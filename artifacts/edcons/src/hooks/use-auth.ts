@@ -11,11 +11,12 @@ export function useAuth(requireAuth = false, allowedRoles?: string[]) {
   useEffect(() => {
     if (!isLoading && requireAuth) {
       if (!user || error) {
-        window.location.href = "/api/auth/login"; // Use Replit auth
+        window.location.href = "/api/auth/login";
         return;
       }
-      if (allowedRoles && !allowedRoles.includes(user.role)) {
-        setLocation("/"); // Unauthorized for this role
+      // Pending users are handled by ProtectedRoute — don't redirect them
+      if (user.role !== "pending" && allowedRoles && !allowedRoles.includes(user.role)) {
+        setLocation("/");
       }
     }
   }, [user, isLoading, error, requireAuth, allowedRoles, setLocation]);
