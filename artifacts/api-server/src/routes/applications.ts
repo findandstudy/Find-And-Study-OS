@@ -130,7 +130,7 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asy
   res.sendStatus(204);
 });
 
-router.get("/applications/:id/notes", requireAuth, async (req, res): Promise<void> => {
+router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const notes = await db
     .select({
@@ -147,7 +147,7 @@ router.get("/applications/:id/notes", requireAuth, async (req, res): Promise<voi
   res.json(notes);
 });
 
-router.post("/applications/:id/notes", requireAuth, async (req, res): Promise<void> => {
+router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { content } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }

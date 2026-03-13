@@ -6,7 +6,16 @@ import { STAFF_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
-const DOC_PATCH_FIELDS = ["name", "type", "status", "studentId", "applicationId", "fileUrl", "notes"];
+const DOC_PATCH_FIELDS = ["name", "type", "status", "studentId", "applicationId", "notes"];
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
 
 router.get("/documents", requireAuth, async (req, res): Promise<void> => {
   const { studentId, applicationId, type, status } = req.query as Record<string, string>;
@@ -20,22 +29,19 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
-  if (!isStaff && user.role === "student") {
-    const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
-    if (!studentRec) {
-      res.json([]);
+  if (!isStaff) {
+    if (user.role === "student") {
+      const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+      if (!studentRec) { res.json([]); return; }
+      conditions.push(eq(documentsTable.studentId, studentRec.id));
+    } else {
+      res.status(403).json({ error: "Access denied" });
       return;
     }
-    conditions.push(eq(documentsTable.studentId, studentRec.id));
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-  const docs = await db
-    .select()
-    .from(documentsTable)
-    .where(whereClause)
-    .orderBy(documentsTable.createdAt);
+  const docs = await db.select().from(documentsTable).where(whereClause).orderBy(documentsTable.createdAt);
   res.json(docs);
 });
 
@@ -43,6 +49,10 @@ router.post("/documents", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   const { name, type, status = "pending", studentId, applicationId, fileUrl, notes } = req.body;
   if (!name || !type) {
     res.status(400).json({ error: "name and type are required" });
+    return;
+  }
+  if (fileUrl && !isValidHttpUrl(fileUrl)) {
+    res.status(400).json({ error: "fileUrl must be a valid http/https URL" });
     return;
   }
   const [doc] = await db.insert(documentsTable).values({
@@ -58,14 +68,19 @@ router.post("/documents", requireAuth, requireRole(...STAFF_ROLES), async (req, 
 
 router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  if (!isStaff && user.role === "student") {
-    const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
-    if (!studentRec || studentRec.id !== doc.studentId) {
+  if (!isStaff) {
+    if (user.role === "student") {
+      const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+      if (!studentRec || studentRec.id !== doc.studentId) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+    } else {
       res.status(403).json({ error: "Access denied" }); return;
     }
   }
@@ -75,10 +90,21 @@ router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  if (req.body.fileUrl !== undefined) {
+    if (!isValidHttpUrl(req.body.fileUrl)) {
+      res.status(400).json({ error: "fileUrl must be a valid http/https URL" });
+      return;
+    }
+  }
+
   const updates: Record<string, unknown> = {};
   for (const key of DOC_PATCH_FIELDS) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
+  if (req.body.fileUrl !== undefined) updates.fileUrl = req.body.fileUrl;
+
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -91,6 +117,7 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
 
 router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
   await db.delete(documentsTable).where(eq(documentsTable.id, id));
@@ -100,22 +127,19 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async 
 
 router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
-  const extractedFields: Record<string, string> = {
-    documentType: doc.type,
-    note: "AI extraction requires document file. Please upload a document file for AI processing.",
-  };
-  const confidenceScore = 0.85;
+  if (!doc.fileUrl) {
+    res.status(422).json({ error: "Document has no file attached. Upload a file before extracting." });
+    return;
+  }
 
-  await db.update(documentsTable).set({
-    extractedData: JSON.stringify(extractedFields),
-    confidenceScore,
-    status: "extracted",
-  }).where(eq(documentsTable.id, id));
-
-  res.json({ documentId: id, extractedFields, confidenceScore, rawText: null, docType: doc.type });
+  res.status(501).json({
+    error: "AI document extraction is not yet configured. Please contact your administrator to enable this feature.",
+    documentId: id,
+  });
 });
 
 export default router;

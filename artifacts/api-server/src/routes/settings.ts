@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 
@@ -50,7 +51,7 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
     }).returning();
     updated = created;
   } else {
-    const [u] = await db.update(settingsTable).set(updates).returning();
+    const [u] = await db.update(settingsTable).set(updates).where(eq(settingsTable.id, existing.id)).returning();
     updated = u;
   }
   const { smtpPassword, whatsappToken, ...safe } = updated;

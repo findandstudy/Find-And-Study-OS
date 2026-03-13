@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, usersTable } from "@workspace/db";
-import { eq, ilike, or, sql } from "drizzle-orm";
+import { eq, ilike, or, sql, and } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
 
@@ -27,7 +27,8 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
     );
   }
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(usersTable);
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(usersTable).where(whereClause);
 
   const data = await db
     .select({
@@ -43,6 +44,7 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
       createdAt: usersTable.createdAt,
     })
     .from(usersTable)
+    .where(whereClause)
     .limit(limitNum)
     .offset(offset);
 

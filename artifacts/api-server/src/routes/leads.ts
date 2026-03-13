@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, leadsTable, studentsTable, notesTable, usersTable } from "@workspace/db";
 import { eq, ilike, or, sql, and } from "drizzle-orm";
-import { requireAuth, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES } from "../lib/roles";
 
@@ -39,7 +39,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
   res.status(201).json({ success: true, message: "Inquiry submitted successfully" });
 });
 
-router.get("/leads", requireAuth, async (req, res): Promise<void> => {
+router.get("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -59,31 +59,13 @@ router.get("/leads", requireAuth, async (req, res): Promise<void> => {
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(leadsTable)
-    .where(whereClause);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause);
+  const data = await db.select().from(leadsTable).where(whereClause).limit(limitNum).offset(offset).orderBy(leadsTable.createdAt);
 
-  const data = await db
-    .select()
-    .from(leadsTable)
-    .where(whereClause)
-    .limit(limitNum)
-    .offset(offset)
-    .orderBy(leadsTable.createdAt);
-
-  res.json({
-    data,
-    meta: {
-      total: Number(count),
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(Number(count) / limitNum),
-    },
-  });
+  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.post("/leads", requireAuth, async (req, res): Promise<void> => {
+router.post("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo } = req.body;
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
@@ -101,15 +83,17 @@ router.post("/leads", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(lead);
 });
 
-router.get("/leads/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   res.json(lead);
 });
 
-router.patch("/leads/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
   for (const key of LEAD_PATCH_FIELDS) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -124,20 +108,40 @@ router.patch("/leads/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(lead);
 });
 
-router.delete("/leads/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(leadsTable).where(eq(leadsTable.id, id));
   await logAudit(req.user!.id, "delete_lead", "lead", id, {}, req.ip);
   res.sendStatus(204);
 });
 
-router.post("/leads/:id/convert", requireAuth, async (req, res): Promise<void> => {
+router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   if (lead.status === "converted") {
     res.status(400).json({ error: "Lead is already converted" });
     return;
+  }
+
+  if (lead.convertedStudentId) {
+    const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, lead.convertedStudentId));
+    if (existing) {
+      res.status(400).json({ error: "Lead has already been converted", studentId: existing.id });
+      return;
+    }
+  }
+
+  if (lead.email) {
+    const [existingByEmail] = await db.select().from(studentsTable).where(eq(studentsTable.email, lead.email));
+    if (existingByEmail) {
+      await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
+      await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: existingByEmail.id, merged: true }, req.ip);
+      res.json({ student: existingByEmail, merged: true });
+      return;
+    }
   }
 
   const [student] = await db.insert(studentsTable).values({
@@ -151,11 +155,12 @@ router.post("/leads/:id/convert", requireAuth, async (req, res): Promise<void> =
 
   await db.update(leadsTable).set({ status: "converted", convertedStudentId: student.id }).where(eq(leadsTable.id, id));
   await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: student.id }, req.ip);
-  res.json(student);
+  res.json({ student, merged: false });
 });
 
-router.get("/leads/:id/notes", requireAuth, async (req, res): Promise<void> => {
+router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const notes = await db
     .select({
       id: notesTable.id,
@@ -171,8 +176,9 @@ router.get("/leads/:id/notes", requireAuth, async (req, res): Promise<void> => {
   res.json(notes);
 });
 
-router.post("/leads/:id/notes", requireAuth, async (req, res): Promise<void> => {
+router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { content } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
   const [note] = await db.insert(notesTable).values({
