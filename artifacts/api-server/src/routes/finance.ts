@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, invoicesTable, commissionsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { FINANCE_ROLES, MANAGER_ROLES } from "../lib/roles";
+import { FINANCE_ROLES, STAFF_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
@@ -13,7 +13,7 @@ function generateInvoiceNumber() {
   return `INV-${Date.now().toString(36).toUpperCase()}`;
 }
 
-router.get("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+router.get("/invoices", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { studentId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -62,7 +62,7 @@ router.post("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req,
   res.status(201).json(invoice);
 });
 
-router.get("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+router.get("/invoices/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
@@ -85,12 +85,12 @@ router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async 
   res.json(invoice);
 });
 
-router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+router.get("/commissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const data = await db.select().from(commissionsTable).orderBy(commissionsTable.createdAt);
   res.json(data);
 });
 
-router.post("/commissions", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { agentId, amount, currency = "USD", status = "pending", notes } = req.body;
   if (!agentId || !amount) {
     res.status(400).json({ error: "agentId and amount are required" });

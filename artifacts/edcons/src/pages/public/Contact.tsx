@@ -18,12 +18,37 @@ export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState("");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setSubmitted(true);
-    setLoading(false);
+    setError("");
+    try {
+      const [firstName, ...rest] = form.name.trim().split(" ");
+      const lastName = rest.join(" ") || firstName;
+      const res = await fetch(`${import.meta.env.BASE_URL}api/public/lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email: form.email,
+          phone: form.phone || undefined,
+          message: form.message,
+          interestedProgram: form.subject || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Submission failed");
+      }
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -95,6 +120,11 @@ export default function Contact() {
                     required rows={5} placeholder="Tell us about your education goals..."
                     className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
                 </div>
+                {error && (
+                  <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl p-3">
+                    {error}
+                  </div>
+                )}
                 <Button type="submit" disabled={loading} size="lg" className="w-full rounded-xl">
                   {loading ? (
                     <div className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sending...</div>

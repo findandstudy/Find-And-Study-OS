@@ -1,14 +1,15 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
+import { MANAGER_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
-router.get("/audit", requireAuth, async (req, res): Promise<void> => {
+router.get("/audit", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const { userId, action, resource, page = "1", limit = "50" } = req.query as Record<string, string>;
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(auditLogsTable);

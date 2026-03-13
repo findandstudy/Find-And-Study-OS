@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, invoicesTable, commissionsTable } from "@workspace/db";
 import { sql, eq } from "drizzle-orm";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
+import { STAFF_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
-router.get("/stats/overview", requireAuth, async (req, res): Promise<void> => {
+router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const [[{ leads }], [{ students }], [{ applications }], [{ agents }]] = await Promise.all([
     db.select({ leads: sql<number>`count(*)` }).from(leadsTable),
     db.select({ students: sql<number>`count(*)` }).from(studentsTable),

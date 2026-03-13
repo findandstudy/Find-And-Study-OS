@@ -1,8 +1,16 @@
 import { Router, type IRouter } from "express";
 import { db, settingsTable } from "@workspace/db";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
+import { MANAGER_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
+
+const SETTINGS_PATCH_FIELDS = [
+  "defaultLanguage", "supportedLanguages", "companyName", "companyEmail",
+  "companyPhone", "companyAddress", "smtpHost", "smtpPort", "smtpUser",
+  "smtpPassword", "whatsappEnabled", "whatsappToken",
+  "metaLeadEnabled", "n8nWebhookUrl", "googleSheetsId",
+];
 
 router.get("/settings", requireAuth, async (req, res): Promise<void> => {
   const [settings] = await db.select().from(settingsTable);
@@ -20,7 +28,16 @@ router.get("/settings", requireAuth, async (req, res): Promise<void> => {
   res.json(safe);
 });
 
-router.patch("/settings", requireAuth, async (req, res): Promise<void> => {
+router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const updates: Record<string, unknown> = {};
+  for (const key of SETTINGS_PATCH_FIELDS) {
+    if (req.body[key] !== undefined) updates[key] = req.body[key];
+  }
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
+    return;
+  }
+
   const [existing] = await db.select().from(settingsTable);
   let updated;
   if (!existing) {
@@ -29,11 +46,11 @@ router.patch("/settings", requireAuth, async (req, res): Promise<void> => {
       supportedLanguages: "en,tr,ar,fr,ru",
       whatsappEnabled: false,
       metaLeadEnabled: false,
-      ...req.body,
+      ...updates,
     }).returning();
     updated = created;
   } else {
-    const [u] = await db.update(settingsTable).set(req.body).returning();
+    const [u] = await db.update(settingsTable).set(updates).returning();
     updated = u;
   }
   const { smtpPassword, whatsappToken, ...safe } = updated;

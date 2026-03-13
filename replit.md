@@ -39,9 +39,12 @@ artifacts-monorepo/
 ## Authentication
 
 - Replit Auth via `x-replit-user-id` headers
-- Auto-creates users on first Replit login with role `staff`
-- Roles: `super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`
+- Auto-creates users on first Replit login with role `pending` and `isActive: false` — admin must activate
+- Roles: `super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `pending`
 - Role routing: admin/manager/super_admin → `/admin`, staff/consultant/accountant/editor → `/staff`, student → `/student`, agent/sub_agent → `/agent`
+- Finance read (GET invoices/commissions): STAFF_ROLES; Finance write (POST/PATCH): FINANCE_ROLES (super_admin, admin, manager, accountant)
+- Settings PATCH: MANAGER_ROLES only; sensitive fields (smtpPassword, whatsappToken) stripped from GET
+- Contact form submits to `/api/public/lead` (rate-limited: 10 req/15min)
 
 ## API Notes
 
