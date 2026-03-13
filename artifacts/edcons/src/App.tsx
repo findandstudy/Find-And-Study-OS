@@ -31,12 +31,16 @@ import StaffDocuments from "@/pages/staff/Documents";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminUsers from "@/pages/admin/Users";
 import AdminCatalog from "@/pages/admin/Catalog";
+import AdminAuditLog from "@/pages/admin/AuditLog";
 
 // Student
 import StudentDashboard from "@/pages/student/Dashboard";
+import StudentApplications from "@/pages/student/Applications";
 
 // Agent
 import AgentDashboard from "@/pages/agent/Dashboard";
+import AgentApplications from "@/pages/agent/Applications";
+import AgentCommissions from "@/pages/agent/Commissions";
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -74,6 +78,9 @@ function Router() {
       </Route>
       <Route path="/admin/catalog">
         <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/audit">
+        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>
       </Route>
       <Route path="/admin/settings">
         <ProtectedRoute allowedRoles={ADMIN_ROLES}><StaffSettings /></ProtectedRoute>
@@ -115,10 +122,19 @@ function Router() {
       <Route path="/student">
         <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentDashboard /></ProtectedRoute>
       </Route>
+      <Route path="/student/applications">
+        <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentApplications /></ProtectedRoute>
+      </Route>
 
       {/* Agent Portal */}
       <Route path="/agent">
         <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentDashboard /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/referrals">
+        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApplications /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/commissions">
+        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>
       </Route>
 
       <Route component={NotFound} />
