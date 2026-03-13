@@ -1,22 +1,45 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Education Consultancy Operating System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication and session
+  - name: users
+    description: User management
+  - name: leads
+    description: CRM lead management
+  - name: students
+    description: Student profiles
+  - name: agents
+    description: Agent profiles
+  - name: applications
+    description: Application management
+  - name: documents
+    description: Document management
+  - name: universities
+    description: University and program catalog
+  - name: finance
+    description: Invoices and commissions
+  - name: content
+    description: CMS content (blog, pages, announcements)
+  - name: settings
+    description: System settings
+  - name: audit
+    description: Audit log
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +47,1483 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # USERS
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersListResponse"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # LEADS
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      summary: List leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: assignedTo
+          in: query
+          schema:
+            type: integer
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadsListResponse"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create a lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadBody"
+      responses:
+        "201":
+          description: Created lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get lead by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLeadBody"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /leads/{id}/convert:
+    post:
+      operationId: convertLead
+      tags: [leads]
+      summary: Convert lead to student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Converted to student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+
+  /leads/{id}/notes:
+    get:
+      operationId: getLeadNotes
+      tags: [leads]
+      summary: Get lead notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: addLeadNote
+      tags: [leads]
+      summary: Add note to lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteBody"
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  # PUBLIC LEAD FORM (no auth)
+  /public/lead:
+    post:
+      operationId: submitPublicLead
+      tags: [leads]
+      summary: Submit public inquiry form (no auth)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicLeadBody"
+      responses:
+        "201":
+          description: Lead submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # STUDENTS
+  /students:
+    get:
+      operationId: listStudents
+      tags: [students]
+      summary: List students
+      parameters:
+        - name: agentId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of students
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentsListResponse"
+    post:
+      operationId: createStudent
+      tags: [students]
+      summary: Create student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStudentBody"
+      responses:
+        "201":
+          description: Created student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+
+  /students/{id}:
+    get:
+      operationId: getStudent
+      tags: [students]
+      summary: Get student by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateStudent
+      tags: [students]
+      summary: Update student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStudentBody"
+      responses:
+        "200":
+          description: Updated student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+
+  /students/me:
+    get:
+      operationId: getMyStudentProfile
+      tags: [students]
+      summary: Get own student profile (student role)
+      responses:
+        "200":
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+
+  # AGENTS
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List agents
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentsListResponse"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Create agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentBody"
+      responses:
+        "201":
+          description: Created agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get agent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentBody"
+      responses:
+        "200":
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /agents/me:
+    get:
+      operationId: getMyAgentProfile
+      tags: [agents]
+      summary: Get own agent profile (agent role)
+      responses:
+        "200":
+          description: Agent profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  # APPLICATIONS
+  /applications:
+    get:
+      operationId: listApplications
+      tags: [applications]
+      summary: List applications
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: agentId
+          in: query
+          schema:
+            type: integer
+        - name: stage
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of applications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationsListResponse"
+    post:
+      operationId: createApplication
+      tags: [applications]
+      summary: Create application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApplicationBody"
+      responses:
+        "201":
+          description: Created application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+
+  /applications/{id}:
+    get:
+      operationId: getApplication
+      tags: [applications]
+      summary: Get application by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateApplication
+      tags: [applications]
+      summary: Update application
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateApplicationBody"
+      responses:
+        "200":
+          description: Updated application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+    delete:
+      operationId: deleteApplication
+      tags: [applications]
+      summary: Delete application
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /applications/{id}/notes:
+    get:
+      operationId: getApplicationNotes
+      tags: [applications]
+      summary: Get application notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: addApplicationNote
+      tags: [applications]
+      summary: Add note to application
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteBody"
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  # DOCUMENTS
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List documents
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: applicationId
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+    post:
+      operationId: createDocument
+      tags: [documents]
+      summary: Create document record (metadata only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentBody"
+      responses:
+        "201":
+          description: Created document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /documents/{id}:
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Get document by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    patch:
+      operationId: updateDocument
+      tags: [documents]
+      summary: Update document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentBody"
+      responses:
+        "200":
+          description: Updated document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Delete document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /documents/{id}/extract:
+    post:
+      operationId: extractDocument
+      tags: [documents]
+      summary: Run AI extraction on a document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Extraction result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentExtraction"
+
+  # UNIVERSITIES & PROGRAMS
+  /universities:
+    get:
+      operationId: listUniversities
+      tags: [universities]
+      summary: List universities
+      parameters:
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of universities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UniversitiesListResponse"
+    post:
+      operationId: createUniversity
+      tags: [universities]
+      summary: Create university
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUniversityBody"
+      responses:
+        "201":
+          description: Created university
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/University"
+
+  /universities/{id}:
+    get:
+      operationId: getUniversity
+      tags: [universities]
+      summary: Get university by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: University
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/University"
+    patch:
+      operationId: updateUniversity
+      tags: [universities]
+      summary: Update university
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUniversityBody"
+      responses:
+        "200":
+          description: Updated university
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/University"
+    delete:
+      operationId: deleteUniversity
+      tags: [universities]
+      summary: Delete university
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /programs:
+    get:
+      operationId: listPrograms
+      tags: [universities]
+      summary: List programs
+      parameters:
+        - name: universityId
+          in: query
+          schema:
+            type: integer
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of programs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramsListResponse"
+    post:
+      operationId: createProgram
+      tags: [universities]
+      summary: Create program
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgramBody"
+      responses:
+        "201":
+          description: Created program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Program"
+
+  /programs/{id}:
+    get:
+      operationId: getProgram
+      tags: [universities]
+      summary: Get program by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Program"
+    patch:
+      operationId: updateProgram
+      tags: [universities]
+      summary: Update program
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgramBody"
+      responses:
+        "200":
+          description: Updated program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Program"
+    delete:
+      operationId: deleteProgram
+      tags: [universities]
+      summary: Delete program
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # FINANCE
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [finance]
+      summary: List invoices
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoicesListResponse"
+    post:
+      operationId: createInvoice
+      tags: [finance]
+      summary: Create invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [finance]
+      summary: Get invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+    patch:
+      operationId: updateInvoice
+      tags: [finance]
+      summary: Update invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceBody"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /commissions:
+    get:
+      operationId: listCommissions
+      tags: [finance]
+      summary: List commissions
+      parameters:
+        - name: agentId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of commissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Commission"
+    post:
+      operationId: createCommission
+      tags: [finance]
+      summary: Create commission record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommissionBody"
+      responses:
+        "201":
+          description: Created commission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commission"
+
+  /commissions/{id}:
+    patch:
+      operationId: updateCommission
+      tags: [finance]
+      summary: Update commission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCommissionBody"
+      responses:
+        "200":
+          description: Updated commission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commission"
+
+  # CONTENT / CMS
+  /blog:
+    get:
+      operationId: listBlogPosts
+      tags: [content]
+      summary: List blog posts
+      parameters:
+        - name: locale
+          in: query
+          schema:
+            type: string
+        - name: published
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of blog posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPostsListResponse"
+    post:
+      operationId: createBlogPost
+      tags: [content]
+      summary: Create blog post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBlogPostBody"
+      responses:
+        "201":
+          description: Created blog post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+
+  /blog/{slug}:
+    get:
+      operationId: getBlogPost
+      tags: [content]
+      summary: Get blog post by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: locale
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Blog post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateBlogPost
+      tags: [content]
+      summary: Update blog post
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBlogPostBody"
+      responses:
+        "200":
+          description: Updated blog post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+    delete:
+      operationId: deleteBlogPost
+      tags: [content]
+      summary: Delete blog post
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /announcements:
+    get:
+      operationId: listAnnouncements
+      tags: [content]
+      summary: List announcements
+      parameters:
+        - name: audience
+          in: query
+          schema:
+            type: string
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+    post:
+      operationId: createAnnouncement
+      tags: [content]
+      summary: Create announcement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnnouncementBody"
+      responses:
+        "201":
+          description: Created announcement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+
+  /announcements/{id}:
+    patch:
+      operationId: updateAnnouncement
+      tags: [content]
+      summary: Update announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAnnouncementBody"
+      responses:
+        "200":
+          description: Updated announcement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+    delete:
+      operationId: deleteAnnouncement
+      tags: [content]
+      summary: Delete announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # SETTINGS
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get all settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingsBody"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  # AUDIT LOG
+  /audit:
+    get:
+      operationId: listAuditLogs
+      tags: [audit]
+      summary: List audit log entries
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resource
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogsListResponse"
+
+  # DASHBOARD STATS
+  /stats/overview:
+    get:
+      operationId: getOverviewStats
+      tags: [settings]
+      summary: Get dashboard overview stats
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +1534,1458 @@ components:
       required:
         - status
 
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    PaginationMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - total
+        - page
+        - limit
+        - totalPages
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        replitId:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        role:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        language:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - role
+        - language
+        - isActive
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+        phone:
+          type: ["string", "null"]
+        language:
+          type: string
+      required:
+        - email
+        - firstName
+        - lastName
+        - role
+        - language
+
+    UpdateUserBody:
+      type: object
+      properties:
+        email:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        role:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+        isActive:
+          type: ["boolean", "null"]
+
+    UsersListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserProfile"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Lead:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        status:
+          type: string
+        assignedToId:
+          type: ["integer", "null"]
+        interestedProgram:
+          type: ["string", "null"]
+        interestedCountry:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        convertedStudentId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateLeadBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        status:
+          type: string
+        assignedToId:
+          type: ["integer", "null"]
+        interestedProgram:
+          type: ["string", "null"]
+        interestedCountry:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - firstName
+        - lastName
+        - status
+
+    UpdateLeadBody:
+      type: object
+      properties:
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        assignedToId:
+          type: ["integer", "null"]
+        interestedProgram:
+          type: ["string", "null"]
+        interestedCountry:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    PublicLeadBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        interestedProgram:
+          type: ["string", "null"]
+        interestedCountry:
+          type: ["string", "null"]
+        message:
+          type: ["string", "null"]
+      required:
+        - firstName
+        - lastName
+        - email
+
+    LeadsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lead"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        authorId:
+          type: integer
+        authorName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - content
+        - authorId
+        - createdAt
+
+    CreateNoteBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+
+    Student:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        passportNumber:
+          type: ["string", "null"]
+        passportExpiry:
+          type: ["string", "null"]
+        status:
+          type: string
+        agentId:
+          type: ["integer", "null"]
+        highSchool:
+          type: ["string", "null"]
+        graduationYear:
+          type: ["integer", "null"]
+        gpa:
+          type: ["string", "null"]
+        languageScore:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateStudentBody:
+      type: object
+      properties:
+        userId:
+          type: ["integer", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        passportNumber:
+          type: ["string", "null"]
+        passportExpiry:
+          type: ["string", "null"]
+        status:
+          type: string
+        agentId:
+          type: ["integer", "null"]
+        highSchool:
+          type: ["string", "null"]
+        graduationYear:
+          type: ["integer", "null"]
+        gpa:
+          type: ["string", "null"]
+        languageScore:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - firstName
+        - lastName
+        - status
+
+    UpdateStudentBody:
+      type: object
+      properties:
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: ["string", "null"]
+        nationality:
+          type: ["string", "null"]
+        passportNumber:
+          type: ["string", "null"]
+        passportExpiry:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        agentId:
+          type: ["integer", "null"]
+        highSchool:
+          type: ["string", "null"]
+        graduationYear:
+          type: ["integer", "null"]
+        gpa:
+          type: ["string", "null"]
+        languageScore:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    StudentsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Student"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        companyName:
+          type: ["string", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateAgentBody:
+      type: object
+      properties:
+        userId:
+          type: ["integer", "null"]
+        companyName:
+          type: ["string", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+      required:
+        - firstName
+        - lastName
+        - status
+
+    UpdateAgentBody:
+      type: object
+      properties:
+        companyName:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        status:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    AgentsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Application:
+      type: object
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        programId:
+          type: ["integer", "null"]
+        universityId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        stage:
+          type: string
+        intake:
+          type: ["string", "null"]
+        deadline:
+          type: ["string", "null"]
+        programName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        tuitionFee:
+          type: ["number", "null"]
+        scholarship:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - studentId
+        - stage
+        - createdAt
+        - updatedAt
+
+    CreateApplicationBody:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        programId:
+          type: ["integer", "null"]
+        universityId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        stage:
+          type: string
+        intake:
+          type: ["string", "null"]
+        deadline:
+          type: ["string", "null"]
+        programName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        tuitionFee:
+          type: ["number", "null"]
+        scholarship:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - studentId
+        - stage
+
+    UpdateApplicationBody:
+      type: object
+      properties:
+        programId:
+          type: ["integer", "null"]
+        universityId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        stage:
+          type: ["string", "null"]
+        intake:
+          type: ["string", "null"]
+        deadline:
+          type: ["string", "null"]
+        programName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        tuitionFee:
+          type: ["number", "null"]
+        scholarship:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    ApplicationsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Application"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: ["integer", "null"]
+        applicationId:
+          type: ["integer", "null"]
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        fileKey:
+          type: ["string", "null"]
+        fileUrl:
+          type: ["string", "null"]
+        mimeType:
+          type: ["string", "null"]
+        sizeBytes:
+          type: ["integer", "null"]
+        extractedData:
+          type: ["string", "null"]
+        confidenceScore:
+          type: ["number", "null"]
+        reviewedBy:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - type
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateDocumentBody:
+      type: object
+      properties:
+        studentId:
+          type: ["integer", "null"]
+        applicationId:
+          type: ["integer", "null"]
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        fileKey:
+          type: ["string", "null"]
+        fileUrl:
+          type: ["string", "null"]
+        mimeType:
+          type: ["string", "null"]
+        sizeBytes:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - name
+        - type
+        - status
+
+    UpdateDocumentBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        fileKey:
+          type: ["string", "null"]
+        fileUrl:
+          type: ["string", "null"]
+        extractedData:
+          type: ["string", "null"]
+        confidenceScore:
+          type: ["number", "null"]
+        reviewedBy:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+
+    DocumentExtraction:
+      type: object
+      properties:
+        documentId:
+          type: integer
+        extractedFields:
+          type: object
+          additionalProperties: true
+        confidenceScore:
+          type: number
+        rawText:
+          type: ["string", "null"]
+        docType:
+          type: ["string", "null"]
+      required:
+        - documentId
+        - extractedFields
+        - confidenceScore
+
+    University:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        country:
+          type: string
+        city:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        ranking:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - country
+        - isActive
+        - createdAt
+
+    CreateUniversityBody:
+      type: object
+      properties:
+        name:
+          type: string
+        country:
+          type: string
+        city:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        ranking:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+      required:
+        - name
+        - country
+        - isActive
+
+    UpdateUniversityBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        ranking:
+          type: ["integer", "null"]
+        isActive:
+          type: ["boolean", "null"]
+
+    UniversitiesListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/University"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Program:
+      type: object
+      properties:
+        id:
+          type: integer
+        universityId:
+          type: integer
+        name:
+          type: string
+        degree:
+          type: ["string", "null"]
+        field:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        tuitionFee:
+          type: ["number", "null"]
+        currency:
+          type: ["string", "null"]
+        scholarship:
+          type: ["number", "null"]
+        intakes:
+          type: ["string", "null"]
+        requirements:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - universityId
+        - name
+        - isActive
+        - createdAt
+
+    CreateProgramBody:
+      type: object
+      properties:
+        universityId:
+          type: integer
+        name:
+          type: string
+        degree:
+          type: ["string", "null"]
+        field:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        tuitionFee:
+          type: ["number", "null"]
+        currency:
+          type: ["string", "null"]
+        scholarship:
+          type: ["number", "null"]
+        intakes:
+          type: ["string", "null"]
+        requirements:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+      required:
+        - universityId
+        - name
+        - isActive
+
+    UpdateProgramBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        degree:
+          type: ["string", "null"]
+        field:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        tuitionFee:
+          type: ["number", "null"]
+        currency:
+          type: ["string", "null"]
+        scholarship:
+          type: ["number", "null"]
+        intakes:
+          type: ["string", "null"]
+        requirements:
+          type: ["string", "null"]
+        commissionRate:
+          type: ["number", "null"]
+        isActive:
+          type: ["boolean", "null"]
+
+    ProgramsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Program"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        studentId:
+          type: integer
+        applicationId:
+          type: ["integer", "null"]
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - invoiceNumber
+        - studentId
+        - amount
+        - currency
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateInvoiceBody:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        applicationId:
+          type: ["integer", "null"]
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - studentId
+        - amount
+        - currency
+        - status
+
+    UpdateInvoiceBody:
+      type: object
+      properties:
+        amount:
+          type: ["number", "null"]
+        currency:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    InvoicesListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Commission:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        applicationId:
+          type: ["integer", "null"]
+        invoiceId:
+          type: ["integer", "null"]
+        amount:
+          type: number
+        currency:
+          type: string
+        rate:
+          type: ["number", "null"]
+        status:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - agentId
+        - amount
+        - currency
+        - status
+        - createdAt
+
+    CreateCommissionBody:
+      type: object
+      properties:
+        agentId:
+          type: integer
+        applicationId:
+          type: ["integer", "null"]
+        invoiceId:
+          type: ["integer", "null"]
+        amount:
+          type: number
+        currency:
+          type: string
+        rate:
+          type: ["number", "null"]
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+      required:
+        - agentId
+        - amount
+        - currency
+        - status
+
+    UpdateCommissionBody:
+      type: object
+      properties:
+        amount:
+          type: ["number", "null"]
+        status:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    BlogPost:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+        locale:
+          type: string
+        published:
+          type: boolean
+        authorId:
+          type: ["integer", "null"]
+        featuredImageUrl:
+          type: ["string", "null"]
+        metaTitle:
+          type: ["string", "null"]
+        metaDescription:
+          type: ["string", "null"]
+        tags:
+          type: ["string", "null"]
+        publishedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - slug
+        - title
+        - locale
+        - published
+        - createdAt
+        - updatedAt
+
+    CreateBlogPostBody:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+        locale:
+          type: string
+        published:
+          type: boolean
+        featuredImageUrl:
+          type: ["string", "null"]
+        metaTitle:
+          type: ["string", "null"]
+        metaDescription:
+          type: ["string", "null"]
+        tags:
+          type: ["string", "null"]
+        publishedAt:
+          type: ["string", "null"]
+      required:
+        - slug
+        - title
+        - locale
+        - published
+
+    UpdateBlogPostBody:
+      type: object
+      properties:
+        title:
+          type: ["string", "null"]
+        excerpt:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+        locale:
+          type: ["string", "null"]
+        published:
+          type: ["boolean", "null"]
+        featuredImageUrl:
+          type: ["string", "null"]
+        metaTitle:
+          type: ["string", "null"]
+        metaDescription:
+          type: ["string", "null"]
+        tags:
+          type: ["string", "null"]
+        publishedAt:
+          type: ["string", "null"]
+
+    BlogPostsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlogPost"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        audience:
+          type: string
+        isActive:
+          type: boolean
+        expiresAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - content
+        - audience
+        - isActive
+        - createdAt
+
+    CreateAnnouncementBody:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        audience:
+          type: string
+        isActive:
+          type: boolean
+        expiresAt:
+          type: ["string", "null"]
+      required:
+        - title
+        - content
+        - audience
+        - isActive
+
+    UpdateAnnouncementBody:
+      type: object
+      properties:
+        title:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+        audience:
+          type: ["string", "null"]
+        isActive:
+          type: ["boolean", "null"]
+        expiresAt:
+          type: ["string", "null"]
+
+    Settings:
+      type: object
+      properties:
+        id:
+          type: integer
+        companyName:
+          type: ["string", "null"]
+        companyEmail:
+          type: ["string", "null"]
+        companyPhone:
+          type: ["string", "null"]
+        companyAddress:
+          type: ["string", "null"]
+        defaultLanguage:
+          type: string
+        supportedLanguages:
+          type: string
+        smtpHost:
+          type: ["string", "null"]
+        smtpPort:
+          type: ["integer", "null"]
+        smtpUser:
+          type: ["string", "null"]
+        smtpFromEmail:
+          type: ["string", "null"]
+        whatsappEnabled:
+          type: boolean
+        n8nWebhookUrl:
+          type: ["string", "null"]
+        googleSheetsId:
+          type: ["string", "null"]
+        metaLeadEnabled:
+          type: boolean
+        logoUrl:
+          type: ["string", "null"]
+        faviconUrl:
+          type: ["string", "null"]
+        seoDefaultTitle:
+          type: ["string", "null"]
+        seoDefaultDescription:
+          type: ["string", "null"]
+      required:
+        - id
+        - defaultLanguage
+        - supportedLanguages
+        - whatsappEnabled
+        - metaLeadEnabled
+
+    UpdateSettingsBody:
+      type: object
+      properties:
+        companyName:
+          type: ["string", "null"]
+        companyEmail:
+          type: ["string", "null"]
+        companyPhone:
+          type: ["string", "null"]
+        companyAddress:
+          type: ["string", "null"]
+        defaultLanguage:
+          type: ["string", "null"]
+        supportedLanguages:
+          type: ["string", "null"]
+        smtpHost:
+          type: ["string", "null"]
+        smtpPort:
+          type: ["integer", "null"]
+        smtpUser:
+          type: ["string", "null"]
+        smtpFromEmail:
+          type: ["string", "null"]
+        whatsappEnabled:
+          type: ["boolean", "null"]
+        n8nWebhookUrl:
+          type: ["string", "null"]
+        googleSheetsId:
+          type: ["string", "null"]
+        metaLeadEnabled:
+          type: ["boolean", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        faviconUrl:
+          type: ["string", "null"]
+        seoDefaultTitle:
+          type: ["string", "null"]
+        seoDefaultDescription:
+          type: ["string", "null"]
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: ["integer", "null"]
+        action:
+          type: string
+        resource:
+          type: string
+        resourceId:
+          type: ["integer", "null"]
+        changes:
+          type: ["string", "null"]
+        ipAddress:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - action
+        - resource
+        - createdAt
+
+    AuditLogsListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - data
+        - meta
+
+    OverviewStats:
+      type: object
+      properties:
+        totalLeads:
+          type: integer
+        totalStudents:
+          type: integer
+        totalApplications:
+          type: integer
+        totalAgents:
+          type: integer
+        activeApplications:
+          type: integer
+        pendingDocuments:
+          type: integer
+        totalRevenue:
+          type: number
+        pendingCommissions:
+          type: number
+      required:
+        - totalLeads
+        - totalStudents
+        - totalApplications
+        - totalAgents
+        - activeApplications
+        - pendingDocuments
+        - totalRevenue
+        - pendingCommissions

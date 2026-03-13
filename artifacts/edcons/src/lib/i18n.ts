@@ -1,0 +1,52 @@
+type Translations = Record<string, Record<string, string>>;
+
+export const translations: Translations = {
+  en: {
+    "nav.home": "Home",
+    "nav.about": "About Us",
+    "nav.programs": "Programs",
+    "nav.blog": "Blog",
+    "nav.contact": "Contact",
+    "nav.login": "Portal Login",
+    "hero.title": "Your Journey to Global Education Starts Here",
+    "hero.subtitle": "Expert guidance for university admissions, visas, and scholarships worldwide.",
+    "hero.cta": "Apply Now",
+    "dashboard.overview": "Overview",
+    "dashboard.leads": "Leads Pipeline",
+    "dashboard.students": "Students",
+    "dashboard.applications": "Applications",
+    "dashboard.finance": "Finance",
+    "dashboard.settings": "Settings",
+    "lead.new": "New Lead",
+    "lead.contacted": "Contacted",
+    "lead.interested": "Interested",
+    "lead.qualified": "Qualified",
+    "lead.converted": "Converted",
+    "lead.lost": "Lost",
+  },
+  tr: {
+    "nav.home": "Ana Sayfa",
+    "nav.about": "Hakkımızda",
+    "nav.programs": "Programlar",
+    "nav.blog": "Blog",
+    "nav.contact": "İletişim",
+    "nav.login": "Giriş Yap",
+    "hero.title": "Küresel Eğitime Giden Yolculuğunuz Buradan Başlıyor",
+    "hero.subtitle": "Dünya çapında üniversite kabulleri, vizeler ve burslar için uzman rehberliği.",
+    "hero.cta": "Hemen Başvur",
+    "dashboard.overview": "Genel Bakış",
+    "dashboard.leads": "Aday Yönetimi",
+    "dashboard.students": "Öğrenciler",
+    "dashboard.applications": "Başvurular",
+    "dashboard.finance": "Finans",
+    "dashboard.settings": "Ayarlar",
+    "lead.new": "Yeni",
+    "lead.contacted": "İletişime Geçildi",
+    "lead.interested": "İlgili",
+    "lead.qualified": "Nitelikli",
+    "lead.converted": "Kayıtlı Öğrenci",
+    "lead.lost": "Kaybedildi",
+  }
+};
+
+export type Language = keyof typeof translations;
