@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail } from "lucide-react";
+import {
+  User, Globe, Shield, Save, Check, GraduationCap,
+  Loader2, FileText, MapPin, Phone, Mail, Calendar,
+} from "lucide-react";
 
 const LANGUAGES = [
   { code: "en", label: "English",   flag: "🇬🇧" },
@@ -21,13 +24,7 @@ const LANGUAGES = [
   { code: "ru", label: "Русский",   flag: "🇷🇺" },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin", admin: "Admin", manager: "Manager",
-  staff: "Staff", consultant: "Consultant", accountant: "Accountant", editor: "Editor",
-  student: "Student", agent: "Agent", sub_agent: "Sub Agent",
-};
-
-export default function SettingsPage() {
+export default function StudentAccount() {
   const { user } = useAuth(true);
   const { lang, setLang } = useI18n();
   const { toast } = useToast();
@@ -35,9 +32,6 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
-  const [notifications, setNotifications] = useState({
-    newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false,
-  });
 
   useEffect(() => {
     if (user) {
@@ -48,6 +42,16 @@ export default function SettingsPage() {
       });
     }
   }, [user]);
+
+  const { data: studentProfile, isLoading: profileLoading } = useQuery({
+    queryKey: ["student-me"],
+    enabled: !!user,
+    queryFn: async () => {
+      const res = await customFetch("/api/students/me");
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
 
   async function handleSaveProfile() {
     if (!user) return;
@@ -64,7 +68,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) throw new Error("Failed to update profile");
       await qc.invalidateQueries({ queryKey: ["me"] });
-      toast({ title: "Profile updated", description: "Your changes have been saved." });
+      toast({ title: "Profile updated", description: "Your information has been saved." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -81,7 +85,6 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language: code }),
       });
-      toast({ title: "Language updated" });
     } catch {}
   }
 
@@ -91,16 +94,16 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="space-y-6 max-w-3xl">
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
+          <h1 className="text-2xl font-display font-bold text-foreground">My Account</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage your profile and preferences</p>
         </div>
 
         <Tabs defaultValue="profile">
           <TabsList className="rounded-xl bg-secondary/50 p-1">
-            <TabsTrigger value="profile"       className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
-            <TabsTrigger value="language"      className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
-            <TabsTrigger value="notifications" className="rounded-lg gap-2"><Bell className="w-4 h-4" /> Notifications</TabsTrigger>
-            <TabsTrigger value="security"      className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
+            <TabsTrigger value="profile"     className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
+            <TabsTrigger value="student"     className="rounded-lg gap-2"><GraduationCap className="w-4 h-4" /> Student Info</TabsTrigger>
+            <TabsTrigger value="language"    className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
+            <TabsTrigger value="security"    className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
           </TabsList>
 
           {/* ── Profile ── */}
@@ -114,9 +117,7 @@ export default function SettingsPage() {
                 <div>
                   <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
                   <p className="text-muted-foreground text-sm">{user?.email}</p>
-                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs mt-2 capitalize">
-                    {ROLE_LABELS[user?.role || ""] || user?.role}
-                  </Badge>
+                  <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs mt-2">Student</Badge>
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-5">
@@ -145,10 +146,50 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
+          {/* ── Student Info ── */}
+          <TabsContent value="student" className="mt-6">
+            <Card className="border-none shadow-lg shadow-black/5 p-6">
+              <h2 className="font-display font-bold text-lg mb-6">Student Record</h2>
+              {profileLoading ? (
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-xl" />)}
+                </div>
+              ) : !studentProfile ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <GraduationCap className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
+                  <p className="font-medium">No student record yet</p>
+                  <p className="text-sm mt-1">Your advisor will set up your student profile</p>
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {[
+                    { label: "Nationality",        icon: MapPin,    value: studentProfile.nationality },
+                    { label: "Date of Birth",       icon: Calendar,  value: studentProfile.dateOfBirth ? new Date(studentProfile.dateOfBirth).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }) : null },
+                    { label: "Passport Number",     icon: FileText,  value: studentProfile.passportNumber },
+                    { label: "Emergency Contact",   icon: Phone,     value: studentProfile.emergencyContact },
+                    { label: "Address",             icon: MapPin,    value: studentProfile.address, fullWidth: true },
+                  ].map((f, i) => (
+                    <div key={i} className={`space-y-1.5 ${(f as any).fullWidth ? "sm:col-span-2" : ""}`}>
+                      <Label className="flex items-center gap-1.5 text-muted-foreground">
+                        <f.icon className="w-3.5 h-3.5" /> {f.label}
+                      </Label>
+                      <div className="px-4 py-3 rounded-xl bg-secondary/40 text-sm text-foreground border border-border/40">
+                        {f.value || <span className="text-muted-foreground italic">Not provided</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-6 p-3 rounded-xl bg-secondary/40">
+                To update your student record details (passport, nationality, address), please contact your advisor.
+              </p>
+            </Card>
+          </TabsContent>
+
           {/* ── Language ── */}
           <TabsContent value="language" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Language & Region</h2>
+              <h2 className="font-display font-bold text-lg mb-6">Language Preference</h2>
               <div className="grid sm:grid-cols-2 gap-3">
                 {LANGUAGES.map(l => (
                   <button key={l.code} onClick={() => handleSaveLang(l.code)}
@@ -163,34 +204,6 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-muted-foreground text-sm mt-4">RTL (right-to-left) is automatically applied for Arabic.</p>
-            </Card>
-          </TabsContent>
-
-          {/* ── Notifications ── */}
-          <TabsContent value="notifications" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Notification Preferences</h2>
-              <div className="space-y-4">
-                {[
-                  { key: "newLeads",            label: "New Leads",            desc: "Notify when a new lead is created or assigned" },
-                  { key: "applicationUpdates",   label: "Application Updates",  desc: "Notify when application stage changes" },
-                  { key: "documentAlerts",       label: "Document Alerts",      desc: "Notify when documents are uploaded or need review" },
-                  { key: "financeAlerts",        label: "Finance Alerts",       desc: "Notify for new invoices and overdue payments" },
-                ].map(n => (
-                  <div key={n.key} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/30 transition-colors">
-                    <div>
-                      <p className="font-semibold text-foreground">{n.label}</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">{n.desc}</p>
-                    </div>
-                    <button
-                      onClick={() => setNotifications(prev => ({ ...prev, [n.key]: !prev[n.key as keyof typeof prev] }))}
-                      className={`relative w-12 h-6 rounded-full transition-all ${notifications[n.key as keyof typeof notifications] ? "bg-primary" : "bg-secondary border-2 border-border"}`}>
-                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${notifications[n.key as keyof typeof notifications] ? "translate-x-6" : ""}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
             </Card>
           </TabsContent>
 
@@ -201,33 +214,21 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="p-5 rounded-xl bg-blue-50 border border-blue-200">
                   <p className="font-bold text-blue-800 flex items-center gap-2">
-                    <Shield className="w-5 h-5" /> Authentication via Replit
+                    <Shield className="w-5 h-5" /> Secured Account
                   </p>
                   <p className="text-sm text-blue-700 mt-2">
-                    Your account is secured through Replit's authentication system. No password management required.
+                    Your account is secured through Replit's authentication system.
                   </p>
                 </div>
                 <div className="p-5 rounded-xl border border-border/50 space-y-2">
                   <p className="font-semibold text-foreground">Account Details</p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Role</span>
-                    <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs capitalize">
-                      {ROLE_LABELS[user?.role || ""] || user?.role}
-                    </Badge>
+                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Student</Badge>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Account ID</span>
                     <span className="font-mono text-foreground">#{user?.id}</span>
-                  </div>
-                </div>
-                <div className="p-5 rounded-xl border border-border/50">
-                  <p className="font-semibold text-foreground mb-3">Active Sessions</p>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-foreground">Current session</p>
-                      <p className="text-xs text-muted-foreground">This device · Active now</p>
-                    </div>
-                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
                   </div>
                 </div>
                 <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>

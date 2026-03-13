@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail } from "lucide-react";
+import {
+  User, Globe, Shield, Save, Check, Briefcase,
+  Loader2, Phone, Mail, TrendingUp, Link2, Copy, MapPin,
+} from "lucide-react";
 
 const LANGUAGES = [
   { code: "en", label: "English",   flag: "🇬🇧" },
@@ -21,13 +24,7 @@ const LANGUAGES = [
   { code: "ru", label: "Русский",   flag: "🇷🇺" },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin", admin: "Admin", manager: "Manager",
-  staff: "Staff", consultant: "Consultant", accountant: "Accountant", editor: "Editor",
-  student: "Student", agent: "Agent", sub_agent: "Sub Agent",
-};
-
-export default function SettingsPage() {
+export default function AgentAccount() {
   const { user } = useAuth(true);
   const { lang, setLang } = useI18n();
   const { toast } = useToast();
@@ -35,9 +32,6 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
-  const [notifications, setNotifications] = useState({
-    newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false,
-  });
 
   useEffect(() => {
     if (user) {
@@ -48,6 +42,16 @@ export default function SettingsPage() {
       });
     }
   }, [user]);
+
+  const { data: agentProfile, isLoading: agentLoading } = useQuery({
+    queryKey: ["agent-me"],
+    enabled: !!user,
+    queryFn: async () => {
+      const res = await customFetch("/api/agents/me");
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
 
   async function handleSaveProfile() {
     if (!user) return;
@@ -64,7 +68,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) throw new Error("Failed to update profile");
       await qc.invalidateQueries({ queryKey: ["me"] });
-      toast({ title: "Profile updated", description: "Your changes have been saved." });
+      toast({ title: "Profile updated", description: "Your information has been saved." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -81,9 +85,14 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language: code }),
       });
-      toast({ title: "Language updated" });
     } catch {}
   }
+
+  const referralLink = `${window.location.origin}/apply?ref=${agentProfile?.id || user?.id || "AGENT"}`;
+  const copyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    toast({ title: "Copied!", description: "Referral link copied to clipboard." });
+  };
 
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
 
@@ -91,16 +100,17 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="space-y-6 max-w-3xl">
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your profile and preferences</p>
+          <h1 className="text-2xl font-display font-bold text-foreground">My Account</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage your agent profile and preferences</p>
         </div>
 
         <Tabs defaultValue="profile">
           <TabsList className="rounded-xl bg-secondary/50 p-1">
-            <TabsTrigger value="profile"       className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
-            <TabsTrigger value="language"      className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
-            <TabsTrigger value="notifications" className="rounded-lg gap-2"><Bell className="w-4 h-4" /> Notifications</TabsTrigger>
-            <TabsTrigger value="security"      className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
+            <TabsTrigger value="profile"  className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
+            <TabsTrigger value="agency"   className="rounded-lg gap-2"><Briefcase className="w-4 h-4" /> Agency</TabsTrigger>
+            <TabsTrigger value="referral" className="rounded-lg gap-2"><Link2 className="w-4 h-4" /> Referral</TabsTrigger>
+            <TabsTrigger value="language" className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
+            <TabsTrigger value="security" className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
           </TabsList>
 
           {/* ── Profile ── */}
@@ -114,8 +124,8 @@ export default function SettingsPage() {
                 <div>
                   <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
                   <p className="text-muted-foreground text-sm">{user?.email}</p>
-                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs mt-2 capitalize">
-                    {ROLE_LABELS[user?.role || ""] || user?.role}
+                  <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs mt-2">
+                    {user?.role === "sub_agent" ? "Sub Agent" : "Agent"}
                   </Badge>
                 </div>
               </div>
@@ -145,10 +155,77 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
+          {/* ── Agency ── */}
+          <TabsContent value="agency" className="mt-6">
+            <Card className="border-none shadow-lg shadow-black/5 p-6">
+              <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
+              {agentLoading ? (
+                <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-xl" />)}</div>
+              ) : !agentProfile ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <Briefcase className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
+                  <p className="font-medium">No agency profile yet</p>
+                  <p className="text-sm mt-1">Your agency details will appear here once set up by an admin</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {[
+                    { label: "Agency Name",       icon: Briefcase,   value: agentProfile.agencyName },
+                    { label: "Country",           icon: MapPin,      value: agentProfile.country },
+                    { label: "Commission Rate",   icon: TrendingUp,  value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null },
+                    { label: "Status",            icon: Check,       value: agentProfile.status },
+                  ].map((f, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <f.icon className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground font-medium">{f.label}</p>
+                          <p className="text-sm font-semibold text-foreground capitalize">{f.value || <span className="text-muted-foreground italic font-normal">Not set</span>}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground mt-2 p-3 rounded-xl bg-secondary/40">
+                    Agency details are managed by your account administrator. Contact your manager to update this information.
+                  </p>
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+
+          {/* ── Referral ── */}
+          <TabsContent value="referral" className="mt-6">
+            <Card className="border-none shadow-lg shadow-black/5 p-6">
+              <h2 className="font-display font-bold text-lg mb-6">Your Referral Link</h2>
+              <div className="p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20 mb-5">
+                <p className="text-sm text-muted-foreground mb-3 font-medium">Share this link with prospective students to track your referrals</p>
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-background border border-border/50 mb-4">
+                  <Link2 className="w-4 h-4 text-primary shrink-0" />
+                  <p className="text-sm font-mono text-foreground flex-1 truncate">{referralLink}</p>
+                </div>
+                <Button onClick={copyLink} className="w-full rounded-xl gap-2">
+                  <Copy className="w-4 h-4" /> Copy Referral Link
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="p-4 rounded-xl bg-secondary/40 border border-border/40">
+                  <p className="text-xs text-muted-foreground mb-1">Agent ID</p>
+                  <p className="font-mono font-bold text-foreground">#{agentProfile?.id || user?.id}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-secondary/40 border border-border/40">
+                  <p className="text-xs text-muted-foreground mb-1">Commission Rate</p>
+                  <p className="font-bold text-foreground">{agentProfile?.commissionRate ? `${agentProfile.commissionRate}%` : "—"}</p>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
           {/* ── Language ── */}
           <TabsContent value="language" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Language & Region</h2>
+              <h2 className="font-display font-bold text-lg mb-6">Language Preference</h2>
               <div className="grid sm:grid-cols-2 gap-3">
                 {LANGUAGES.map(l => (
                   <button key={l.code} onClick={() => handleSaveLang(l.code)}
@@ -163,34 +240,6 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-muted-foreground text-sm mt-4">RTL (right-to-left) is automatically applied for Arabic.</p>
-            </Card>
-          </TabsContent>
-
-          {/* ── Notifications ── */}
-          <TabsContent value="notifications" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Notification Preferences</h2>
-              <div className="space-y-4">
-                {[
-                  { key: "newLeads",            label: "New Leads",            desc: "Notify when a new lead is created or assigned" },
-                  { key: "applicationUpdates",   label: "Application Updates",  desc: "Notify when application stage changes" },
-                  { key: "documentAlerts",       label: "Document Alerts",      desc: "Notify when documents are uploaded or need review" },
-                  { key: "financeAlerts",        label: "Finance Alerts",       desc: "Notify for new invoices and overdue payments" },
-                ].map(n => (
-                  <div key={n.key} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/30 transition-colors">
-                    <div>
-                      <p className="font-semibold text-foreground">{n.label}</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">{n.desc}</p>
-                    </div>
-                    <button
-                      onClick={() => setNotifications(prev => ({ ...prev, [n.key]: !prev[n.key as keyof typeof prev] }))}
-                      className={`relative w-12 h-6 rounded-full transition-all ${notifications[n.key as keyof typeof notifications] ? "bg-primary" : "bg-secondary border-2 border-border"}`}>
-                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${notifications[n.key as keyof typeof notifications] ? "translate-x-6" : ""}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
             </Card>
           </TabsContent>
 
@@ -201,33 +250,23 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="p-5 rounded-xl bg-blue-50 border border-blue-200">
                   <p className="font-bold text-blue-800 flex items-center gap-2">
-                    <Shield className="w-5 h-5" /> Authentication via Replit
+                    <Shield className="w-5 h-5" /> Secured Account
                   </p>
                   <p className="text-sm text-blue-700 mt-2">
-                    Your account is secured through Replit's authentication system. No password management required.
+                    Your account is secured through Replit's authentication system.
                   </p>
                 </div>
                 <div className="p-5 rounded-xl border border-border/50 space-y-2">
                   <p className="font-semibold text-foreground">Account Details</p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Role</span>
-                    <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs capitalize">
-                      {ROLE_LABELS[user?.role || ""] || user?.role}
+                    <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs capitalize">
+                      {user?.role?.replace("_", " ")}
                     </Badge>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Account ID</span>
                     <span className="font-mono text-foreground">#{user?.id}</span>
-                  </div>
-                </div>
-                <div className="p-5 rounded-xl border border-border/50">
-                  <p className="font-semibold text-foreground mb-3">Active Sessions</p>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-foreground">Current session</p>
-                      <p className="text-xs text-muted-foreground">This device · Active now</p>
-                    </div>
-                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
                   </div>
                 </div>
                 <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>

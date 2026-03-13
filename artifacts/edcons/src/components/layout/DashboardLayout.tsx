@@ -30,6 +30,7 @@ import {
   Link2,
   TrendingUp,
   Library,
+  UserCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -104,8 +105,14 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
         {
           label: "My Portal",
           items: [
-            { title: "Dashboard", icon: LayoutDashboard, url: '/student' },
-            { title: "My Applications", icon: FileText, url: '/student/applications' },
+            { title: "Dashboard",        icon: LayoutDashboard, url: '/student' },
+            { title: "My Applications",  icon: FileText,        url: '/student/applications' },
+          ]
+        },
+        {
+          label: "Account",
+          items: [
+            { title: "My Account",  icon: UserCircle, url: '/student/account' },
           ]
         }
       ]
@@ -118,9 +125,15 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
         {
           label: "Agent Portal",
           items: [
-            { title: "Dashboard", icon: LayoutDashboard, url: '/agent' },
-            { title: "My Referrals", icon: Link2, url: '/agent/referrals' },
-            { title: "Commissions", icon: TrendingUp, url: '/agent/commissions' },
+            { title: "Dashboard",    icon: LayoutDashboard, url: '/agent' },
+            { title: "My Referrals", icon: Link2,           url: '/agent/referrals' },
+            { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
+          ]
+        },
+        {
+          label: "Account",
+          items: [
+            { title: "My Account", icon: UserCircle, url: '/agent/account' },
           ]
         }
       ]

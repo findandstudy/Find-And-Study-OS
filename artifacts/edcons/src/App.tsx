@@ -36,11 +36,13 @@ import AdminAuditLog from "@/pages/admin/AuditLog";
 // Student
 import StudentDashboard from "@/pages/student/Dashboard";
 import StudentApplications from "@/pages/student/Applications";
+import StudentAccount from "@/pages/student/Account";
 
 // Agent
 import AgentDashboard from "@/pages/agent/Dashboard";
 import AgentApplications from "@/pages/agent/Applications";
 import AgentCommissions from "@/pages/agent/Commissions";
+import AgentAccount from "@/pages/agent/Account";
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -125,6 +127,9 @@ function Router() {
       <Route path="/student/applications">
         <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentApplications /></ProtectedRoute>
       </Route>
+      <Route path="/student/account">
+        <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentAccount /></ProtectedRoute>
+      </Route>
 
       {/* Agent Portal */}
       <Route path="/agent">
@@ -135,6 +140,9 @@ function Router() {
       </Route>
       <Route path="/agent/commissions">
         <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/account">
+        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentAccount /></ProtectedRoute>
       </Route>
 
       <Route component={NotFound} />
