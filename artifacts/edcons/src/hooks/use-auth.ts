@@ -11,7 +11,8 @@ export function useAuth(requireAuth = false, allowedRoles?: string[]) {
   useEffect(() => {
     if (!isLoading && requireAuth) {
       if (!user || error) {
-        window.location.href = "/api/auth/login";
+        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/api/auth/login?returnTo=${returnTo}`;
         return;
       }
       // Pending users are handled by ProtectedRoute — don't redirect them

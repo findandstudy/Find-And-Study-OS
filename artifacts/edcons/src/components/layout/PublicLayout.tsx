@@ -42,7 +42,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             </div>
             
             <Button asChild className="rounded-full px-6 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all duration-300 hover:-translate-y-0.5">
-              <a href="/api/auth/login">{t('nav.login')}</a>
+              <Link href="/login">{t('nav.login')}</Link>
             </Button>
             
             <Button variant="ghost" size="icon" className="md:hidden">

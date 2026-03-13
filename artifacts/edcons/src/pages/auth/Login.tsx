@@ -84,7 +84,7 @@ export default function Login() {
           <p className="text-muted-foreground mb-10">Sign in to access your EduCons portal.</p>
 
           <Button asChild size="lg" className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5">
-            <a href="/api/auth/login" className="flex items-center justify-center gap-3">
+            <a href="/api/auth/login?returnTo=/login" className="flex items-center justify-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
                 <GraduationCap className="w-5 h-5" />
               </div>
