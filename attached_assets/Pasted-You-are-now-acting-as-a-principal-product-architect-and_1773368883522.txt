@@ -1,0 +1,106 @@
+You are now acting as a principal product architect and senior systems designer.
+
+I already have a large list of repeated feature requests, bug fixes, UX issues, workflow changes, role visibility rules, finance logic changes, and Course Finder redesign requests for my education consultancy platform.
+
+Do NOT treat these as isolated tickets only.
+
+Your task is to identify the deeper product patterns behind these requests and evolve the system architecture accordingly.
+
+==================================================
+CONTEXT
+==================================================
+
+The repeated requests show that the platform is growing beyond a simple CRM.
+
+The system already includes:
+- dashboard
+- leads
+- students
+- applications
+- agencies
+- staff
+- roles
+- invoices
+- course finder
+- settings
+- exports
+- login/portal logic
+- student and agency access layers
+
+The repeated requests heavily cluster around:
+- dashboard/table/filter behavior
+- role-based visibility
+- application workflow
+- form validation
+- finance/service fee/commission logic
+- course finder redesign
+- program/university state logic
+- export fields
+- notifications/activity
+- agent code / WhatsApp group code
+- responsive UI
+- iframe/embed support
+- document checklist / application status triggers
+
+==================================================
+YOUR JOB
+==================================================
+
+I want you to go beyond bug fixing and identify what core product layers should be added or redesigned.
+
+Analyze the request patterns and propose the missing system layers.
+
+Specifically think about whether the platform now needs:
+- workflow rules engine
+- status automation engine
+- role visibility engine
+- export template engine
+- activity timeline system
+- notification center
+- snapshot data model
+- finance ledger logic
+- validation rules engine
+- duplicate control layer
+- embeddable search/widget system
+- AI document processing queue
+- application readiness scoring
+- admin-driven dashboard/widget builder
+
+==================================================
+WHAT TO DELIVER
+==================================================
+
+Return your answer in this order:
+
+1. What these repeated requests reveal about the current system maturity
+2. What major architectural gaps they expose
+3. What new core system layers/modules should be added
+4. Which of those should be phase 1, phase 2, phase 3
+5. Which existing modules should be refactored because of this
+6. Which data model changes are needed
+7. Which settings/admin controls should become configurable
+8. Which automation rules should become admin-manageable instead of hardcoded
+9. Which AI-related opportunities naturally emerge from these requests
+10. A concrete upgrade roadmap from “CRM with many requests” to “real operations platform”
+
+==================================================
+IMPORTANT THINKING RULES
+==================================================
+
+- Do not stay at ticket level
+- Think at system level
+- Identify repeated patterns
+- Convert repeated fixes into reusable product architecture
+- Avoid hardcoding if a repeated pattern suggests a reusable engine
+- Be practical, not theoretical
+- Design for maintainability
+- Design for long-term scale
+- Keep the current single-company setup in mind, but structure things cleanly
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Treat this as product evolution planning.
+I do not only want fixes.
+I want the next-level architecture that these repeated requests are pointing toward.
