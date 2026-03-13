@@ -13,6 +13,7 @@ import contentRouter from "./content";
 import settingsRouter from "./settings";
 import auditRouter from "./audit";
 import statsRouter from "./stats";
+import catalogRouter from "./catalog";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(contentRouter);
 router.use(settingsRouter);
 router.use(auditRouter);
 router.use(statsRouter);
+router.use(catalogRouter);
 
 export default router;

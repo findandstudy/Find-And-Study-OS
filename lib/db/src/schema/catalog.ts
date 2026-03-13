@@ -1,0 +1,30 @@
+import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const countriesTable = pgTable("countries", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  code: text("code").notNull().unique(),
+  flagEmoji: text("flag_emoji"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const citiesTable = pgTable("cities", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  countryId: integer("country_id").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const insertCountrySchema = createInsertSchema(countriesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCountry = z.infer<typeof insertCountrySchema>;
+export type Country = typeof countriesTable.$inferSelect;
+
+export const insertCitySchema = createInsertSchema(citiesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCity = z.infer<typeof insertCitySchema>;
+export type City = typeof citiesTable.$inferSelect;

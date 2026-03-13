@@ -30,6 +30,7 @@ import StaffDocuments from "@/pages/staff/Documents";
 // Admin
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminUsers from "@/pages/admin/Users";
+import AdminCatalog from "@/pages/admin/Catalog";
 
 // Student
 import StudentDashboard from "@/pages/student/Dashboard";
@@ -70,6 +71,9 @@ function Router() {
       </Route>
       <Route path="/admin/users">
         <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/catalog">
+        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
       </Route>
       <Route path="/admin/settings">
         <ProtectedRoute allowedRoles={ADMIN_ROLES}><StaffSettings /></ProtectedRoute>

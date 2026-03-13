@@ -29,6 +29,7 @@ import {
   Activity,
   Link2,
   TrendingUp,
+  Library,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +59,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
         {
           label: "Admin",
           items: [
+            { title: "Catalog", icon: Library, url: '/admin/catalog' },
             { title: "Users", icon: UserCheck, url: '/admin/users' },
             { title: "Audit Log", icon: Activity, url: '/admin/audit' },
             { title: "Settings", icon: Settings, url: '/admin/settings' },
