@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /programs
+Allow: /blog
+Allow: /contact
+
+Disallow: /admin/
+Disallow: /staff/
+Disallow: /student/
+Disallow: /agent/
+Disallow: /login
+Disallow: /api/
+
+Sitemap: https://educons.com/sitemap.xml

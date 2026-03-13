@@ -44,16 +44,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         replitId: replitUserId,
         firstName: replitUserName || null,
         avatarUrl: replitUserImage || null,
-        role: "staff",
+        role: "pending",
         language: "en",
-        isActive: true,
+        isActive: false,
       })
       .returning();
     user = created;
   }
 
   if (!user.isActive) {
-    res.status(403).json({ error: "Account is deactivated" });
+    res.status(403).json({ error: "Account is pending activation. Contact your administrator." });
     return;
   }
 
@@ -61,8 +61,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-export async function requireRole(...roles: string[]) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: "Authentication required" });
       return;
@@ -82,7 +82,7 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
       .select()
       .from(usersTable)
       .where(eq(usersTable.replitId, replitUserId));
-    if (user) {
+    if (user && user.isActive) {
       req.user = user as AuthUser;
     }
   }
@@ -107,6 +107,7 @@ export async function logAudit(
       changes: changes ? JSON.stringify(changes) : null,
       ipAddress: ipAddress || null,
     });
-  } catch {
+  } catch (err) {
+    console.error("[audit] Failed to write audit log:", err);
   }
 }

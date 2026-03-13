@@ -1,21 +1,58 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
-import { requireAuth } from "../lib/auth";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable } from "@workspace/db";
+import { eq, sql, and } from "drizzle-orm";
+import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { STAFF_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
+const APP_PATCH_FIELDS = [
+  "stage", "universityId", "programId", "intakeDate",
+  "offerDate", "offerDeadline", "visaStatus", "notes", "assignedTo",
+];
+
 router.get("/applications", requireAuth, async (req, res): Promise<void> => {
-  const { studentId, agentId, stage, search, page = "1", limit = "20" } = req.query as Record<string, string>;
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  const { studentId, agentId, stage, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(applicationsTable);
+  const user = req.user!;
+  const isStaff = STAFF_ROLES.includes(user.role as any);
+
+  const conditions = [];
+
+  if (isStaff) {
+    if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
+    if (agentId) conditions.push(eq(applicationsTable.agentId, parseInt(agentId, 10)));
+    if (stage) conditions.push(eq(applicationsTable.stage, stage));
+  } else if (user.role === "student") {
+    const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+    if (!studentRec) {
+      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      return;
+    }
+    conditions.push(eq(applicationsTable.studentId, studentRec.id));
+  } else if (user.role === "agent" || user.role === "sub_agent") {
+    const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, user.id));
+    if (!agentRec) {
+      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      return;
+    }
+    conditions.push(eq(applicationsTable.agentId, agentRec.id));
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(applicationsTable)
+    .where(whereClause);
 
   const data = await db
     .select()
     .from(applicationsTable)
+    .where(whereClause)
     .limit(limitNum)
     .offset(offset)
     .orderBy(applicationsTable.createdAt);
@@ -31,42 +68,70 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.post("/applications", requireAuth, async (req, res): Promise<void> => {
-  const { studentId, stage = "inquiry", ...rest } = req.body;
+router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const { studentId, stage = "inquiry", universityId, programId, intakeDate, notes, agentId } = req.body;
   if (!studentId) {
     res.status(400).json({ error: "studentId is required" });
     return;
   }
-  const [app] = await db.insert(applicationsTable).values({ studentId, stage, ...rest }).returning();
+  const [app] = await db.insert(applicationsTable).values({
+    studentId, stage,
+    universityId: universityId || null,
+    programId: programId || null,
+    intakeDate: intakeDate || null,
+    notes: notes || null,
+    agentId: agentId || null,
+  }).returning();
+  await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
   res.status(201).json(app);
 });
 
 router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw, 10);
+  const id = parseInt(req.params.id, 10);
   const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, id));
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+
+  const user = req.user!;
+  const isStaff = STAFF_ROLES.includes(user.role as any);
+  if (!isStaff) {
+    if (user.role === "student") {
+      const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+      if (!studentRec || studentRec.id !== app.studentId) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+    } else {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  }
+
   res.json(app);
 });
 
-router.patch("/applications/:id", requireAuth, async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw, 10);
-  const [app] = await db.update(applicationsTable).set(req.body).where(eq(applicationsTable.id, id)).returning();
+router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const updates: Record<string, unknown> = {};
+  for (const key of APP_PATCH_FIELDS) {
+    if (req.body[key] !== undefined) updates[key] = req.body[key];
+  }
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
+    return;
+  }
+  const [app] = await db.update(applicationsTable).set(updates).where(eq(applicationsTable.id, id)).returning();
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+  await logAudit(req.user!.id, "update_application", "application", id, updates, req.ip);
   res.json(app);
 });
 
-router.delete("/applications/:id", requireAuth, async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw, 10);
+router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
   await db.delete(applicationsTable).where(eq(applicationsTable.id, id));
+  await logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
   res.sendStatus(204);
 });
 
 router.get("/applications/:id/notes", requireAuth, async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw, 10);
+  const id = parseInt(req.params.id, 10);
   const notes = await db
     .select({
       id: notesTable.id,
@@ -77,18 +142,17 @@ router.get("/applications/:id/notes", requireAuth, async (req, res): Promise<voi
     })
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
-    .where(eq(notesTable.resourceId, id))
+    .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")))
     .orderBy(notesTable.createdAt);
   res.json(notes);
 });
 
 router.post("/applications/:id/notes", requireAuth, async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw, 10);
+  const id = parseInt(req.params.id, 10);
   const { content } = req.body;
-  if (!content) { res.status(400).json({ error: "content is required" }); return; }
+  if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
   const [note] = await db.insert(notesTable).values({
-    content,
+    content: String(content).slice(0, 5000),
     authorId: req.user!.id,
     resourceType: "application",
     resourceId: id,

@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
+import { useSeo } from "@/hooks/use-seo";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -144,6 +145,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth(true);
   const [location] = useLocation();
   const { t } = useI18n();
+  useSeo({ title: "Portal", noindex: true });
 
   if (isLoading || !user) {
     return (
