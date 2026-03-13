@@ -1,18 +1,20 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
+import { authMiddleware } from "./middlewares/authMiddleware";
 import router from "./routes";
 
 const app: Express = express();
 
-const isDev = process.env.NODE_ENV !== "production";
-
 app.use(cors({
-  origin: isDev ? true : (process.env.ALLOWED_ORIGIN ?? false),
   credentials: true,
+  origin: true,
 }));
 
+app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+app.use(authMiddleware);
 
 app.use("/api", router);
 

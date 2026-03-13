@@ -38,8 +38,11 @@ artifacts-monorepo/
 
 ## Authentication
 
-- Replit Auth via `x-replit-user-id` headers
-- Auto-creates users on first Replit login with role `pending` and `isActive: false` — admin must activate
+- Replit Auth via OpenID Connect (PKCE) — full OIDC flow with session cookies
+- OIDC routes: `/api/auth/login` (redirect to Replit), `/api/callback` (OIDC callback), `/api/auth/logout`
+- Sessions stored in `sessions` table (PostgreSQL), 7-day TTL, httpOnly secure cookies
+- Auth middleware runs on every request; loads user from session cookie (`sid`)
+- Auto-creates users on first login with role `pending` and `isActive: false` — admin must activate
 - Roles: `super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `pending`
 - Role routing: admin/manager/super_admin → `/admin`, staff/consultant/accountant/editor → `/staff`, student → `/student`, agent/sub_agent → `/agent`
 - Finance read (GET invoices/commissions): STAFF_ROLES; Finance write (POST/PATCH): FINANCE_ROLES (super_admin, admin, manager, accountant)

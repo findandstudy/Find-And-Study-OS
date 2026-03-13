@@ -88,7 +88,7 @@ export default function Login() {
               <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
                 <GraduationCap className="w-5 h-5" />
               </div>
-              Continue with Replit
+              Sign In
               <ArrowRight className="w-5 h-5 ml-auto" />
             </a>
           </Button>
