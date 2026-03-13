@@ -19,6 +19,7 @@ import {
   Users, 
   GraduationCap, 
   FileText, 
+  FolderOpen,
   Briefcase, 
   Settings, 
   Shield,
@@ -49,6 +50,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Leads", icon: Users, url: '/staff/leads' },
             { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Students", icon: GraduationCap, url: '/staff/students' },
+            { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
             { title: "Finance", icon: DollarSign, url: '/staff/finance' },
           ]
         },
@@ -79,6 +81,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Leads", icon: Users, url: '/staff/leads' },
             { title: "Students", icon: GraduationCap, url: '/staff/students' },
             { title: "Applications", icon: FileText, url: '/staff/applications' },
+            { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
             { title: "Finance", icon: Briefcase, url: '/staff/finance' },
           ]
         },

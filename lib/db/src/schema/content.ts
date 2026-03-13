@@ -9,6 +9,7 @@ export const blogPostsTable = pgTable("blog_posts", {
   excerpt: text("excerpt"),
   content: text("content"),
   locale: text("locale").notNull().default("en"),
+  category: text("category"),
   published: boolean("published").notNull().default(false),
   authorId: integer("author_id"),
   featuredImageUrl: text("featured_image_url"),

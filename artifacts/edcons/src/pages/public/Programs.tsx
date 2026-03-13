@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ const countries = ["All", "UK", "USA", "Canada", "Australia", "Germany", "Nether
 const levels = ["All", "Bachelor", "Master", "PhD", "Language", "Foundation"];
 
 export default function Programs() {
+  useSeo({ title: "Programs", description: "Browse programs at 200+ partner universities worldwide." });
   const [search, setSearch] = useState("");
   const [country, setCountry] = useState("All");
   const [level, setLevel] = useState("All");

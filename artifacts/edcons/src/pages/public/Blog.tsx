@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { useSeo } from "@/hooks/use-seo";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useListBlogPosts } from "@workspace/api-client-react";
@@ -9,6 +10,7 @@ import { motion } from "framer-motion";
 const categories = ["All", "University Guide", "Visa Tips", "Scholarships", "Student Life", "Career Advice"];
 
 export default function Blog() {
+  useSeo({ title: "Blog", description: "Expert articles on studying abroad, university applications, visas, and scholarships." });
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const { data: postsResp, isLoading } = useListBlogPosts({ query: { queryKey: ['blog-posts'] } });

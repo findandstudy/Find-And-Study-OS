@@ -1,11 +1,13 @@
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
+import { useSeo } from "@/hooks/use-seo";
 import { ArrowRight, BookOpen, FileText, Globe2, ShieldCheck, Star, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 
 export default function Home() {
+  useSeo({ title: "Global Education Consultancy", description: "Expert guidance for university admissions, visas, and scholarships worldwide." });
   const { t } = useI18n();
 
   return (

@@ -1,5 +1,6 @@
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { useSeo } from "@/hooks/use-seo";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Award, Globe2, Heart, Users, Target, Zap } from "lucide-react";
@@ -21,6 +22,7 @@ const values = [
 ];
 
 export default function About() {
+  useSeo({ title: "About Us", description: "Learn about EduCons and our mission to connect students with the best universities worldwide." });
   return (
     <PublicLayout>
       {/* Hero */}

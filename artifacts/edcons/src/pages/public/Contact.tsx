@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { useSeo } from "@/hooks/use-seo";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lucide-react";
@@ -12,6 +13,7 @@ const offices = [
 ];
 
 export default function Contact() {
+  useSeo({ title: "Contact Us", description: "Get in touch with our team of education consultants." });
   const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);

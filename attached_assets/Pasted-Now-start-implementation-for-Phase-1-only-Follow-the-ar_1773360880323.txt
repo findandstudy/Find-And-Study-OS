@@ -1,0 +1,178 @@
+Now start implementation for Phase 1 only.
+
+Follow the architecture you proposed.
+Do not try to build everything at once.
+Proceed in a clean, modular, production-minded way.
+
+==================================================
+PHASE 1 GOAL
+==================================================
+
+Build the project foundation and core operational skeleton for the Education Consultancy Operating System.
+
+==================================================
+PHASE 1 SCOPE
+==================================================
+
+Implement only these foundational areas:
+
+1. Core project structure
+- clean folder structure
+- environment setup
+- config architecture
+- modular app architecture
+
+2. Authentication and authorization
+- one login page
+- secure auth flow
+- role-based redirect after login
+- RBAC foundation
+- protected routes
+- role-based navigation shell
+
+3. Database foundation
+Create initial schema for:
+- users
+- roles
+- permissions
+- students
+- agents
+- leads
+- applications
+- universities
+- programs
+- documents
+- invoices
+- commission records
+- announcements
+- pages/blog basics
+- settings
+- audit logs
+- AI extraction logs (basic structure only)
+
+4. Public website foundation
+- homepage shell
+- blog shell
+- landing page shell
+- contact/inquiry form shell
+- program search shell
+- SEO base structure
+- multilingual-ready structure
+
+5. Internal app shells
+- admin shell
+- staff shell
+- student shell
+- agent shell
+
+6. Leads foundation
+- lead list
+- lead detail
+- create lead
+- source/status fields
+- basic filters
+- convert lead to student flow foundation
+
+7. Students foundation
+- student list
+- student detail
+- personal info
+- academic info
+- status
+
+8. Applications foundation
+- application list
+- application detail
+- create application
+- relation to student/program/university
+- stage tracking base
+
+9. Documents foundation
+- secure file upload structure
+- document entity structure
+- document type support
+- preview/download/delete architecture
+- file access permission logic
+- Replit storage compatible design
+- future AI processing hook structure
+
+10. Finance foundation
+- invoice entity
+- invoice list/detail
+- payment status field
+- commission entity structure
+- simple finance dashboard widget placeholders
+
+11. Integrations foundation
+- settings structure for SMTP, Google Sheets, n8n, WhatsApp, Meta Lead
+- no need to fully implement all integrations yet
+- but prepare config pages and service interfaces cleanly
+
+12. Multilingual foundation
+- i18n setup
+- role-aware UI labels ready for localization
+- public content structure ready for multiple languages
+
+13. SEO foundation
+- metadata structure
+- canonical handling
+- robots/sitemap basics
+- blog/landing SEO fields in schema
+
+14. Security foundation
+- validation
+- auth checks
+- permission checks
+- safe file upload rules
+- audit log for critical actions
+- environment variable discipline
+- basic rate limiting strategy if practical
+
+==================================================
+PHASE 1 RULES
+==================================================
+
+- keep code modular
+- keep code clean
+- do not hardcode business text everywhere
+- do not create messy monolithic files
+- do not skip validation
+- do not skip access control
+- do not skip responsive layout
+- do not overengineer features not in phase 1
+- do not implement advanced AI yet, only the structure/hooks
+- do not implement deep accounting yet
+- do not implement advanced tenant logic yet
+
+==================================================
+EXPECTED OUTPUT STYLE
+==================================================
+
+Before writing code:
+1. briefly restate phase 1 plan
+2. list the files/modules you will create first
+
+Then start implementation in safe steps.
+
+After each major step:
+- summarize what was done
+- mention what remains
+
+==================================================
+CRITICAL TESTS FOR PHASE 1
+==================================================
+
+By the end of phase 1, verify these flows:
+- login works
+- role-based redirect works
+- protected routes work
+- public form can create a lead
+- lead list/detail works
+- lead can be converted to student
+- student can have documents attached structurally
+- application can be created and linked
+- invoice base flow works
+- multilingual setup works
+- public pages have SEO metadata structure
+
+Start with database schema, auth, and app shells first.
