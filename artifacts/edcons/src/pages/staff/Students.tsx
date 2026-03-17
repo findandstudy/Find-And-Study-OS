@@ -86,6 +86,43 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(dataUrl.split(",")[1]);
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepareDocumentBase64(file: File): Promise<{ base64: string; mediaType: string; isImage: boolean }> {
+  const isImage = file.type.startsWith("image/");
+  if (isImage) {
+    const base64 = await compressImage(file);
+    return { base64, mediaType: "image/jpeg", isImage: true };
+  }
+  const base64 = await fileToBase64(file);
+  return { base64, mediaType: file.type || "application/pdf", isImage: false };
+}
+
 function DropZone({
   docType,
   uploaded,
@@ -101,14 +138,13 @@ function DropZone({
   const [dragging, setDragging] = useState(false);
 
   async function handleFile(file: File) {
-    const base64 = await fileToBase64(file);
-    const isImage = file.type.startsWith("image/");
+    const { base64, mediaType, isImage } = await prepareDocumentBase64(file);
     onUpload({
       key: docType.key,
       label: docType.label,
       file,
       base64,
-      mediaType: file.type || (isImage ? "image/jpeg" : "application/pdf"),
+      mediaType,
       isImage,
     });
   }
@@ -269,7 +305,10 @@ function AddStudentModal({
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        if (res.status === 413) {
+          throw new Error("Documents are too large even after compression. Please use smaller files (max ~10MB total).");
+        }
+        const err = await res.json().catch(() => ({ error: "AI extraction failed" }));
         throw new Error(err.error || "AI extraction failed");
       }
 
