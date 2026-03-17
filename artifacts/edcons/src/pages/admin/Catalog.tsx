@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
@@ -61,7 +62,17 @@ function useDebounce<T>(value: T, delay = 300): T {
 
 type Country = { id: number; name: string; code: string; flagEmoji?: string | null; isActive: boolean };
 type City = { id: number; name: string; countryId: number; isActive: boolean };
-type University = { id: number; name: string; country: string; city?: string | null; website?: string | null; description?: string | null; ranking?: number | null; logoUrl?: string | null; isActive: boolean };
+type University = {
+  id: number; name: string; country: string; city?: string | null; website?: string | null;
+  description?: string | null; ranking?: number | null; logoUrl?: string | null; isActive: boolean;
+  universityType?: string | null; taxType?: string | null; taxPercent?: number | null;
+  qsRanking?: number | null; timesRanking?: number | null; shanghaiRanking?: number | null;
+  cwtsLeidenRanking?: number | null; address?: string | null; onlinePaymentUrl?: string | null;
+  cricosLink?: string | null; documentsLink?: string | null; currentFeeListLink?: string | null;
+  initialDepositOptions?: string | null; admissionProcess?: string | null;
+  contactPersonName?: string | null; contactPersonPhone?: string | null; contactPersonEmail?: string | null;
+  status: string;
+};
 type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; isActive: boolean };
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
@@ -402,6 +413,10 @@ function CitiesTab() {
 ══════════════════════════════════════════════════════════ */
 function UniversitiesTab() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super_admin";
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const dSearch = useDebounce(search);
@@ -434,6 +449,19 @@ function UniversitiesTab() {
     return res;
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      setForm(f => ({ ...f, logoUrl: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const setF = (updates: Partial<University>) => setForm(f => ({ ...f, ...updates } as Partial<University>));
+
   const template = `name,country,city,website,description,ranking\nIstanbul University,Turkey,Istanbul,https://www.istanbul.edu.tr,Leading state university,351\nMiddle East Technical University,Turkey,Ankara,https://www.metu.edu.tr,Top technical university,601\nKing's College London,United Kingdom,London,https://www.kcl.ac.uk,Russell Group university,35`;
   const headers = "name*, country*, city, website, description, ranking";
 
@@ -445,7 +473,7 @@ function UniversitiesTab() {
           <Input placeholder="Üniversite ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
-        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Üniversite Ekle</Button>
+        <Button onClick={() => setForm({ isActive: true, status: "open" })}><Plus className="h-4 w-4 mr-2" />Üniversite Ekle</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -454,25 +482,42 @@ function UniversitiesTab() {
             <tr>
               <th className="text-left px-4 py-2 font-medium">Üniversite</th>
               <th className="text-left px-4 py-2 font-medium">Ülke / Şehir</th>
-              <th className="text-left px-4 py-2 font-medium">Sıralama</th>
+              <th className="text-left px-4 py-2 font-medium">Tür</th>
+              <th className="text-left px-4 py-2 font-medium">QS</th>
               <th className="text-left px-4 py-2 font-medium">Durum</th>
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {universities.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">Üniversite bulunamadı</td></tr>
+              <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Üniversite bulunamadı</td></tr>
             )}
             {universities.map(u => (
               <tr key={u.id} className="hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-2.5">
-                  <div className="font-medium">{u.name}</div>
-                  {u.website && <a href={u.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block max-w-[180px]">{u.website}</a>}
+                  <div className="flex items-center gap-2">
+                    {u.logoUrl
+                      ? <img src={u.logoUrl} alt={u.name} className="w-7 h-7 rounded object-contain border bg-white" />
+                      : <div className="w-7 h-7 rounded border bg-muted flex items-center justify-center"><Building2 className="h-3.5 w-3.5 text-muted-foreground" /></div>
+                    }
+                    <div>
+                      <div className="font-medium">{u.name}</div>
+                      {u.website && <a href={u.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">{u.website}</a>}
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.country}{u.city ? `, ${u.city}` : ""}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{u.ranking ?? "—"}</td>
+                <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  {u.universityType === "state" ? "Devlet" : u.universityType === "private" ? "Özel" : u.universityType === "foundation" ? "Vakıf" : u.universityType ?? "—"}
+                </td>
+                <td className="px-4 py-2.5 text-muted-foreground">{u.qsRanking ?? "—"}</td>
                 <td className="px-4 py-2.5">
-                  <Badge variant={u.isActive ? "default" : "secondary"} className="text-xs">{u.isActive ? "Aktif" : "Pasif"}</Badge>
+                  <div className="flex flex-col gap-0.5">
+                    <Badge variant={u.status === "open" ? "default" : "secondary"} className="text-xs w-fit">
+                      {u.status === "open" ? "Açık" : "Kapalı"}
+                    </Badge>
+                    {!u.isActive && <Badge variant="outline" className="text-xs w-fit text-muted-foreground">Pasif</Badge>}
+                  </div>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
@@ -488,26 +533,209 @@ function UniversitiesTab() {
       <Pagination page={page} totalPages={totalPages} onPage={setPage} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{form?.id ? "Üniversiteyi Düzenle" : "Yeni Üniversite"}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2"><Label>Üniversite Adı *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-              <div><Label>Ülke *</Label><Input className="mt-1" placeholder="Turkey" value={form?.country ?? ""} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} /></div>
-              <div><Label>Şehir</Label><Input className="mt-1" placeholder="Istanbul" value={form?.city ?? ""} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></div>
-              <div className="col-span-2"><Label>Website</Label><Input className="mt-1" placeholder="https://…" value={form?.website ?? ""} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} /></div>
-              <div><Label>Sıralama</Label><Input className="mt-1" type="number" value={form?.ranking ?? ""} onChange={e => setForm(f => ({ ...f, ranking: e.target.value ? Number(e.target.value) : undefined }))} /></div>
-              <div><Label>Logo URL</Label><Input className="mt-1" placeholder="https://…" value={form?.logoUrl ?? ""} onChange={e => setForm(f => ({ ...f, logoUrl: e.target.value }))} /></div>
-              <div className="col-span-2"><Label>Açıklama</Label><Textarea className="mt-1" rows={3} value={form?.description ?? ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-              <div className="col-span-2 flex items-center justify-between">
-                <Label>Aktif</Label>
-                <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{form?.id ? "Üniversiteyi Düzenle" : "Yeni Üniversite"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+
+            {/* ── Logo ──────────────────────────────── */}
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-lg border-2 border-dashed bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                {form?.logoUrl
+                  ? <img src={form.logoUrl} alt="logo" className="w-full h-full object-contain" />
+                  : <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                }
+              </div>
+              <div className="flex-1">
+                <Label className="text-sm font-medium">Üniversite Logosu</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-2">PNG, JPG veya SVG yükleyin</p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />Dosya Seç
+                  </Button>
+                  {form?.logoUrl && (
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setF({ logoUrl: undefined })}>
+                      Kaldır
+                    </Button>
+                  )}
+                </div>
+                <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                <div className="mt-2">
+                  <Input placeholder="veya Logo URL yapıştırın…" className="text-xs h-8"
+                    value={form?.logoUrl?.startsWith("data:") ? "" : form?.logoUrl ?? ""}
+                    onChange={e => setF({ logoUrl: e.target.value || undefined })}
+                  />
+                </div>
               </div>
             </div>
+
+            {/* ── Temel Bilgiler ─────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Temel Bilgiler</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label>Üniversite Adı *</Label>
+                  <Input className="mt-1" value={form?.name ?? ""} onChange={e => setF({ name: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Ülke *</Label>
+                  <Input className="mt-1" placeholder="Turkey" value={form?.country ?? ""} onChange={e => setF({ country: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Şehir</Label>
+                  <Input className="mt-1" placeholder="Istanbul" value={form?.city ?? ""} onChange={e => setF({ city: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Üniversite Türü</Label>
+                  <Select value={form?.universityType ?? ""} onValueChange={v => setF({ universityType: v || null })}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Tür seçin…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="state">Devlet</SelectItem>
+                      <SelectItem value="private">Özel</SelectItem>
+                      <SelectItem value="foundation">Vakıf</SelectItem>
+                      <SelectItem value="other">Diğer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Başvuru Durumu</Label>
+                  <Select value={form?.status ?? "open"} onValueChange={v => setF({ status: v })}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Açık</SelectItem>
+                      <SelectItem value="closed">Kapalı</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label>Adres</Label>
+                  <Input className="mt-1" placeholder="Tam adres…" value={form?.address ?? ""} onChange={e => setF({ address: e.target.value })} />
+                </div>
+                <div className="col-span-2">
+                  <Label>Açıklama</Label>
+                  <Textarea className="mt-1" rows={2} value={form?.description ?? ""} onChange={e => setF({ description: e.target.value })} />
+                </div>
+                <div className="col-span-2 flex items-center justify-between">
+                  <Label>Sistemde Aktif</Label>
+                  <Switch checked={form?.isActive ?? true} onCheckedChange={v => setF({ isActive: v })} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Vergi ─────────────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Vergi Bilgileri</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Vergi Türü</Label>
+                  <Input className="mt-1" placeholder="KDV, Stopaj…" value={form?.taxType ?? ""} onChange={e => setF({ taxType: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Vergi Oranı (%)</Label>
+                  <Input className="mt-1" type="number" step="0.01" placeholder="18" value={form?.taxPercent ?? ""} onChange={e => setF({ taxPercent: e.target.value ? Number(e.target.value) : undefined })} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Sıralamalar ───────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Dünya Sıralamaları</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>QS World Ranking</Label>
+                  <Input className="mt-1" type="number" placeholder="—" value={form?.qsRanking ?? ""} onChange={e => setF({ qsRanking: e.target.value ? Number(e.target.value) : undefined })} />
+                </div>
+                <div>
+                  <Label>Times Higher Education</Label>
+                  <Input className="mt-1" type="number" placeholder="—" value={form?.timesRanking ?? ""} onChange={e => setF({ timesRanking: e.target.value ? Number(e.target.value) : undefined })} />
+                </div>
+                <div>
+                  <Label>Shanghai (ARWU)</Label>
+                  <Input className="mt-1" type="number" placeholder="—" value={form?.shanghaiRanking ?? ""} onChange={e => setF({ shanghaiRanking: e.target.value ? Number(e.target.value) : undefined })} />
+                </div>
+                <div>
+                  <Label>CWTS Leiden</Label>
+                  <Input className="mt-1" type="number" placeholder="—" value={form?.cwtsLeidenRanking ?? ""} onChange={e => setF({ cwtsLeidenRanking: e.target.value ? Number(e.target.value) : undefined })} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Bağlantılar ───────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Bağlantılar ve Belgeler</p>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <Label>Website</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input placeholder="https://university.edu" value={form?.website ?? ""} onChange={e => setF({ website: e.target.value })} />
+                    {form?.website && <a href={form.website} target="_blank" rel="noopener noreferrer"><Button type="button" variant="ghost" size="icon"><ExternalLink className="h-4 w-4" /></Button></a>}
+                  </div>
+                </div>
+                <div>
+                  <Label>Online Ödeme Linki</Label>
+                  <Input className="mt-1" placeholder="https://…" value={form?.onlinePaymentUrl ?? ""} onChange={e => setF({ onlinePaymentUrl: e.target.value })} />
+                </div>
+                <div>
+                  <Label>CRICOS Linki</Label>
+                  <Input className="mt-1" placeholder="https://cricos.education.gov.au/…" value={form?.cricosLink ?? ""} onChange={e => setF({ cricosLink: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Belgeler Linki</Label>
+                  <Input className="mt-1" placeholder="https://…" value={form?.documentsLink ?? ""} onChange={e => setF({ documentsLink: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Güncel Ücret Listesi</Label>
+                  <Input className="mt-1" placeholder="https://…" value={form?.currentFeeListLink ?? ""} onChange={e => setF({ currentFeeListLink: e.target.value })} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Kabul Süreci ──────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Kabul Süreci</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Başlangıç Depozito Seçenekleri</Label>
+                  <Textarea className="mt-1" rows={2} placeholder="Depozito miktarları ve koşulları…" value={form?.initialDepositOptions ?? ""} onChange={e => setF({ initialDepositOptions: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Kabul Süreci Açıklaması</Label>
+                  <Textarea className="mt-1" rows={3} placeholder="Adım adım başvuru ve kabul süreci…" value={form?.admissionProcess ?? ""} onChange={e => setF({ admissionProcess: e.target.value })} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── İletişim (sadece Super Admin) ─────── */}
+            {isSuperAdmin && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lock className="h-4 w-4 text-amber-600" />
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">İletişim Kişisi — Sadece Super Admin</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label>İsim Soyisim</Label>
+                    <Input className="mt-1 bg-white" placeholder="John Doe" value={form?.contactPersonName ?? ""} onChange={e => setF({ contactPersonName: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Telefon</Label>
+                    <Input className="mt-1 bg-white" placeholder="+1 555 000 0000" value={form?.contactPersonPhone ?? ""} onChange={e => setF({ contactPersonPhone: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>E-posta</Label>
+                    <Input className="mt-1 bg-white" type="email" placeholder="contact@university.edu" value={form?.contactPersonEmail ?? ""} onChange={e => setF({ contactPersonEmail: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setForm(null)}>İptal</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.country}>Kaydet</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.country}>
+              {save.isPending ? "Kaydediliyor…" : "Kaydet"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

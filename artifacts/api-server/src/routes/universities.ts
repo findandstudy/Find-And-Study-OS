@@ -6,7 +6,15 @@ import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
-const UNI_PATCH_FIELDS = ["name", "country", "city", "website", "logoUrl", "description", "ranking", "isActive"];
+const UNI_PATCH_FIELDS = [
+  "name", "country", "city", "website", "logoUrl", "description", "ranking", "isActive",
+  "universityType", "taxType", "taxPercent", "qsRanking", "timesRanking", "shanghaiRanking",
+  "cwtsLeidenRanking", "address", "onlinePaymentUrl", "cricosLink", "documentsLink",
+  "currentFeeListLink", "initialDepositOptions", "admissionProcess",
+  "contactPersonName", "contactPersonPhone", "contactPersonEmail", "status",
+];
+
+const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
 const PROG_PATCH_FIELDS = [
   "universityId", "name", "degree", "field", "language", "duration",
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
@@ -15,6 +23,15 @@ const PROG_PATCH_FIELDS = [
 ];
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
+
+function maskContacts(uni: Record<string, any>, userRole?: string): Record<string, any> {
+  if (userRole === "super_admin") return uni;
+  const masked = { ...uni };
+  for (const f of CONTACT_FIELDS) {
+    delete masked[f];
+  }
+  return masked;
+}
 
 router.get("/universities", async (req, res): Promise<void> => {
   const { country, search, page = "1", limit = "20" } = req.query as Record<string, string>;
@@ -28,15 +45,41 @@ router.get("/universities", async (req, res): Promise<void> => {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(universitiesTable).where(where);
-  const data = await db.select().from(universitiesTable).where(where).limit(limitNum).offset(offset).orderBy(universitiesTable.name);
+  const rows = await db.select().from(universitiesTable).where(where).limit(limitNum).offset(offset).orderBy(universitiesTable.name);
+  const userRole = (req as any).user?.role;
+  const data = rows.map(u => maskContacts(u as any, userRole));
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, country, city, website, logoUrl, description, ranking, isActive = true } = req.body;
+  const {
+    name, country, city, website, logoUrl, description, ranking, isActive = true,
+    universityType, taxType, taxPercent, qsRanking, timesRanking, shanghaiRanking,
+    cwtsLeidenRanking, address, onlinePaymentUrl, cricosLink, documentsLink,
+    currentFeeListLink, initialDepositOptions, admissionProcess,
+    contactPersonName, contactPersonPhone, contactPersonEmail, status = "open",
+  } = req.body;
   if (!name || !country) { res.status(400).json({ error: "name and country are required" }); return; }
-  const [uni] = await db.insert(universitiesTable).values({ name, country, city: city || null, website: website || null, logoUrl: logoUrl || null, description: description || null, ranking: ranking ? Number(ranking) : null, isActive }).returning();
+  const [uni] = await db.insert(universitiesTable).values({
+    name, country, city: city || null, website: website || null, logoUrl: logoUrl || null,
+    description: description || null, ranking: ranking ? Number(ranking) : null, isActive,
+    universityType: universityType || null, taxType: taxType || null,
+    taxPercent: taxPercent ? Number(taxPercent) : null,
+    qsRanking: qsRanking ? Number(qsRanking) : null,
+    timesRanking: timesRanking ? Number(timesRanking) : null,
+    shanghaiRanking: shanghaiRanking ? Number(shanghaiRanking) : null,
+    cwtsLeidenRanking: cwtsLeidenRanking ? Number(cwtsLeidenRanking) : null,
+    address: address || null, onlinePaymentUrl: onlinePaymentUrl || null,
+    cricosLink: cricosLink || null, documentsLink: documentsLink || null,
+    currentFeeListLink: currentFeeListLink || null,
+    initialDepositOptions: initialDepositOptions || null,
+    admissionProcess: admissionProcess || null,
+    contactPersonName: contactPersonName || null,
+    contactPersonPhone: contactPersonPhone || null,
+    contactPersonEmail: contactPersonEmail || null,
+    status,
+  }).returning();
   await logAudit(req.user!.id, "create_university", "university", uni.id, { name, country }, req.ip);
   res.status(201).json(uni);
 });
@@ -46,7 +89,8 @@ router.get("/universities/:id", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [uni] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, id));
   if (!uni) { res.status(404).json({ error: "University not found" }); return; }
-  res.json(uni);
+  const userRole = (req as any).user?.role;
+  res.json(maskContacts(uni as any, userRole));
 });
 
 router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
