@@ -1,3 +1,4 @@
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -5,11 +6,26 @@ import {
   useListApplications,
   useListDocuments,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2 } from "lucide-react";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const DOC_TYPES = [
+  { key: "passport", label: "Passport" },
+  { key: "diploma", label: "Diploma" },
+  { key: "transcript", label: "Transcript" },
+  { key: "photo", label: "Photo" },
+  { key: "other", label: "Other" },
+];
 
 interface Props {
   id: number;
@@ -35,6 +51,7 @@ const STAGE_COLORS: Record<string, string> = {
 
 export default function StudentDetail({ id }: Props) {
   const [, setLocation] = useLocation();
+  const qc = useQueryClient();
 
   const { data: student, isLoading } = useGetStudent(id);
   const { data: applicationsResp } = useListApplications({ studentId: id });
@@ -42,6 +59,68 @@ export default function StudentDetail({ id }: Props) {
 
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadType, setUploadType] = useState("passport");
+  const [uploadName, setUploadName] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function openUpload() {
+    setUploadType("passport");
+    setUploadName("");
+    setUploadFile(null);
+    setUploadOpen(true);
+  }
+
+  function handleFileSelect(file: File) {
+    setUploadFile(file);
+    if (!uploadName) {
+      const typeLabel = DOC_TYPES.find(d => d.key === uploadType)?.label ?? "Document";
+      setUploadName(`${student?.firstName ?? ""}-${student?.lastName ?? ""}-${typeLabel}`);
+    }
+  }
+
+  async function handleUpload() {
+    if (!uploadFile) return;
+    setUploading(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const result = e.target?.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(uploadFile);
+      });
+
+      const typeLabel = DOC_TYPES.find(d => d.key === uploadType)?.label ?? "Document";
+      const docName = uploadName.trim() || `${student?.firstName ?? ""}-${student?.lastName ?? ""}-${typeLabel}`;
+
+      await fetch(`${BASE_URL}/api/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: docName,
+          type: uploadType,
+          status: "pending",
+          studentId: id,
+          fileData: base64,
+          mimeType: uploadFile.type,
+          sizeBytes: uploadFile.size,
+        }),
+      });
+
+      await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && k.includes("document")) });
+      setUploadOpen(false);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   return (
     <DashboardLayout>
@@ -200,11 +279,23 @@ export default function StudentDetail({ id }: Props) {
 
           {/* Documents Tab */}
           <TabsContent value="documents" className="mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-muted-foreground">{documents.length} belge</p>
+              <Button size="sm" onClick={openUpload}>
+                <Upload className="w-4 h-4 mr-2" />
+                Belge Yükle
+              </Button>
+            </div>
+
             <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
               {documents.length === 0 ? (
-                <div className="p-12 text-center text-muted-foreground">
-                  <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p>No documents attached.</p>
+                <div
+                  className="p-16 text-center text-muted-foreground cursor-pointer hover:bg-secondary/30 transition-colors"
+                  onClick={openUpload}
+                >
+                  <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">Henüz belge yok</p>
+                  <p className="text-xs mt-1">Tıklayarak belge yükleyin</p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
@@ -264,6 +355,107 @@ export default function StudentDetail({ id }: Props) {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Upload Dialog */}
+      <Dialog open={uploadOpen} onOpenChange={o => { if (!uploading) setUploadOpen(o); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Belge Yükle</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Type */}
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Belge Türü</Label>
+              <Select value={uploadType} onValueChange={v => {
+                setUploadType(v);
+                const typeLabel = DOC_TYPES.find(d => d.key === v)?.label ?? "Document";
+                setUploadName(`${student?.firstName ?? ""}-${student?.lastName ?? ""}-${typeLabel}`);
+              }}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOC_TYPES.map(d => (
+                    <SelectItem key={d.key} value={d.key}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Name */}
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Belge Adı</Label>
+              <Input
+                className="mt-1"
+                value={uploadName}
+                onChange={e => setUploadName(e.target.value)}
+                placeholder={`${student?.firstName ?? ""}-${student?.lastName ?? ""}-Passport`}
+              />
+            </div>
+
+            {/* File Drop Zone */}
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Dosya</Label>
+              <div
+                className={`mt-1 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                  dragging ? "border-primary bg-primary/5" : uploadFile ? "border-primary/40 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-secondary/40"
+                }`}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragging(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleFileSelect(file);
+                }}
+              >
+                {uploadFile ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-foreground truncate max-w-[240px]">{uploadFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{Math.round(uploadFile.size / 1024)} KB</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      onClick={e => { e.stopPropagation(); setUploadFile(null); }}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                    <p className="text-sm font-medium text-muted-foreground">Sürükle bırak veya tıkla</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG — maks. 10 MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>İptal</Button>
+            <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
+              {uploading ? "Yükleniyor…" : "Kaydet"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

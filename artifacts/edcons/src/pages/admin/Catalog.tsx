@@ -618,14 +618,14 @@ function UniversitiesTab() {
                   <Label>Şehir</Label>
                   <Select
                     value={form?.city ?? ""}
-                    onValueChange={v => setF({ city: v || null })}
+                    onValueChange={v => setF({ city: v === "__none__" ? null : (v || null) })}
                     disabled={!selCountryId}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder={selCountryId ? "Şehir seçin…" : "Önce ülke seçin"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">— Şehir seçmeyin —</SelectItem>
+                      <SelectItem value="__none__">— Şehir seçmeyin —</SelectItem>
                       {formCities.map(c => (
                         <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                       ))}
