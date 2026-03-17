@@ -29,13 +29,46 @@ const STATUS_COLORS: Record<string, string> = {
   suspended: "bg-red-100 text-red-700 border-red-200",
 };
 
-const DOC_TYPES = [
-  { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf" },
-  { key: "diploma", label: "Diploma", icon: "🎓", accept: "image/*,.pdf" },
-  { key: "transcript", label: "Transcript", icon: "📋", accept: "image/*,.pdf" },
-  { key: "photo", label: "Photo", icon: "📷", accept: "image/*" },
-  { key: "other", label: "Other", icon: "📎", accept: "image/*,.pdf" },
+type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
+type AppLevel = "undergraduate" | "graduate" | "doctorate";
+
+const LEVELS: { key: AppLevel; label: string; badge: string; color: string }[] = [
+  { key: "undergraduate", label: "Lisans / Ön Lisans", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  { key: "graduate", label: "Yüksek Lisans (Master)", badge: "Graduate", color: "bg-violet-100 text-violet-700 border-violet-200" },
+  { key: "doctorate", label: "Doktora (PhD)", badge: "Doctorate", color: "bg-amber-100 text-amber-700 border-amber-200" },
 ];
+
+const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
+  undergraduate: [
+    { key: "hs_diploma",      label: "HS Diploma",       icon: "🎓", accept: "image/*,.pdf", required: true  },
+    { key: "hs_transcript",   label: "HS Transcript",    icon: "📋", accept: "image/*,.pdf", required: true  },
+    { key: "passport",        label: "Passport",         icon: "🛂", accept: "image/*,.pdf", required: true  },
+    { key: "photo",           label: "Photograph",       icon: "📷", accept: "image/*",      required: true  },
+    { key: "language_proof",  label: "Language Proof",   icon: "🌐", accept: "image/*,.pdf", required: false, note: "EN/TR (varsa)" },
+  ],
+  graduate: [
+    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "🎓", accept: "image/*,.pdf", required: true  },
+    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "📋", accept: "image/*,.pdf", required: true  },
+    { key: "passport",            label: "Passport",             icon: "🛂", accept: "image/*,.pdf", required: true  },
+    { key: "photo",               label: "Photograph",           icon: "📷", accept: "image/*",      required: true  },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Okul Tanınırlık" },
+    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "Programa göre" },
+    { key: "sop",                 label: "SOP",                  icon: "✍️", accept: "image/*,.pdf", required: false, note: "Programa göre" },
+  ],
+  doctorate: [
+    { key: "master_diploma",      label: "Master Diploma",       icon: "🎓", accept: "image/*,.pdf", required: true  },
+    { key: "master_transcript",   label: "Master Transcript",    icon: "📋", accept: "image/*,.pdf", required: true  },
+    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "🎓", accept: "image/*,.pdf", required: true  },
+    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "📋", accept: "image/*,.pdf", required: true  },
+    { key: "passport",            label: "Passport",             icon: "🛂", accept: "image/*,.pdf", required: true  },
+    { key: "photo",               label: "Photograph",           icon: "📷", accept: "image/*",      required: true  },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Okul Tanınırlık" },
+    { key: "research_proposal",   label: "Research Proposal",    icon: "🔬", accept: "image/*,.pdf", required: false, note: "Programa göre" },
+    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "Programa göre" },
+  ],
+};
+
+const DOC_TYPES = LEVEL_DOCS.undergraduate;
 
 type UploadedDoc = {
   key: string;
@@ -131,7 +164,7 @@ function DropZone({
   onUpload,
   onRemove,
 }: {
-  docType: (typeof DOC_TYPES)[0];
+  docType: LevelDoc;
   uploaded?: UploadedDoc;
   onUpload: (doc: UploadedDoc) => void;
   onRemove: () => void;
@@ -141,14 +174,7 @@ function DropZone({
 
   async function handleFile(file: File) {
     const { base64, mediaType, isImage } = await prepareDocumentBase64(file);
-    onUpload({
-      key: docType.key,
-      label: docType.label,
-      file,
-      base64,
-      mediaType,
-      isImage,
-    });
+    onUpload({ key: docType.key, label: docType.label, file, base64, mediaType, isImage });
   }
 
   const handleDrop = useCallback(
@@ -161,9 +187,13 @@ function DropZone({
     []
   );
 
+  const requiredBadge = docType.required
+    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Zorunlu</span>
+    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Opsiyonel</span>;
+
   if (uploaded) {
     return (
-      <div className="relative flex flex-col items-center gap-2 p-3 border-2 border-primary/30 bg-primary/5 rounded-2xl text-center min-h-[110px] justify-center">
+      <div className="relative flex flex-col items-center gap-1.5 p-3 border-2 border-green-300 bg-green-50 rounded-2xl text-center min-h-[120px] justify-center">
         <button
           type="button"
           onClick={onRemove}
@@ -173,7 +203,7 @@ function DropZone({
         </button>
         <CheckCircle2 className="w-6 h-6 text-green-500" />
         <div>
-          <p className="text-xs font-semibold text-foreground truncate max-w-[80px]">{uploaded.file.name}</p>
+          <p className="text-xs font-semibold text-foreground truncate max-w-[90px]">{uploaded.file.name}</p>
           <p className="text-xs text-muted-foreground">{Math.round(uploaded.file.size / 1024)}KB</p>
         </div>
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label}</span>
@@ -184,8 +214,9 @@ function DropZone({
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-2 p-3 border-2 border-dashed rounded-2xl text-center cursor-pointer min-h-[110px] justify-center transition-all",
-        dragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-secondary/50"
+        "flex flex-col items-center gap-1.5 p-3 border-2 border-dashed rounded-2xl text-center cursor-pointer min-h-[120px] justify-center transition-all",
+        dragging ? "border-primary bg-primary/10"
+          : docType.required ? "border-rose-200 hover:border-rose-400 hover:bg-rose-50/50" : "border-border hover:border-primary/50 hover:bg-secondary/50"
       )}
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -193,8 +224,9 @@ function DropZone({
       onDrop={handleDrop}
     >
       <span className="text-2xl">{docType.icon}</span>
-      <p className="text-xs font-semibold text-foreground">{docType.label}</p>
-      <p className="text-xs text-muted-foreground">Drop or click</p>
+      <p className="text-xs font-semibold text-foreground leading-tight">{docType.label}</p>
+      {docType.note && <p className="text-[10px] text-muted-foreground leading-tight">{docType.note}</p>}
+      <div className="mt-0.5">{requiredBadge}</div>
       <input
         ref={inputRef}
         type="file"
@@ -274,6 +306,9 @@ function AddStudentModal({
   const [extractedFields, setExtractedFields] = useState<Set<string>>(new Set());
   const [form, setForm] = useState(EMPTY_FORM);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [applicationLevel, setApplicationLevel] = useState<AppLevel>("undergraduate");
+
+  const currentDocs = LEVEL_DOCS[applicationLevel];
 
   function handleClose() {
     setStep("upload");
@@ -281,6 +316,7 @@ function AddStudentModal({
     setExtractedFields(new Set());
     setForm(EMPTY_FORM);
     setAnalysisError(null);
+    setApplicationLevel("undergraduate");
     onClose();
   }
 
@@ -475,23 +511,54 @@ function AddStudentModal({
 
         <div className="overflow-y-auto flex-1 px-6 py-5">
           {step === "upload" && (
-            <div className="space-y-5">
-              <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-2xl p-4 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-violet-500 mt-0.5 shrink-0" />
+            <div className="space-y-4">
+              {/* Level Selector */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Başvuru Seviyesi</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {LEVELS.map(lv => (
+                    <button
+                      key={lv.key}
+                      type="button"
+                      onClick={() => setApplicationLevel(lv.key)}
+                      className={cn(
+                        "rounded-xl border-2 px-3 py-2.5 text-center transition-all",
+                        applicationLevel === lv.key
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border hover:border-primary/40 hover:bg-secondary/40"
+                      )}
+                    >
+                      <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md border", lv.color)}>{lv.badge}</span>
+                      <p className="text-xs text-foreground font-medium mt-1.5 leading-tight">{lv.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Banner */}
+              <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-2xl p-3 flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-foreground">AI-Powered Form Filling</p>
+                  <p className="text-sm font-semibold text-foreground">AI Otomatik Form Doldurma</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Upload the student's documents below. AI will read them and automatically fill the form fields. You'll only need to complete anything missing.
+                    Belgeleri yükleyin — AI okuyup formu dolduracak. <span className="font-medium text-rose-600">Zorunlu</span> belgeler önceliklidir.
                   </p>
                 </div>
               </div>
 
+              {/* Document Grid */}
               <div>
-                <p className="text-sm font-semibold text-foreground mb-3">
-                  Upload Documents <span className="text-muted-foreground font-normal">(optional but recommended)</span>
-                </p>
-                <div className="grid grid-cols-5 gap-3">
-                  {DOC_TYPES.map((dt) => (
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold text-foreground">Gerekli Belgeler</p>
+                  <p className="text-xs text-muted-foreground">
+                    {uploadedCount}/{currentDocs.length} yüklendi
+                  </p>
+                </div>
+                <div className={cn(
+                  "grid gap-2",
+                  currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
+                )}>
+                  {currentDocs.map((dt) => (
                     <DropZone
                       key={dt.key}
                       docType={dt}
@@ -501,17 +568,12 @@ function AddStudentModal({
                     />
                   ))}
                 </div>
-                {uploadedCount > 0 && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {uploadedCount} document{uploadedCount !== 1 ? "s" : ""} ready for AI analysis
-                  </p>
-                )}
               </div>
 
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                 <p className="text-xs text-amber-700">
-                  No documents? Click <strong>"Skip to Form"</strong> to fill everything manually.
+                  Belge yoksa <strong>"Skip to Form"</strong> ile formu manuel doldurun.
                 </p>
               </div>
             </div>
