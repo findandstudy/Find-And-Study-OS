@@ -2629,6 +2629,18 @@ components:
           type: ["string", "null"]
         commissionRate:
           type: ["number", "null"]
+        applicationFee:
+          type: ["number", "null"]
+        advancedFee:
+          type: ["number", "null"]
+        depositFee:
+          type: ["number", "null"]
+        serviceFeeAmount:
+          type: ["number", "null"]
+        discountedFee:
+          type: ["number", "null"]
+        languageFee:
+          type: ["number", "null"]
         isActive:
           type: boolean
         createdAt:
@@ -2668,6 +2680,18 @@ components:
           type: ["string", "null"]
         commissionRate:
           type: ["number", "null"]
+        applicationFee:
+          type: ["number", "null"]
+        advancedFee:
+          type: ["number", "null"]
+        depositFee:
+          type: ["number", "null"]
+        serviceFeeAmount:
+          type: ["number", "null"]
+        discountedFee:
+          type: ["number", "null"]
+        languageFee:
+          type: ["number", "null"]
         isActive:
           type: boolean
       required:
@@ -2699,6 +2723,18 @@ components:
         requirements:
           type: ["string", "null"]
         commissionRate:
+          type: ["number", "null"]
+        applicationFee:
+          type: ["number", "null"]
+        advancedFee:
+          type: ["number", "null"]
+        depositFee:
+          type: ["number", "null"]
+        serviceFeeAmount:
+          type: ["number", "null"]
+        discountedFee:
+          type: ["number", "null"]
+        languageFee:
           type: ["number", "null"]
         isActive:
           type: ["boolean", "null"]

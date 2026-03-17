@@ -62,7 +62,7 @@ function useDebounce<T>(value: T, delay = 300): T {
 type Country = { id: number; name: string; code: string; flagEmoji?: string | null; isActive: boolean };
 type City = { id: number; name: string; countryId: number; isActive: boolean };
 type University = { id: number; name: string; country: string; city?: string | null; website?: string | null; description?: string | null; ranking?: number | null; logoUrl?: string | null; isActive: boolean };
-type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; isActive: boolean };
+type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; isActive: boolean };
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
@@ -573,8 +573,8 @@ function ProgramsTab() {
     return res;
   };
 
-  const template = `universityName,name,degree,field,language,duration,tuitionFee,currency,scholarship,commissionRate\nIstanbul University,Computer Engineering,BSc,Engineering,English,4 years,5000,USD,0,10\nIstanbul University,Business Administration,MBA,Business,English,2 years,8000,USD,2000,12`;
-  const headers = "universityName* (veya universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, commissionRate";
+  const template = `universityName,name,degree,field,language,duration,tuitionFee,currency,scholarship,commissionRate,applicationFee,advancedFee,depositFee,serviceFeeAmount,discountedFee,languageFee\nIstanbul University,Computer Engineering,BSc,Engineering,English,4 years,5000,USD,0,10,200,0,500,300,4500,0\nIstanbul University,Business Administration,MBA,Business,English,2 years,8000,USD,2000,12,150,0,500,300,7000,0`;
+  const headers = "universityName* (veya universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee";
 
   return (
     <div className="space-y-4">
@@ -682,6 +682,38 @@ function ProgramsTab() {
               <div><Label>Burs</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : undefined }))} /></div>
               <div><Label>Komisyon %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : undefined }))} /></div>
             </div>
+
+            {/* ── Ek Ücret Alanları ─────────────────────────── */}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Ek Ücretler ({form?.currency ?? "USD"})</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Application Fee</Label>
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Advanced Fee</Label>
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Deposit Fee</Label>
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Service Fee</Label>
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Discounted Fee</Label>
+                  <Input className="mt-1" type="number" placeholder="İndirimli tutar" value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Language Fee</Label>
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                </div>
+              </div>
+            </div>
+
             <div><Label>Başvuru Dönemleri</Label><Input className="mt-1" placeholder="Sep, Feb" value={form?.intakes ?? ""} onChange={e => setForm(f => ({ ...f, intakes: e.target.value }))} /></div>
             <div><Label>Gereksinimler</Label><Textarea className="mt-1" rows={2} placeholder="IELTS 6.0, GPA 3.0…" value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
             <div className="flex items-center justify-between">

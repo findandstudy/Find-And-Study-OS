@@ -30,6 +30,18 @@ export interface Program {
   requirements?: string | null;
   /** @nullable */
   commissionRate?: number | null;
+  /** @nullable */
+  applicationFee?: number | null;
+  /** @nullable */
+  advancedFee?: number | null;
+  /** @nullable */
+  depositFee?: number | null;
+  /** @nullable */
+  serviceFeeAmount?: number | null;
+  /** @nullable */
+  discountedFee?: number | null;
+  /** @nullable */
+  languageFee?: number | null;
   isActive: boolean;
   createdAt: Date;
 }

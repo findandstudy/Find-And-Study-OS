@@ -660,6 +660,18 @@ export interface Program {
   requirements?: string | null;
   /** @nullable */
   commissionRate?: number | null;
+  /** @nullable */
+  applicationFee?: number | null;
+  /** @nullable */
+  advancedFee?: number | null;
+  /** @nullable */
+  depositFee?: number | null;
+  /** @nullable */
+  serviceFeeAmount?: number | null;
+  /** @nullable */
+  discountedFee?: number | null;
+  /** @nullable */
+  languageFee?: number | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -687,6 +699,18 @@ export interface CreateProgramBody {
   requirements?: string | null;
   /** @nullable */
   commissionRate?: number | null;
+  /** @nullable */
+  applicationFee?: number | null;
+  /** @nullable */
+  advancedFee?: number | null;
+  /** @nullable */
+  depositFee?: number | null;
+  /** @nullable */
+  serviceFeeAmount?: number | null;
+  /** @nullable */
+  discountedFee?: number | null;
+  /** @nullable */
+  languageFee?: number | null;
   isActive: boolean;
 }
 
@@ -713,6 +737,18 @@ export interface UpdateProgramBody {
   requirements?: string | null;
   /** @nullable */
   commissionRate?: number | null;
+  /** @nullable */
+  applicationFee?: number | null;
+  /** @nullable */
+  advancedFee?: number | null;
+  /** @nullable */
+  depositFee?: number | null;
+  /** @nullable */
+  serviceFeeAmount?: number | null;
+  /** @nullable */
+  discountedFee?: number | null;
+  /** @nullable */
+  languageFee?: number | null;
   /** @nullable */
   isActive?: boolean | null;
 }

@@ -10,7 +10,8 @@ const UNI_PATCH_FIELDS = ["name", "country", "city", "website", "logoUrl", "desc
 const PROG_PATCH_FIELDS = [
   "universityId", "name", "degree", "field", "language", "duration",
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
-  "commissionRate", "isActive",
+  "commissionRate", "applicationFee", "advancedFee", "depositFee",
+  "serviceFeeAmount", "discountedFee", "languageFee", "isActive",
 ];
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
@@ -91,15 +92,28 @@ router.get("/programs", async (req, res): Promise<void> => {
 });
 
 router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { universityId, name, degree, field, language, duration, tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate, isActive = true } = req.body;
+  const {
+    universityId, name, degree, field, language, duration,
+    tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate,
+    applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
+    isActive = true,
+  } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
+  const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
   const [prog] = await db.insert(programsTable).values({
     universityId: Number(universityId), name, degree: degree || null, field: field || null,
     language: language || null, duration: duration || null,
-    tuitionFee: tuitionFee ? Number(tuitionFee) : null, currency,
-    scholarship: scholarship ? Number(scholarship) : null,
+    tuitionFee: n(tuitionFee), currency,
+    scholarship: n(scholarship),
     intakes: intakes || null, requirements: requirements || null,
-    commissionRate: commissionRate ? Number(commissionRate) : null, isActive,
+    commissionRate: n(commissionRate),
+    applicationFee: n(applicationFee),
+    advancedFee: n(advancedFee),
+    depositFee: n(depositFee),
+    serviceFeeAmount: n(serviceFeeAmount),
+    discountedFee: n(discountedFee),
+    languageFee: n(languageFee),
+    isActive,
   }).returning();
   await logAudit(req.user!.id, "create_program", "program", prog.id, { universityId, name }, req.ip);
   res.status(201).json(prog);
