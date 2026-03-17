@@ -18,6 +18,10 @@ export interface CreateApplicationBody {
   /** @nullable */
   intake?: string | null;
   /** @nullable */
+  level?: string | null;
+  /** @nullable */
+  instructionLanguage?: string | null;
+  /** @nullable */
   deadline?: string | null;
   /** @nullable */
   programName?: string | null;

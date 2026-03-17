@@ -7,8 +7,10 @@ import { STAFF_ROLES } from "../lib/roles";
 const router: IRouter = Router();
 
 const APP_PATCH_FIELDS = [
-  "stage", "universityId", "programId", "intakeDate",
-  "offerDate", "offerDeadline", "visaStatus", "notes", "assignedTo",
+  "stage", "universityId", "programId", "agentId",
+  "universityName", "country", "programName", "intake",
+  "level", "instructionLanguage", "deadline",
+  "tuitionFee", "scholarship", "notes",
 ];
 
 router.get("/applications", requireAuth, async (req, res): Promise<void> => {
@@ -69,7 +71,11 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { studentId, stage = "inquiry", universityId, programId, intakeDate, notes, agentId } = req.body;
+  const {
+    studentId, stage = "inquiry", universityId, programId, agentId,
+    universityName, country, programName, intake, level, instructionLanguage,
+    deadline, tuitionFee, scholarship, notes,
+  } = req.body;
   if (!studentId) {
     res.status(400).json({ error: "studentId is required" });
     return;
@@ -78,9 +84,17 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (re
     studentId, stage,
     universityId: universityId || null,
     programId: programId || null,
-    intakeDate: intakeDate || null,
-    notes: notes || null,
     agentId: agentId || null,
+    universityName: universityName || null,
+    country: country || null,
+    programName: programName || null,
+    intake: intake || null,
+    level: level || null,
+    instructionLanguage: instructionLanguage || null,
+    deadline: deadline || null,
+    tuitionFee: tuitionFee ? Number(tuitionFee) : null,
+    scholarship: scholarship ? Number(scholarship) : null,
+    notes: notes || null,
   }).returning();
   await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
   res.status(201).json(app);

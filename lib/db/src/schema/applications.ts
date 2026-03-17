@@ -10,6 +10,8 @@ export const applicationsTable = pgTable("applications", {
   agentId: integer("agent_id"),
   stage: text("stage").notNull().default("inquiry"),
   intake: text("intake"),
+  level: text("level"),
+  instructionLanguage: text("instruction_language"),
   deadline: text("deadline"),
   programName: text("program_name"),
   universityName: text("university_name"),

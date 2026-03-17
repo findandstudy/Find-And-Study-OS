@@ -2088,6 +2088,10 @@ components:
           type: string
         intake:
           type: ["string", "null"]
+        level:
+          type: ["string", "null"]
+        instructionLanguage:
+          type: ["string", "null"]
         deadline:
           type: ["string", "null"]
         programName:
@@ -2130,6 +2134,10 @@ components:
           type: string
         intake:
           type: ["string", "null"]
+        level:
+          type: ["string", "null"]
+        instructionLanguage:
+          type: ["string", "null"]
         deadline:
           type: ["string", "null"]
         programName:
@@ -2160,6 +2168,10 @@ components:
         stage:
           type: ["string", "null"]
         intake:
+          type: ["string", "null"]
+        level:
+          type: ["string", "null"]
+        instructionLanguage:
           type: ["string", "null"]
         deadline:
           type: ["string", "null"]
