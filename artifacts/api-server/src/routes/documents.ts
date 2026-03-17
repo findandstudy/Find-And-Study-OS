@@ -46,7 +46,7 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/documents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { name, type, status = "pending", studentId, applicationId, fileUrl, notes } = req.body;
+  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileData, mimeType, sizeBytes, notes } = req.body;
   if (!name || !type) {
     res.status(400).json({ error: "name and type are required" });
     return;
@@ -60,6 +60,9 @@ router.post("/documents", requireAuth, requireRole(...STAFF_ROLES), async (req, 
     studentId: studentId || null,
     applicationId: applicationId || null,
     fileUrl: fileUrl || null,
+    fileData: fileData || null,
+    mimeType: mimeType || null,
+    sizeBytes: sizeBytes ? Number(sizeBytes) : null,
     notes: notes || null,
   }).returning();
   await logAudit(req.user!.id, "create_document", "document", doc.id, { name, type }, req.ip);

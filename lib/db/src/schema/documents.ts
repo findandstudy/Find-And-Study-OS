@@ -16,6 +16,7 @@ export const documentsTable = pgTable("documents", {
   extractedData: text("extracted_data"),
   confidenceScore: real("confidence_score"),
   reviewedBy: integer("reviewed_by"),
+  fileData: text("file_data"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

@@ -196,6 +196,7 @@ export default function StudentDetail({ id }: Props) {
                       <th className="text-left px-4 py-3 font-semibold text-foreground">Type</th>
                       <th className="text-left px-4 py-3 font-semibold text-foreground">Status</th>
                       <th className="text-left px-4 py-3 font-semibold text-foreground">Uploaded</th>
+                      <th className="text-left px-4 py-3 font-semibold text-foreground">File</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -210,6 +211,31 @@ export default function StudentDetail({ id }: Props) {
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {new Date(doc.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          {doc.fileData && (
+                            <button
+                              onClick={() => {
+                                const mimeType = doc.mimeType || "application/octet-stream";
+                                const isImage = mimeType.startsWith("image/");
+                                const ext = mimeType === "application/pdf" ? "pdf" : isImage ? mimeType.split("/")[1] : "bin";
+                                const link = document.createElement("a");
+                                link.href = `data:${mimeType};base64,${doc.fileData}`;
+                                link.download = `${doc.name}.${ext}`;
+                                link.click();
+                              }}
+                              className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                              İndir
+                            </button>
+                          )}
+                          {doc.fileUrl && !doc.fileData && (
+                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                              Görüntüle
+                            </a>
+                          )}
                         </td>
                       </tr>
                     ))}

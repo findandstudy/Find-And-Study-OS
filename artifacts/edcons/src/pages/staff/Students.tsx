@@ -351,6 +351,40 @@ function AddStudentModal({
     }
   }
 
+  async function saveDocumentsForStudent(studentId: number, firstName: string, lastName: string) {
+    const uploadedDocs = Object.values(docs);
+    if (uploadedDocs.length === 0) return;
+
+    const docTypeLabel: Record<string, string> = {
+      passport: "Passport",
+      diploma: "Diploma",
+      transcript: "Transcript",
+      photo: "Photo",
+      other: "Other",
+    };
+
+    await Promise.allSettled(
+      uploadedDocs.map((d) => {
+        const label = docTypeLabel[d.label?.toLowerCase()] ?? d.label ?? "Document";
+        const docName = `${firstName}-${lastName}-${label}`;
+        return fetch(`${BASE_URL}/api/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: docName,
+            type: d.label?.toLowerCase() ?? "other",
+            status: "pending",
+            studentId,
+            fileData: d.base64,
+            mimeType: d.mediaType,
+            sizeBytes: d.file?.size ?? null,
+          }),
+        });
+      })
+    );
+  }
+
   function handleSubmit() {
     if (!form.firstName || !form.lastName) {
       toast({ title: "First and Last name are required", variant: "destructive" });
@@ -382,8 +416,14 @@ function AddStudentModal({
         },
       },
       {
-        onSuccess: () => {
-          toast({ title: "Student created successfully" });
+        onSuccess: async (createdStudent: any) => {
+          const docCount = Object.keys(docs).length;
+          if (docCount > 0) {
+            await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
+            toast({ title: "Öğrenci oluşturuldu", description: `${docCount} belge profil'e eklendi.` });
+          } else {
+            toast({ title: "Student created successfully" });
+          }
           handleClose();
           onSuccess();
         },
