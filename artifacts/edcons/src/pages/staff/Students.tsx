@@ -399,8 +399,12 @@ function AddStudentModal({
   const ef = extractedFields;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <Dialog open={open} onOpenChange={(o) => { if (!o && step !== "analyzing") handleClose(); }}>
+      <DialogContent
+        className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
+        onInteractOutside={(e) => { if (step === "analyzing") e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (step === "analyzing") e.preventDefault(); }}
+      >
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
           <DialogTitle className="text-xl font-display">Add New Student</DialogTitle>
           <div className="mt-3 space-y-2">
