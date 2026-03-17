@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 /* ─── helpers ──────────────────────────────────────────────── */
@@ -146,6 +146,36 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
   );
 }
 
+/* ─── Sort helpers ──────────────────────────────────────── */
+type SortState = { col: string; dir: "asc" | "desc" };
+
+function sortCompare<T>(a: T, b: T, key: keyof T, dir: "asc" | "desc"): number {
+  const av = a[key] ?? "";
+  const bv = b[key] ?? "";
+  const cmp = String(av).localeCompare(String(bv), "tr", { numeric: true, sensitivity: "base" });
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function SortTh({ label, col, sort, onSort, className }: { label: string; col: string; sort: SortState; onSort: (col: string) => void; className?: string }) {
+  const active = sort.col === col;
+  return (
+    <th
+      className={`text-left px-4 py-2 font-medium cursor-pointer select-none hover:bg-muted/80 transition-colors ${className ?? ""}`}
+      onClick={() => onSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active
+          ? sort.dir === "asc"
+            ? <ChevronUp className="h-3.5 w-3.5 text-primary" />
+            : <ChevronDown className="h-3.5 w-3.5 text-primary" />
+          : <ChevronsUpDown className="h-3 w-3 text-muted-foreground/50" />
+        }
+      </span>
+    </th>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
    COUNTRIES TAB
 ══════════════════════════════════════════════════════════ */
@@ -157,6 +187,10 @@ function CountriesTab() {
   const [form, setForm] = useState<Partial<Country> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [delId, setDelId] = useState<number | null>(null);
+  const [sort, setSort] = useState<SortState>({ col: "name", dir: "asc" });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDelOpen, setBulkDelOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["countries", page, dSearch],
@@ -164,6 +198,25 @@ function CountriesTab() {
   });
   const countries: Country[] = data?.data ?? [];
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
+
+  const sorted = useMemo(() => {
+    const colMap: Record<string, keyof Country> = { name: "name", code: "code", status: "isActive" };
+    const key = colMap[sort.col] ?? "name";
+    return [...countries].sort((a, b) => sortCompare(a, b, key, sort.dir));
+  }, [countries, sort]);
+
+  function handleSort(col: string) {
+    setSort(s => s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: "asc" });
+  }
+
+  const allSelected = sorted.length > 0 && sorted.every(c => selected.has(c.id));
+  function toggleAll() {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(sorted.map(c => c.id)));
+  }
+  function toggleOne(id: number) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
 
   const save = useMutation({
     mutationFn: async (f: Partial<Country>) => f.id
@@ -177,6 +230,15 @@ function CountriesTab() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["countries"] }); setDelId(null); },
   });
 
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    await Promise.allSettled([...selected].map(id => apiDelete(`/api/countries/${id}`)));
+    setSelected(new Set());
+    setBulkDelOpen(false);
+    setBulkDeleting(false);
+    qc.invalidateQueries({ queryKey: ["countries"] });
+  }
+
   const handleBulkImport = async (rows: Record<string, string>[]) => {
     const res = await api("/api/countries/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rows) });
     qc.invalidateQueries({ queryKey: ["countries"] });
@@ -188,11 +250,16 @@ function CountriesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Ülke ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder="Ülke ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
+        {selected.size > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Ülke Ekle</Button>
       </div>
@@ -201,18 +268,24 @@ function CountriesTab() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-2 font-medium">Ülke</th>
-              <th className="text-left px-4 py-2 font-medium">Kod</th>
-              <th className="text-left px-4 py-2 font-medium">Durum</th>
+              <th className="px-4 py-2 w-8">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
+              </th>
+              <SortTh label="Ülke" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Kod" col="code" sort={sort} onSort={handleSort} />
+              <SortTh label="Durum" col="status" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {countries.length === 0 && (
-              <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Ülke bulunamadı</td></tr>
+            {sorted.length === 0 && (
+              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">Ülke bulunamadı</td></tr>
             )}
-            {countries.map(c => (
-              <tr key={c.id} className="hover:bg-muted/20 transition-colors">
+            {sorted.map(c => (
+              <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
+                <td className="px-4 py-2.5">
+                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleOne(c.id)} className="rounded cursor-pointer" />
+                </td>
                 <td className="px-4 py-2.5 font-medium">{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</td>
                 <td className="px-4 py-2.5 text-muted-foreground font-mono">{c.code}</td>
                 <td className="px-4 py-2.5">
@@ -229,7 +302,7 @@ function CountriesTab() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+      <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       {/* Add/Edit Modal */}
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
@@ -251,7 +324,7 @@ function CountriesTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
+      {/* Single delete confirm */}
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Ülkeyi Sil</DialogTitle></DialogHeader>
@@ -259,6 +332,20 @@ function CountriesTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDelId(null)}>İptal</Button>
             <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Sil</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk delete confirm */}
+      <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> ülkeyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Siliniyor…" : `${selected.size} Ülkeyi Sil`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -280,6 +367,10 @@ function CitiesTab() {
   const [form, setForm] = useState<Partial<City> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [delId, setDelId] = useState<number | null>(null);
+  const [sort, setSort] = useState<SortState>({ col: "name", dir: "asc" });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDelOpen, setBulkDelOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: countriesData } = useQuery({
     queryKey: ["countries", 1, ""],
@@ -295,6 +386,32 @@ function CitiesTab() {
   const cities: City[] = data?.data ?? [];
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
 
+  const sorted = useMemo(() => {
+    const key = sort.col === "country" ? "countryId" : sort.col === "status" ? "isActive" : "name";
+    return [...cities].sort((a, b) => {
+      if (sort.col === "country") {
+        const an = countryMap[a.countryId]?.name ?? "";
+        const bn = countryMap[b.countryId]?.name ?? "";
+        const cmp = an.localeCompare(bn, "tr", { sensitivity: "base" });
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
+      return sortCompare(a, b, key as keyof City, sort.dir);
+    });
+  }, [cities, sort, countryMap]);
+
+  function handleSort(col: string) {
+    setSort(s => s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: "asc" });
+  }
+
+  const allSelected = sorted.length > 0 && sorted.every(c => selected.has(c.id));
+  function toggleAll() {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(sorted.map(c => c.id)));
+  }
+  function toggleOne(id: number) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
   const save = useMutation({
     mutationFn: async (f: Partial<City>) => f.id
       ? api(`/api/cities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
@@ -306,6 +423,15 @@ function CitiesTab() {
     mutationFn: (id: number) => apiDelete(`/api/cities/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["cities"] }); setDelId(null); },
   });
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    await Promise.allSettled([...selected].map(id => apiDelete(`/api/cities/${id}`)));
+    setSelected(new Set());
+    setBulkDelOpen(false);
+    setBulkDeleting(false);
+    qc.invalidateQueries({ queryKey: ["cities"] });
+  }
 
   const handleBulkImport = async (rows: Record<string, string>[]) => {
     const res = await api("/api/cities/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rows) });
@@ -321,15 +447,20 @@ function CitiesTab() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Şehir ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder="Şehir ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
-        <Select value={filterCountry} onValueChange={v => { setFilterCountry(v); setPage(1); }}>
+        <Select value={filterCountry} onValueChange={v => { setFilterCountry(v); setPage(1); setSelected(new Set()); }}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm ülkeler" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tüm ülkeler</SelectItem>
             {countries.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {selected.size > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Şehir Ekle</Button>
       </div>
@@ -338,18 +469,24 @@ function CitiesTab() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-2 font-medium">Şehir</th>
-              <th className="text-left px-4 py-2 font-medium">Ülke</th>
-              <th className="text-left px-4 py-2 font-medium">Durum</th>
+              <th className="px-4 py-2 w-8">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
+              </th>
+              <SortTh label="Şehir" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Ülke" col="country" sort={sort} onSort={handleSort} />
+              <SortTh label="Durum" col="status" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {cities.length === 0 && (
-              <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Şehir bulunamadı</td></tr>
+            {sorted.length === 0 && (
+              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">Şehir bulunamadı</td></tr>
             )}
-            {cities.map(c => (
-              <tr key={c.id} className="hover:bg-muted/20 transition-colors">
+            {sorted.map(c => (
+              <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
+                <td className="px-4 py-2.5">
+                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleOne(c.id)} className="rounded cursor-pointer" />
+                </td>
                 <td className="px-4 py-2.5 font-medium">{c.name}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{countryMap[c.countryId]?.flagEmoji ?? ""} {countryMap[c.countryId]?.name ?? c.countryId}</td>
                 <td className="px-4 py-2.5">
@@ -366,7 +503,7 @@ function CitiesTab() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+      <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-sm">
@@ -403,6 +540,19 @@ function CitiesTab() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> şehri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Siliniyor…" : `${selected.size} Şehri Sil`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Şehirler" template={template} headers={headers} onImport={handleBulkImport} />
     </div>
   );
@@ -424,6 +574,10 @@ function UniversitiesTab() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [delId, setDelId] = useState<number | null>(null);
   const [selCountryId, setSelCountryId] = useState<number | null>(null);
+  const [sort, setSort] = useState<SortState>({ col: "name", dir: "asc" });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDelOpen, setBulkDelOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["universities", page, dSearch],
@@ -431,6 +585,41 @@ function UniversitiesTab() {
   });
   const universities: University[] = data?.data ?? [];
   const totalPages = data?.meta?.totalPages ?? 1;
+
+  const sorted = useMemo(() => {
+    return [...universities].sort((a, b) => {
+      if (sort.col === "country") {
+        const cmp = (a.country ?? "").localeCompare(b.country ?? "", "tr", { sensitivity: "base" });
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
+      if (sort.col === "type") return sortCompare(a, b, "universityType" as keyof University, sort.dir);
+      if (sort.col === "qs") return sortCompare(a, b, "qsRanking" as keyof University, sort.dir);
+      if (sort.col === "status") return sortCompare(a, b, "status" as keyof University, sort.dir);
+      return sortCompare(a, b, "name" as keyof University, sort.dir);
+    });
+  }, [universities, sort]);
+
+  function handleSort(col: string) {
+    setSort(s => s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: "asc" });
+  }
+
+  const allSelected = sorted.length > 0 && sorted.every(u => selected.has(u.id));
+  function toggleAll() {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(sorted.map(u => u.id)));
+  }
+  function toggleOne(id: number) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    await Promise.allSettled([...selected].map(id => apiDelete(`/api/universities/${id}`)));
+    setSelected(new Set());
+    setBulkDelOpen(false);
+    setBulkDeleting(false);
+    qc.invalidateQueries({ queryKey: ["universities"] });
+  }
 
   const { data: allCountriesResp } = useQuery({
     queryKey: ["all-countries-uni"],
@@ -486,6 +675,11 @@ function UniversitiesTab() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Üniversite ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
+        {selected.size > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
         <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />Üniversite Ekle</Button>
       </div>
@@ -494,20 +688,26 @@ function UniversitiesTab() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-2 font-medium">Üniversite</th>
-              <th className="text-left px-4 py-2 font-medium">Ülke / Şehir</th>
-              <th className="text-left px-4 py-2 font-medium">Tür</th>
-              <th className="text-left px-4 py-2 font-medium">QS</th>
-              <th className="text-left px-4 py-2 font-medium">Durum</th>
+              <th className="px-4 py-2 w-8">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
+              </th>
+              <SortTh label="Üniversite" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Ülke / Şehir" col="country" sort={sort} onSort={handleSort} />
+              <SortTh label="Tür" col="type" sort={sort} onSort={handleSort} />
+              <SortTh label="QS" col="qs" sort={sort} onSort={handleSort} />
+              <SortTh label="Durum" col="status" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {universities.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Üniversite bulunamadı</td></tr>
+            {sorted.length === 0 && (
+              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Üniversite bulunamadı</td></tr>
             )}
-            {universities.map(u => (
-              <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+            {sorted.map(u => (
+              <tr key={u.id} className={`hover:bg-muted/20 transition-colors ${selected.has(u.id) ? "bg-primary/5" : ""}`}>
+                <td className="px-4 py-2.5">
+                  <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleOne(u.id)} className="rounded cursor-pointer" />
+                </td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     {u.logoUrl
@@ -544,7 +744,7 @@ function UniversitiesTab() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+      <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -797,6 +997,19 @@ function UniversitiesTab() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> üniversiteyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Siliniyor…" : `${selected.size} Üniversiteyi Sil`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Üniversiteler" template={template} headers={headers} onImport={handleBulkImport} />
     </div>
   );
@@ -814,6 +1027,10 @@ function ProgramsTab() {
   const [form, setForm] = useState<Partial<Program> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [delId, setDelId] = useState<number | null>(null);
+  const [sort, setSort] = useState<SortState>({ col: "name", dir: "asc" });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDelOpen, setBulkDelOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: unisData } = useQuery({
     queryKey: ["universities", 1, ""],
@@ -828,6 +1045,43 @@ function ProgramsTab() {
   });
   const programs: Program[] = data?.data ?? [];
   const totalPages = data?.meta?.totalPages ?? 1;
+
+  const sorted = useMemo(() => {
+    return [...programs].sort((a, b) => {
+      if (sort.col === "university") {
+        const an = uniMap[a.universityId]?.name ?? "";
+        const bn = uniMap[b.universityId]?.name ?? "";
+        const cmp = an.localeCompare(bn, "tr", { sensitivity: "base" });
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
+      if (sort.col === "degree") return sortCompare(a, b, "degree" as keyof Program, sort.dir);
+      if (sort.col === "fee") return sortCompare(a, b, "tuitionFee" as keyof Program, sort.dir);
+      if (sort.col === "commission") return sortCompare(a, b, "commissionRate" as keyof Program, sort.dir);
+      return sortCompare(a, b, "name" as keyof Program, sort.dir);
+    });
+  }, [programs, sort, uniMap]);
+
+  function handleSort(col: string) {
+    setSort(s => s.col === col ? { col, dir: s.dir === "asc" ? "desc" : "asc" } : { col, dir: "asc" });
+  }
+
+  const allSelected = sorted.length > 0 && sorted.every(p => selected.has(p.id));
+  function toggleAll() {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(sorted.map(p => p.id)));
+  }
+  function toggleOne(id: number) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true);
+    await Promise.allSettled([...selected].map(id => apiDelete(`/api/programs/${id}`)));
+    setSelected(new Set());
+    setBulkDelOpen(false);
+    setBulkDeleting(false);
+    qc.invalidateQueries({ queryKey: ["programs"] });
+  }
 
   const save = useMutation({
     mutationFn: async (f: Partial<Program>) => f.id
@@ -864,6 +1118,11 @@ function ProgramsTab() {
             {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {selected.size > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
         <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />Program Ekle</Button>
       </div>
@@ -872,20 +1131,26 @@ function ProgramsTab() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-2 font-medium">Program</th>
-              <th className="text-left px-4 py-2 font-medium">Üniversite</th>
-              <th className="text-left px-4 py-2 font-medium">Derece / Alan</th>
-              <th className="text-left px-4 py-2 font-medium">Ücret</th>
-              <th className="text-left px-4 py-2 font-medium">Komisyon</th>
+              <th className="px-4 py-2 w-8">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
+              </th>
+              <SortTh label="Program" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Üniversite" col="university" sort={sort} onSort={handleSort} />
+              <SortTh label="Derece / Alan" col="degree" sort={sort} onSort={handleSort} />
+              <SortTh label="Ücret" col="fee" sort={sort} onSort={handleSort} />
+              <SortTh label="Komisyon" col="commission" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {programs.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Program bulunamadı</td></tr>
+            {sorted.length === 0 && (
+              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Program bulunamadı</td></tr>
             )}
-            {programs.map(p => (
-              <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+            {sorted.map(p => (
+              <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${selected.has(p.id) ? "bg-primary/5" : ""}`}>
+                <td className="px-4 py-2.5">
+                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} className="rounded cursor-pointer" />
+                </td>
                 <td className="px-4 py-2.5">
                   <div className="font-medium">{p.name}</div>
                   {p.language && <span className="text-xs text-muted-foreground">{p.language} {p.duration ? `· ${p.duration}` : ""}</span>}
@@ -905,7 +1170,7 @@ function ProgramsTab() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+      <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -1009,6 +1274,19 @@ function ProgramsTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDelId(null)}>İptal</Button>
             <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Sil</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> programı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Siliniyor…" : `${selected.size} Programı Sil`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
