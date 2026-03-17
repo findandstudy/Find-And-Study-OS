@@ -1852,7 +1852,15 @@ components:
           type: ["string", "null"]
         passportNumber:
           type: ["string", "null"]
+        passportIssueDate:
+          type: ["string", "null"]
         passportExpiry:
+          type: ["string", "null"]
+        motherName:
+          type: ["string", "null"]
+        fatherName:
+          type: ["string", "null"]
+        address:
           type: ["string", "null"]
         status:
           type: string
@@ -1901,7 +1909,15 @@ components:
           type: ["string", "null"]
         passportNumber:
           type: ["string", "null"]
+        passportIssueDate:
+          type: ["string", "null"]
         passportExpiry:
+          type: ["string", "null"]
+        motherName:
+          type: ["string", "null"]
+        fatherName:
+          type: ["string", "null"]
+        address:
           type: ["string", "null"]
         status:
           type: string
@@ -1939,7 +1955,15 @@ components:
           type: ["string", "null"]
         passportNumber:
           type: ["string", "null"]
+        passportIssueDate:
+          type: ["string", "null"]
         passportExpiry:
+          type: ["string", "null"]
+        motherName:
+          type: ["string", "null"]
+        fatherName:
+          type: ["string", "null"]
+        address:
           type: ["string", "null"]
         status:
           type: ["string", "null"]

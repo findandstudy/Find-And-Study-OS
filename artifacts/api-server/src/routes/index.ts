@@ -14,6 +14,7 @@ import settingsRouter from "./settings";
 import auditRouter from "./audit";
 import statsRouter from "./stats";
 import catalogRouter from "./catalog";
+import aiExtractRouter from "./ai-extract";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(settingsRouter);
 router.use(auditRouter);
 router.use(statsRouter);
 router.use(catalogRouter);
+router.use(aiExtractRouter);
 
 export default router;

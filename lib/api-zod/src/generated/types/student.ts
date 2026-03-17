@@ -23,7 +23,15 @@ export interface Student {
   /** @nullable */
   passportNumber?: string | null;
   /** @nullable */
+  passportIssueDate?: string | null;
+  /** @nullable */
   passportExpiry?: string | null;
+  /** @nullable */
+  motherName?: string | null;
+  /** @nullable */
+  fatherName?: string | null;
+  /** @nullable */
+  address?: string | null;
   status: string;
   /** @nullable */
   agentId?: number | null;

@@ -22,7 +22,15 @@ export interface UpdateStudentBody {
   /** @nullable */
   passportNumber?: string | null;
   /** @nullable */
+  passportIssueDate?: string | null;
+  /** @nullable */
   passportExpiry?: string | null;
+  /** @nullable */
+  motherName?: string | null;
+  /** @nullable */
+  fatherName?: string | null;
+  /** @nullable */
+  address?: string | null;
   /** @nullable */
   status?: string | null;
   /** @nullable */

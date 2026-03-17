@@ -28,7 +28,8 @@ artifacts-monorepo/
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
+│   ├── db/                 # Drizzle ORM schema + DB connection
+│   └── integrations-anthropic-ai/  # Anthropic SDK wrapper (AI document extraction)
 ├── scripts/                # Utility scripts
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
@@ -83,7 +84,9 @@ artifacts-monorepo/
 - Users management table with role badges and filters
 
 ### Staff Portal
-- Applications page with stage filter + pipeline summary
+- **Students page**: AI-powered student creation (multi-step: upload docs → Claude reads & fills form → user reviews/completes); bulk CSV import with AI column mapping; new fields: motherName, fatherName, passportIssueDate
+- Applications page with stage filter + pipeline summary; "New Application" modal with student search, country/university/level/program/language/intake selects
+- Leads page: Kanban drag-and-drop with estimatedValue revenue display (role-gated)
 - Finance page with invoices + commissions (charts + Tabs UI)
 - Settings page (profile/language/notifications/security tabs)
 
@@ -92,6 +95,18 @@ artifacts-monorepo/
 
 ### Student Portal
 - Dashboard
+
+## AI Integration
+
+- Provider: Anthropic Claude (via Replit AI Integrations proxy — no API key needed)
+- Env vars: `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`, `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (auto-set)
+- Model used: `claude-sonnet-4-6` for document OCR; `claude-haiku-4-5` for CSV parsing
+- API routes: `POST /api/ai/extract-document` (base64 images/PDFs → student field extraction), `POST /api/ai/extract-bulk-csv` (CSV text → student array)
+- Bulk student import: `POST /api/students/bulk` (array of students, returns `{ inserted, errors, success }`)
+
+## DB Schema — Students Extra Fields
+
+Added to `studentsTable`: `motherName`, `fatherName`, `passportIssueDate`, `address`
 
 ## Frontend Notes
 
