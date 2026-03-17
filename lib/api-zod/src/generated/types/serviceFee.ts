@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Commission {
+export interface ServiceFee {
   id: number;
   /** @nullable */
   applicationId?: number | null;
@@ -19,30 +19,20 @@ export interface Commission {
   /** @nullable */
   universityName?: string | null;
   /** @nullable */
-  programName?: string | null;
-  /** @nullable */
   isStateUniversity?: boolean | null;
+  payerType: string;
   season: string;
   currency: string;
+  totalAmount: string;
   /** @nullable */
-  programFee?: string | null;
+  firstInstallmentAmount?: string | null;
   /** @nullable */
-  universityCommissionRate?: string | null;
+  firstInstallmentPaidAt?: string | null;
   /** @nullable */
-  universityCommissionAmount?: string | null;
+  secondInstallmentAmount?: string | null;
   /** @nullable */
-  universityCollected?: string | null;
-  /** @nullable */
-  agentCommissionRate?: string | null;
-  /** @nullable */
-  agentCommissionAmount?: string | null;
-  /** @nullable */
-  agentPaid?: string | null;
+  secondInstallmentPaidAt?: string | null;
   status: string;
-  /** @nullable */
-  confirmedAt?: string | null;
-  /** @nullable */
-  offsetAmount?: string | null;
   /** @nullable */
   notes?: string | null;
   createdAt: Date;

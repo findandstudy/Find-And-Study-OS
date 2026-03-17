@@ -6,11 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListCommissionsParams = {
-  agentId?: number;
-  status?: string;
+export type GetFinanceSummaryParams = {
   season?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
 };

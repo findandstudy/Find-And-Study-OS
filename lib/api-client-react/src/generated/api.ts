@@ -36,6 +36,7 @@ import type {
   CreateLeadBody,
   CreateNoteBody,
   CreateProgramBody,
+  CreateServiceFeeBody,
   CreateStudentBody,
   CreateUniversityBody,
   CreateUserBody,
@@ -43,6 +44,8 @@ import type {
   DocumentExtraction,
   ErrorResponse,
   GetBlogPostParams,
+  GetFinanceSummary200,
+  GetFinanceSummaryParams,
   HealthStatus,
   Invoice,
   InvoicesListResponse,
@@ -53,11 +56,14 @@ import type {
   ListApplicationsParams,
   ListAuditLogsParams,
   ListBlogPostsParams,
+  ListCommissions200,
   ListCommissionsParams,
   ListDocumentsParams,
   ListInvoicesParams,
   ListLeadsParams,
   ListProgramsParams,
+  ListServiceFees200,
+  ListServiceFeesParams,
   ListStudentsParams,
   ListUniversitiesParams,
   ListUsersParams,
@@ -66,6 +72,7 @@ import type {
   Program,
   ProgramsListResponse,
   PublicLeadBody,
+  ServiceFee,
   Settings,
   Student,
   StudentsListResponse,
@@ -81,6 +88,7 @@ import type {
   UpdateInvoiceBody,
   UpdateLeadBody,
   UpdateProgramBody,
+  UpdateServiceFeeBody,
   UpdateSettingsBody,
   UpdateStudentBody,
   UpdateUniversityBody,
@@ -4765,8 +4773,8 @@ export const getListCommissionsUrl = (params?: ListCommissionsParams) => {
 export const listCommissions = async (
   params?: ListCommissionsParams,
   options?: RequestInit,
-): Promise<Commission[]> => {
-  return customFetch<Commission[]>(getListCommissionsUrl(params), {
+): Promise<ListCommissions200> => {
+  return customFetch<ListCommissions200>(getListCommissionsUrl(params), {
     ...options,
     method: "GET",
   });
@@ -4924,6 +4932,93 @@ export const useCreateCommission = <
 };
 
 /**
+ * @summary Get commission by ID
+ */
+export const getGetCommissionUrl = (id: number) => {
+  return `/api/commissions/${id}`;
+};
+
+export const getCommission = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Commission> => {
+  return customFetch<Commission>(getGetCommissionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCommissionQueryKey = (id: number) => {
+  return [`/api/commissions/${id}`] as const;
+};
+
+export const getGetCommissionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCommission>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCommission>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCommissionQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommission>>> = ({
+    signal,
+  }) => getCommission(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCommission>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCommissionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCommission>>
+>;
+export type GetCommissionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get commission by ID
+ */
+
+export function useGetCommission<
+  TData = Awaited<ReturnType<typeof getCommission>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCommission>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCommissionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Update commission
  */
 export const getUpdateCommissionUrl = (id: number) => {
@@ -5009,6 +5104,538 @@ export const useUpdateCommission = <
 > => {
   return useMutation(getUpdateCommissionMutationOptions(options));
 };
+
+/**
+ * @summary Delete commission
+ */
+export const getDeleteCommissionUrl = (id: number) => {
+  return `/api/commissions/${id}`;
+};
+
+export const deleteCommission = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteCommissionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCommissionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCommission>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCommission>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteCommission"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCommission>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteCommission(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCommissionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCommission>>
+>;
+
+export type DeleteCommissionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete commission
+ */
+export const useDeleteCommission = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCommission>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCommission>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteCommissionMutationOptions(options));
+};
+
+/**
+ * @summary List service fees
+ */
+export const getListServiceFeesUrl = (params?: ListServiceFeesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/service-fees?${stringifiedParams}`
+    : `/api/service-fees`;
+};
+
+export const listServiceFees = async (
+  params?: ListServiceFeesParams,
+  options?: RequestInit,
+): Promise<ListServiceFees200> => {
+  return customFetch<ListServiceFees200>(getListServiceFeesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListServiceFeesQueryKey = (params?: ListServiceFeesParams) => {
+  return [`/api/service-fees`, ...(params ? [params] : [])] as const;
+};
+
+export const getListServiceFeesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listServiceFees>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListServiceFeesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listServiceFees>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListServiceFeesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listServiceFees>>> = ({
+    signal,
+  }) => listServiceFees(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listServiceFees>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListServiceFeesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listServiceFees>>
+>;
+export type ListServiceFeesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List service fees
+ */
+
+export function useListServiceFees<
+  TData = Awaited<ReturnType<typeof listServiceFees>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListServiceFeesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listServiceFees>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListServiceFeesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create service fee record
+ */
+export const getCreateServiceFeeUrl = () => {
+  return `/api/service-fees`;
+};
+
+export const createServiceFee = async (
+  createServiceFeeBody: CreateServiceFeeBody,
+  options?: RequestInit,
+): Promise<ServiceFee> => {
+  return customFetch<ServiceFee>(getCreateServiceFeeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createServiceFeeBody),
+  });
+};
+
+export const getCreateServiceFeeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createServiceFee>>,
+    TError,
+    { data: BodyType<CreateServiceFeeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createServiceFee>>,
+  TError,
+  { data: BodyType<CreateServiceFeeBody> },
+  TContext
+> => {
+  const mutationKey = ["createServiceFee"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createServiceFee>>,
+    { data: BodyType<CreateServiceFeeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createServiceFee(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateServiceFeeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createServiceFee>>
+>;
+export type CreateServiceFeeMutationBody = BodyType<CreateServiceFeeBody>;
+export type CreateServiceFeeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create service fee record
+ */
+export const useCreateServiceFee = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createServiceFee>>,
+    TError,
+    { data: BodyType<CreateServiceFeeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createServiceFee>>,
+  TError,
+  { data: BodyType<CreateServiceFeeBody> },
+  TContext
+> => {
+  return useMutation(getCreateServiceFeeMutationOptions(options));
+};
+
+/**
+ * @summary Update service fee
+ */
+export const getUpdateServiceFeeUrl = (id: number) => {
+  return `/api/service-fees/${id}`;
+};
+
+export const updateServiceFee = async (
+  id: number,
+  updateServiceFeeBody: UpdateServiceFeeBody,
+  options?: RequestInit,
+): Promise<ServiceFee> => {
+  return customFetch<ServiceFee>(getUpdateServiceFeeUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateServiceFeeBody),
+  });
+};
+
+export const getUpdateServiceFeeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateServiceFee>>,
+    TError,
+    { id: number; data: BodyType<UpdateServiceFeeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateServiceFee>>,
+  TError,
+  { id: number; data: BodyType<UpdateServiceFeeBody> },
+  TContext
+> => {
+  const mutationKey = ["updateServiceFee"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateServiceFee>>,
+    { id: number; data: BodyType<UpdateServiceFeeBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateServiceFee(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateServiceFeeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateServiceFee>>
+>;
+export type UpdateServiceFeeMutationBody = BodyType<UpdateServiceFeeBody>;
+export type UpdateServiceFeeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update service fee
+ */
+export const useUpdateServiceFee = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateServiceFee>>,
+    TError,
+    { id: number; data: BodyType<UpdateServiceFeeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateServiceFee>>,
+  TError,
+  { id: number; data: BodyType<UpdateServiceFeeBody> },
+  TContext
+> => {
+  return useMutation(getUpdateServiceFeeMutationOptions(options));
+};
+
+/**
+ * @summary Delete service fee
+ */
+export const getDeleteServiceFeeUrl = (id: number) => {
+  return `/api/service-fees/${id}`;
+};
+
+export const deleteServiceFee = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteServiceFeeUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteServiceFeeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteServiceFee>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteServiceFee>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteServiceFee"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteServiceFee>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteServiceFee(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteServiceFeeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteServiceFee>>
+>;
+
+export type DeleteServiceFeeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete service fee
+ */
+export const useDeleteServiceFee = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteServiceFee>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteServiceFee>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteServiceFeeMutationOptions(options));
+};
+
+/**
+ * @summary Finance dashboard summary
+ */
+export const getGetFinanceSummaryUrl = (params?: GetFinanceSummaryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/finance/summary?${stringifiedParams}`
+    : `/api/finance/summary`;
+};
+
+export const getFinanceSummary = async (
+  params?: GetFinanceSummaryParams,
+  options?: RequestInit,
+): Promise<GetFinanceSummary200> => {
+  return customFetch<GetFinanceSummary200>(getGetFinanceSummaryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFinanceSummaryQueryKey = (
+  params?: GetFinanceSummaryParams,
+) => {
+  return [`/api/finance/summary`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetFinanceSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFinanceSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetFinanceSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFinanceSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetFinanceSummaryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getFinanceSummary>>
+  > = ({ signal }) => getFinanceSummary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFinanceSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFinanceSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFinanceSummary>>
+>;
+export type GetFinanceSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Finance dashboard summary
+ */
+
+export function useGetFinanceSummary<
+  TData = Awaited<ReturnType<typeof getFinanceSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetFinanceSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFinanceSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFinanceSummaryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List blog posts

@@ -87,7 +87,7 @@ artifacts-monorepo/
 - **Students page**: AI-powered student creation (multi-step: upload docs → Claude reads & fills form → user reviews/completes); bulk CSV import with AI column mapping; new fields: motherName, fatherName, passportIssueDate
 - Applications page with stage filter + pipeline summary; "New Application" modal with student search, country/university/level/program/language/intake selects
 - Leads page: Kanban drag-and-drop with estimatedValue revenue display (role-gated)
-- Finance page with invoices + commissions (charts + Tabs UI)
+- Finance page — full redesign with commission tracking, service fees, Article 6 offsets
 - Settings page (profile/language/notifications/security tabs)
 
 ### Agent Portal
@@ -107,6 +107,28 @@ artifacts-monorepo/
 ## DB Schema — Students Extra Fields
 
 Added to `studentsTable`: `motherName`, `fatherName`, `passportIssueDate`, `address`
+
+## DB Schema — Finance System
+
+**commissionsTable** redesigned:
+- `programFee`, `universityCommissionRate`, `universityCommissionAmount`, `universityCollected`
+- `agentCommissionRate`, `agentCommissionAmount`, `agentPaid`
+- `status`: `potential` → `confirmed` → `collected_partial` / `collected_full` → `settled`
+- `confirmedAt`, `offsetAmount` (Article 6 offset for state universities, max 70% of confirmed commission)
+- `isStateUniversity`, `season`, `studentName`, `universityName`, `programName`
+
+**serviceFeesTable** (new):
+- `totalAmount`, `firstInstallmentAmount/PaidAt`, `secondInstallmentAmount/PaidAt`
+- `payerType` (student/agent), `status` (pending/partial/paid)
+- Auto-status derived from installment paid dates
+- `isStateUniversity` (for offset eligibility)
+
+**Finance API endpoints**:
+- `GET/POST /api/commissions` — with summary totals
+- `GET/PATCH/DELETE /api/commissions/:id`
+- `GET/POST /api/service-fees` — with summary totals
+- `PATCH/DELETE /api/service-fees/:id`
+- `GET /api/finance/summary?season=` — overall dashboard numbers
 
 ## Frontend Notes
 

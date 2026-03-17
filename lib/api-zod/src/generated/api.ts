@@ -1321,35 +1321,97 @@ export const UpdateInvoiceResponse = zod.object({
 export const ListCommissionsQueryParams = zod.object({
   agentId: zod.coerce.number().optional(),
   status: zod.coerce.string().optional(),
+  season: zod.coerce.string().optional(),
+  search: zod.coerce.string().optional(),
+  page: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
 });
 
-export const ListCommissionsResponseItem = zod.object({
-  id: zod.number(),
-  agentId: zod.number(),
-  applicationId: zod.number().nullish(),
-  invoiceId: zod.number().nullish(),
-  amount: zod.number(),
-  currency: zod.string(),
-  rate: zod.number().nullish(),
-  status: zod.string(),
-  paidAt: zod.string().nullish(),
-  notes: zod.string().nullish(),
-  createdAt: zod.date(),
+export const ListCommissionsResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        applicationId: zod.number().nullish(),
+        studentId: zod.number().nullish(),
+        agentId: zod.number().nullish(),
+        studentName: zod.string().nullish(),
+        universityName: zod.string().nullish(),
+        programName: zod.string().nullish(),
+        isStateUniversity: zod.boolean().nullish(),
+        season: zod.string(),
+        currency: zod.string(),
+        programFee: zod.string().nullish(),
+        universityCommissionRate: zod.string().nullish(),
+        universityCommissionAmount: zod.string().nullish(),
+        universityCollected: zod.string().nullish(),
+        agentCommissionRate: zod.string().nullish(),
+        agentCommissionAmount: zod.string().nullish(),
+        agentPaid: zod.string().nullish(),
+        status: zod.string(),
+        confirmedAt: zod.string().nullish(),
+        offsetAmount: zod.string().nullish(),
+        notes: zod.string().nullish(),
+        createdAt: zod.date(),
+      }),
+    )
+    .optional(),
+  summary: zod.object({}).passthrough().optional(),
+  meta: zod.object({}).passthrough().optional(),
 });
-export const ListCommissionsResponse = zod.array(ListCommissionsResponseItem);
 
 /**
  * @summary Create commission record
  */
 export const CreateCommissionBody = zod.object({
-  agentId: zod.number(),
   applicationId: zod.number().nullish(),
-  invoiceId: zod.number().nullish(),
-  amount: zod.number(),
-  currency: zod.string(),
-  rate: zod.number().nullish(),
-  status: zod.string(),
+  studentId: zod.number().nullish(),
+  agentId: zod.number().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  programName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  season: zod.string().optional(),
+  currency: zod.string().optional(),
+  programFee: zod.number().nullish(),
+  universityCommissionRate: zod.number().nullish(),
+  universityCommissionAmount: zod.number().nullish(),
+  agentCommissionRate: zod.number().nullish(),
+  agentCommissionAmount: zod.number().nullish(),
+  status: zod.string().optional(),
   notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Get commission by ID
+ */
+export const GetCommissionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetCommissionResponse = zod.object({
+  id: zod.number(),
+  applicationId: zod.number().nullish(),
+  studentId: zod.number().nullish(),
+  agentId: zod.number().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  programName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  season: zod.string(),
+  currency: zod.string(),
+  programFee: zod.string().nullish(),
+  universityCommissionRate: zod.string().nullish(),
+  universityCommissionAmount: zod.string().nullish(),
+  universityCollected: zod.string().nullish(),
+  agentCommissionRate: zod.string().nullish(),
+  agentCommissionAmount: zod.string().nullish(),
+  agentPaid: zod.string().nullish(),
+  status: zod.string(),
+  confirmedAt: zod.string().nullish(),
+  offsetAmount: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
 });
 
 /**
@@ -1360,25 +1422,171 @@ export const UpdateCommissionParams = zod.object({
 });
 
 export const UpdateCommissionBody = zod.object({
-  amount: zod.number().nullish(),
   status: zod.string().nullish(),
-  paidAt: zod.string().nullish(),
+  season: zod.string().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  programName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  programFee: zod.number().nullish(),
+  universityCommissionRate: zod.number().nullish(),
+  universityCommissionAmount: zod.number().nullish(),
+  universityCollected: zod.number().nullish(),
+  agentCommissionRate: zod.number().nullish(),
+  agentCommissionAmount: zod.number().nullish(),
+  agentPaid: zod.number().nullish(),
+  offsetAmount: zod.number().nullish(),
   notes: zod.string().nullish(),
 });
 
 export const UpdateCommissionResponse = zod.object({
   id: zod.number(),
-  agentId: zod.number(),
   applicationId: zod.number().nullish(),
-  invoiceId: zod.number().nullish(),
-  amount: zod.number(),
+  studentId: zod.number().nullish(),
+  agentId: zod.number().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  programName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  season: zod.string(),
   currency: zod.string(),
-  rate: zod.number().nullish(),
+  programFee: zod.string().nullish(),
+  universityCommissionRate: zod.string().nullish(),
+  universityCommissionAmount: zod.string().nullish(),
+  universityCollected: zod.string().nullish(),
+  agentCommissionRate: zod.string().nullish(),
+  agentCommissionAmount: zod.string().nullish(),
+  agentPaid: zod.string().nullish(),
   status: zod.string(),
-  paidAt: zod.string().nullish(),
+  confirmedAt: zod.string().nullish(),
+  offsetAmount: zod.string().nullish(),
   notes: zod.string().nullish(),
   createdAt: zod.date(),
 });
+
+/**
+ * @summary Delete commission
+ */
+export const DeleteCommissionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List service fees
+ */
+export const ListServiceFeesQueryParams = zod.object({
+  studentId: zod.coerce.number().optional(),
+  agentId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+  season: zod.coerce.string().optional(),
+  page: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListServiceFeesResponse = zod.object({
+  data: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        applicationId: zod.number().nullish(),
+        studentId: zod.number().nullish(),
+        agentId: zod.number().nullish(),
+        studentName: zod.string().nullish(),
+        universityName: zod.string().nullish(),
+        isStateUniversity: zod.boolean().nullish(),
+        payerType: zod.string(),
+        season: zod.string(),
+        currency: zod.string(),
+        totalAmount: zod.string(),
+        firstInstallmentAmount: zod.string().nullish(),
+        firstInstallmentPaidAt: zod.string().nullish(),
+        secondInstallmentAmount: zod.string().nullish(),
+        secondInstallmentPaidAt: zod.string().nullish(),
+        status: zod.string(),
+        notes: zod.string().nullish(),
+        createdAt: zod.date(),
+      }),
+    )
+    .optional(),
+  summary: zod.object({}).passthrough().optional(),
+  meta: zod.object({}).passthrough().optional(),
+});
+
+/**
+ * @summary Create service fee record
+ */
+export const CreateServiceFeeBody = zod.object({
+  applicationId: zod.number().nullish(),
+  studentId: zod.number().nullish(),
+  agentId: zod.number().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  payerType: zod.string().optional(),
+  season: zod.string().optional(),
+  currency: zod.string().optional(),
+  totalAmount: zod.number(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update service fee
+ */
+export const UpdateServiceFeeParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateServiceFeeBody = zod.object({
+  status: zod.string().nullish(),
+  season: zod.string().nullish(),
+  totalAmount: zod.number().nullish(),
+  payerType: zod.string().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  firstInstallmentAmount: zod.number().nullish(),
+  firstInstallmentPaidAt: zod.string().nullish(),
+  secondInstallmentAmount: zod.number().nullish(),
+  secondInstallmentPaidAt: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateServiceFeeResponse = zod.object({
+  id: zod.number(),
+  applicationId: zod.number().nullish(),
+  studentId: zod.number().nullish(),
+  agentId: zod.number().nullish(),
+  studentName: zod.string().nullish(),
+  universityName: zod.string().nullish(),
+  isStateUniversity: zod.boolean().nullish(),
+  payerType: zod.string(),
+  season: zod.string(),
+  currency: zod.string(),
+  totalAmount: zod.string(),
+  firstInstallmentAmount: zod.string().nullish(),
+  firstInstallmentPaidAt: zod.string().nullish(),
+  secondInstallmentAmount: zod.string().nullish(),
+  secondInstallmentPaidAt: zod.string().nullish(),
+  status: zod.string(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+
+/**
+ * @summary Delete service fee
+ */
+export const DeleteServiceFeeParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Finance dashboard summary
+ */
+export const GetFinanceSummaryQueryParams = zod.object({
+  season: zod.coerce.string().optional(),
+});
+
+export const GetFinanceSummaryResponse = zod.object({}).passthrough();
 
 /**
  * @summary List blog posts

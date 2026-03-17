@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateCommissionBody {
+export interface CreateServiceFeeBody {
   /** @nullable */
   applicationId?: number | null;
   /** @nullable */
@@ -18,22 +18,11 @@ export interface CreateCommissionBody {
   /** @nullable */
   universityName?: string | null;
   /** @nullable */
-  programName?: string | null;
-  /** @nullable */
   isStateUniversity?: boolean | null;
+  payerType?: string;
   season?: string;
   currency?: string;
-  /** @nullable */
-  programFee?: number | null;
-  /** @nullable */
-  universityCommissionRate?: number | null;
-  /** @nullable */
-  universityCommissionAmount?: number | null;
-  /** @nullable */
-  agentCommissionRate?: number | null;
-  /** @nullable */
-  agentCommissionAmount?: number | null;
-  status?: string;
+  totalAmount: number;
   /** @nullable */
   notes?: string | null;
 }

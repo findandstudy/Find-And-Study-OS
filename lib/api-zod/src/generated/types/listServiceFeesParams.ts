@@ -6,11 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListCommissionsParams = {
+export type ListServiceFeesParams = {
+  studentId?: number;
   agentId?: number;
   status?: string;
   season?: string;
-  search?: string;
   page?: number;
   limit?: number;
 };

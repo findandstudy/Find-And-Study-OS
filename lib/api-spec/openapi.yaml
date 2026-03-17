@@ -1200,15 +1200,38 @@ paths:
           in: query
           schema:
             type: string
+        - name: season
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
       responses:
         "200":
-          description: List of commissions
+          description: Commission list with summary
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Commission"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Commission"
+                  summary:
+                    type: object
+                  meta:
+                    type: object
     post:
       operationId: createCommission
       tags: [finance]
@@ -1228,6 +1251,23 @@ paths:
                 $ref: "#/components/schemas/Commission"
 
   /commissions/{id}:
+    get:
+      operationId: getCommission
+      tags: [finance]
+      summary: Get commission by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Commission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commission"
     patch:
       operationId: updateCommission
       tags: [finance]
@@ -1251,6 +1291,139 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Commission"
+    delete:
+      operationId: deleteCommission
+      tags: [finance]
+      summary: Delete commission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /service-fees:
+    get:
+      operationId: listServiceFees
+      tags: [finance]
+      summary: List service fees
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: agentId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: season
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Service fee list with summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ServiceFee"
+                  summary:
+                    type: object
+                  meta:
+                    type: object
+    post:
+      operationId: createServiceFee
+      tags: [finance]
+      summary: Create service fee record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceFeeBody"
+      responses:
+        "201":
+          description: Created service fee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceFee"
+
+  /service-fees/{id}:
+    patch:
+      operationId: updateServiceFee
+      tags: [finance]
+      summary: Update service fee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateServiceFeeBody"
+      responses:
+        "200":
+          description: Updated service fee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceFee"
+    delete:
+      operationId: deleteServiceFee
+      tags: [finance]
+      summary: Delete service fee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /finance/summary:
+    get:
+      operationId: getFinanceSummary
+      tags: [finance]
+      summary: Finance dashboard summary
+      parameters:
+        - name: season
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Finance summary
+          content:
+            application/json:
+              schema:
+                type: object
 
   # CONTENT / CMS
   /blog:
@@ -2639,21 +2812,43 @@ components:
       properties:
         id:
           type: integer
-        agentId:
-          type: integer
         applicationId:
           type: ["integer", "null"]
-        invoiceId:
+        studentId:
           type: ["integer", "null"]
-        amount:
-          type: number
+        agentId:
+          type: ["integer", "null"]
+        studentName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        programName:
+          type: ["string", "null"]
+        isStateUniversity:
+          type: ["boolean", "null"]
+        season:
+          type: string
         currency:
           type: string
-        rate:
-          type: ["number", "null"]
+        programFee:
+          type: ["string", "null"]
+        universityCommissionRate:
+          type: ["string", "null"]
+        universityCommissionAmount:
+          type: ["string", "null"]
+        universityCollected:
+          type: ["string", "null"]
+        agentCommissionRate:
+          type: ["string", "null"]
+        agentCommissionAmount:
+          type: ["string", "null"]
+        agentPaid:
+          type: ["string", "null"]
         status:
           type: string
-        paidAt:
+        confirmedAt:
+          type: ["string", "null"]
+        offsetAmount:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
@@ -2662,8 +2857,7 @@ components:
           format: date-time
       required:
         - id
-        - agentId
-        - amount
+        - season
         - currency
         - status
         - createdAt
@@ -2671,36 +2865,174 @@ components:
     CreateCommissionBody:
       type: object
       properties:
-        agentId:
-          type: integer
         applicationId:
           type: ["integer", "null"]
-        invoiceId:
+        studentId:
           type: ["integer", "null"]
-        amount:
-          type: number
+        agentId:
+          type: ["integer", "null"]
+        studentName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        programName:
+          type: ["string", "null"]
+        isStateUniversity:
+          type: ["boolean", "null"]
+        season:
+          type: string
         currency:
           type: string
-        rate:
+        programFee:
+          type: ["number", "null"]
+        universityCommissionRate:
+          type: ["number", "null"]
+        universityCommissionAmount:
+          type: ["number", "null"]
+        agentCommissionRate:
+          type: ["number", "null"]
+        agentCommissionAmount:
           type: ["number", "null"]
         status:
           type: string
         notes:
           type: ["string", "null"]
-      required:
-        - agentId
-        - amount
-        - currency
-        - status
 
     UpdateCommissionBody:
       type: object
       properties:
-        amount:
-          type: ["number", "null"]
         status:
           type: ["string", "null"]
-        paidAt:
+        season:
+          type: ["string", "null"]
+        studentName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        programName:
+          type: ["string", "null"]
+        isStateUniversity:
+          type: ["boolean", "null"]
+        programFee:
+          type: ["number", "null"]
+        universityCommissionRate:
+          type: ["number", "null"]
+        universityCommissionAmount:
+          type: ["number", "null"]
+        universityCollected:
+          type: ["number", "null"]
+        agentCommissionRate:
+          type: ["number", "null"]
+        agentCommissionAmount:
+          type: ["number", "null"]
+        agentPaid:
+          type: ["number", "null"]
+        offsetAmount:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    ServiceFee:
+      type: object
+      properties:
+        id:
+          type: integer
+        applicationId:
+          type: ["integer", "null"]
+        studentId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        studentName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        isStateUniversity:
+          type: ["boolean", "null"]
+        payerType:
+          type: string
+        season:
+          type: string
+        currency:
+          type: string
+        totalAmount:
+          type: string
+        firstInstallmentAmount:
+          type: ["string", "null"]
+        firstInstallmentPaidAt:
+          type: ["string", "null"]
+        secondInstallmentAmount:
+          type: ["string", "null"]
+        secondInstallmentPaidAt:
+          type: ["string", "null"]
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - payerType
+        - season
+        - currency
+        - totalAmount
+        - status
+        - createdAt
+
+    CreateServiceFeeBody:
+      type: object
+      properties:
+        applicationId:
+          type: ["integer", "null"]
+        studentId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        studentName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        isStateUniversity:
+          type: ["boolean", "null"]
+        payerType:
+          type: string
+        season:
+          type: string
+        currency:
+          type: string
+        totalAmount:
+          type: number
+        notes:
+          type: ["string", "null"]
+      required:
+        - totalAmount
+
+    UpdateServiceFeeBody:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+        season:
+          type: ["string", "null"]
+        totalAmount:
+          type: ["number", "null"]
+        payerType:
+          type: ["string", "null"]
+        studentName:
+          type: ["string", "null"]
+        universityName:
+          type: ["string", "null"]
+        isStateUniversity:
+          type: ["boolean", "null"]
+        firstInstallmentAmount:
+          type: ["number", "null"]
+        firstInstallmentPaidAt:
+          type: ["string", "null"]
+        secondInstallmentAmount:
+          type: ["number", "null"]
+        secondInstallmentPaidAt:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]

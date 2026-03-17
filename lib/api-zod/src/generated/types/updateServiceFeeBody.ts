@@ -6,35 +6,29 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface UpdateCommissionBody {
+export interface UpdateServiceFeeBody {
   /** @nullable */
   status?: string | null;
   /** @nullable */
   season?: string | null;
   /** @nullable */
+  totalAmount?: number | null;
+  /** @nullable */
+  payerType?: string | null;
+  /** @nullable */
   studentName?: string | null;
   /** @nullable */
   universityName?: string | null;
   /** @nullable */
-  programName?: string | null;
-  /** @nullable */
   isStateUniversity?: boolean | null;
   /** @nullable */
-  programFee?: number | null;
+  firstInstallmentAmount?: number | null;
   /** @nullable */
-  universityCommissionRate?: number | null;
+  firstInstallmentPaidAt?: string | null;
   /** @nullable */
-  universityCommissionAmount?: number | null;
+  secondInstallmentAmount?: number | null;
   /** @nullable */
-  universityCollected?: number | null;
-  /** @nullable */
-  agentCommissionRate?: number | null;
-  /** @nullable */
-  agentCommissionAmount?: number | null;
-  /** @nullable */
-  agentPaid?: number | null;
-  /** @nullable */
-  offsetAmount?: number | null;
+  secondInstallmentPaidAt?: string | null;
   /** @nullable */
   notes?: string | null;
 }

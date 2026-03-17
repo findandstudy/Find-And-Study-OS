@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -7,7 +7,7 @@ export const invoicesTable = pgTable("invoices", {
   invoiceNumber: text("invoice_number").notNull().unique(),
   studentId: integer("student_id").notNull(),
   applicationId: integer("application_id"),
-  amount: real("amount").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("USD"),
   status: text("status").notNull().default("draft"),
   dueDate: text("due_date"),
@@ -19,14 +19,61 @@ export const invoicesTable = pgTable("invoices", {
 
 export const commissionsTable = pgTable("commissions", {
   id: serial("id").primaryKey(),
-  agentId: integer("agent_id").notNull(),
   applicationId: integer("application_id"),
-  invoiceId: integer("invoice_id"),
-  amount: real("amount").notNull(),
+  studentId: integer("student_id"),
+  agentId: integer("agent_id"),
+
+  studentName: text("student_name"),
+  universityName: text("university_name"),
+  programName: text("program_name"),
+  isStateUniversity: boolean("is_state_university").default(false),
+
+  season: text("season").notNull().default("2025"),
   currency: text("currency").notNull().default("USD"),
-  rate: real("rate"),
+
+  programFee: numeric("program_fee", { precision: 12, scale: 2 }),
+
+  universityCommissionRate: numeric("university_commission_rate", { precision: 5, scale: 2 }),
+  universityCommissionAmount: numeric("university_commission_amount", { precision: 12, scale: 2 }),
+  universityCollected: numeric("university_collected", { precision: 12, scale: 2 }).default("0"),
+
+  agentCommissionRate: numeric("agent_commission_rate", { precision: 5, scale: 2 }),
+  agentCommissionAmount: numeric("agent_commission_amount", { precision: 12, scale: 2 }),
+  agentPaid: numeric("agent_paid", { precision: 12, scale: 2 }).default("0"),
+
+  status: text("status").notNull().default("potential"),
+  confirmedAt: text("confirmed_at"),
+
+  offsetAmount: numeric("offset_amount", { precision: 12, scale: 2 }).default("0"),
+
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const serviceFeesTable = pgTable("service_fees", {
+  id: serial("id").primaryKey(),
+  applicationId: integer("application_id"),
+  studentId: integer("student_id"),
+  agentId: integer("agent_id"),
+
+  studentName: text("student_name"),
+  universityName: text("university_name"),
+  isStateUniversity: boolean("is_state_university").default(false),
+
+  payerType: text("payer_type").notNull().default("student"),
+  season: text("season").notNull().default("2025"),
+  currency: text("currency").notNull().default("USD"),
+
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+
+  firstInstallmentAmount: numeric("first_installment_amount", { precision: 12, scale: 2 }),
+  firstInstallmentPaidAt: text("first_installment_paid_at"),
+
+  secondInstallmentAmount: numeric("second_installment_amount", { precision: 12, scale: 2 }),
+  secondInstallmentPaidAt: text("second_installment_paid_at"),
+
   status: text("status").notNull().default("pending"),
-  paidAt: text("paid_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -39,3 +86,7 @@ export type Invoice = typeof invoicesTable.$inferSelect;
 export const insertCommissionSchema = createInsertSchema(commissionsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCommission = z.infer<typeof insertCommissionSchema>;
 export type Commission = typeof commissionsTable.$inferSelect;
+
+export const insertServiceFeeSchema = createInsertSchema(serviceFeesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertServiceFee = z.infer<typeof insertServiceFeeSchema>;
+export type ServiceFee = typeof serviceFeesTable.$inferSelect;

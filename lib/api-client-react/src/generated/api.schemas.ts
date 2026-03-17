@@ -776,45 +776,187 @@ export interface InvoicesListResponse {
 
 export interface Commission {
   id: number;
-  agentId: number;
   /** @nullable */
   applicationId?: number | null;
   /** @nullable */
-  invoiceId?: number | null;
-  amount: number;
+  studentId?: number | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  studentName?: string | null;
+  /** @nullable */
+  universityName?: string | null;
+  /** @nullable */
+  programName?: string | null;
+  /** @nullable */
+  isStateUniversity?: boolean | null;
+  season: string;
   currency: string;
   /** @nullable */
-  rate?: number | null;
+  programFee?: string | null;
+  /** @nullable */
+  universityCommissionRate?: string | null;
+  /** @nullable */
+  universityCommissionAmount?: string | null;
+  /** @nullable */
+  universityCollected?: string | null;
+  /** @nullable */
+  agentCommissionRate?: string | null;
+  /** @nullable */
+  agentCommissionAmount?: string | null;
+  /** @nullable */
+  agentPaid?: string | null;
   status: string;
   /** @nullable */
-  paidAt?: string | null;
+  confirmedAt?: string | null;
+  /** @nullable */
+  offsetAmount?: string | null;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
 }
 
 export interface CreateCommissionBody {
-  agentId: number;
   /** @nullable */
   applicationId?: number | null;
   /** @nullable */
-  invoiceId?: number | null;
-  amount: number;
-  currency: string;
+  studentId?: number | null;
   /** @nullable */
-  rate?: number | null;
-  status: string;
+  agentId?: number | null;
+  /** @nullable */
+  studentName?: string | null;
+  /** @nullable */
+  universityName?: string | null;
+  /** @nullable */
+  programName?: string | null;
+  /** @nullable */
+  isStateUniversity?: boolean | null;
+  season?: string;
+  currency?: string;
+  /** @nullable */
+  programFee?: number | null;
+  /** @nullable */
+  universityCommissionRate?: number | null;
+  /** @nullable */
+  universityCommissionAmount?: number | null;
+  /** @nullable */
+  agentCommissionRate?: number | null;
+  /** @nullable */
+  agentCommissionAmount?: number | null;
+  status?: string;
   /** @nullable */
   notes?: string | null;
 }
 
 export interface UpdateCommissionBody {
   /** @nullable */
-  amount?: number | null;
+  status?: string | null;
+  /** @nullable */
+  season?: string | null;
+  /** @nullable */
+  studentName?: string | null;
+  /** @nullable */
+  universityName?: string | null;
+  /** @nullable */
+  programName?: string | null;
+  /** @nullable */
+  isStateUniversity?: boolean | null;
+  /** @nullable */
+  programFee?: number | null;
+  /** @nullable */
+  universityCommissionRate?: number | null;
+  /** @nullable */
+  universityCommissionAmount?: number | null;
+  /** @nullable */
+  universityCollected?: number | null;
+  /** @nullable */
+  agentCommissionRate?: number | null;
+  /** @nullable */
+  agentCommissionAmount?: number | null;
+  /** @nullable */
+  agentPaid?: number | null;
+  /** @nullable */
+  offsetAmount?: number | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface ServiceFee {
+  id: number;
+  /** @nullable */
+  applicationId?: number | null;
+  /** @nullable */
+  studentId?: number | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  studentName?: string | null;
+  /** @nullable */
+  universityName?: string | null;
+  /** @nullable */
+  isStateUniversity?: boolean | null;
+  payerType: string;
+  season: string;
+  currency: string;
+  totalAmount: string;
+  /** @nullable */
+  firstInstallmentAmount?: string | null;
+  /** @nullable */
+  firstInstallmentPaidAt?: string | null;
+  /** @nullable */
+  secondInstallmentAmount?: string | null;
+  /** @nullable */
+  secondInstallmentPaidAt?: string | null;
+  status: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateServiceFeeBody {
+  /** @nullable */
+  applicationId?: number | null;
+  /** @nullable */
+  studentId?: number | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  studentName?: string | null;
+  /** @nullable */
+  universityName?: string | null;
+  /** @nullable */
+  isStateUniversity?: boolean | null;
+  payerType?: string;
+  season?: string;
+  currency?: string;
+  totalAmount: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface UpdateServiceFeeBody {
   /** @nullable */
   status?: string | null;
   /** @nullable */
-  paidAt?: string | null;
+  season?: string | null;
+  /** @nullable */
+  totalAmount?: number | null;
+  /** @nullable */
+  payerType?: string | null;
+  /** @nullable */
+  studentName?: string | null;
+  /** @nullable */
+  universityName?: string | null;
+  /** @nullable */
+  isStateUniversity?: boolean | null;
+  /** @nullable */
+  firstInstallmentAmount?: number | null;
+  /** @nullable */
+  firstInstallmentPaidAt?: string | null;
+  /** @nullable */
+  secondInstallmentAmount?: number | null;
+  /** @nullable */
+  secondInstallmentPaidAt?: string | null;
   /** @nullable */
   notes?: string | null;
 }
@@ -1104,7 +1246,46 @@ export type ListInvoicesParams = {
 export type ListCommissionsParams = {
   agentId?: number;
   status?: string;
+  season?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
 };
+
+export type ListCommissions200Summary = { [key: string]: unknown };
+
+export type ListCommissions200Meta = { [key: string]: unknown };
+
+export type ListCommissions200 = {
+  data?: Commission[];
+  summary?: ListCommissions200Summary;
+  meta?: ListCommissions200Meta;
+};
+
+export type ListServiceFeesParams = {
+  studentId?: number;
+  agentId?: number;
+  status?: string;
+  season?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type ListServiceFees200Summary = { [key: string]: unknown };
+
+export type ListServiceFees200Meta = { [key: string]: unknown };
+
+export type ListServiceFees200 = {
+  data?: ServiceFee[];
+  summary?: ListServiceFees200Summary;
+  meta?: ListServiceFees200Meta;
+};
+
+export type GetFinanceSummaryParams = {
+  season?: string;
+};
+
+export type GetFinanceSummary200 = { [key: string]: unknown };
 
 export type ListBlogPostsParams = {
   locale?: string;
