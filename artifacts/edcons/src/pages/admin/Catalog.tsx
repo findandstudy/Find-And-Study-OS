@@ -423,6 +423,7 @@ function UniversitiesTab() {
   const [form, setForm] = useState<Partial<University> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [delId, setDelId] = useState<number | null>(null);
+  const [selCountryId, setSelCountryId] = useState<number | null>(null);
 
   const { data } = useQuery({
     queryKey: ["universities", page, dSearch],
@@ -430,6 +431,19 @@ function UniversitiesTab() {
   });
   const universities: University[] = data?.data ?? [];
   const totalPages = data?.meta?.totalPages ?? 1;
+
+  const { data: allCountriesResp } = useQuery({
+    queryKey: ["all-countries-uni"],
+    queryFn: () => api("/api/countries?limit=500"),
+  });
+  const allCountries: Country[] = allCountriesResp?.data ?? [];
+
+  const { data: formCitiesResp } = useQuery({
+    queryKey: ["form-cities-uni", selCountryId],
+    queryFn: () => api(`/api/cities?countryId=${selCountryId}&limit=500`),
+    enabled: selCountryId != null,
+  });
+  const formCities: City[] = formCitiesResp?.data ?? [];
 
   const save = useMutation({
     mutationFn: async (f: Partial<University>) => f.id
@@ -473,7 +487,7 @@ function UniversitiesTab() {
           <Input placeholder="Üniversite ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
-        <Button onClick={() => setForm({ isActive: true, status: "open" })}><Plus className="h-4 w-4 mr-2" />Üniversite Ekle</Button>
+        <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />Üniversite Ekle</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -521,7 +535,7 @@ function UniversitiesTab() {
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm(u)}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setForm(u); setSelCountryId(allCountries.find(c => c.name === u.country)?.id ?? null); }}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDelId(u.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 </td>
@@ -580,11 +594,43 @@ function UniversitiesTab() {
                 </div>
                 <div>
                   <Label>Ülke *</Label>
-                  <Input className="mt-1" placeholder="Turkey" value={form?.country ?? ""} onChange={e => setF({ country: e.target.value })} />
+                  <Select
+                    value={form?.country ?? ""}
+                    onValueChange={v => {
+                      const found = allCountries.find(c => c.name === v);
+                      setF({ country: v, city: null });
+                      setSelCountryId(found?.id ?? null);
+                    }}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Ülke seçin…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allCountries.map(c => (
+                        <SelectItem key={c.id} value={c.name}>
+                          {c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Şehir</Label>
-                  <Input className="mt-1" placeholder="Istanbul" value={form?.city ?? ""} onChange={e => setF({ city: e.target.value })} />
+                  <Select
+                    value={form?.city ?? ""}
+                    onValueChange={v => setF({ city: v || null })}
+                    disabled={!selCountryId}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={selCountryId ? "Şehir seçin…" : "Önce ülke seçin"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— Şehir seçmeyin —</SelectItem>
+                      {formCities.map(c => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Üniversite Türü</Label>

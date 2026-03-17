@@ -3,13 +3,14 @@ import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListStudents, useCreateStudent } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import {
   Search, Plus, FileText, FileUp, Sparkles, ChevronLeft,
@@ -261,6 +262,12 @@ function AddStudentModal({
   const { toast } = useToast();
   const createStudent = useCreateStudent();
   const { season } = useSeason();
+
+  const { data: countriesResp } = useQuery({
+    queryKey: ["all-countries-nationality"],
+    queryFn: () => fetch(`${BASE_URL}/api/countries?limit=500`, { credentials: "include" }).then(r => r.json()),
+  });
+  const allCountries: Array<{ id: number; name: string; flagEmoji?: string | null }> = countriesResp?.data ?? [];
 
   const [step, setStep] = useState<Step>("upload");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
@@ -567,7 +574,21 @@ function AddStudentModal({
                   <FormField label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
                   <FormField label="Phone" value={form.phone} onChange={field("phone")} placeholder="+90 555 000 0000" aiExtracted={ef.has("phone")} />
                   <FormField label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
-                  <FormField label="Nationality" value={form.nationality} onChange={field("nationality")} placeholder="e.g. Turkish" aiExtracted={ef.has("nationality")} />
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
+                    <Select value={form.nationality} onValueChange={field("nationality")}>
+                      <SelectTrigger className="mt-1 h-9 text-sm">
+                        <SelectValue placeholder="Ülke seçin…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allCountries.map(c => (
+                          <SelectItem key={c.id} value={c.name}>
+                            {c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <FormField label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Anne adı" aiExtracted={ef.has("motherName")} />
                   <FormField label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Baba adı" aiExtracted={ef.has("fatherName")} />
                   <div className="col-span-2">
