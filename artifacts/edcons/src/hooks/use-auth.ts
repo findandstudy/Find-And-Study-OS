@@ -4,8 +4,9 @@ import { useLocation } from "wouter";
 
 export function useAuth(requireAuth = false, allowedRoles?: string[]) {
   const { data: user, isLoading, error } = useGetMe({
-    query: { retry: false }
+    query: { retry: false, staleTime: 30_000 },
   });
+
   const [, setLocation] = useLocation();
 
   useEffect(() => {
