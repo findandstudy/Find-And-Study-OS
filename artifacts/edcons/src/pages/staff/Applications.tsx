@@ -123,8 +123,9 @@ const EMPTY_FORM = {
   country: "",
   universityId: "",
   universityName: "",
-  level: "",
+  programId: "",
   programName: "",
+  level: "",
   instructionLanguage: "",
   intake: "",
   notes: "",
@@ -259,12 +260,48 @@ function AddApplicationModal({
   });
   const universities = uniData?.data ?? [];
 
-  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null }> }>({
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; intakes?: string | null }> }>({
     queryKey: ["programs-by-university", form.universityId],
     queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
     enabled: !!form.universityId,
   });
   const programs = progData?.data ?? [];
+
+  function degreeToLevel(degree?: string | null): string {
+    if (!degree) return "";
+    const d = degree.toLowerCase();
+    if (d.includes("phd") || d.includes("doctorate") || d.includes("dphil")) return "doctorate";
+    if (d.includes("mba")) return "mba";
+    if (d.includes("msc") || d.includes("ma") || d.includes("master") || d.includes("llm")) return "masters";
+    if (d.includes("bsc") || d.includes("ba") || d.includes("beng") || d.includes("llb") || d.includes("undergrad") || d.includes("lisans")) return "undergraduate";
+    if (d.includes("diploma")) return "diploma";
+    if (d.includes("foundation")) return "foundation";
+    if (d.includes("certificate")) return "certificate";
+    if (d.includes("language")) return "language_school";
+    return "";
+  }
+
+  function matchIntake(stored?: string | null): string {
+    if (!stored) return "";
+    const found = INTAKES.find((i) => i.toLowerCase().startsWith(stored.toLowerCase().trim()));
+    return found ?? "";
+  }
+
+  function handleProgramSelect(programId: string) {
+    const prog = programs.find((p) => String(p.id) === programId);
+    if (!prog) return;
+    const autoLevel = degreeToLevel(prog.degree);
+    const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
+    const autoIntake = matchIntake(prog.intakes);
+    setForm({
+      ...form,
+      programId,
+      programName: prog.name,
+      level: autoLevel || form.level,
+      instructionLanguage: autoLang,
+      intake: autoIntake || form.intake,
+    });
+  }
 
   const createApplication = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
@@ -345,7 +382,7 @@ function AddApplicationModal({
               <Select
                 value={form.country}
                 onValueChange={(v) =>
-                  setForm({ ...form, country: v, universityId: "", universityName: "", programName: "" })
+                  setForm({ ...form, country: v, universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" })
                 }
               >
                 <SelectTrigger className="rounded-xl">
@@ -365,7 +402,7 @@ function AddApplicationModal({
                 value={form.universityId}
                 onValueChange={(v) => {
                   const uni = universities.find((u) => String(u.id) === v);
-                  setForm({ ...form, universityId: v, universityName: uni?.name ?? "", programName: "" });
+                  setForm({ ...form, universityId: v, universityName: uni?.name ?? "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" });
                 }}
                 disabled={!form.country || universities.length === 0}
               >
@@ -407,8 +444,8 @@ function AddApplicationModal({
             <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label className="font-semibold">Department / Program</Label>
               <Select
-                value={form.programName}
-                onValueChange={(v) => setForm({ ...form, programName: v })}
+                value={form.programId}
+                onValueChange={handleProgramSelect}
                 disabled={!form.universityId || programs.length === 0}
               >
                 <SelectTrigger className="rounded-xl">
@@ -424,7 +461,7 @@ function AddApplicationModal({
                 </SelectTrigger>
                 <SelectContent className="max-h-60">
                   {programs.map((p) => (
-                    <SelectItem key={p.id} value={p.name}>
+                    <SelectItem key={p.id} value={String(p.id)}>
                       <span>{p.name}</span>
                       {p.degree && <span className="text-muted-foreground ml-1.5 text-xs">({p.degree})</span>}
                     </SelectItem>
