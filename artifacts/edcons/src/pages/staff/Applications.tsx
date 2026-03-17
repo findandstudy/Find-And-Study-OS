@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useListApplications,
@@ -34,6 +34,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -127,7 +128,7 @@ function StudentSearchInput({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 300);
@@ -135,20 +136,10 @@ function StudentSearchInput({
   }, [query]);
 
   const { data: studentsResp, isLoading } = useListStudents(
-    { search: debouncedQuery, limit: 10 },
-    { query: { enabled: debouncedQuery.length >= 1 } }
+    { search: debouncedQuery, limit: 20 },
+    { query: { enabled: open } }
   );
   const students = studentsResp?.data ?? [];
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   if (value) {
     return (
@@ -166,7 +157,7 @@ function StudentSearchInput({
         </div>
         <button
           type="button"
-          onClick={() => onChange(null)}
+          onClick={() => { onChange(null); setQuery(""); }}
           className="p-1 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
         >
           <X className="w-4 h-4" />
@@ -176,59 +167,61 @@ function StudentSearchInput({
   }
 
   return (
-    <div ref={containerRef} className="relative">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or email…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          className="pl-9 rounded-xl"
-        />
-      </div>
-
-      {open && (query.length >= 1) && (
-        <div className="absolute z-50 top-full mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden">
-          {isLoading && (
-            <div className="p-3 text-sm text-muted-foreground text-center">Searching…</div>
-          )}
-          {!isLoading && students.length === 0 && (
-            <div className="p-3 text-sm text-muted-foreground text-center">
-              No students found
-            </div>
-          )}
-          {students.map((student) => (
-            <button
-              key={student.id}
-              type="button"
-              className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0"
-              onClick={() => {
-                onChange(student);
-                setQuery("");
-                setOpen(false);
-              }}
-            >
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <User className="w-4 h-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">
-                  {student.firstName} {student.lastName}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {student.email || student.nationality || "—"}
-                </p>
-              </div>
-              <Check className="w-4 h-4 text-primary opacity-0 group-hover:opacity-100" />
-            </button>
-          ))}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative cursor-text" onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            ref={inputRef}
+            placeholder="İsim veya e-posta ile ara…"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            className="pl-9 rounded-xl"
+            autoComplete="off"
+          />
         </div>
-      )}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent
+        className="p-0 w-[var(--radix-popover-trigger-width)] max-h-64 overflow-y-auto"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        {isLoading && (
+          <div className="p-3 text-sm text-muted-foreground text-center">Aranıyor…</div>
+        )}
+        {!isLoading && students.length === 0 && (
+          <div className="p-4 text-sm text-muted-foreground text-center">
+            {query.length === 0 ? "Aramak için yazmaya başlayın" : "Öğrenci bulunamadı"}
+          </div>
+        )}
+        {students.map((student) => (
+          <button
+            key={student.id}
+            type="button"
+            className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange(student);
+              setQuery("");
+              setOpen(false);
+            }}
+          >
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <User className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {student.firstName} {student.lastName}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {student.email || student.nationality || "—"}
+              </p>
+            </div>
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
