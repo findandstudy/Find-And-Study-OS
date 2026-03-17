@@ -121,6 +121,7 @@ const INTAKES = generateIntakes();
 
 const EMPTY_FORM = {
   country: "",
+  universityId: "",
   universityName: "",
   level: "",
   programName: "",
@@ -251,6 +252,20 @@ function AddApplicationModal({
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
 
+  const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
+    queryKey: ["universities-by-country", form.country],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities?country=${encodeURIComponent(form.country)}&limit=100`),
+    enabled: !!form.country,
+  });
+  const universities = uniData?.data ?? [];
+
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null }> }>({
+    queryKey: ["programs-by-university", form.universityId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
+    enabled: !!form.universityId,
+  });
+  const programs = progData?.data ?? [];
+
   const createApplication = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
       apiFetch(`${BASE_URL}/api/applications`, {
@@ -327,7 +342,12 @@ function AddApplicationModal({
               <Label className="font-semibold">
                 Country <span className="text-destructive">*</span>
               </Label>
-              <Select value={form.country} onValueChange={(v) => setForm({ ...form, country: v })}>
+              <Select
+                value={form.country}
+                onValueChange={(v) =>
+                  setForm({ ...form, country: v, universityId: "", universityName: "", programName: "" })
+                }
+              >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Select country…" />
                 </SelectTrigger>
@@ -341,12 +361,31 @@ function AddApplicationModal({
 
             <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label className="font-semibold">University / School</Label>
-              <Input
-                placeholder="e.g. University of Manchester"
-                value={form.universityName}
-                onChange={(e) => setForm({ ...form, universityName: e.target.value })}
-                className="rounded-xl"
-              />
+              <Select
+                value={form.universityId}
+                onValueChange={(v) => {
+                  const uni = universities.find((u) => String(u.id) === v);
+                  setForm({ ...form, universityId: v, universityName: uni?.name ?? "", programName: "" });
+                }}
+                disabled={!form.country || universities.length === 0}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue
+                    placeholder={
+                      !form.country
+                        ? "Select a country first…"
+                        : universities.length === 0
+                        ? "No universities found"
+                        : "Select university…"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {universities.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2 col-span-2 sm:col-span-1">
@@ -367,12 +406,31 @@ function AddApplicationModal({
 
             <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label className="font-semibold">Department / Program</Label>
-              <Input
-                placeholder="e.g. Computer Science"
+              <Select
                 value={form.programName}
-                onChange={(e) => setForm({ ...form, programName: e.target.value })}
-                className="rounded-xl"
-              />
+                onValueChange={(v) => setForm({ ...form, programName: v })}
+                disabled={!form.universityId || programs.length === 0}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue
+                    placeholder={
+                      !form.universityId
+                        ? "Select a university first…"
+                        : programs.length === 0
+                        ? "No programs found"
+                        : "Select program…"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {programs.map((p) => (
+                    <SelectItem key={p.id} value={p.name}>
+                      <span>{p.name}</span>
+                      {p.degree && <span className="text-muted-foreground ml-1.5 text-xs">({p.degree})</span>}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2 col-span-2 sm:col-span-1">
