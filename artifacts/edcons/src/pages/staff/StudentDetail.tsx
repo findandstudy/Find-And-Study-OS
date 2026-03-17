@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar } from "lucide-react";
 
 interface Props {
   id: number;
@@ -89,35 +89,53 @@ export default function StudentDetail({ id }: Props) {
                 <h2 className="font-semibold text-foreground">Personal Information</h2>
                 {isLoading ? (
                   <div className="space-y-3">
-                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
+                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
                   </div>
                 ) : (
                   <div className="space-y-3 text-sm">
+                    <InfoRow icon={<Calendar className="w-4 h-4" />} label="Date of Birth" value={student?.dateOfBirth} />
+                    <InfoRow icon={<Globe className="w-4 h-4" />} label="Nationality" value={student?.nationality} />
                     <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={student?.email} />
                     <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={student?.phone} />
-                    <InfoRow icon={<Globe className="w-4 h-4" />} label="Nationality" value={student?.nationality} />
-                    <InfoRow icon={<FileText className="w-4 h-4" />} label="Passport" value={student?.passportNumber} />
-                    <InfoRow icon={<FileText className="w-4 h-4" />} label="Passport Expiry" value={student?.passportExpiry} />
-                    <InfoRow icon={<FileText className="w-4 h-4" />} label="Date of Birth" value={student?.dateOfBirth} />
+                    <InfoRow icon={<User className="w-4 h-4" />} label="Mother's Name" value={student?.motherName} />
+                    <InfoRow icon={<User className="w-4 h-4" />} label="Father's Name" value={student?.fatherName} />
+                    <InfoRow icon={<Home className="w-4 h-4" />} label="Address" value={student?.address} />
                   </div>
                 )}
               </div>
 
-              {/* Academic */}
-              <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
-                <h2 className="font-semibold text-foreground">Academic Information</h2>
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
-                  </div>
-                ) : (
-                  <div className="space-y-3 text-sm">
-                    <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="High School" value={student?.highSchool} />
-                    <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="Graduation Year" value={student?.graduationYear?.toString()} />
-                    <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="GPA" value={student?.gpa} />
-                    <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="Language Score" value={student?.languageScore} />
-                  </div>
-                )}
+              {/* Passport + Academic stacked in right column */}
+              <div className="space-y-4">
+                <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+                  <h2 className="font-semibold text-foreground">Passport / ID</h2>
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 text-sm">
+                      <InfoRow icon={<FileText className="w-4 h-4" />} label="Passport No" value={student?.passportNumber} />
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Issue Date" value={student?.passportIssueDate} />
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Expiry Date" value={student?.passportExpiry} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+                  <h2 className="font-semibold text-foreground">Academic Information</h2>
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 text-sm">
+                      <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="High School" value={student?.highSchool} />
+                      <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="Graduation Year" value={student?.graduationYear?.toString()} />
+                      <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="GPA" value={student?.gpa} />
+                      <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="Language Score" value={student?.languageScore} />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
