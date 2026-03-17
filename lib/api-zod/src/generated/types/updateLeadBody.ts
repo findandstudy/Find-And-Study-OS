@@ -31,4 +31,6 @@ export interface UpdateLeadBody {
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  estimatedValue?: number | null;
 }

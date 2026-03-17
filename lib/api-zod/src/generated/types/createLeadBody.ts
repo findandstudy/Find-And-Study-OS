@@ -28,4 +28,6 @@ export interface CreateLeadBody {
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  estimatedValue?: number | null;
 }

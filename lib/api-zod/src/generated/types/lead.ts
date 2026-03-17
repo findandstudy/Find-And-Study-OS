@@ -30,6 +30,8 @@ export interface Lead {
   /** @nullable */
   notes?: string | null;
   /** @nullable */
+  estimatedValue?: number | null;
+  /** @nullable */
   convertedStudentId?: number | null;
   createdAt: Date;
   updatedAt: Date;

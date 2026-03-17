@@ -101,6 +101,8 @@ export interface Lead {
   /** @nullable */
   notes?: string | null;
   /** @nullable */
+  estimatedValue?: number | null;
+  /** @nullable */
   convertedStudentId?: number | null;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +130,8 @@ export interface CreateLeadBody {
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  estimatedValue?: number | null;
 }
 
 export interface UpdateLeadBody {
@@ -155,6 +159,8 @@ export interface UpdateLeadBody {
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  estimatedValue?: number | null;
 }
 
 export interface PublicLeadBody {

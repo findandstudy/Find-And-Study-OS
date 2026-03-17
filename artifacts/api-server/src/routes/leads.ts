@@ -10,7 +10,7 @@ const router: IRouter = Router();
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "interestedProgram", "interestedCountry", "source",
-  "status", "assignedTo", "notes",
+  "status", "assignedTo", "notes", "estimatedValue",
 ];
 
 router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> => {

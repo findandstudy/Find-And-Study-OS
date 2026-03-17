@@ -1684,6 +1684,8 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        estimatedValue:
+          type: ["number", "null"]
         convertedStudentId:
           type: ["integer", "null"]
         createdAt:
@@ -1727,6 +1729,8 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        estimatedValue:
+          type: ["number", "null"]
       required:
         - firstName
         - lastName
@@ -1759,6 +1763,8 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        estimatedValue:
+          type: ["number", "null"]
 
     PublicLeadBody:
       type: object

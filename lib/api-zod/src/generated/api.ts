@@ -172,6 +172,7 @@ export const ListLeadsResponse = zod.object({
       interestedProgram: zod.string().nullish(),
       interestedCountry: zod.string().nullish(),
       notes: zod.string().nullish(),
+      estimatedValue: zod.number().nullish(),
       convertedStudentId: zod.number().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
@@ -201,6 +202,7 @@ export const CreateLeadBody = zod.object({
   interestedProgram: zod.string().nullish(),
   interestedCountry: zod.string().nullish(),
   notes: zod.string().nullish(),
+  estimatedValue: zod.number().nullish(),
 });
 
 /**
@@ -224,6 +226,7 @@ export const GetLeadResponse = zod.object({
   interestedProgram: zod.string().nullish(),
   interestedCountry: zod.string().nullish(),
   notes: zod.string().nullish(),
+  estimatedValue: zod.number().nullish(),
   convertedStudentId: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
@@ -249,6 +252,7 @@ export const UpdateLeadBody = zod.object({
   interestedProgram: zod.string().nullish(),
   interestedCountry: zod.string().nullish(),
   notes: zod.string().nullish(),
+  estimatedValue: zod.number().nullish(),
 });
 
 export const UpdateLeadResponse = zod.object({
@@ -265,6 +269,7 @@ export const UpdateLeadResponse = zod.object({
   interestedProgram: zod.string().nullish(),
   interestedCountry: zod.string().nullish(),
   notes: zod.string().nullish(),
+  estimatedValue: zod.number().nullish(),
   convertedStudentId: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
