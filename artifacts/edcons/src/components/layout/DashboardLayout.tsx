@@ -3,6 +3,8 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useSeason, SEASON_YEARS } from "@/contexts/SeasonContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -31,6 +33,7 @@ import {
   TrendingUp,
   Library,
   UserCircle,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -183,6 +186,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   });
   const roleBadgeColor = ROLE_COLORS[user.role] || "bg-secondary text-muted-foreground";
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
+  const { season, setSeason } = useSeason();
+  const isOperationalRole = ["super_admin","admin","manager","staff","consultant","accountant","editor","agent","sub_agent"].includes(user.role);
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
@@ -274,6 +279,21 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               </h1>
             </div>
             <div className="flex items-center gap-3">
+              {isOperationalRole && (
+                <div className="flex items-center gap-1.5 bg-primary/8 border border-primary/20 rounded-lg px-2 py-1">
+                  <CalendarDays className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <Select value={season} onValueChange={setSeason}>
+                    <SelectTrigger className="h-6 border-0 bg-transparent p-0 text-xs font-bold text-primary shadow-none focus:ring-0 w-[52px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      {SEASON_YEARS.map(y => (
+                        <SelectItem key={y} value={y} className="text-sm font-medium">{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Badge className={`hidden sm:flex text-xs font-semibold border-0 ${roleBadgeColor}`}>
                 <Shield className="w-3 h-3 mr-1" />
                 {ROLE_LABELS[user.role] || user.role}

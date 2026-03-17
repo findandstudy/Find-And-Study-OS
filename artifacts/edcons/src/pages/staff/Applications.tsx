@@ -5,6 +5,7 @@ import {
   useListStudents,
   useCreateApplication,
 } from "@workspace/api-client-react";
+import { useSeason } from "@/contexts/SeasonContext";
 import type { Student } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -241,6 +242,7 @@ function AddApplicationModal({
   onSuccess: () => void;
 }) {
   const { toast } = useToast();
+  const { season } = useSeason();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const createApplication = useCreateApplication();
@@ -270,6 +272,7 @@ function AddApplicationModal({
         data: {
           studentId: selectedStudent.id,
           stage: "inquiry",
+          season,
           country: form.country || null,
           universityName: form.universityName || null,
           level: form.level || null,
@@ -443,8 +446,9 @@ export default function ApplicationsPage() {
   const [stageFilter, setStageFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { season } = useSeason();
 
-  const { data: applicationsResp, isLoading } = useListApplications({});
+  const { data: applicationsResp, isLoading } = useListApplications({ season } as any);
   const applications: any[] = (applicationsResp as any)?.data || [];
 
   const filtered = applications.filter((app: any) =>

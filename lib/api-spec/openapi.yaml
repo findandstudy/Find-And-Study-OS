@@ -197,6 +197,10 @@ paths:
       tags: [leads]
       summary: List leads
       parameters:
+        - name: season
+          in: query
+          schema:
+            type: string
         - name: status
           in: query
           schema:
@@ -397,6 +401,10 @@ paths:
       tags: [students]
       summary: List students
       parameters:
+        - name: season
+          in: query
+          schema:
+            type: string
         - name: agentId
           in: query
           schema:
@@ -605,6 +613,10 @@ paths:
       tags: [applications]
       summary: List applications
       parameters:
+        - name: season
+          in: query
+          schema:
+            type: string
         - name: studentId
           in: query
           schema:

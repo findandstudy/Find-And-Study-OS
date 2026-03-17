@@ -23,6 +23,7 @@ export const studentsTable = pgTable("students", {
   graduationYear: integer("graduation_year"),
   gpa: text("gpa"),
   languageScore: text("language_score"),
+  season: text("season").notNull().default("2026"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

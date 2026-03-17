@@ -10,7 +10,7 @@ const router: IRouter = Router();
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "interestedProgram", "interestedCountry", "source",
-  "status", "assignedTo", "notes", "estimatedValue",
+  "status", "assignedTo", "notes", "estimatedValue", "season",
 ];
 
 router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> => {
@@ -40,12 +40,13 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
 });
 
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
+  if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
   if (search) {
     conditions.push(
@@ -66,18 +67,20 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
 });
 
 router.post("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo } = req.body;
+  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo, season } = req.body;
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
     return;
   }
+  const currentYear = String(new Date().getFullYear());
   const [lead] = await db.insert(leadsTable).values({
     firstName, lastName, status, email: email || null,
     phone: phone || null, nationality: nationality || null,
     interestedProgram: interestedProgram || null,
     interestedCountry: interestedCountry || null,
     source: source || null, notes: notes || null,
-    assignedTo: assignedTo || null,
+    assignedToId: assignedTo || null,
+    season: season || currentYear,
   }).returning();
   await logAudit(req.user!.id, "create_lead", "lead", lead.id, {}, req.ip);
   res.status(201).json(lead);

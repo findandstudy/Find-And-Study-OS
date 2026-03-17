@@ -7,6 +7,7 @@
  */
 
 export type ListLeadsParams = {
+  season?: string;
   status?: string;
   assignedTo?: number;
   source?: string;

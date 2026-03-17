@@ -10,11 +10,11 @@ const APP_PATCH_FIELDS = [
   "stage", "universityId", "programId", "agentId",
   "universityName", "country", "programName", "intake",
   "level", "instructionLanguage", "deadline",
-  "tuitionFee", "scholarship", "notes",
+  "tuitionFee", "scholarship", "notes", "season",
 ];
 
 router.get("/applications", requireAuth, async (req, res): Promise<void> => {
-  const { studentId, agentId, stage, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { studentId, agentId, stage, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -23,6 +23,8 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
   const conditions = [];
+
+  if (season) conditions.push(eq(applicationsTable.season, season));
 
   if (isStaff) {
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
@@ -74,14 +76,16 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (re
   const {
     studentId, stage = "inquiry", universityId, programId, agentId,
     universityName, country, programName, intake, level, instructionLanguage,
-    deadline, tuitionFee, scholarship, notes,
+    deadline, tuitionFee, scholarship, notes, season,
   } = req.body;
   if (!studentId) {
     res.status(400).json({ error: "studentId is required" });
     return;
   }
+  const currentYear = String(new Date().getFullYear());
   const [app] = await db.insert(applicationsTable).values({
     studentId, stage,
+    season: season || currentYear,
     universityId: universityId || null,
     programId: programId || null,
     agentId: agentId || null,

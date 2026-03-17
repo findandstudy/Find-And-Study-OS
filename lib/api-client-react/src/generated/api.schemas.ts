@@ -1219,6 +1219,7 @@ export type ListUsersParams = {
 };
 
 export type ListLeadsParams = {
+  season?: string;
   status?: string;
   assignedTo?: number;
   source?: string;
@@ -1228,6 +1229,7 @@ export type ListLeadsParams = {
 };
 
 export type ListStudentsParams = {
+  season?: string;
   agentId?: number;
   status?: string;
   search?: string;
@@ -1241,6 +1243,7 @@ export type ListAgentsParams = {
 };
 
 export type ListApplicationsParams = {
+  season?: string;
   studentId?: number;
   agentId?: number;
   stage?: string;

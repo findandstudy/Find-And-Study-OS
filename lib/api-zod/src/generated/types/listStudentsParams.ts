@@ -7,6 +7,7 @@
  */
 
 export type ListStudentsParams = {
+  season?: string;
   agentId?: number;
   status?: string;
   search?: string;

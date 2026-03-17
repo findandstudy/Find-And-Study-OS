@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListLeads, useUpdateLead, useCreateLead } from "@workspace/api-client-react";
+import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Plus, Search, Filter, ExternalLink, TrendingUp } from "lucide-react";
@@ -206,7 +207,8 @@ export default function LeadsPage() {
   const canSeeRevenue =
     user?.role === "super_admin" || user?.role === "admin" || user?.role === "agent";
 
-  const { data, isLoading } = useListLeads({ search, limit: 100 });
+  const { season } = useSeason();
+  const { data, isLoading } = useListLeads({ search, season, limit: 100 } as any);
   const updateLead = useUpdateLead();
   const createLead = useCreateLead();
   const queryClient = useQueryClient();
@@ -261,7 +263,7 @@ export default function LeadsPage() {
 
   function handleCreate() {
     if (!form.firstName || !form.lastName) return;
-    const payload: any = { ...form, status: "new" };
+    const payload: any = { ...form, status: "new", season };
     if (form.estimatedValue) {
       payload.estimatedValue = parseFloat(form.estimatedValue);
     } else {

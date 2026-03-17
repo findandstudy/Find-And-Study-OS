@@ -23,13 +23,14 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
 
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as any, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { agentId, status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { agentId, status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
 
+  if (season) conditions.push(eq(studentsTable.season, season));
   if (status) conditions.push(eq(studentsTable.status, status));
   if (agentId && STAFF_ROLES.includes(user.role as any)) {
     conditions.push(eq(studentsTable.agentId, parseInt(agentId, 10)));
@@ -81,7 +82,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
     dateOfBirth, passportNumber, passportIssueDate, passportExpiry,
     motherName, fatherName, address,
     agentId, userId, notes,
-    highSchool, graduationYear, gpa, languageScore,
+    highSchool, graduationYear, gpa, languageScore, season,
   } = req.body;
 
   if (!firstName || !lastName) {
@@ -108,6 +109,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
     graduationYear: graduationYear ? parseInt(String(graduationYear), 10) : null,
     gpa: gpa || null,
     languageScore: languageScore || null,
+    season: season || String(new Date().getFullYear()),
   }).returning();
 
   await logAudit(req.user!.id, "create_student", "student", student.id, { firstName, lastName }, req.ip);

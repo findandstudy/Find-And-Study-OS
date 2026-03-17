@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useSeason } from "@/contexts/SeasonContext";
 import {
   useListCommissions, useListServiceFees, useGetFinanceSummary,
   customFetch,
@@ -438,7 +439,7 @@ function ServiceFeeModal({
 export default function FinancePage() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [season, setSeason] = useState(currentYear);
+  const { season } = useSeason();
   const [tab, setTab] = useState("commissions");
   const [commSearch, setCommSearch] = useState("");
   const [commStatus, setCommStatus] = useState("all");
@@ -527,10 +528,9 @@ export default function FinancePage() {
             <p className="text-slate-500 text-sm mt-0.5">Commission tracking, service fees, and Article 6 offsets</p>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={season} onValueChange={setSeason}>
-              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-              <SelectContent>{seasons.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
+            <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg">
+              Season: <span className="font-bold text-primary">{season}</span>
+            </div>
             <Button variant="outline" size="icon" onClick={() => { refetchComm(); refetchFees(); }}>
               <RefreshCw className="w-4 h-4" />
             </Button>

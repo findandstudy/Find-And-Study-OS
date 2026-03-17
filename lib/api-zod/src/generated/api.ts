@@ -148,6 +148,7 @@ export const DeleteUserParams = zod.object({
  * @summary List leads
  */
 export const ListLeadsQueryParams = zod.object({
+  season: zod.coerce.string().optional(),
   status: zod.coerce.string().optional(),
   assignedTo: zod.coerce.number().optional(),
   source: zod.coerce.string().optional(),
@@ -360,6 +361,7 @@ export const SubmitPublicLeadBody = zod.object({
  * @summary List students
  */
 export const ListStudentsQueryParams = zod.object({
+  season: zod.coerce.string().optional(),
   agentId: zod.coerce.number().optional(),
   status: zod.coerce.string().optional(),
   search: zod.coerce.string().optional(),
@@ -677,6 +679,7 @@ export const GetMyAgentProfileResponse = zod.object({
  * @summary List applications
  */
 export const ListApplicationsQueryParams = zod.object({
+  season: zod.coerce.string().optional(),
   studentId: zod.coerce.number().optional(),
   agentId: zod.coerce.number().optional(),
   stage: zod.coerce.string().optional(),

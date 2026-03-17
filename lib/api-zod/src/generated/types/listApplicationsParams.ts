@@ -7,6 +7,7 @@
  */
 
 export type ListApplicationsParams = {
+  season?: string;
   studentId?: number;
   agentId?: number;
   stage?: string;

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListStudents, useCreateStudent } from "@workspace/api-client-react";
+import { useSeason } from "@/contexts/SeasonContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -259,6 +260,7 @@ function AddStudentModal({
 }) {
   const { toast } = useToast();
   const createStudent = useCreateStudent();
+  const { season } = useSeason();
 
   const [step, setStep] = useState<Step>("upload");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
@@ -376,6 +378,7 @@ function AddStudentModal({
           languageScore: form.languageScore || null,
           notes: form.notes || null,
           status: "active",
+          season,
         },
       },
       {
@@ -856,7 +859,8 @@ export default function StudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  const { data, isLoading } = useListStudents({ search });
+  const { season } = useSeason();
+  const { data, isLoading } = useListStudents({ search, season } as any);
   const students = data?.data ?? [];
 
   function invalidate() {
