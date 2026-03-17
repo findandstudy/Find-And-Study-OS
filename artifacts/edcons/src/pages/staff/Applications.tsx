@@ -1,12 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import {
-  useListApplications,
-  useListStudents,
-  useCreateApplication,
-} from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
-import type { Student } from "@workspace/api-client-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +39,23 @@ import {
 } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+type Student = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  nationality?: string | null;
+};
+
+async function apiFetch(url: string, opts?: RequestInit) {
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (r.status === 204) return undefined;
+  return r.json();
+}
 
 const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   inquiry: { label: "Inquiry", color: "bg-slate-100 text-slate-700 border-slate-200" },
@@ -135,11 +147,12 @@ function StudentSearchInput({
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data: studentsResp, isLoading } = useListStudents(
-    { search: debouncedQuery, limit: 20 },
-    { query: { enabled: open } }
-  );
-  const students = studentsResp?.data ?? [];
+  const { data: studentsResp, isLoading } = useQuery({
+    queryKey: ["students-search", debouncedQuery],
+    queryFn: () => apiFetch(`${BASE_URL}/api/students?limit=20${debouncedQuery ? `&search=${encodeURIComponent(debouncedQuery)}` : ""}`),
+    enabled: open,
+  });
+  const students: Student[] = studentsResp?.data ?? [];
 
   if (value) {
     return (
@@ -238,7 +251,27 @@ function AddApplicationModal({
   const { season } = useSeason();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const createApplication = useCreateApplication();
+
+  const createApplication = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiFetch(`${BASE_URL}/api/applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      toast({ title: "Application created successfully" });
+      handleClose();
+      onSuccess();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Failed to create application",
+        description: err?.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
 
   function handleClose() {
     setSelectedStudent(null);
@@ -260,36 +293,18 @@ function AddApplicationModal({
       return;
     }
 
-    createApplication.mutate(
-      {
-        data: {
-          studentId: selectedStudent.id,
-          stage: "inquiry",
-          season,
-          country: form.country || null,
-          universityName: form.universityName || null,
-          level: form.level || null,
-          programName: form.programName || null,
-          instructionLanguage: form.instructionLanguage || null,
-          intake: form.intake || null,
-          notes: form.notes || null,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Application created successfully" });
-          handleClose();
-          onSuccess();
-        },
-        onError: (err: any) => {
-          toast({
-            title: "Failed to create application",
-            description: err?.message || "Please try again",
-            variant: "destructive",
-          });
-        },
-      }
-    );
+    createApplication.mutate({
+      studentId: selectedStudent.id,
+      stage: "inquiry",
+      season,
+      country: form.country || null,
+      universityName: form.universityName || null,
+      level: form.level || null,
+      programName: form.programName || null,
+      instructionLanguage: form.instructionLanguage || null,
+      intake: form.intake || null,
+      notes: form.notes || null,
+    });
   }
 
   return (
@@ -441,8 +456,11 @@ export default function ApplicationsPage() {
   const queryClient = useQueryClient();
   const { season } = useSeason();
 
-  const { data: applicationsResp, isLoading } = useListApplications({ season } as any);
-  const applications: any[] = (applicationsResp as any)?.data || [];
+  const { data: applicationsResp, isLoading } = useQuery({
+    queryKey: ["applications", season],
+    queryFn: () => apiFetch(`${BASE_URL}/api/applications?season=${encodeURIComponent(season)}&limit=200`),
+  });
+  const applications: any[] = applicationsResp?.data || [];
 
   const filtered = applications.filter((app: any) =>
     stageFilter === "all" || app.stage === stageFilter
@@ -628,7 +646,7 @@ export default function ApplicationsPage() {
       <AddApplicationModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/applications"] })}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })}
       />
     </DashboardLayout>
   );
