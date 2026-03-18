@@ -17,6 +17,7 @@ import {
   Building2, Mail, Phone, MapPin, Upload, Eye, EyeOff,
   ChevronLeft, ChevronRight, UserPlus, Network,
   MoreHorizontal, KeyRound, LogIn, Power, ShieldCheck, ShieldOff,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -457,11 +458,47 @@ export default function AgentsPage() {
     return colors[s] || "bg-gray-500/10 text-gray-600 border-gray-200";
   };
 
+  type AgentSortKey = "agent" | "contact" | "category" | "commission" | "status" | "parent";
+  type AgentSortDir = "asc" | "desc";
+
+  function AgentSortHeader({ label, sortKey, currentSort, onSort, className }: {
+    label: string; sortKey: AgentSortKey; currentSort: { key: AgentSortKey; dir: AgentSortDir }; onSort: (k: AgentSortKey) => void; className?: string;
+  }) {
+    const active = currentSort.key === sortKey;
+    return (
+      <th className={`py-3 px-3 font-semibold text-muted-foreground cursor-pointer select-none hover:bg-muted/50 transition-colors ${className || ""}`}
+        onClick={() => onSort(sortKey)}>
+        <div className="flex items-center gap-1.5">
+          {label}
+          {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
+        </div>
+      </th>
+    );
+  }
+
   function AgentTable({ data, showParent }: { data: Agent[]; showParent?: boolean }) {
     const selected = showParent ? subSelectedIds : selectedIds;
     const setSelected = showParent ? setSubSelectedIds : setSelectedIds;
     const allChecked = data.length > 0 && data.every(a => selected.has(a.id));
     const someChecked = data.some(a => selected.has(a.id));
+    const [agentSort, setAgentSort] = useState<{ key: AgentSortKey; dir: AgentSortDir }>({ key: "agent", dir: "asc" });
+
+    function handleAgentSort(key: AgentSortKey) {
+      setAgentSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+    }
+
+    const sortedData = [...data].sort((a, b) => {
+      const dir = agentSort.dir === "asc" ? 1 : -1;
+      switch (agentSort.key) {
+        case "agent": { const nameA = `${a.firstName} ${a.lastName}`; const nameB = `${b.firstName} ${b.lastName}`; return dir * nameA.localeCompare(nameB); }
+        case "contact": return dir * ((a.email || "").localeCompare(b.email || ""));
+        case "parent": return dir * (getParentName(a.parentAgentId).localeCompare(getParentName(b.parentAgentId)));
+        case "category": return dir * ((a.category || "").localeCompare(b.category || ""));
+        case "commission": return dir * ((a.commissionRate ?? 0) - (b.commissionRate ?? 0));
+        case "status": return dir * ((a.status || "").localeCompare(b.status || ""));
+        default: return 0;
+      }
+    });
 
     return (
       <div className="overflow-x-auto">
@@ -484,19 +521,19 @@ export default function AgentsPage() {
                   <Checkbox checked={allChecked} onCheckedChange={() => toggleSelectAll(data, selected, setSelected)} />
                 </th>
               )}
-              <th className="py-3 px-3 font-semibold text-muted-foreground">Agent</th>
-              <th className="py-3 px-3 font-semibold text-muted-foreground">Contact</th>
-              {showParent && <th className="py-3 px-3 font-semibold text-muted-foreground">Parent Agent</th>}
-              <th className="py-3 px-3 font-semibold text-muted-foreground">Category</th>
-              <th className="py-3 px-3 font-semibold text-muted-foreground">Commission %</th>
-              <th className="py-3 px-3 font-semibold text-muted-foreground">Status</th>
+              <AgentSortHeader label="Agent" sortKey="agent" currentSort={agentSort} onSort={handleAgentSort} />
+              <AgentSortHeader label="Contact" sortKey="contact" currentSort={agentSort} onSort={handleAgentSort} />
+              {showParent && <AgentSortHeader label="Parent Agent" sortKey="parent" currentSort={agentSort} onSort={handleAgentSort} />}
+              <AgentSortHeader label="Category" sortKey="category" currentSort={agentSort} onSort={handleAgentSort} />
+              <AgentSortHeader label="Commission %" sortKey="commission" currentSort={agentSort} onSort={handleAgentSort} />
+              <AgentSortHeader label="Status" sortKey="status" currentSort={agentSort} onSort={handleAgentSort} />
               {isManager && <th className="py-3 px-3 font-semibold text-muted-foreground text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
+            {sortedData.length === 0 ? (
               <tr><td colSpan={showParent ? 8 : 7} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
-            ) : data.map(a => (
+            ) : sortedData.map(a => (
               <tr key={a.id} className={`border-b border-border/30 hover:bg-secondary/30 transition-colors ${selected.has(a.id) ? "bg-primary/5" : ""}`}>
                 {isManager && (
                   <td className="py-3 px-3">
