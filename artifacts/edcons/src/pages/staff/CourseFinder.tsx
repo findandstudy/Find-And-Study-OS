@@ -15,9 +15,11 @@ import {
   Languages, DollarSign, BookOpen, Building2, MapPin,
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
-  Download, CheckSquare, Square, FileDown,
+  Download, CheckSquare, Square, FileDown, LayoutGrid, List, ArrowUpDown,
+  ArrowUp, ArrowDown,
 } from "lucide-react";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
+import * as XLSX from "xlsx";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -124,8 +126,12 @@ export default function CourseFinder() {
   const [applyProgram, setApplyProgram] = useState<Program | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortField, setSortField] = useState<string>("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
+  const canExportExcel = user && ["super_admin", "admin"].includes(user.role);
 
   const { data: filterOptions } = useQuery<FilterOptions>({
     queryKey: ["course-finder-filters"],
@@ -262,6 +268,65 @@ export default function CourseFinder() {
   }
 
   const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.search || filters.feeMin || filters.feeMax;
+
+  function handleSort(field: string) {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedPrograms = useMemo(() => {
+    if (!sortField) return programs;
+    const sorted = [...programs].sort((a, b) => {
+      let va: any, vb: any;
+      switch (sortField) {
+        case "name": va = a.name; vb = b.name; break;
+        case "university": va = a.universityName; vb = b.universityName; break;
+        case "country": va = a.universityCountry || ""; vb = b.universityCountry || ""; break;
+        case "tuition": va = a.discountedFee ?? a.tuitionFee ?? 0; vb = b.discountedFee ?? b.tuitionFee ?? 0; break;
+        case "degree": va = a.degree || ""; vb = b.degree || ""; break;
+        case "language": va = a.language || ""; vb = b.language || ""; break;
+        default: return 0;
+      }
+      if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      return sortDir === "asc" ? (va - vb) : (vb - va);
+    });
+    return sorted;
+  }, [programs, sortField, sortDir]);
+
+  function exportToExcel() {
+    if (!sortedPrograms.length) return;
+    const rows = sortedPrograms.map(p => ({
+      "Program Name": p.name,
+      "University": p.universityName,
+      "Country": p.universityCountry || "",
+      "City": p.universityCity || "",
+      "Degree": p.degree || "",
+      "Language": p.language || "",
+      "Duration": p.duration || "",
+      "Tuition Fee": p.tuitionFee ?? "",
+      "Discounted Fee": p.discountedFee ?? "",
+      "Currency": p.currency || "USD",
+      "Scholarship": p.scholarship ?? "",
+      "Application Fee": p.applicationFee ?? "",
+      "Commission Rate (%)": p.commissionRate ?? "",
+      "Commission Amount": calcCommissionAmount(p) ?? "",
+      "Fee Type": p.feeType || "",
+      "Intakes": p.intakes || "",
+      "University Type": p.universityType || "",
+      "Status": p.universityStatus || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const colWidths = Object.keys(rows[0]).map(k => ({ wch: Math.max(k.length, 14) }));
+    ws["!cols"] = colWidths;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Programs");
+    XLSX.writeFile(wb, `programs_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast({ title: "Excel exported", description: `${rows.length} programs exported successfully.` });
+  }
 
   return (
     <DashboardLayout>
@@ -418,6 +483,33 @@ export default function CourseFinder() {
                   )}
                 </div>
               )}
+              {canExportExcel && programs.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportToExcel}
+                  className="h-8 text-xs gap-1.5 rounded-lg"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export Excel
+                </Button>
+              )}
+              <div className="flex items-center border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`p-1.5 transition-colors ${viewMode === "grid" ? "bg-primary text-white" : "bg-card text-muted-foreground hover:text-foreground"}`}
+                  title="Grid view"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-1.5 transition-colors ${viewMode === "list" ? "bg-primary text-white" : "bg-card text-muted-foreground hover:text-foreground"}`}
+                  title="List view"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
               {meta && (
                 <div className="text-sm text-muted-foreground">
                   {meta.total} program{meta.total !== 1 ? "s" : ""} found
@@ -428,30 +520,42 @@ export default function CourseFinder() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-card border rounded-2xl p-5 animate-pulse space-y-4">
-                <div className="flex gap-3 items-center">
-                  <div className="w-14 h-14 bg-muted rounded-xl" />
-                  <div className="space-y-2 flex-1">
-                    <div className="h-4 bg-muted rounded w-3/4" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
+          viewMode === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="bg-card border rounded-2xl p-5 animate-pulse space-y-4">
+                  <div className="flex gap-3 items-center">
+                    <div className="w-14 h-14 bg-muted rounded-xl" />
+                    <div className="space-y-2 flex-1">
+                      <div className="h-4 bg-muted rounded w-3/4" />
+                      <div className="h-3 bg-muted rounded w-1/2" />
+                    </div>
                   </div>
+                  <div className="h-3 bg-muted rounded w-full" />
+                  <div className="h-3 bg-muted rounded w-2/3" />
                 </div>
-                <div className="h-3 bg-muted rounded w-full" />
-                <div className="h-3 bg-muted rounded w-2/3" />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-card border rounded-2xl overflow-hidden">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 p-4 border-b animate-pulse">
+                  <div className="w-10 h-10 bg-muted rounded-lg" />
+                  <div className="flex-1 space-y-2"><div className="h-4 bg-muted rounded w-1/3" /><div className="h-3 bg-muted rounded w-1/4" /></div>
+                  <div className="h-4 bg-muted rounded w-20" />
+                </div>
+              ))}
+            </div>
+          )
         ) : programs.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p className="text-lg font-medium">No programs found</p>
             <p className="text-sm">Try adjusting your filters or search terms</p>
           </div>
-        ) : (
+        ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {programs.map(prog => (
+            {sortedPrograms.map(prog => (
               <ProgramCard
                 key={prog.id}
                 program={prog}
@@ -466,6 +570,21 @@ export default function CourseFinder() {
               />
             ))}
           </div>
+        ) : (
+          <ProgramListView
+            programs={sortedPrograms}
+            wishlistIds={wishlistIds}
+            selectedIds={selectedIds}
+            showCommission={!!showCommission}
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={handleSort}
+            onToggleSelect={toggleSelect}
+            onToggleWishlist={toggleWishlist}
+            onInfo={setSelectedProgram}
+            onApply={setApplyProgram}
+            onUniversityClick={setSelectedUniversity}
+          />
         )}
 
         {meta && meta.totalPages > 1 && (
@@ -499,6 +618,219 @@ export default function CourseFinder() {
         onClose={() => setApplyProgram(null)}
       />
     </DashboardLayout>
+  );
+}
+
+function SortHeader({ label, field, sortField, sortDir, onSort }: {
+  label: string; field: string; sortField: string; sortDir: "asc" | "desc"; onSort: (f: string) => void;
+}) {
+  const active = sortField === field;
+  return (
+    <button onClick={() => onSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors group">
+      <span>{label}</span>
+      {active ? (
+        sortDir === "asc" ? <ArrowUp className="w-3 h-3 text-primary" /> : <ArrowDown className="w-3 h-3 text-primary" />
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+      )}
+    </button>
+  );
+}
+
+function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick }: {
+  programs: Program[];
+  wishlistIds: number[];
+  selectedIds: Set<number>;
+  showCommission: boolean;
+  sortField: string;
+  sortDir: "asc" | "desc";
+  onSort: (field: string) => void;
+  onToggleSelect: (id: number) => void;
+  onToggleWishlist: (id: number) => void;
+  onInfo: (p: Program) => void;
+  onApply: (p: Program) => void;
+  onUniversityClick: (p: Program) => void;
+}) {
+  return (
+    <div className="bg-card border rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/30 text-xs text-muted-foreground font-medium">
+              <th className="p-3 w-10"></th>
+              <th className="p-3 text-left min-w-[250px]">
+                <SortHeader label="Program" field="name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+              </th>
+              <th className="p-3 text-left min-w-[160px]">
+                <SortHeader label="University" field="university" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+              </th>
+              <th className="p-3 text-left">
+                <SortHeader label="Degree" field="degree" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+              </th>
+              <th className="p-3 text-left">
+                <SortHeader label="Country" field="country" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+              </th>
+              <th className="p-3 text-left">
+                <SortHeader label="Language" field="language" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+              </th>
+              <th className="p-3 text-right">
+                <SortHeader label="Tuition" field="tuition" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+              </th>
+              {showCommission && (
+                <th className="p-3 text-right">Commission</th>
+              )}
+              <th className="p-3 text-center">Intakes</th>
+              <th className="p-3 text-center">Status</th>
+              <th className="p-3 text-center w-[120px]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {programs.map(p => {
+              const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
+              const commissionAmount = calcCommissionAmount(p);
+              const cur = p.currency ?? "USD";
+              const isSelected = selectedIds.has(p.id);
+              const isWishlisted = wishlistIds.includes(p.id);
+
+              return (
+                <tr
+                  key={p.id}
+                  className={`border-b last:border-b-0 hover:bg-muted/20 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                >
+                  <td className="p-3">
+                    <button onClick={() => onToggleSelect(p.id)} className="p-0.5 rounded hover:bg-muted/80">
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4 text-muted-foreground/40" />
+                      )}
+                    </button>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-lg border bg-white flex items-center justify-center overflow-hidden shrink-0">
+                        {p.universityLogoUrl ? (
+                          <img src={p.universityLogoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                        ) : (
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground text-sm truncate max-w-[220px]">{p.name}</p>
+                        {p.duration && (
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3" />{p.duration}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => onUniversityClick(p)}
+                      className="text-sm text-foreground hover:text-primary hover:underline transition-colors truncate max-w-[150px] block text-left"
+                    >
+                      {p.universityName}
+                    </button>
+                  </td>
+                  <td className="p-3">
+                    {p.degree && (
+                      <Badge className="text-[10px] px-2 py-0.5 h-auto rounded-full bg-primary/10 text-primary border-0 font-medium">
+                        {p.degree}
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <div className="text-sm">
+                      <span>{p.universityCountry || "—"}</span>
+                      {p.universityCity && (
+                        <span className="text-muted-foreground text-xs block">{p.universityCity}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-3 text-sm">{p.language || "—"}</td>
+                  <td className="p-3 text-right">
+                    <div>
+                      {hasDiscount && (
+                        <span className="text-xs text-muted-foreground line-through block">{formatCurrency(p.tuitionFee, cur)}</span>
+                      )}
+                      <span className={`text-sm font-semibold ${hasDiscount ? "text-emerald-600" : ""}`}>
+                        {formatCurrency(hasDiscount ? p.discountedFee : p.tuitionFee, cur)}
+                      </span>
+                      {hasDiscount && (
+                        <Badge className="text-[9px] px-1 py-0 h-3.5 bg-emerald-100 text-emerald-700 border-0 rounded-full ml-1">
+                          -{Math.round(((p.tuitionFee! - p.discountedFee!) / p.tuitionFee!) * 100)}%
+                        </Badge>
+                      )}
+                    </div>
+                  </td>
+                  {showCommission && (
+                    <td className="p-3 text-right">
+                      {commissionAmount != null ? (
+                        <span className="text-sm font-semibold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  )}
+                  <td className="p-3 text-center">
+                    {p.intakes ? (
+                      <div className="flex flex-wrap gap-1 justify-center">
+                        {p.intakes.split(",").slice(0, 3).map(intake => (
+                          <Badge key={intake.trim()} variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full">
+                            {intake.trim()}
+                          </Badge>
+                        ))}
+                        {p.intakes.split(",").length > 3 && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 rounded-full">
+                            +{p.intakes.split(",").length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="p-3 text-center">
+                    {p.universityStatus && (
+                      <div className="flex items-center gap-1.5 justify-center">
+                        <div className={`w-2 h-2 rounded-full ${p.universityStatus === "open" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                        <span className="text-[11px] capitalize">{p.universityStatus === "open" ? "Open" : "Closed"}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => onToggleWishlist(p.id)}
+                        className="p-1.5 rounded-lg hover:bg-muted/80 transition-colors"
+                        title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                      >
+                        <Heart className={`w-3.5 h-3.5 ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                      </button>
+                      <button
+                        onClick={() => onInfo(p)}
+                        className="p-1.5 rounded-lg hover:bg-muted/80 transition-colors"
+                        title="Details"
+                      >
+                        <Info className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={() => onApply(p)}
+                        className="p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+                        title="Apply"
+                      >
+                        <Send className="w-3.5 h-3.5 text-primary" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
