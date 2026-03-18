@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -49,6 +49,20 @@ const STAGE_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
+function buildDownloadFilename(docType: string, firstName: string, lastName: string, mimeType: string): string {
+  const MIME_EXT: Record<string, string> = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+  };
+  const ext = MIME_EXT[mimeType] || (mimeType.startsWith("image/") ? mimeType.split("/")[1].split("+")[0] : "bin");
+  const sanitize = (s: string) => (s || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `${sanitize(docType || "document")}-${sanitize(firstName)}-${sanitize(lastName)}.${ext}`;
+}
+
 export default function StudentDetail({ id }: Props) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
@@ -60,13 +74,21 @@ export default function StudentDetail({ id }: Props) {
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
+  const photoDoc = useMemo(() => {
+    const photoDocs = documents.filter((d: any) => d.type === "photo" && d.fileData);
+    if (photoDocs.length === 0) return null;
+    return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }, [documents]);
+
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadType, setUploadType] = useState("passport");
   const [uploadName, setUploadName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   function openUpload() {
     setUploadType("passport");
@@ -78,8 +100,10 @@ export default function StudentDetail({ id }: Props) {
   function handleFileSelect(file: File) {
     setUploadFile(file);
     if (!uploadName) {
-      const typeLabel = DOC_TYPES.find(d => d.key === uploadType)?.label ?? "Document";
-      setUploadName(`${student?.firstName ?? ""}-${student?.lastName ?? ""}-${typeLabel}`);
+      const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
+      const first = (student?.firstName ?? "").toLowerCase();
+      const last = (student?.lastName ?? "").toLowerCase();
+      setUploadName(`${type}-${first}-${last}`);
     }
   }
 
@@ -87,20 +111,13 @@ export default function StudentDetail({ id }: Props) {
     if (!uploadFile) return;
     setUploading(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          const result = e.target?.result as string;
-          resolve(result.split(",")[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(uploadFile);
-      });
+      const base64 = await fileToBase64(uploadFile);
+      const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
+      const first = (student?.firstName ?? "").toLowerCase();
+      const last = (student?.lastName ?? "").toLowerCase();
+      const docName = uploadName.trim() || `${type}-${first}-${last}`;
 
-      const typeLabel = DOC_TYPES.find(d => d.key === uploadType)?.label ?? "Document";
-      const docName = uploadName.trim() || `${student?.firstName ?? ""}-${student?.lastName ?? ""}-${typeLabel}`;
-
-      await fetch(`${BASE_URL}/api/documents`, {
+      const resp = await fetch(`${BASE_URL}/api/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -115,6 +132,12 @@ export default function StudentDetail({ id }: Props) {
         }),
       });
 
+      if (!resp.ok) {
+        const err = await resp.text().catch(() => "Upload failed");
+        alert(err);
+        return;
+      }
+
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && k.includes("document")) });
       setUploadOpen(false);
     } finally {
@@ -122,14 +145,108 @@ export default function StudentDetail({ id }: Props) {
     }
   }
 
+  async function handlePhotoUpload(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    setPhotoUploading(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const first = (student?.firstName ?? "").toLowerCase();
+      const last = (student?.lastName ?? "").toLowerCase();
+
+      const resp = await fetch(`${BASE_URL}/api/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: `photo-${first}-${last}`,
+          type: "photo",
+          status: "approved",
+          studentId: id,
+          fileData: base64,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.text().catch(() => "Photo upload failed");
+        alert(err);
+        return;
+      }
+
+      await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && k.includes("document")) });
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  function downloadPhoto() {
+    if (!photoDoc) return;
+    const mime = photoDoc.mimeType || "image/jpeg";
+    const filename = buildDownloadFilename("photo", student?.firstName ?? "", student?.lastName ?? "", mime);
+    const link = document.createElement("a");
+    link.href = `data:${mime};base64,${photoDoc.fileData}`;
+    link.download = filename;
+    link.click();
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-4xl">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation("/staff/students")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
+          <div className="relative group shrink-0">
+            {isLoading ? (
+              <Skeleton className="w-20 h-20 rounded-full" />
+            ) : photoDoc ? (
+              <img
+                src={`data:${photoDoc.mimeType || "image/jpeg"};base64,${photoDoc.fileData}`}
+                alt={`${student?.firstName} ${student?.lastName}`}
+                className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
+                {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
+              </div>
+            )}
+            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+              <button
+                className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
+                title="Upload photo"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoUploading}
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+              {photoDoc && (
+                <button
+                  className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
+                  title="Download photo"
+                  onClick={downloadPhoto}
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {photoUploading && (
+              <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoUpload(file);
+                e.target.value = "";
+              }}
+            />
+          </div>
           <div className="flex-1">
             {isLoading ? (
               <Skeleton className="h-8 w-48" />
@@ -160,10 +277,8 @@ export default function StudentDetail({ id }: Props) {
             </TabsTrigger>
           </TabsList>
 
-          {/* Profile Tab */}
           <TabsContent value="profile" className="mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Personal */}
               <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
                 <h2 className="font-semibold text-foreground">Personal Information</h2>
                 {isLoading ? (
@@ -183,7 +298,6 @@ export default function StudentDetail({ id }: Props) {
                 )}
               </div>
 
-              {/* Passport + Academic stacked in right column */}
               <div className="space-y-4">
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
                   <h2 className="font-semibold text-foreground">Passport / ID</h2>
@@ -226,7 +340,6 @@ export default function StudentDetail({ id }: Props) {
             )}
           </TabsContent>
 
-          {/* Applications Tab */}
           <TabsContent value="applications" className="mt-4">
             <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
               {applications.length === 0 ? (
@@ -248,8 +361,8 @@ export default function StudentDetail({ id }: Props) {
                   <tbody>
                     {applications.map((app: any) => (
                       <tr key={app.id} className="border-t hover:bg-primary/5 transition-colors">
-                        <td className="px-4 py-3 font-medium">{app.universityId ?? "—"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{app.programId ?? "—"}</td>
+                        <td className="px-4 py-3 font-medium">{app.universityId ?? "\u2014"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{app.programId ?? "\u2014"}</td>
                         <td className="px-4 py-3">
                           <Badge
                             className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}
@@ -277,13 +390,12 @@ export default function StudentDetail({ id }: Props) {
             </div>
           </TabsContent>
 
-          {/* Documents Tab */}
           <TabsContent value="documents" className="mt-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-muted-foreground">{documents.length} belge</p>
               <Button size="sm" onClick={openUpload}>
                 <Upload className="w-4 h-4 mr-2" />
-                Belge Yükle
+                Belge Y\u00fckle
               </Button>
             </div>
 
@@ -294,8 +406,8 @@ export default function StudentDetail({ id }: Props) {
                   onClick={openUpload}
                 >
                   <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">Henüz belge yok</p>
-                  <p className="text-xs mt-1">Tıklayarak belge yükleyin</p>
+                  <p className="font-medium">Hen\u00fcz belge yok</p>
+                  <p className="text-xs mt-1">T\u0131klayarak belge y\u00fckleyin</p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
@@ -326,23 +438,22 @@ export default function StudentDetail({ id }: Props) {
                             <button
                               onClick={() => {
                                 const mimeType = doc.mimeType || "application/octet-stream";
-                                const isImage = mimeType.startsWith("image/");
-                                const ext = mimeType === "application/pdf" ? "pdf" : isImage ? mimeType.split("/")[1] : "bin";
+                                const filename = buildDownloadFilename(doc.type, student?.firstName ?? "", student?.lastName ?? "", mimeType);
                                 const link = document.createElement("a");
                                 link.href = `data:${mimeType};base64,${doc.fileData}`;
-                                link.download = `${doc.name}.${ext}`;
+                                link.download = filename;
                                 link.click();
                               }}
                               className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                              İndir
+                              \u0130ndir
                             </button>
                           )}
                           {doc.fileUrl && !doc.fileData && (
                             <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                              Görüntüle
+                              G\u00f6r\u00fcnt\u00fcle
                             </a>
                           )}
                         </td>
@@ -356,21 +467,21 @@ export default function StudentDetail({ id }: Props) {
         </Tabs>
       </div>
 
-      {/* Upload Dialog */}
       <Dialog open={uploadOpen} onOpenChange={o => { if (!uploading) setUploadOpen(o); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Belge Yükle</DialogTitle>
+            <DialogTitle>Belge Y\u00fckle</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Type */}
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Belge Türü</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Belge T\u00fcr\u00fc</Label>
               <Select value={uploadType} onValueChange={v => {
                 setUploadType(v);
-                const typeLabel = DOC_TYPES.find(d => d.key === v)?.label ?? "Document";
-                setUploadName(`${student?.firstName ?? ""}-${student?.lastName ?? ""}-${typeLabel}`);
+                const type = (DOC_TYPES.find(d => d.key === v)?.label ?? "document").toLowerCase();
+                const first = (student?.firstName ?? "").toLowerCase();
+                const last = (student?.lastName ?? "").toLowerCase();
+                setUploadName(`${type}-${first}-${last}`);
               }}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -383,18 +494,16 @@ export default function StudentDetail({ id }: Props) {
               </Select>
             </div>
 
-            {/* Name */}
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Belge Adı</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Belge Ad\u0131</Label>
               <Input
                 className="mt-1"
                 value={uploadName}
                 onChange={e => setUploadName(e.target.value)}
-                placeholder={`${student?.firstName ?? ""}-${student?.lastName ?? ""}-Passport`}
+                placeholder={`passport-${(student?.firstName ?? "").toLowerCase()}-${(student?.lastName ?? "").toLowerCase()}`}
               />
             </div>
 
-            {/* File Drop Zone */}
             <div>
               <Label className="text-xs font-medium text-muted-foreground">Dosya</Label>
               <div
@@ -429,8 +538,8 @@ export default function StudentDetail({ id }: Props) {
                 ) : (
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                    <p className="text-sm font-medium text-muted-foreground">Sürükle bırak veya tıkla</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG — maks. 10 MB</p>
+                    <p className="text-sm font-medium text-muted-foreground">S\u00fcr\u00fckle b\u0131rak veya t\u0131kla</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG \u2014 maks. 10 MB</p>
                   </>
                 )}
               </div>
@@ -449,9 +558,9 @@ export default function StudentDetail({ id }: Props) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>İptal</Button>
+            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>\u0130ptal</Button>
             <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-              {uploading ? "Yükleniyor…" : "Kaydet"}
+              {uploading ? "Y\u00fckleniyor\u2026" : "Kaydet"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -474,8 +583,20 @@ function InfoRow({
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-medium text-foreground">{value || "—"}</p>
+        <p className="font-medium text-foreground">{value || "\u2014"}</p>
       </div>
     </div>
   );
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target?.result as string;
+      resolve(result.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

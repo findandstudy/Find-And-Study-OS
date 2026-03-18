@@ -12,6 +12,7 @@ const STUDENT_PATCH_FIELDS = [
   "motherName", "fatherName", "address",
   "status", "agentId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
+  "photoUrl",
 ];
 
 router.get("/students/me", requireAuth, async (req, res): Promise<void> => {

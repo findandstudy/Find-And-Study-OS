@@ -62,3 +62,9 @@ The project is structured as a pnpm monorepo with separate packages for the API 
   - Notification rules configurable per event with channel selection (in_app, email, whatsapp, telegram, sms), recipient targeting (role, assigned, owner, specific, all)
 - **Security:** Conversation participants endpoint has membership authorization check. Broadcast tab gated to admin/manager roles on frontend.
 - **ADMIN_ROLES:** `["super_admin", "admin", "manager"]` — used for notification rules, broadcast access, and other admin-level operations.
+
+## Student Profile
+
+- **Photo System:** Student photos stored as documents with `type = "photo"` in the `documents` table. Profile page displays latest photo (sorted by `createdAt` desc) as circular avatar in header. Hover reveals camera (upload) and download buttons. Photo upload creates a new document record with auto-naming `photo-firstname-lastname`.
+- **`photoUrl` field:** Added to `students` table schema (`photo_url` column) for future external URL photo support, included in PATCH fields whitelist.
+- **Download Naming Convention:** All document downloads follow `doctype-firstname-lastname.ext` format (lowercase, sanitized). Implemented via `buildDownloadFilename()` in `StudentDetail.tsx`. MIME-to-extension map handles common types (pdf, jpg, png, gif, webp, svg).
