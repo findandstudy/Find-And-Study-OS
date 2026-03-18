@@ -49,8 +49,8 @@ const FEE_STATUS: Record<string, { label: string; color: string }> = {
   paid:    { label: "Paid",    color: "bg-green-100 text-green-700 border-green-200" },
 };
 
-function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: {
-  icon: any; label: string; value: string; sub?: string; color?: string;
+function StatCard({ icon: Icon, label, value, sub, sub2, color = "text-indigo-600" }: {
+  icon: any; label: string; value: string; sub?: string; sub2?: string; color?: string;
 }) {
   return (
     <Card>
@@ -58,10 +58,11 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: 
         <div className={`p-2 rounded-lg bg-slate-50 ${color}`}>
           <Icon className="w-5 h-5" />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</p>
           <p className="text-lg font-bold text-slate-800">{value}</p>
           {sub && <p className="text-xs text-slate-400">{sub}</p>}
+          {sub2 && <p className="text-xs text-slate-400">{sub2}</p>}
         </div>
       </CardContent>
     </Card>
@@ -812,15 +813,17 @@ export default function FinancePage() {
           <StatCard
             icon={Building2}
             label="University Commission"
-            value={fmt(summary?.commissions?.totalUniversityCommission || commSummary.totalUniversityCommission || 0)}
-            sub={`${fmt(summary?.commissions?.totalUniversityCollected || commSummary.totalUniversityCollected || 0)} collected (${collectionRate}%)`}
+            value={fmt(summary?.commissions?.confirmedUniversityCommission || 0)}
+            sub={`Potential: ${fmt(summary?.commissions?.potentialUniversityCommission || 0)}`}
+            sub2={`${fmt(summary?.commissions?.totalUniversityCollected || 0)} collected (${collectionRate}%)`}
             color="text-blue-600"
           />
           <StatCard
             icon={Users}
             label="Agent Commission"
-            value={fmt(summary?.commissions?.totalAgentCommission || commSummary.totalAgentCommission || 0)}
-            sub={`${fmt(summary?.commissions?.totalAgentPaid || commSummary.totalAgentPaid || 0)} paid`}
+            value={fmt(summary?.commissions?.confirmedAgentCommission || 0)}
+            sub={`Potential: ${fmt(summary?.commissions?.potentialAgentCommission || 0)}`}
+            sub2={`${fmt(summary?.commissions?.totalAgentPaid || 0)} paid`}
             color="text-amber-600"
           />
           <StatCard
