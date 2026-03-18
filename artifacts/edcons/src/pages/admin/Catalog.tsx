@@ -588,6 +588,9 @@ function UniversitiesTab() {
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const { data: catOptsResp } = useQuery({ queryKey: ["catalog-options"], queryFn: () => api("/api/catalog-options") });
+  const uniTypeOpts = ((catOptsResp as any)?.grouped?.university_type || []).filter((o: any) => o.isActive).map((o: any) => o.value);
+
   const { data } = useQuery({
     queryKey: ["universities", page, dSearch],
     queryFn: () => api(`/api/universities?page=${page}&limit=30${dSearch ? `&search=${encodeURIComponent(dSearch)}` : ""}`),
@@ -860,10 +863,7 @@ function UniversitiesTab() {
                   <Select value={form?.universityType ?? ""} onValueChange={v => setF({ universityType: v || null })}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Select type…" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="state">State</SelectItem>
-                      <SelectItem value="private">Private</SelectItem>
-                      <SelectItem value="foundation">Foundation</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {uniTypeOpts.map((t: string) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1397,6 +1397,7 @@ const OPTION_CATEGORIES = [
   { key: "fee_type", label: "Fee Type", description: "Fee calculation types" },
   { key: "intake", label: "Intake Periods", description: "Enrollment periods" },
   { key: "field", label: "Field", description: "Academic fields / study areas" },
+  { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
 ];
 
 function OptionsTab() {
