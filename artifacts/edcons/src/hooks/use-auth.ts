@@ -13,10 +13,9 @@ export function useAuth(requireAuth = false, allowedRoles?: string[]) {
     if (!isLoading && requireAuth) {
       if (!user || error) {
         const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/api/auth/login?returnTo=${returnTo}`;
+        setLocation(`/login?returnTo=${returnTo}`);
         return;
       }
-      // Pending users are handled by ProtectedRoute — don't redirect them
       if (user.role !== "pending" && allowedRoles && !allowedRoles.includes(user.role)) {
         setLocation("/");
       }

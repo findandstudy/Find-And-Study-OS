@@ -317,8 +317,8 @@ export default function SettingsPage() {
         <SectionHeader title="Security & Access" description="Manage your authentication and active sessions." />
         <div className="space-y-4">
           <div className="p-5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-            <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Shield className="w-5 h-5" /> Authentication via Replit</p>
-            <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">Your account is secured through Replit's authentication system. No password management required.</p>
+            <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Shield className="w-5 h-5" /> Secure Authentication</p>
+            <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">Your account is secured with email and password authentication.</p>
           </div>
           <div className="p-5 rounded-xl border border-border/50 space-y-2">
             <p className="font-semibold text-foreground">Account Details</p>

@@ -1,30 +1,166 @@
-import { useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { GraduationCap, Globe2, Star, ArrowRight, Loader2 } from "lucide-react";
+import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { motion, AnimatePresence } from "framer-motion";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+type Tab = "login" | "register" | "verify";
 
 export default function Login() {
   const { user, isLoading } = useAuth(false);
   const [, setLocation] = useLocation();
+  const returnTo = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("returnTo");
+    if (!raw) return null;
+    const decoded = decodeURIComponent(raw);
+    if (decoded.startsWith("/") && !decoded.startsWith("//")) return decoded;
+    return null;
+  }, []);
+
+  const [tab, setTab] = useState<Tab>("login");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phone: "" });
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     if (!isLoading && user) {
-      if (['super_admin', 'admin', 'manager'].includes(user.role)) setLocation('/admin');
-      else if (['staff', 'consultant', 'accountant', 'editor'].includes(user.role)) setLocation('/staff');
-      else if (user.role === 'student') setLocation('/student');
-      else if (['agent', 'sub_agent'].includes(user.role)) setLocation('/agent');
-      else setLocation('/staff');
+      if (returnTo) {
+        setLocation(returnTo);
+      } else if (["super_admin", "admin", "manager"].includes(user.role)) {
+        setLocation("/admin");
+      } else if (["staff", "consultant", "accountant", "editor"].includes(user.role)) {
+        setLocation("/staff");
+      } else if (user.role === "student") {
+        setLocation("/student");
+      } else if (["agent", "sub_agent"].includes(user.role)) {
+        setLocation("/agent");
+      } else {
+        setLocation("/staff");
+      }
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading, setLocation, returnTo]);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginForm.email, password: loginForm.password }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Login failed");
+        return;
+      }
+      window.location.href = returnTo ? decodeURIComponent(returnTo) : "/login";
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (registerForm.password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: registerForm.email,
+          password: registerForm.password,
+          firstName: registerForm.firstName,
+          lastName: registerForm.lastName,
+          phone: registerForm.phone || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Registration failed");
+        return;
+      }
+      setVerifyEmail(registerForm.email);
+      setTab("verify");
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/verify-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: verifyEmail, code: verifyCode }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Verification failed");
+        return;
+      }
+      window.location.href = "/login";
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setResending(true);
+    setError("");
+    try {
+      await fetch(`${BASE_URL}/api/auth/resend-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: verifyEmail }),
+      });
+      setError("");
+    } catch {} finally {
+      setResending(false);
+    }
+  }
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-accent/5">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 text-primary animate-spin" />
-          <p className="text-muted-foreground font-medium">Authenticating...</p>
+          <p className="text-muted-foreground font-medium">Loading...</p>
         </div>
       </div>
     );
@@ -32,7 +168,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary to-accent relative overflow-hidden flex-col justify-between p-12">
         <div className="absolute inset-0">
           <div className="absolute top-20 left-20 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
@@ -43,7 +178,7 @@ export default function Login() {
             <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
               <GraduationCap className="w-7 h-7 text-white" />
             </div>
-            <span className="font-display font-bold text-3xl text-white">EduCons</span>
+            <span className="font-display font-bold text-3xl text-white">Find & Study</span>
           </div>
           <h1 className="text-4xl font-display font-bold text-white mb-6 leading-tight">
             Your Global Education<br />Journey Starts Here
@@ -69,56 +204,262 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right panel */}
       <div className="flex-1 flex items-center justify-center bg-background p-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-          {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 justify-center mb-10">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
               <GraduationCap className="w-6 h-6 text-white" />
             </div>
-            <span className="font-display font-bold text-2xl">EduCons</span>
+            <span className="font-display font-bold text-2xl">Find & Study</span>
           </div>
 
-          <h2 className="text-3xl font-display font-bold text-foreground mb-2">Welcome Back</h2>
-          <p className="text-muted-foreground mb-10">Sign in to access your EduCons portal.</p>
+          {tab !== "verify" && (
+            <div className="flex rounded-xl bg-secondary/50 p-1 mb-8">
+              <button
+                onClick={() => { setTab("login"); setError(""); }}
+                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${tab === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => { setTab("register"); setError(""); }}
+                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${tab === "register" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Student Registration
+              </button>
+            </div>
+          )}
 
-          <Button asChild size="lg" className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5">
-            <a href="/api/auth/login?returnTo=/login" className="flex items-center justify-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                <GraduationCap className="w-5 h-5" />
-              </div>
-              Sign In
-              <ArrowRight className="w-5 h-5 ml-auto" />
-            </a>
-          </Button>
+          <AnimatePresence mode="wait">
+            {tab === "login" && (
+              <motion.div key="login" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                <h2 className="text-3xl font-display font-bold text-foreground mb-2">Welcome Back</h2>
+                <p className="text-muted-foreground mb-8">Sign in to access your portal.</p>
 
-          <div className="mt-8 p-5 rounded-2xl bg-secondary/50 border border-border/40">
-            <p className="text-sm text-muted-foreground text-center">
-              By signing in, you agree to our{" "}
-              <span className="text-primary font-medium cursor-pointer hover:underline">Terms of Service</span>
-              {" "}and{" "}
-              <span className="text-primary font-medium cursor-pointer hover:underline">Privacy Policy</span>.
-            </p>
-          </div>
+                <form onSubmit={handleLogin} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                    <Input
+                      type="email"
+                      value={loginForm.email}
+                      onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="you@example.com"
+                      className="rounded-xl h-12"
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> Password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        value={loginForm.password}
+                        onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Enter your password"
+                        className="rounded-xl h-12 pr-12"
+                        required
+                        autoComplete="current-password"
+                      />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
 
-          <div className="mt-8 grid grid-cols-3 gap-4">
-            {[
-              { label: "Students", icon: "🎓" },
-              { label: "Agents", icon: "🤝" },
-              { label: "Staff", icon: "💼" },
-            ].map((p, i) => (
-              <div key={i} className="text-center p-4 rounded-xl bg-secondary/30 border border-border/30">
-                <div className="text-2xl mb-2">{p.icon}</div>
-                <p className="text-xs font-medium text-muted-foreground">{p.label} Portal</p>
-              </div>
-            ))}
-          </div>
+                  {error && (
+                    <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      {error}
+                    </div>
+                  )}
 
-          <p className="text-center mt-8 text-muted-foreground text-sm">
-            New student?{" "}
-            <a href="/contact" className="text-primary font-semibold hover:underline">Contact us to get started</a>
-          </p>
+                  <Button type="submit" size="lg" disabled={loading}
+                    className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ArrowRight className="w-5 h-5 mr-2" />}
+                    Sign In
+                  </Button>
+                </form>
+              </motion.div>
+            )}
+
+            {tab === "register" && (
+              <motion.div key="register" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <h2 className="text-3xl font-display font-bold text-foreground mb-2">Create Account</h2>
+                <p className="text-muted-foreground mb-8">Register as a student to get started.</p>
+
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold">First Name</Label>
+                      <Input
+                        value={registerForm.firstName}
+                        onChange={e => setRegisterForm(f => ({ ...f, firstName: e.target.value }))}
+                        placeholder="John"
+                        className="rounded-xl h-11"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold">Last Name</Label>
+                      <Input
+                        value={registerForm.lastName}
+                        onChange={e => setRegisterForm(f => ({ ...f, lastName: e.target.value }))}
+                        placeholder="Doe"
+                        className="rounded-xl h-11"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                    <Input
+                      type="email"
+                      value={registerForm.email}
+                      onChange={e => setRegisterForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="you@example.com"
+                      className="rounded-xl h-11"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> Phone (optional)</Label>
+                    <Input
+                      value={registerForm.phone}
+                      onChange={e => setRegisterForm(f => ({ ...f, phone: e.target.value }))}
+                      placeholder="+90 555 123 4567"
+                      className="rounded-xl h-11"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> Password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        value={registerForm.password}
+                        onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Min. 8 characters"
+                        className="rounded-xl h-11 pr-12"
+                        required
+                        minLength={8}
+                      />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold">Confirm Password</Label>
+                    <Input
+                      type="password"
+                      value={registerForm.confirmPassword}
+                      onChange={e => setRegisterForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                      placeholder="Re-enter password"
+                      className="rounded-xl h-11"
+                      required
+                    />
+                  </div>
+
+                  {error && (
+                    <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      {error}
+                    </div>
+                  )}
+
+                  <Button type="submit" size="lg" disabled={loading}
+                    className="w-full rounded-xl py-5 text-base font-semibold shadow-lg shadow-primary/25 hover:shadow-xl transition-all hover:-translate-y-0.5">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <User className="w-5 h-5 mr-2" />}
+                    Create Account
+                  </Button>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    A verification code will be sent to your email.
+                  </p>
+                </form>
+              </motion.div>
+            )}
+
+            {tab === "verify" && (
+              <motion.div key="verify" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <ShieldCheck className="w-8 h-8 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">Verify Your Email</h2>
+                  <p className="text-muted-foreground text-sm">
+                    We sent a 6-digit verification code to<br />
+                    <span className="font-semibold text-foreground">{verifyEmail}</span>
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerify} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold text-center block">Verification Code</Label>
+                    <Input
+                      value={verifyCode}
+                      onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      className="rounded-xl h-14 text-center text-2xl tracking-[0.5em] font-mono"
+                      maxLength={6}
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  {error && (
+                    <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      {error}
+                    </div>
+                  )}
+
+                  <Button type="submit" size="lg" disabled={loading || verifyCode.length !== 6}
+                    className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShieldCheck className="w-5 h-5 mr-2" />}
+                    Verify & Sign In
+                  </Button>
+
+                  <div className="text-center">
+                    <button type="button" onClick={handleResendCode} disabled={resending}
+                      className="text-sm text-primary font-medium hover:underline disabled:opacity-50">
+                      {resending ? "Sending..." : "Resend verification code"}
+                    </button>
+                  </div>
+
+                  <button type="button" onClick={() => { setTab("login"); setError(""); }}
+                    className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
+                    Back to Sign In
+                  </button>
+                </form>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {tab !== "verify" && (
+            <div className="mt-8 p-5 rounded-2xl bg-secondary/50 border border-border/40">
+              <p className="text-sm text-muted-foreground text-center">
+                By signing in, you agree to our{" "}
+                <span className="text-primary font-medium cursor-pointer hover:underline">Terms of Service</span>
+                {" "}and{" "}
+                <span className="text-primary font-medium cursor-pointer hover:underline">Privacy Policy</span>.
+              </p>
+            </div>
+          )}
+
+          {tab === "login" && (
+            <div className="mt-8 grid grid-cols-3 gap-4">
+              {[
+                { label: "Students", icon: "🎓" },
+                { label: "Agents", icon: "🤝" },
+                { label: "Staff", icon: "💼" },
+              ].map((p, i) => (
+                <div key={i} className="text-center p-4 rounded-xl bg-secondary/30 border border-border/30">
+                  <div className="text-2xl mb-2">{p.icon}</div>
+                  <p className="text-xs font-medium text-muted-foreground">{p.label} Portal</p>
+                </div>
+              ))}
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

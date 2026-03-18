@@ -1,14 +1,10 @@
-import * as oidc from "openid-client";
 import { type Request, type Response, type NextFunction } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   clearSession,
-  getOidcConfig,
   getSessionId,
   getSession,
-  updateSession,
-  type SessionData,
   type SessionUser,
 } from "../lib/replitAuth";
 
@@ -25,33 +21,6 @@ declare global {
   }
 }
 
-async function refreshIfExpired(
-  sid: string,
-  session: SessionData,
-): Promise<SessionData | null> {
-  const now = Math.floor(Date.now() / 1000);
-  if (!session.expires_at || now <= session.expires_at) return session;
-
-  if (!session.refresh_token) return null;
-
-  try {
-    const config = await getOidcConfig();
-    const tokens = await oidc.refreshTokenGrant(
-      config,
-      session.refresh_token,
-    );
-    session.access_token = tokens.access_token;
-    session.refresh_token = tokens.refresh_token ?? session.refresh_token;
-    session.expires_at = tokens.expiresIn()
-      ? now + tokens.expiresIn()!
-      : session.expires_at;
-    await updateSession(sid, session);
-    return session;
-  } catch {
-    return null;
-  }
-}
-
 async function rehydrateUser(sessionUser: SessionUser): Promise<SessionUser | null> {
   const [dbUser] = await db
     .select()
@@ -60,7 +29,7 @@ async function rehydrateUser(sessionUser: SessionUser): Promise<SessionUser | nu
   if (!dbUser) return null;
   return {
     id: dbUser.id,
-    replitId: dbUser.replitId!,
+    replitId: dbUser.replitId || `local-${dbUser.id}`,
     email: dbUser.email,
     firstName: dbUser.firstName,
     lastName: dbUser.lastName,
@@ -93,14 +62,7 @@ export async function authMiddleware(
     return;
   }
 
-  const refreshed = await refreshIfExpired(sid, session);
-  if (!refreshed) {
-    await clearSession(res, sid);
-    next();
-    return;
-  }
-
-  const freshUser = await rehydrateUser(refreshed.user);
+  const freshUser = await rehydrateUser(session.user);
   if (!freshUser) {
     await clearSession(res, sid);
     next();

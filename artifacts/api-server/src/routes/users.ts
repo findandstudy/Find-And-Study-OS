@@ -62,7 +62,7 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
 });
 
 router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { email, firstName, lastName, role, phone, language } = req.body;
+  const { email, firstName, lastName, role, phone, language, password } = req.body;
   if (!email || !firstName || !lastName || !role) {
     res.status(400).json({ error: "Missing required fields" });
     return;
@@ -76,9 +76,32 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     return;
   }
 
+  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
+  if (existingUser) {
+    res.status(409).json({ error: "A user with this email already exists" });
+    return;
+  }
+
+  let passwordHash: string | undefined;
+  if (password) {
+    if (password.length < 6) {
+      res.status(400).json({ error: "Password must be at least 6 characters" });
+      return;
+    }
+    passwordHash = await bcrypt.hash(password, 10);
+  }
+
   const [user] = await db
     .insert(usersTable)
-    .values({ email, firstName, lastName, role, phone: phone || null, language: language || "en", isActive: true })
+    .values({
+      email: email.toLowerCase().trim(),
+      firstName, lastName, role,
+      phone: phone || null,
+      language: language || "en",
+      isActive: true,
+      emailVerified: true,
+      passwordHash: passwordHash || null,
+    })
     .returning();
   await logAudit(req.user!.id, "create_user", "user", user.id, { role }, req.ip);
   const { passwordHash: _ph, replitId: _ri, ...safeNewUser } = user as any;

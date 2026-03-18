@@ -1,36 +1,36 @@
-import * as oidc from "openid-client";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { db, usersTable, emailVerificationCodesTable } from "@workspace/db";
+import { eq, and, gt, sql } from "drizzle-orm";
 import {
   clearSession,
-  getOidcConfig,
   getSessionId,
   createSession,
-  deleteSession,
   SESSION_COOKIE,
   SESSION_TTL,
-  ISSUER_URL,
   type SessionData,
   type SessionUser,
 } from "../lib/replitAuth";
 
-const OIDC_COOKIE_TTL = 10 * 60 * 1000;
-
 const router: IRouter = Router();
 
-function getOrigin(req: Request): string {
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 10;
+const MAX_VERIFY_ATTEMPTS = 5;
+const MAX_RESEND_ATTEMPTS = 3;
+
+function checkRateLimit(key: string, max: number): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return true;
   }
-  if (process.env.REPLIT_DOMAINS) {
-    const domain = process.env.REPLIT_DOMAINS.split(",")[0];
-    return `https://${domain}`;
-  }
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host =
-    req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
-  return `${proto}://${host}`;
+  if (entry.count >= max) return false;
+  entry.count++;
+  return true;
 }
 
 function setSessionCookie(res: Response, sid: string) {
@@ -43,65 +43,10 @@ function setSessionCookie(res: Response, sid: string) {
   });
 }
 
-function setOidcCookie(res: Response, name: string, value: string) {
-  res.cookie(name, value, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: OIDC_COOKIE_TTL,
-  });
-}
-
-function getSafeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
-}
-
-async function upsertUser(claims: Record<string, unknown>): Promise<SessionUser> {
-  const replitId = claims.sub as string;
-  const email = (claims.email as string) || null;
-  const firstName = (claims.first_name as string) || (claims.name as string) || null;
-  const lastName = (claims.last_name as string) || null;
-  const avatarUrl = ((claims.profile_image_url || claims.picture) as string) || null;
-
-  let [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.replitId, replitId));
-
-  if (!user) {
-    [user] = await db
-      .insert(usersTable)
-      .values({
-        replitId,
-        email,
-        firstName,
-        lastName,
-        avatarUrl,
-        role: "pending",
-        language: "en",
-        isActive: false,
-      })
-      .returning();
-  } else {
-    [user] = await db
-      .update(usersTable)
-      .set({
-        email: email || user.email,
-        firstName: firstName || user.firstName,
-        lastName: lastName || user.lastName,
-        avatarUrl: avatarUrl || user.avatarUrl,
-      })
-      .where(eq(usersTable.id, user.id))
-      .returning();
-  }
-
+function buildSessionUser(user: any): SessionUser {
   return {
     id: user.id,
-    replitId: user.replitId!,
+    replitId: user.replitId || `local-${user.id}`,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
@@ -112,6 +57,10 @@ async function upsertUser(claims: Record<string, unknown>): Promise<SessionUser>
   };
 }
 
+function generateVerificationCode(): string {
+  return crypto.randomInt(100000, 999999).toString();
+}
+
 router.get("/auth/me", (req: Request, res: Response) => {
   if (!req.user) {
     res.status(401).json({ error: "Not authenticated" });
@@ -120,109 +69,210 @@ router.get("/auth/me", (req: Request, res: Response) => {
   res.json(req.user);
 });
 
-router.get("/auth/login", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
-
-  const returnTo = getSafeReturnTo(req.query.returnTo);
-
-  const state = oidc.randomState();
-  const nonce = oidc.randomNonce();
-  const codeVerifier = oidc.randomPKCECodeVerifier();
-  const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-
-  const redirectTo = oidc.buildAuthorizationUrl(config, {
-    redirect_uri: callbackUrl,
-    scope: "openid email profile offline_access",
-    code_challenge: codeChallenge,
-    code_challenge_method: "S256",
-    prompt: "login consent",
-    state,
-    nonce,
-  });
-
-  setOidcCookie(res, "code_verifier", codeVerifier);
-  setOidcCookie(res, "nonce", nonce);
-  setOidcCookie(res, "state", state);
-  setOidcCookie(res, "return_to", returnTo);
-
-  res.redirect(redirectTo.href);
-});
-
-router.get("/callback", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
-
-  const codeVerifier = req.cookies?.code_verifier;
-  const nonce = req.cookies?.nonce;
-  const expectedState = req.cookies?.state;
-
-  if (!codeVerifier || !expectedState) {
-    res.redirect("/api/auth/login");
+router.post("/auth/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required" });
     return;
   }
 
-  const currentUrl = new URL(
-    `${callbackUrl}?${new URL(req.url, `http://${req.headers.host}`).searchParams}`,
-  );
-
-  let tokens: oidc.TokenEndpointResponse & oidc.TokenEndpointResponseHelpers;
-  try {
-    tokens = await oidc.authorizationCodeGrant(config, currentUrl, {
-      pkceCodeVerifier: codeVerifier,
-      expectedNonce: nonce,
-      expectedState,
-      idTokenExpected: true,
-    });
-  } catch (err) {
-    console.error("OIDC auth error:", err);
-    res.redirect("/api/auth/login");
+  const normalizedEmail = email.toLowerCase().trim();
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`login:${ip}`, MAX_LOGIN_ATTEMPTS) || !checkRateLimit(`login:${normalizedEmail}`, MAX_LOGIN_ATTEMPTS)) {
+    res.status(429).json({ error: "Too many login attempts. Please try again later." });
     return;
   }
 
-  const returnTo = getSafeReturnTo(req.cookies?.return_to);
-
-  res.clearCookie("code_verifier", { path: "/" });
-  res.clearCookie("nonce", { path: "/" });
-  res.clearCookie("state", { path: "/" });
-  res.clearCookie("return_to", { path: "/" });
-
-  const claims = tokens.claims();
-  if (!claims) {
-    res.redirect("/api/auth/login");
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  if (!user || !user.passwordHash) {
+    res.status(401).json({ error: "Invalid email or password" });
     return;
   }
 
-  const dbUser = await upsertUser(
-    claims as unknown as Record<string, unknown>,
-  );
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
 
-  const now = Math.floor(Date.now() / 1000);
+  if (!user.isActive) {
+    res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
+    return;
+  }
+
+  const sessionUser = buildSessionUser(user);
   const sessionData: SessionData = {
-    user: dbUser,
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
+    user: sessionUser,
+    access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
   };
 
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
-  res.redirect(returnTo);
+  res.json({ user: sessionUser });
+});
+
+router.post("/auth/register", async (req: Request, res: Response) => {
+  const { email, password, firstName, lastName, phone } = req.body;
+
+  if (!email || !password || !firstName || !lastName) {
+    res.status(400).json({ error: "All fields are required" });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`register:${ip}`, 5)) {
+    res.status(429).json({ error: "Too many registration attempts. Please try again later." });
+    return;
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  if (existing) {
+    res.status(409).json({ error: "An account with this email already exists" });
+    return;
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+  const [user] = await db.insert(usersTable).values({
+    email: normalizedEmail,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    phone: phone?.trim() || null,
+    passwordHash: hash,
+    role: "student",
+    isActive: false,
+    emailVerified: false,
+    language: "en",
+  }).returning();
+
+  const code = generateVerificationCode();
+  await db.insert(emailVerificationCodesTable).values({
+    email: normalizedEmail,
+    code,
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  });
+
+  console.log(`[EMAIL VERIFICATION] Code for ${normalizedEmail}: ${code}`);
+
+  res.status(201).json({
+    message: "Account created. Please verify your email.",
+    requiresVerification: true,
+    email: normalizedEmail,
+  });
+});
+
+router.post("/auth/verify-email", async (req: Request, res: Response) => {
+  const { email, code } = req.body;
+  if (!email || !code) {
+    res.status(400).json({ error: "Email and verification code are required" });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`verify:${ip}`, MAX_VERIFY_ATTEMPTS) || !checkRateLimit(`verify:${normalizedEmail}`, MAX_VERIFY_ATTEMPTS)) {
+    res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
+    return;
+  }
+
+  const [verificationRecord] = await db
+    .select()
+    .from(emailVerificationCodesTable)
+    .where(
+      and(
+        eq(emailVerificationCodesTable.email, normalizedEmail),
+        eq(emailVerificationCodesTable.code, code.trim()),
+        eq(emailVerificationCodesTable.used, false),
+        gt(emailVerificationCodesTable.expiresAt, new Date()),
+      )
+    );
+
+  if (!verificationRecord) {
+    res.status(400).json({ error: "Invalid or expired verification code" });
+    return;
+  }
+
+  await db
+    .update(emailVerificationCodesTable)
+    .set({ used: true })
+    .where(eq(emailVerificationCodesTable.email, normalizedEmail));
+
+  const [user] = await db
+    .update(usersTable)
+    .set({ emailVerified: true, isActive: true })
+    .where(eq(usersTable.email, normalizedEmail))
+    .returning();
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const sessionUser = buildSessionUser(user);
+  const sessionData: SessionData = {
+    user: sessionUser,
+    access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
+  };
+
+  const sid = await createSession(sessionData);
+  setSessionCookie(res, sid);
+  res.json({ user: sessionUser, verified: true });
+});
+
+router.post("/auth/resend-code", async (req: Request, res: Response) => {
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`resend:${ip}`, MAX_RESEND_ATTEMPTS) || !checkRateLimit(`resend:${normalizedEmail}`, MAX_RESEND_ATTEMPTS)) {
+    res.status(429).json({ error: "Too many resend attempts. Please wait before requesting a new code." });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  if (!user) {
+    res.json({ message: "If an account exists, a new code has been sent." });
+    return;
+  }
+
+  if (user.emailVerified) {
+    res.status(400).json({ error: "Email is already verified" });
+    return;
+  }
+
+  await db
+    .update(emailVerificationCodesTable)
+    .set({ used: true })
+    .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
+
+  const code = generateVerificationCode();
+  await db.insert(emailVerificationCodesTable).values({
+    email: normalizedEmail,
+    code,
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  });
+
+  console.log(`[EMAIL VERIFICATION] New code for ${normalizedEmail}: ${code}`);
+
+  res.json({ message: "A new verification code has been sent to your email." });
 });
 
 async function handleLogout(req: Request, res: Response) {
-  const config = await getOidcConfig();
-  const origin = getOrigin(req);
-
   const sid = getSessionId(req);
   await clearSession(res, sid);
-
-  const endSessionUrl = oidc.buildEndSessionUrl(config, {
-    client_id: process.env.REPL_ID!,
-    post_logout_redirect_uri: origin,
-  });
-
-  res.redirect(endSessionUrl.href);
+  res.redirect("/login");
 }
 
 router.get("/auth/logout", handleLogout);

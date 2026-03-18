@@ -1,10 +1,8 @@
-import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
-export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 export const SESSION_COOKIE = "sid";
 export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
@@ -25,18 +23,6 @@ export interface SessionData {
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
-}
-
-let oidcConfig: client.Configuration | null = null;
-
-export async function getOidcConfig(): Promise<client.Configuration> {
-  if (!oidcConfig) {
-    oidcConfig = await client.discovery(
-      new URL(ISSUER_URL),
-      process.env.REPL_ID!,
-    );
-  }
-  return oidcConfig;
 }
 
 export async function createSession(data: SessionData): Promise<string> {

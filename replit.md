@@ -22,7 +22,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Frontend:** React, Vite, TailwindCSS, shadcn/ui, Framer Motion
 
 **Core Architectural Decisions:**
-- **Authentication:** Replit Auth via OpenID Connect (PKCE) with session cookies, supporting multi-role access control (`super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `pending`). User activation is admin-controlled.
+- **Authentication:** Custom email/password authentication with session cookies. Staff/agent accounts created by admin with password; students self-register with email verification (6-digit code, 15min TTL, logged to console in dev). Rate limiting on login (10/15min), verify (5/15min), resend (3/15min), register (5/15min). Sessions stored in DB `sessions` table. Cookie: `sid` (httpOnly, secure, sameSite=lax). Open-redirect protection on returnTo param. Multi-role access control (`super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `pending`). User activation is admin-controlled for staff; auto-activated on email verification for students.
 - **Role-Based Access Control (RBAC):** Granular permissions across various modules (Dashboard, Leads, Applications, Students, Documents, Course Finder, Agents, Finance, Catalog, Users, Audit, Settings) with definable system and custom roles.
 - **Dynamic Pipeline Management:** Lead, application, and student pipeline stages are database-driven and fully configurable via API, allowing managers to customize workflows.
 - **UI/UX:**
@@ -43,7 +43,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 
 ## External Dependencies
 
-- **Replit Auth:** For user authentication via OpenID Connect.
+- **bcryptjs:** For password hashing (email/password auth).
 - **Anthropic Claude:** AI integration for document OCR (claude-sonnet-4-6) and CSV parsing (claude-haiku-4-5) via Replit AI Integrations proxy.
 - **PostgreSQL:** Primary database for all application data.
 - **Object Storage:** For storing uploaded files like invoices, receipts, and branding assets (accessed via presigned URLs).
