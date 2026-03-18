@@ -157,13 +157,65 @@ type ExtractedData = {
 };
 
 const EMPTY_FORM = {
-  firstName: "", lastName: "", email: "", phone: "",
+  firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
   nationality: "", dateOfBirth: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
   highSchool: "", graduationYear: "", gpa: "", languageScore: "",
   notes: "",
 };
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR", flag: "🇹🇷" },
+  { code: "+1", country: "US", flag: "🇺🇸" },
+  { code: "+44", country: "UK", flag: "🇬🇧" },
+  { code: "+49", country: "DE", flag: "🇩🇪" },
+  { code: "+33", country: "FR", flag: "🇫🇷" },
+  { code: "+39", country: "IT", flag: "🇮🇹" },
+  { code: "+34", country: "ES", flag: "🇪🇸" },
+  { code: "+31", country: "NL", flag: "🇳🇱" },
+  { code: "+46", country: "SE", flag: "🇸🇪" },
+  { code: "+47", country: "NO", flag: "🇳🇴" },
+  { code: "+45", country: "DK", flag: "🇩🇰" },
+  { code: "+41", country: "CH", flag: "🇨🇭" },
+  { code: "+43", country: "AT", flag: "🇦🇹" },
+  { code: "+48", country: "PL", flag: "🇵🇱" },
+  { code: "+7", country: "RU", flag: "🇷🇺" },
+  { code: "+380", country: "UA", flag: "🇺🇦" },
+  { code: "+86", country: "CN", flag: "🇨🇳" },
+  { code: "+81", country: "JP", flag: "🇯🇵" },
+  { code: "+82", country: "KR", flag: "🇰🇷" },
+  { code: "+91", country: "IN", flag: "🇮🇳" },
+  { code: "+92", country: "PK", flag: "🇵🇰" },
+  { code: "+93", country: "AF", flag: "🇦🇫" },
+  { code: "+966", country: "SA", flag: "🇸🇦" },
+  { code: "+971", country: "AE", flag: "🇦🇪" },
+  { code: "+964", country: "IQ", flag: "🇮🇶" },
+  { code: "+98", country: "IR", flag: "🇮🇷" },
+  { code: "+962", country: "JO", flag: "🇯🇴" },
+  { code: "+961", country: "LB", flag: "🇱🇧" },
+  { code: "+20", country: "EG", flag: "🇪🇬" },
+  { code: "+212", country: "MA", flag: "🇲🇦" },
+  { code: "+234", country: "NG", flag: "🇳🇬" },
+  { code: "+27", country: "ZA", flag: "🇿🇦" },
+  { code: "+55", country: "BR", flag: "🇧🇷" },
+  { code: "+52", country: "MX", flag: "🇲🇽" },
+  { code: "+54", country: "AR", flag: "🇦🇷" },
+  { code: "+61", country: "AU", flag: "🇦🇺" },
+  { code: "+64", country: "NZ", flag: "🇳🇿" },
+  { code: "+60", country: "MY", flag: "🇲🇾" },
+  { code: "+65", country: "SG", flag: "🇸🇬" },
+  { code: "+63", country: "PH", flag: "🇵🇭" },
+  { code: "+66", country: "TH", flag: "🇹🇭" },
+  { code: "+84", country: "VN", flag: "🇻🇳" },
+  { code: "+62", country: "ID", flag: "🇮🇩" },
+  { code: "+994", country: "AZ", flag: "🇦🇿" },
+  { code: "+995", country: "GE", flag: "🇬🇪" },
+  { code: "+998", country: "UZ", flag: "🇺🇿" },
+  { code: "+996", country: "KG", flag: "🇰🇬" },
+  { code: "+993", country: "TM", flag: "🇹🇲" },
+  { code: "+77", country: "KZ", flag: "🇰🇿" },
+];
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -434,8 +486,25 @@ function AddStudentModal({
       for (const [fk, ek] of mapping) {
         const val = extracted[ek];
         if (val !== null && val !== undefined && val !== "") {
-          (newForm as any)[fk] = String(val);
-          newExtracted.add(fk);
+          if (fk === "phone") {
+            const phoneStr = String(val).replace(/\s+/g, " ").trim();
+            if (phoneStr.startsWith("+")) {
+              const sortedCodes = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+              const matched = sortedCodes.find(pc => phoneStr.startsWith(pc.code));
+              if (matched) {
+                newForm.phoneCode = matched.code;
+                newForm.phone = phoneStr.slice(matched.code.length).trim();
+              } else {
+                newForm.phone = phoneStr;
+              }
+            } else {
+              newForm.phone = phoneStr;
+            }
+            newExtracted.add("phone");
+          } else {
+            (newForm as any)[fk] = String(val);
+            newExtracted.add(fk);
+          }
         }
       }
       if (extracted.graduationYear != null) {
@@ -487,10 +556,22 @@ function AddStudentModal({
   }
 
   function handleSubmit() {
-    if (!form.firstName || !form.lastName) {
-      toast({ title: "First and Last name are required", variant: "destructive" });
+    const missing: string[] = [];
+    if (!form.firstName.trim()) missing.push("First Name");
+    if (!form.lastName.trim()) missing.push("Last Name");
+    if (!form.email.trim()) missing.push("Email");
+    if (!form.phone.trim()) missing.push("Phone");
+    if (!form.dateOfBirth.trim()) missing.push("Date of Birth");
+    if (!form.nationality.trim()) missing.push("Nationality");
+    if (!form.motherName.trim()) missing.push("Mother's Name");
+    if (!form.fatherName.trim()) missing.push("Father's Name");
+    if (!form.passportNumber.trim()) missing.push("Passport Number");
+    if (missing.length > 0) {
+      toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" });
       return;
     }
+
+    const fullPhone = form.phone ? `${form.phoneCode} ${form.phone}` : null;
 
     createStudent.mutate(
       {
@@ -498,7 +579,7 @@ function AddStudentModal({
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email || null,
-          phone: form.phone || null,
+          phone: fullPhone,
           nationality: form.nationality || null,
           dateOfBirth: form.dateOfBirth || null,
           passportNumber: form.passportNumber || null,
@@ -521,7 +602,7 @@ function AddStudentModal({
           const docCount = Object.keys(docs).length;
           if (docCount > 0) {
             await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
-            toast({ title: "Öğrenci oluşturuldu", description: `${docCount} belge profil'e eklendi.` });
+            toast({ title: "Student created", description: `${docCount} document${docCount !== 1 ? "s" : ""} added to profile.` });
           } else {
             toast({ title: "Student created successfully" });
           }
@@ -691,14 +772,42 @@ function AddStudentModal({
                 <div className="grid grid-cols-2 gap-4">
                   <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" aiExtracted={ef.has("firstName")} />
                   <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" aiExtracted={ef.has("lastName")} />
-                  <FormField label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
-                  <FormField label="Phone" value={form.phone} onChange={field("phone")} placeholder="+90 555 000 0000" aiExtracted={ef.has("phone")} />
-                  <FormField label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
+                  <FormField required label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
+                  <div className="space-y-1.5">
+                    <Label className="font-semibold text-sm flex items-center">
+                      Phone<span className="text-destructive ml-0.5">*</span>
+                      {ef.has("phone") && <AiBadge />}
+                    </Label>
+                    <div className="flex gap-1.5">
+                      <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
+                        <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PHONE_CODES.map(pc => (
+                            <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                              {pc.flag} {pc.code}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={form.phone}
+                        onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                        placeholder="555 000 0000"
+                        className={cn(
+                          "rounded-xl flex-1",
+                          ef.has("phone") && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400"
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
                   <div>
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
                     <Select value={form.nationality} onValueChange={field("nationality")}>
                       <SelectTrigger className="mt-1 h-9 text-sm">
-                        <SelectValue placeholder="Ülke seçin…" />
+                        <SelectValue placeholder="Select country..." />
                       </SelectTrigger>
                       <SelectContent>
                         {allCountries.map(c => (
@@ -709,8 +818,8 @@ function AddStudentModal({
                       </SelectContent>
                     </Select>
                   </div>
-                  <FormField label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Anne adı" aiExtracted={ef.has("motherName")} />
-                  <FormField label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Baba adı" aiExtracted={ef.has("fatherName")} />
+                  <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" aiExtracted={ef.has("motherName")} />
+                  <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" aiExtracted={ef.has("fatherName")} />
                   <div className="col-span-2">
                     <FormField label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" aiExtracted={ef.has("address")} />
                   </div>
@@ -724,7 +833,7 @@ function AddStudentModal({
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <FormField label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" aiExtracted={ef.has("passportNumber")} />
+                    <FormField required label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" aiExtracted={ef.has("passportNumber")} />
                   </div>
                   <FormField label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
                   <FormField label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" aiExtracted={ef.has("passportExpiry")} />
@@ -795,7 +904,7 @@ function AddStudentModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createStudent.isPending || !form.firstName || !form.lastName}
+                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim()}
                 className="rounded-xl gap-2"
               >
                 {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
