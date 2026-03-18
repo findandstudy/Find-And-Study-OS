@@ -144,6 +144,22 @@ export default function AgentsPage() {
   const certRef = useRef<HTMLInputElement>(null);
 
   const [parentAgents, setParentAgents] = useState<Agent[]>([]);
+  const [countries, setCountries] = useState<{ id: number; name: string; code: string }[]>([]);
+  const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
+
+  async function fetchCountries() {
+    try {
+      const res = await customFetch(`/api/countries?limit=300`);
+      setCountries(res.data || []);
+    } catch {}
+  }
+
+  async function fetchCities(countryId: number) {
+    try {
+      const res = await customFetch(`/api/cities?countryId=${countryId}&limit=500`);
+      setCities(res.data || []);
+    } catch {}
+  }
 
   async function fetchAgents() {
     setLoading(true);
@@ -174,12 +190,13 @@ export default function AgentsPage() {
 
   useEffect(() => { fetchAgents(); }, [page, search]);
   useEffect(() => { fetchSubAgents(); }, [subPage, subSearch]);
-  useEffect(() => { fetchParentAgents(); }, []);
+  useEffect(() => { fetchParentAgents(); fetchCountries(); }, []);
 
   function openCreate(isSub: boolean) {
     setEditingAgent(null);
     setIsSubAgent(isSub);
     setForm({ ...emptyForm });
+    setCities([]);
     setShowDialog(true);
   }
 
@@ -211,6 +228,13 @@ export default function AgentsPage() {
       subAgentCommissionRate: agent.subAgentCommissionRate?.toString() || "",
       hideServiceFees: agent.hideServiceFees,
     });
+    if (agent.country) {
+      const c = countries.find(ct => ct.name === agent.country);
+      if (c) fetchCities(c.id);
+      else setCities([]);
+    } else {
+      setCities([]);
+    }
     setShowDialog(true);
   }
 
@@ -563,7 +587,19 @@ export default function AgentsPage() {
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> Country</Label>
-                  <Input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className="rounded-xl" />
+                  <Select value={form.country} onValueChange={v => {
+                    setForm(f => ({ ...f, country: v, city: "" }));
+                    const c = countries.find(ct => ct.name === v);
+                    if (c) fetchCities(c.id);
+                    else setCities([]);
+                  }}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select Country" /></SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {countries.map(c => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label>State</Label>
@@ -571,7 +607,18 @@ export default function AgentsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>City / Location</Label>
-                  <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="rounded-xl" />
+                  {cities.length > 0 ? (
+                    <Select value={form.city} onValueChange={v => setForm(f => ({ ...f, city: v }))}>
+                      <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select City" /></SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {cities.map(c => (
+                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="rounded-xl" placeholder={form.country ? "No cities found, type manually" : "Select country first"} />
+                  )}
                 </div>
               </div>
 
@@ -658,7 +705,7 @@ export default function AgentsPage() {
 
                   {/* ID Proof */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Agent ID Proof</Label>
+                    <Label className="text-xs">Contract</Label>
                     <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                       {form.agentIdProofUrl ? (
                         <>
