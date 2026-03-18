@@ -1190,7 +1190,7 @@ function ProgramsTab() {
                 <Select value={form?.degree ?? ""} onValueChange={v => setForm(f => ({ ...f, degree: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Seçin" /></SelectTrigger>
                   <SelectContent>
-                    {["Certificate", "Associate", "BSc", "BA", "BEng", "MSc", "MA", "MEng", "MBA", "PhD", "Other"].map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    {["Bachelor", "Master", "Ph.D", "Associate", "Language Course", "Foundation", "Pathway Programs"].map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

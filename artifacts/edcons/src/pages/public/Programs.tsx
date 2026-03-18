@@ -9,7 +9,7 @@ import { Search, MapPin, BookOpen, Star, GraduationCap, Globe2, Clock, DollarSig
 import { motion } from "framer-motion";
 
 const countries = ["All", "UK", "USA", "Canada", "Australia", "Germany", "Netherlands", "Turkey"];
-const levels = ["All", "Bachelor", "Master", "PhD", "Language", "Foundation"];
+const levels = ["All", "Bachelor", "Master", "Ph.D", "Associate", "Language Course", "Foundation", "Pathway Programs"];
 
 export default function Programs() {
   useSeo({ title: "Programs", description: "Browse programs at 200+ partner universities worldwide." });

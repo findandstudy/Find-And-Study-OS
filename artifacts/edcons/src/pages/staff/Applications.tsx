@@ -59,14 +59,13 @@ function getStageColor(stage: PipelineStage, index: number): string {
 }
 
 const STUDY_LEVELS = [
-  { value: "foundation", label: "Foundation" },
-  { value: "diploma", label: "Diploma" },
-  { value: "undergraduate", label: "Undergraduate" },
-  { value: "masters", label: "Masters" },
-  { value: "mba", label: "MBA" },
-  { value: "doctorate", label: "Doctorate" },
-  { value: "certificate", label: "Certificate" },
-  { value: "language_school", label: "Language School" },
+  { value: "Bachelor", label: "Bachelor" },
+  { value: "Master", label: "Master" },
+  { value: "Ph.D", label: "Ph.D" },
+  { value: "Associate", label: "Associate" },
+  { value: "Language Course", label: "Language Course" },
+  { value: "Foundation", label: "Foundation" },
+  { value: "Pathway Programs", label: "Pathway Programs" },
 ];
 
 const INSTRUCTION_LANGUAGES = [
