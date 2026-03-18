@@ -1,7 +1,21 @@
 import app from "./app";
-import { db, usersTable } from "@workspace/db";
+import { db, pool, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+function getSeedDir(): string {
+  try {
+    if (typeof __dirname !== "undefined") return __dirname;
+  } catch {}
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {}
+  return process.cwd();
+}
+const seedDir = getSeedDir();
 
 async function ensureSuperAdmin() {
   try {
@@ -26,6 +40,69 @@ async function ensureSuperAdmin() {
   }
 }
 
+async function ensureAgentUser() {
+  try {
+    const email = "omar@agent.com";
+    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (!existing) {
+      const hash = await bcrypt.hash("findandstudy123", 10);
+      await db.insert(usersTable).values({
+        replitId: "local-agent",
+        email,
+        firstName: "Omar",
+        lastName: "Hassan",
+        role: "agent",
+        passwordHash: hash,
+        isActive: true,
+        language: "en",
+      });
+      console.log("[seed] Agent user created");
+    }
+  } catch (err) {
+    console.error("[seed] ensureAgentUser error:", err);
+  }
+}
+
+async function runSeedSQL() {
+  try {
+    const seedPath = path.join(seedDir, "seed.sql");
+    if (!fs.existsSync(seedPath)) {
+      console.log("[seed] No seed.sql found, skipping");
+      return;
+    }
+    const sql = fs.readFileSync(seedPath, "utf8");
+    const statements = sql.split(";").map(s => s.trim()).filter(s => s.length > 0 && !s.startsWith("--"));
+    let inserted = 0;
+    for (const stmt of statements) {
+      try {
+        const res = await pool.query(stmt);
+        if (res.rowCount && res.rowCount > 0) inserted++;
+      } catch (err: any) {
+        if (!err.message?.includes("duplicate") && !err.message?.includes("already exists")) {
+          console.error("[seed] SQL error:", err.message, "stmt:", stmt.substring(0, 80));
+        }
+      }
+    }
+    if (inserted > 0) console.log(`[seed] Inserted ${inserted} records from seed.sql`);
+  } catch (err) {
+    console.error("[seed] runSeedSQL error:", err);
+  }
+}
+
+async function linkAgentUser() {
+  try {
+    const [agentUser] = await db.select().from(usersTable).where(eq(usersTable.email, "omar@agent.com"));
+    if (agentUser) {
+      await pool.query(
+        `UPDATE agents SET user_id = $1 WHERE email = 'omar@agent.com' AND (user_id IS NULL OR user_id != $1)`,
+        [agentUser.id]
+      );
+    }
+  } catch (err) {
+    console.error("[seed] linkAgentUser error:", err);
+  }
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -40,8 +117,12 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-ensureSuperAdmin().then(() => {
+(async () => {
+  await ensureSuperAdmin();
+  await ensureAgentUser();
+  await runSeedSQL();
+  await linkAgentUser();
   app.listen(port, () => {
     console.log(`Server listening on port ${port}`);
   });
-});
+})();
