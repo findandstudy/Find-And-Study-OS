@@ -1,17 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useListLeads, useUpdateLead, useCreateLead } from "@workspace/api-client-react";
+import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Filter, ExternalLink, TrendingUp, Settings2, X, ChevronDown, GripVertical, Check, Trophy, XCircle } from "lucide-react";
+import {
+  Plus, Search, Filter, ExternalLink, TrendingUp, Settings2, X,
+  ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
+  ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil, ChevronLeft, ChevronRight,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import {
   DndContext,
   DragOverlay,
@@ -54,6 +62,7 @@ const DEFAULT_COLUMNS: ColDef[] = [
 ];
 
 const LS_KEY = "edcons_pipeline_labels";
+const VIEW_KEY = "edcons_leads_view";
 
 function loadLabels(): Record<string, string> {
   try {
@@ -72,6 +81,21 @@ function formatCurrency(value: number | string | null | undefined): string {
   if (!num || isNaN(num)) return "";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
 }
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+const statusColors: Record<string, string> = {
+  new: "bg-blue-100 text-blue-700 border-blue-200",
+  contacted: "bg-amber-100 text-amber-700 border-amber-200",
+  interested: "bg-purple-100 text-purple-700 border-purple-200",
+  qualified: "bg-cyan-100 text-cyan-700 border-cyan-200",
+  converted: "bg-indigo-100 text-indigo-700 border-indigo-200",
+  won: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  lost: "bg-rose-100 text-rose-700 border-rose-200",
+};
 
 /* ── LeadCard ──────────────────────────────────────────────── */
 function LeadCard({ lead, onView, showRevenue, variant }: {
@@ -326,6 +350,181 @@ function FilterPopover({ filters, onChange }: {
   );
 }
 
+/* ── EditLeadDialog ───────────────────────────────────────── */
+function EditLeadDialog({ open, onClose, lead, canSeeRevenue }: {
+  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean;
+}) {
+  const [form, setForm] = useState({ ...EMPTY_FORM, status: "new" });
+  const updateLead = useUpdateLead();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open && lead) {
+      setForm({
+        firstName: lead.firstName || "",
+        lastName: lead.lastName || "",
+        email: lead.email || "",
+        phone: lead.phone || "",
+        source: lead.source || "website",
+        interestedProgram: lead.interestedProgram || "",
+        interestedCountry: lead.interestedCountry || "",
+        nationality: lead.nationality || "",
+        estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
+        status: lead.status || "new",
+      });
+    }
+  }, [open, lead]);
+
+  function handleSave() {
+    if (!lead || !form.firstName || !form.lastName) return;
+    const payload: any = { ...form };
+    const parsedVal = parseFloat(form.estimatedValue);
+    if (form.estimatedValue && !isNaN(parsedVal)) payload.estimatedValue = parsedVal;
+    else delete payload.estimatedValue;
+
+    updateLead.mutate(
+      { id: lead.id, data: payload },
+      {
+        onSuccess: () => {
+          toast({ title: "Lead updated" });
+          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          onClose();
+        },
+        onError: () => {
+          toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+        },
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-1.5">
+            <Label>First Name *</Label>
+            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Last Name *</Label>
+            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email</Label>
+            <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Phone</Label>
+            <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nationality</Label>
+            <Input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Source</Label>
+            <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SOURCES.map(s => (
+                  <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DEFAULT_COLUMNS.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Interested Program</Label>
+            <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>Interested Country</Label>
+            <Input value={form.interestedCountry} onChange={e => setForm({ ...form, interestedCountry: e.target.value })} />
+          </div>
+          {canSeeRevenue && (
+            <div className="space-y-1.5 col-span-2">
+              <Label className="flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                Estimated Value (USD)
+              </Label>
+              <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
+            {updateLead.isPending ? "Saving…" : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── DeleteConfirmDialog ─────────────────────────────────── */
+function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
+  open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete {count} Lead{count > 1 ? "s" : ""}?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">
+          This action cannot be undone. The selected lead{count > 1 ? "s" : ""} and all associated data will be permanently removed.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
+            {isPending ? "Deleting…" : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── SortHeader ──────────────────────────────────────────── */
+type SortKey = "name" | "email" | "status" | "source" | "program" | "country" | "value" | "date";
+type SortDir = "asc" | "desc";
+
+function SortHeader({ label, sortKey, currentSort, onSort }: {
+  label: string; sortKey: SortKey;
+  currentSort: { key: SortKey; dir: SortDir };
+  onSort: (key: SortKey) => void;
+}) {
+  const active = currentSort.key === sortKey;
+  return (
+    <TableHead
+      className="cursor-pointer select-none hover:bg-muted/50 transition-colors"
+      onClick={() => onSort(sortKey)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {active ? (
+          currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />
+        )}
+      </div>
+    </TableHead>
+  );
+}
+
 /* ── EMPTY_FORM ───────────────────────────────────────────── */
 const EMPTY_FORM = {
   firstName: "",
@@ -337,6 +536,7 @@ const EMPTY_FORM = {
   interestedCountry: "",
   nationality: "",
   estimatedValue: "",
+  status: "new",
 };
 
 /* ── LeadsPage ────────────────────────────────────────────── */
@@ -350,6 +550,18 @@ export default function LeadsPage() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [filters, setFilters] = useState({ source: "all", status: "all" });
   const [customLabels, setCustomLabels] = useState<Record<string, string>>(loadLabels);
+  const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
+    return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
+  });
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
+  const [editLead, setEditLead] = useState<any>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+
+  const [listPage, setListPage] = useState(1);
+  const LIST_PAGE_SIZE = 50;
 
   const { user } = useAuth(true, [
     "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
@@ -360,6 +572,7 @@ export default function LeadsPage() {
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
   const updateLead = useUpdateLead();
   const createLead = useCreateLead();
+  const deleteLead = useDeleteLead();
   const queryClient = useQueryClient();
 
   const sensors = useSensors(
@@ -382,7 +595,97 @@ export default function LeadsPage() {
     return true;
   });
 
+  const sortedLeads = useMemo(() => {
+    const arr = [...filteredLeads];
+    arr.sort((a: any, b: any) => {
+      let valA: any, valB: any;
+      switch (sort.key) {
+        case "name": valA = `${a.firstName} ${a.lastName}`.toLowerCase(); valB = `${b.firstName} ${b.lastName}`.toLowerCase(); break;
+        case "email": valA = (a.email || "").toLowerCase(); valB = (b.email || "").toLowerCase(); break;
+        case "status": valA = a.status || ""; valB = b.status || ""; break;
+        case "source": valA = a.source || ""; valB = b.source || ""; break;
+        case "program": valA = (a.interestedProgram || "").toLowerCase(); valB = (b.interestedProgram || "").toLowerCase(); break;
+        case "country": valA = (a.interestedCountry || "").toLowerCase(); valB = (b.interestedCountry || "").toLowerCase(); break;
+        case "value": valA = parseFloat(a.estimatedValue) || 0; valB = parseFloat(b.estimatedValue) || 0; break;
+        case "date": valA = a.createdAt || ""; valB = b.createdAt || ""; break;
+        default: return 0;
+      }
+      if (valA < valB) return sort.dir === "asc" ? -1 : 1;
+      if (valA > valB) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [filteredLeads, sort]);
+
+  const totalListPages = Math.max(1, Math.ceil(sortedLeads.length / LIST_PAGE_SIZE));
+  const pagedLeads = sortedLeads.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE);
+
+  useEffect(() => { setListPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
+
+  useEffect(() => {
+    if (listPage > totalListPages) setListPage(Math.max(1, totalListPages));
+  }, [totalListPages, listPage]);
+
   const activeCard = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
+
+  function toggleView(mode: "pipeline" | "list") {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_KEY, mode);
+    setSelectedIds(new Set());
+  }
+
+  function handleSort(key: SortKey) {
+    setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  const pagedIds = useMemo(() => new Set(pagedLeads.map((l: any) => l.id)), [pagedLeads]);
+  const allPageSelected = pagedLeads.length > 0 && pagedLeads.every((l: any) => selectedIds.has(l.id));
+
+  function toggleSelectAll() {
+    if (allPageSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pagedIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pagedIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }
+
+  async function handleBulkDelete() {
+    setDeleteInProgress(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await deleteLead.mutateAsync({ id });
+      } catch {
+        failed++;
+      }
+    }
+    setDeleteInProgress(false);
+    setDeleteOpen(false);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+    if (failed === 0) {
+      toast({ title: `${ids.length} lead${ids.length > 1 ? "s" : ""} deleted` });
+    } else {
+      toast({ title: "Some leads could not be deleted", variant: "destructive" });
+    }
+  }
 
   const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
 
@@ -431,8 +734,10 @@ export default function LeadsPage() {
   function handleCreate() {
     if (!form.firstName || !form.lastName) return;
     const payload: any = { ...form, status: "new", season };
-    if (form.estimatedValue) payload.estimatedValue = parseFloat(form.estimatedValue);
+    const parsedCreate = parseFloat(form.estimatedValue);
+    if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
     else delete payload.estimatedValue;
+    delete payload.status;
 
     createLead.mutate(
       { data: payload },
@@ -457,15 +762,17 @@ export default function LeadsPage() {
               <h1 className="text-3xl font-display font-bold text-foreground">Lead Pipeline</h1>
               <p className="text-muted-foreground text-sm mt-1">Manage and convert prospective students.</p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground mt-0.5"
-              title="Pipeline aşamalarını düzenle"
-              onClick={() => setEditStagesOpen(true)}
-            >
-              <Settings2 className="w-4 h-4" />
-            </Button>
+            {viewMode === "pipeline" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground mt-0.5"
+                title="Pipeline aşamalarını düzenle"
+                onClick={() => setEditStagesOpen(true)}
+              >
+                <Settings2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <div className="relative w-64">
@@ -478,6 +785,31 @@ export default function LeadsPage() {
               />
             </div>
             <FilterPopover filters={filters} onChange={setFilters} />
+
+            <div className="flex items-center border rounded-full overflow-hidden">
+              <button
+                onClick={() => toggleView("pipeline")}
+                className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                title="Pipeline view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => toggleView("list")}
+                className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                title="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+
+            {selectedIds.size > 0 && (
+              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete ({selectedIds.size})
+              </Button>
+            )}
+
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Lead
             </Button>
@@ -485,57 +817,197 @@ export default function LeadsPage() {
         </div>
 
         {/* ── Pipeline board ─────────────────────────────────── */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
-          <div className="flex gap-5 h-full min-w-max px-1">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCorners}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              {columns.map((col) => {
-                const columnLeads = filteredLeads.filter((l: any) => l.status === col.id);
-                return (
-                  <DroppableColumn
-                    key={col.id}
-                    col={col}
-                    leads={columnLeads}
-                    showRevenue={canSeeRevenue}
-                    onView={(id) => setLocation(`/staff/leads/${id}`)}
-                  />
-                );
-              })}
+        {viewMode === "pipeline" && (
+          <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+            <div className="flex gap-5 h-full min-w-max px-1">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                {columns.map((col) => {
+                  const columnLeads = filteredLeads.filter((l: any) => l.status === col.id);
+                  return (
+                    <DroppableColumn
+                      key={col.id}
+                      col={col}
+                      leads={columnLeads}
+                      showRevenue={canSeeRevenue}
+                      onView={(id) => setLocation(`/staff/leads/${id}`)}
+                    />
+                  );
+                })}
 
-              <DragOverlay>
-                {activeCard ? (
-                  <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-sm text-foreground">
-                        {activeCard.firstName} {activeCard.lastName}
-                      </h4>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {activeCard.email || activeCard.phone || "No contact info"}
-                    </p>
-                    {activeCard.interestedProgram && (
-                      <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">
-                        {activeCard.interestedProgram}
-                      </p>
-                    )}
-                    {canSeeRevenue && activeCard.estimatedValue && parseFloat(activeCard.estimatedValue) > 0 && (
-                      <div className="mt-2 flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3 text-emerald-500" />
-                        <span className="text-xs font-semibold text-emerald-600">
-                          {formatCurrency(activeCard.estimatedValue)}
-                        </span>
+                <DragOverlay>
+                  {activeCard ? (
+                    <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-bold text-sm text-foreground">
+                          {activeCard.firstName} {activeCard.lastName}
+                        </h4>
                       </div>
-                    )}
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {activeCard.email || activeCard.phone || "No contact info"}
+                      </p>
+                      {activeCard.interestedProgram && (
+                        <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">
+                          {activeCard.interestedProgram}
+                        </p>
+                      )}
+                      {canSeeRevenue && activeCard.estimatedValue && parseFloat(activeCard.estimatedValue) > 0 && (
+                        <div className="mt-2 flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3 text-emerald-500" />
+                          <span className="text-xs font-semibold text-emerald-600">
+                            {formatCurrency(activeCard.estimatedValue)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ── List view ──────────────────────────────────────── */}
+        {viewMode === "list" && (
+          <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-2xl border">
+            <div className="flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allPageSelected}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <SortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Source" sortKey="source" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
+                    {canSeeRevenue && (
+                      <SortHeader label="Value" sortKey="value" currentSort={sort} onSort={handleSort} />
+                    )}
+                    <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <TableHead className="w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : pagedLeads.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground">
+                        No leads found
+                      </TableCell>
+                    </TableRow>
+                  ) : pagedLeads.map((lead: any) => (
+                    <TableRow
+                      key={lead.id}
+                      className={`cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(lead.id) ? "bg-primary/5" : ""}`}
+                    >
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(lead.id)}
+                          onCheckedChange={() => toggleSelect(lead.id)}
+                        />
+                      </TableCell>
+                      <TableCell
+                        className="font-medium"
+                        onClick={() => setLocation(`/staff/leads/${lead.id}`)}
+                      >
+                        {lead.firstName} {lead.lastName}
+                      </TableCell>
+                      <TableCell
+                        className="text-muted-foreground"
+                        onClick={() => setLocation(`/staff/leads/${lead.id}`)}
+                      >
+                        {lead.email || "-"}
+                      </TableCell>
+                      <TableCell onClick={() => setLocation(`/staff/leads/${lead.id}`)}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusColors[lead.status] || "bg-gray-100 text-gray-700"}`}>
+                          {lead.status}
+                        </span>
+                      </TableCell>
+                      <TableCell
+                        className="text-muted-foreground capitalize"
+                        onClick={() => setLocation(`/staff/leads/${lead.id}`)}
+                      >
+                        {lead.source?.replace(/_/g, " ") || "-"}
+                      </TableCell>
+                      <TableCell
+                        className="max-w-[150px] truncate"
+                        onClick={() => setLocation(`/staff/leads/${lead.id}`)}
+                      >
+                        {lead.interestedProgram || "-"}
+                      </TableCell>
+                      <TableCell onClick={() => setLocation(`/staff/leads/${lead.id}`)}>
+                        {lead.interestedCountry || "-"}
+                      </TableCell>
+                      {canSeeRevenue && (
+                        <TableCell onClick={() => setLocation(`/staff/leads/${lead.id}`)}>
+                          {lead.estimatedValue ? (
+                            <span className="text-emerald-600 font-medium">{formatCurrency(lead.estimatedValue)}</span>
+                          ) : "-"}
+                        </TableCell>
+                      )}
+                      <TableCell
+                        className="text-muted-foreground text-xs"
+                        onClick={() => setLocation(`/staff/leads/${lead.id}`)}
+                      >
+                        {formatDate(lead.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setEditLead(lead)}
+                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Edit lead"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); }}
+                            className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete lead"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {totalListPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
+                <p className="text-sm text-muted-foreground">
+                  Showing {(listPage - 1) * LIST_PAGE_SIZE + 1}–{Math.min(listPage * LIST_PAGE_SIZE, sortedLeads.length)} of {sortedLeads.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm font-medium">{listPage} / {totalListPages}</span>
+                  <Button variant="outline" size="sm" disabled={listPage >= totalListPages} onClick={() => setListPage(p => p + 1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Edit Stages Dialog ─────────────────────────────── */}
@@ -544,6 +1016,23 @@ export default function LeadsPage() {
         onClose={() => setEditStagesOpen(false)}
         columns={DEFAULT_COLUMNS}
         onSave={handleSaveLabels}
+      />
+
+      {/* ── Edit Lead Dialog ───────────────────────────────── */}
+      <EditLeadDialog
+        open={!!editLead}
+        onClose={() => setEditLead(null)}
+        lead={editLead}
+        canSeeRevenue={canSeeRevenue}
+      />
+
+      {/* ── Delete Confirm Dialog ──────────────────────────── */}
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onClose={() => { setDeleteOpen(false); }}
+        count={selectedIds.size}
+        onConfirm={handleBulkDelete}
+        isPending={deleteInProgress}
       />
 
       {/* ── Create Lead Dialog ─────────────────────────────── */}
