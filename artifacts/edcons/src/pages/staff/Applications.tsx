@@ -510,14 +510,14 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             <Label className="flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
               Tuition Fee (USD)
-              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">İndirimli</span>}
+              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
             </Label>
             <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
             {selectedProgForFee && (selectedProgForFee.tuitionFee != null || selectedProgForFee.discountedFee != null || selectedProgForFee.commissionRate != null) && (
               <div className="flex flex-wrap gap-3 text-xs mt-1">
-                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standart: <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
-                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">İndirimli: <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
-                {selectedProgForFee.commissionRate != null && <span className="text-indigo-600">Komisyon: <strong>{selectedProgForFee.commissionRate}%</strong></span>}
+                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{selectedProgForFee.commissionRate}%</strong></span>}
               </div>
             )}
           </div>
@@ -731,14 +731,14 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                 Tuition Fee (USD)
-                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">İndirimli</span>}
+                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
               </Label>
               <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" className="rounded-xl" />
               {addSelProgForFee && (addSelProgForFee.tuitionFee != null || addSelProgForFee.discountedFee != null || addSelProgForFee.commissionRate != null) && (
                 <div className="flex flex-wrap gap-3 text-xs">
-                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standart: <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
-                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">İndirimli: <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
-                  {addSelProgForFee.commissionRate != null && <span className="text-indigo-600">Komisyon: <strong>{addSelProgForFee.commissionRate}%</strong></span>}
+                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{addSelProgForFee.commissionRate}%</strong></span>}
                 </div>
               )}
             </div>

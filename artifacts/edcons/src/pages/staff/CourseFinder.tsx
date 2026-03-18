@@ -1340,10 +1340,10 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
       });
       setSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["applications"] });
-      toast({ title: "Başvuru oluşturuldu", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}` });
+      toast({ title: "Application created", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}` });
       setTimeout(() => handleClose(), 1500);
     } catch (err: any) {
-      toast({ title: "Hata", description: err.message || "Başvuru oluşturulamadı", variant: "destructive" });
+      toast({ title: "Error", description: err.message || "Failed to create application", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -1359,7 +1359,7 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
     <Dialog open={!!p} onOpenChange={o => !o && handleClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-lg">Başvuru Oluştur</DialogTitle>
+          <DialogTitle className="text-lg">Create Application</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -1367,9 +1367,9 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
               <Check className="w-8 h-8 text-emerald-600" />
             </div>
-            <p className="text-lg font-semibold text-emerald-700">Başvuru Oluşturuldu!</p>
+            <p className="text-lg font-semibold text-emerald-700">Application Created!</p>
             <p className="text-sm text-muted-foreground text-center">
-              Başvuru, komisyon ve hizmet bedeli kayıtları otomatik olarak oluşturuldu.
+              Application, commission and service fee records have been created automatically.
             </p>
           </div>
         ) : (
@@ -1385,23 +1385,23 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
                   <Badge variant="outline" className="text-xs">{p.feeType}</Badge>
                 )}
                 {p.scholarship != null && p.scholarship > 0 && (
-                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0">Burs: {formatCurrency(p.scholarship, cur)}</Badge>
+                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0">Scholarship: {formatCurrency(p.scholarship, cur)}</Badge>
                 )}
                 {commissionAmount != null && (
-                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0">Komisyon: {formatCurrency(commissionAmount, cur)}</Badge>
+                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
                 )}
                 {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0">H. Bedeli: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
+                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0">Service Fee: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
                 )}
               </div>
             </div>
 
             <div>
-              <Label className="text-sm font-medium mb-2 block">Öğrenci Seç</Label>
+              <Label className="text-sm font-medium mb-2 block">Select Student</Label>
               <div className="relative mb-3">
                 <UserSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="İsim, e-posta veya telefon ile ara..."
+                  placeholder="Search by name, email or phone..."
                   value={searchTerm}
                   onChange={e => { setSearchTerm(e.target.value); setSelectedStudent(null); }}
                   className="pl-10 rounded-lg"
@@ -1409,19 +1409,19 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
               </div>
 
               {!debouncedSearch && recentStudents.length > 0 && (
-                <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">Son Eklenen Öğrenciler</p>
+                <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">Recent Students</p>
               )}
 
               <div className="space-y-1.5 max-h-52 overflow-y-auto">
                 {isSearching ? (
                   <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm">Aranıyor...</span>
+                    <span className="text-sm">Searching...</span>
                   </div>
                 ) : studentsToShow.length === 0 ? (
                   <div className="text-center py-6 text-muted-foreground">
                     <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">{debouncedSearch.length >= 2 ? "Öğrenci bulunamadı" : "Henüz öğrenci yok"}</p>
+                    <p className="text-sm">{debouncedSearch.length >= 2 ? "No students found" : "No students yet"}</p>
                   </div>
                 ) : (
                   studentsToShow.map(s => {
@@ -1459,10 +1459,10 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
             </div>
 
             <div>
-              <Label className="text-sm font-medium mb-1.5 block">Not (Opsiyonel)</Label>
+              <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
               <Textarea
                 rows={2}
-                placeholder="Başvuru ile ilgili not ekleyebilirsiniz..."
+                placeholder="Add a note about this application..."
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 className="resize-none rounded-lg"
@@ -1470,14 +1470,14 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
             </div>
 
             <div className="bg-blue-50 rounded-xl p-3 space-y-1">
-              <p className="text-xs font-semibold text-blue-700">Başvuru ile otomatik oluşturulacaklar:</p>
+              <p className="text-xs font-semibold text-blue-700">The following will be created automatically:</p>
               <ul className="text-xs text-blue-600 space-y-0.5">
-                <li>• Başvuru kaydı (Applications → inquiry aşaması)</li>
+                <li>• Application record (Applications → inquiry stage)</li>
                 {commissionAmount != null && commissionAmount > 0 && (
-                  <li>• Komisyon kaydı ({formatCurrency(commissionAmount, cur)} — potansiyel)</li>
+                  <li>• Commission record ({formatCurrency(commissionAmount, cur)} — potential)</li>
                 )}
                 {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                  <li>• Hizmet bedeli ({formatCurrency(p.serviceFeeAmount, cur)} — 2 taksit)</li>
+                  <li>• Service fee ({formatCurrency(p.serviceFeeAmount, cur)} — 2 installments)</li>
                 )}
               </ul>
             </div>
@@ -1488,9 +1488,9 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
               className="w-full rounded-xl h-11"
             >
               {submitting ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Oluşturuluyor...</>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
               ) : (
-                <><Send className="w-4 h-4 mr-2" /> Başvuru Oluştur</>
+                <><Send className="w-4 h-4 mr-2" /> Create Application</>
               )}
             </Button>
           </div>

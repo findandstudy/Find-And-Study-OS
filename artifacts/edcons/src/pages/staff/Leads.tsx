@@ -281,11 +281,11 @@ function FilterPopover({ filters, onChange, columns }: {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Kaynak</Label>
+          <Label className="text-xs">Source</Label>
           <Select value={filters.source} onValueChange={v => onChange({ ...filters, source: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               {SOURCES.map(s => (
                 <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
               ))}
@@ -294,11 +294,11 @@ function FilterPopover({ filters, onChange, columns }: {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Aşama</Label>
+          <Label className="text-xs">Stage</Label>
           <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               {columns.map(c => (
                 <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
               ))}
@@ -737,10 +737,10 @@ export default function LeadsPage() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           const colLabel = columns.find(c => c.id === targetStatus)?.title ?? targetStatus;
-          toast({ title: `Lead taşındı → ${colLabel}` });
+          toast({ title: `Lead moved to ${colLabel}` });
         },
         onError: () => {
-          toast({ title: "Hata", description: "Lead taşınamadı", variant: "destructive" });
+          toast({ title: "Error", description: "Failed to move lead", variant: "destructive" });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         },
       }
@@ -763,7 +763,7 @@ export default function LeadsPage() {
       { data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Lead oluşturuldu" });
+          toast({ title: "Lead created" });
           setCreateOpen(false);
           setForm(EMPTY_FORM);
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
@@ -787,7 +787,7 @@ export default function LeadsPage() {
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground mt-0.5"
-                title="Pipeline aşamalarını düzenle"
+                title="Edit pipeline stages"
                 onClick={() => setEditStagesOpen(true)}
               >
                 <Settings2 className="w-4 h-4" />
