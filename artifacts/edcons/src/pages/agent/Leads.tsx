@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { CountryFlag } from "@/components/CountryFlag";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -380,11 +381,13 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
 
   useEffect(() => {
     if (open && lead) {
+      const parsed = parsePhoneCode(lead.phone || "");
       setForm({
         firstName: lead.firstName || "",
         lastName: lead.lastName || "",
         email: lead.email || "",
-        phone: lead.phone || "",
+        phoneCode: parsed.phoneCode,
+        phone: parsed.phone,
         source: lead.source || "website",
         interestedProgram: lead.interestedProgram || "",
         interestedCountry: lead.interestedCountry || "",
@@ -397,7 +400,8 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
 
   function handleSave() {
     if (!lead || !form.firstName || !form.lastName) return;
-    const payload: any = { ...form };
+    const { phoneCode, ...rest } = form;
+    const payload: any = { ...rest, phone: form.phone ? `${phoneCode}${form.phone}` : "" };
     const parsedVal = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedVal)) payload.estimatedValue = parsedVal;
     else delete payload.estimatedValue;
@@ -434,9 +438,21 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
             <Label>Email</Label>
             <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 col-span-2">
             <Label>Phone</Label>
-            <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+            <div className="flex gap-2">
+              <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
+                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PHONE_CODES.map(pc => (
+                    <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                      <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input className="flex-1" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Nationality</Label>
@@ -544,11 +560,72 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
   );
 }
 
+/* ── PHONE CODES ─────────────────────────────────────────── */
+const PHONE_CODES = [
+  { code: "+90", country: "TR" },
+  { code: "+1", country: "US" },
+  { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" },
+  { code: "+33", country: "FR" },
+  { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" },
+  { code: "+31", country: "NL" },
+  { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" },
+  { code: "+45", country: "DK" },
+  { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" },
+  { code: "+48", country: "PL" },
+  { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" },
+  { code: "+86", country: "CN" },
+  { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" },
+  { code: "+91", country: "IN" },
+  { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" },
+  { code: "+966", country: "SA" },
+  { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" },
+  { code: "+98", country: "IR" },
+  { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" },
+  { code: "+20", country: "EG" },
+  { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" },
+  { code: "+254", country: "KE" },
+  { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" },
+  { code: "+61", country: "AU" },
+  { code: "+64", country: "NZ" },
+  { code: "+60", country: "MY" },
+  { code: "+65", country: "SG" },
+  { code: "+66", country: "TH" },
+  { code: "+84", country: "VN" },
+  { code: "+62", country: "ID" },
+  { code: "+63", country: "PH" },
+  { code: "+880", country: "BD" },
+  { code: "+94", country: "LK" },
+  { code: "+977", country: "NP" },
+  { code: "+251", country: "ET" },
+  { code: "+255", country: "TZ" },
+  { code: "+233", country: "GH" },
+];
+
+function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
+  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
+  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length).trim() };
+  return { phoneCode: "+90", phone: fullPhone.replace(/^\+/, "").trim() };
+}
+
 /* ── EMPTY_FORM ───────────────────────────────────────────── */
 const EMPTY_FORM = {
   firstName: "",
   lastName: "",
   email: "",
+  phoneCode: "+90",
   phone: "",
   source: "website",
   interestedProgram: "",
@@ -739,7 +816,8 @@ export default function AgentLeadsPage() {
   function handleCreate() {
     if (!form.firstName || !form.lastName) return;
     const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
-    const payload: any = { ...form, status: defaultStatus, season };
+    const { phoneCode, ...formRest } = form;
+    const payload: any = { ...formRest, phone: form.phone ? `${phoneCode}${form.phone}` : "", status: defaultStatus, season };
     const parsedCreate = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
     else delete payload.estimatedValue;
@@ -1032,9 +1110,21 @@ export default function AgentLeadsPage() {
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 col-span-2">
               <Label>Phone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+1 555 000 0000" />
+              <div className="flex gap-2">
+                <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
+                  <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PHONE_CODES.map(pc => (
+                      <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                        <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input className="flex-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Nationality</Label>
