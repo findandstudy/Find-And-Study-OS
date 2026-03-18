@@ -1,4 +1,4 @@
-export const ADMIN_ROLES = ["super_admin", "admin"] as const;
+export const ADMIN_ROLES = ["super_admin", "admin", "manager"] as const;
 export const MANAGER_ROLES = ["super_admin", "admin", "manager"] as const;
 export const STAFF_ROLES = [
   "super_admin", "admin", "manager",

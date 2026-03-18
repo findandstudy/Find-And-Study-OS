@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
 import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail, Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon } from "lucide-react";
+import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -254,29 +255,7 @@ export default function SettingsPage() {
 
           {/* ── Notifications ── */}
           <TabsContent value="notifications" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Notification Preferences</h2>
-              <div className="space-y-4">
-                {[
-                  { key: "newLeads",            label: "New Leads",            desc: "Notify when a new lead is created or assigned" },
-                  { key: "applicationUpdates",   label: "Application Updates",  desc: "Notify when application stage changes" },
-                  { key: "documentAlerts",       label: "Document Alerts",      desc: "Notify when documents are uploaded or need review" },
-                  { key: "financeAlerts",        label: "Finance Alerts",       desc: "Notify for new invoices and overdue payments" },
-                ].map(n => (
-                  <div key={n.key} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/30 transition-colors">
-                    <div>
-                      <p className="font-semibold text-foreground">{n.label}</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">{n.desc}</p>
-                    </div>
-                    <button
-                      onClick={() => setNotifications(prev => ({ ...prev, [n.key]: !prev[n.key as keyof typeof prev] }))}
-                      className={`relative w-12 h-6 rounded-full transition-all ${notifications[n.key as keyof typeof notifications] ? "bg-primary" : "bg-secondary border-2 border-border"}`}>
-                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${notifications[n.key as keyof typeof notifications] ? "translate-x-6" : ""}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
           </TabsContent>
 
           {/* ── Security ── */}

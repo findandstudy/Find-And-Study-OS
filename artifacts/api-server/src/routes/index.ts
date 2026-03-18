@@ -19,6 +19,8 @@ import pipelineRouter from "./pipeline";
 import courseFinderRouter from "./course-finder";
 import storageRouter from "./storage";
 import rolesRouter from "./roles";
+import messagesRouter from "./messages";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -42,5 +44,7 @@ router.use(aiExtractRouter);
 router.use(pipelineRouter);
 router.use(courseFinderRouter);
 router.use(rolesRouter);
+router.use(messagesRouter);
+router.use(notificationsRouter);
 
 export default router;

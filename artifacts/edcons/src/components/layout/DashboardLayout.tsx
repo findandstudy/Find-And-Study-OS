@@ -39,9 +39,11 @@ import {
   Sun,
   Moon,
   Handshake,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string };
 
@@ -65,6 +67,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
             { title: "Agents", icon: Handshake, url: '/staff/agents' },
             { title: "Finance", icon: DollarSign, url: '/staff/finance' },
+            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
           ]
         },
         {
@@ -99,6 +102,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
             { title: "Agents", icon: Handshake, url: '/staff/agents' },
             { title: "Finance", icon: Briefcase, url: '/staff/finance' },
+            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
           ]
         },
         {
@@ -313,6 +317,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   </Select>
                 </div>
               )}
+              <NotificationCenter />
               <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg"
                 onClick={() => setMode(resolvedTheme === "dark" ? "light" : "dark")}
                 title={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
