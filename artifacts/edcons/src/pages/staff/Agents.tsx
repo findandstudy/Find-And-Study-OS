@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users, Plus, Search, Edit, Trash2, X, Loader2, Save,
   Building2, Mail, Phone, MapPin, Upload, Eye, EyeOff,
   ChevronLeft, ChevronRight, UserPlus, Network,
+  MoreHorizontal, KeyRound, LogIn, Power, ShieldCheck, ShieldOff,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -146,6 +149,11 @@ export default function AgentsPage() {
   const [parentAgents, setParentAgents] = useState<Agent[]>([]);
   const [countries, setCountries] = useState<{ id: number; name: string; code: string }[]>([]);
   const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [subSelectedIds, setSubSelectedIds] = useState<Set<number>>(new Set());
+  const [passwordDialog, setPasswordDialog] = useState<{ agentId: number; agentName: string } | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   async function fetchCountries() {
     try {
@@ -331,10 +339,98 @@ export default function AgentsPage() {
     try {
       await customFetch(`/api/agents/${id}`, { method: "DELETE" });
       toast({ title: "Agent deleted" });
+      setSelectedIds(s => { const n = new Set(s); n.delete(id); return n; });
+      setSubSelectedIds(s => { const n = new Set(s); n.delete(id); return n; });
       fetchAgents();
       fetchSubAgents();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleBulkDelete(ids: Set<number>) {
+    if (ids.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${ids.size} agent(s)?`)) return;
+    try {
+      await customFetch(`/api/agents/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(ids) }),
+      });
+      toast({ title: `${ids.size} agent(s) deleted` });
+      setSelectedIds(new Set());
+      setSubSelectedIds(new Set());
+      fetchAgents();
+      fetchSubAgents();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleToggleStatus(agent: Agent) {
+    const newStatus = agent.status === "active" ? "inactive" : "active";
+    try {
+      await customFetch(`/api/agents/${agent.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      toast({ title: `Agent ${newStatus === "active" ? "activated" : "deactivated"}` });
+      fetchAgents();
+      fetchSubAgents();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleSetPassword() {
+    if (!passwordDialog) return;
+    setPasswordSaving(true);
+    try {
+      await customFetch(`/api/agents/${passwordDialog.agentId}/set-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      toast({ title: "Password updated" });
+      setPasswordDialog(null);
+      setNewPassword("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  async function handleImpersonate(agent: Agent) {
+    if (!confirm(`Login as ${agent.firstName} ${agent.lastName}? You will be logged out of your current session.`)) return;
+    try {
+      const res = await customFetch(`/api/agents/${agent.id}/impersonate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.redirectTo) {
+        window.location.href = res.redirectTo;
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  function toggleSelect(id: number, selected: Set<number>, setSelected: React.Dispatch<React.SetStateAction<Set<number>>>) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(data: Agent[], selected: Set<number>, setSelected: React.Dispatch<React.SetStateAction<Set<number>>>) {
+    if (data.every(a => selected.has(a.id))) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(data.map(a => a.id)));
     }
   }
 
@@ -354,11 +450,32 @@ export default function AgentsPage() {
   };
 
   function AgentTable({ data, showParent }: { data: Agent[]; showParent?: boolean }) {
+    const selected = showParent ? subSelectedIds : selectedIds;
+    const setSelected = showParent ? setSubSelectedIds : setSelectedIds;
+    const allChecked = data.length > 0 && data.every(a => selected.has(a.id));
+    const someChecked = data.some(a => selected.has(a.id));
+
     return (
       <div className="overflow-x-auto">
+        {isManager && someChecked && (
+          <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+            <span className="text-sm font-medium text-foreground">{selected.size} selected</span>
+            <Button size="sm" variant="destructive" className="rounded-lg gap-1.5 h-8" onClick={() => handleBulkDelete(selected)}>
+              <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-lg h-8" onClick={() => setSelected(new Set())}>
+              Clear Selection
+            </Button>
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/50 text-left">
+              {isManager && (
+                <th className="py-3 px-3 w-10">
+                  <Checkbox checked={allChecked} onCheckedChange={() => toggleSelectAll(data, selected, setSelected)} />
+                </th>
+              )}
               <th className="py-3 px-3 font-semibold text-muted-foreground">Agent</th>
               <th className="py-3 px-3 font-semibold text-muted-foreground">Contact</th>
               {showParent && <th className="py-3 px-3 font-semibold text-muted-foreground">Parent Agent</th>}
@@ -370,9 +487,14 @@ export default function AgentsPage() {
           </thead>
           <tbody>
             {data.length === 0 ? (
-              <tr><td colSpan={showParent ? 7 : 6} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
+              <tr><td colSpan={showParent ? 8 : 7} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
             ) : data.map(a => (
-              <tr key={a.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
+              <tr key={a.id} className={`border-b border-border/30 hover:bg-secondary/30 transition-colors ${selected.has(a.id) ? "bg-primary/5" : ""}`}>
+                {isManager && (
+                  <td className="py-3 px-3">
+                    <Checkbox checked={selected.has(a.id)} onCheckedChange={() => toggleSelect(a.id, selected, setSelected)} />
+                  </td>
+                )}
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-3">
                     {a.logoUrl ? (
@@ -406,9 +528,33 @@ export default function AgentsPage() {
                       <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => openEdit(a)}>
                         <Edit className="w-3.5 h-3.5" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="w-7 h-7 text-destructive hover:text-destructive" onClick={() => handleDelete(a.id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost" className="w-7 h-7">
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem onClick={() => { setPasswordDialog({ agentId: a.id, agentName: `${a.firstName} ${a.lastName}` }); setNewPassword(""); }}>
+                            <KeyRound className="w-4 h-4 mr-2" /> Set Password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleImpersonate(a)}>
+                            <LogIn className="w-4 h-4 mr-2" /> Login as {a.firstName} {a.lastName}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleToggleStatus(a)}>
+                            {a.status === "active" ? (
+                              <><ShieldOff className="w-4 h-4 mr-2" /> Deactivate</>
+                            ) : (
+                              <><ShieldCheck className="w-4 h-4 mr-2" /> Activate</>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(a.id)}>
+                            <Trash2 className="w-4 h-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
                 )}
@@ -509,6 +655,36 @@ export default function AgentsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ── Password Dialog ── */}
+      {passwordDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
+              <h2 className="font-display font-bold text-lg text-foreground flex items-center gap-2">
+                <KeyRound className="w-5 h-5" /> Set Password
+              </h2>
+              <Button size="icon" variant="ghost" onClick={() => setPasswordDialog(null)} className="w-8 h-8 rounded-lg">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">Set a new password for <strong>{passwordDialog.agentName}</strong></p>
+              <div className="space-y-1.5">
+                <Label>New Password</Label>
+                <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="rounded-xl" placeholder="Min. 6 characters" />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-border/50 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setPasswordDialog(null)} className="rounded-xl">Cancel</Button>
+              <Button onClick={handleSetPassword} disabled={passwordSaving || newPassword.length < 6} className="rounded-xl gap-2">
+                {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Password
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Create / Edit Dialog ── */}
       {showDialog && (

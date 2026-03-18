@@ -77,14 +77,15 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     .values({ email, firstName, lastName, role, phone: phone || null, language: language || "en", isActive: true })
     .returning();
   await logAudit(req.user!.id, "create_user", "user", user.id, { role }, req.ip);
-  res.status(201).json(user);
+  const { passwordHash: _ph, replitId: _ri, ...safeNewUser } = user as any;
+  res.status(201).json(safeNewUser);
 });
 
 router.get("/users/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  const { replitId: _r, ...safeUser } = user as any;
+  const { replitId: _r, passwordHash: _p, ...safeUser } = user as any;
   res.json(safeUser);
 });
 
@@ -116,7 +117,8 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   await logAudit(req.user!.id, "update_user", "user", id, updates, req.ip);
-  res.json(user);
+  const { passwordHash: _ph2, replitId: _ri2, ...safePatchUser } = user as any;
+  res.json(safePatchUser);
 });
 
 router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {

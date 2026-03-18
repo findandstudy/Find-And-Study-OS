@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, agentsTable, usersTable } from "@workspace/db";
-import { eq, sql, isNull, isNotNull, and, or, ilike } from "drizzle-orm";
+import { eq, sql, isNull, isNotNull, and, or, ilike, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
+import bcrypt from "bcryptjs";
+import { createSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 
 const router: IRouter = Router();
 
@@ -174,6 +176,92 @@ router.delete("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (
   const [agent] = await db.delete(agentsTable).where(eq(agentsTable.id, id)).returning();
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   res.json({ success: true });
+});
+
+router.post("/agents/bulk-delete", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids array is required" });
+    return;
+  }
+  const numIds = ids.map((id: any) => parseInt(id, 10)).filter((id: number) => !isNaN(id));
+  if (numIds.length === 0) {
+    res.status(400).json({ error: "No valid IDs provided" });
+    return;
+  }
+  const deleted = await db.delete(agentsTable).where(inArray(agentsTable.id, numIds)).returning();
+  res.json({ success: true, count: deleted.length });
+});
+
+router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const { status } = req.body;
+  if (!status || !["active", "inactive"].includes(status)) {
+    res.status(400).json({ error: "status must be 'active' or 'inactive'" });
+    return;
+  }
+  const [agent] = await db.update(agentsTable).set({ status }).where(eq(agentsTable.id, id)).returning();
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  res.json(agent);
+});
+
+router.post("/agents/:id/set-password", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!agent.userId) {
+    res.status(400).json({ error: "Agent has no linked user account" });
+    return;
+  }
+  const hash = await bcrypt.hash(password, 10);
+  await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, agent.userId));
+  res.json({ success: true });
+});
+
+router.post("/agents/:id/impersonate", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!agent.userId) {
+    res.status(400).json({ error: "Agent has no linked user account" });
+    return;
+  }
+  const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, agent.userId));
+  if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
+  if (!["agent", "sub_agent"].includes(targetUser.role)) {
+    res.status(403).json({ error: "Can only impersonate agent or sub-agent accounts" });
+    return;
+  }
+
+  const sessionData: SessionData = {
+    user: {
+      id: targetUser.id,
+      replitId: targetUser.replitId || `impersonated-${targetUser.id}`,
+      email: targetUser.email,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+      role: targetUser.role,
+      avatarUrl: targetUser.avatarUrl,
+      language: targetUser.language,
+      isActive: targetUser.isActive,
+    },
+    access_token: `impersonation-${Date.now()}`,
+  };
+
+  const sid = await createSession(sessionData);
+  res.cookie("sid", sid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
+  res.json({ success: true, redirectTo: "/" });
 });
 
 export default router;
