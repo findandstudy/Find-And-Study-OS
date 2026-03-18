@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Search, Heart, Send, Info, GraduationCap, Globe, Clock,
   Languages, DollarSign, BookOpen, Building2, MapPin,
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
-  Mail, Phone, User, Award, Calendar,
+  Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -118,6 +119,7 @@ export default function CourseFinder() {
   const [page, setPage] = useState(1);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedUniversity, setSelectedUniversity] = useState<Program | null>(null);
+  const [applyProgram, setApplyProgram] = useState<Program | null>(null);
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
 
   const { data: filterOptions } = useQuery<FilterOptions>({
@@ -344,6 +346,7 @@ export default function CourseFinder() {
                 isWishlisted={wishlistIds.includes(prog.id)}
                 onToggleWishlist={() => toggleWishlist(prog.id)}
                 onInfo={() => setSelectedProgram(prog)}
+                onApply={() => setApplyProgram(prog)}
                 onUniversityClick={() => setSelectedUniversity(prog)}
                 showCommission={!!showCommission}
               />
@@ -376,15 +379,21 @@ export default function CourseFinder() {
         program={selectedUniversity}
         onClose={() => setSelectedUniversity(null)}
       />
+
+      <ApplyDialog
+        program={applyProgram}
+        onClose={() => setApplyProgram(null)}
+      />
     </DashboardLayout>
   );
 }
 
-function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onUniversityClick, showCommission }: {
+function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
   onInfo: () => void;
+  onApply: () => void;
   onUniversityClick: () => void;
   showCommission: boolean;
 }) {
@@ -544,6 +553,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onUni
           <Info className="w-3.5 h-3.5" /> Details
         </button>
         <button
+          onClick={onApply}
           className="py-3 text-xs font-semibold text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
         >
           <Send className="w-3.5 h-3.5" /> Apply
@@ -803,6 +813,229 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type StudentOption = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string | null;
+  nationality?: string | null;
+  agentId?: number | null;
+  createdAt: string;
+};
+
+function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const debouncedSearch = useMemo(() => searchTerm.trim(), [searchTerm]);
+
+  const { data: recentStudents = [], isLoading: loadingRecent } = useQuery<StudentOption[]>({
+    queryKey: ["apply-recent-students"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/students?limit=3`),
+    enabled: !!p,
+    staleTime: 30_000,
+  });
+
+  const { data: searchResults = [], isLoading: loadingSearch } = useQuery<StudentOption[]>({
+    queryKey: ["apply-search-students", debouncedSearch],
+    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/students?search=${encodeURIComponent(debouncedSearch)}&limit=10`),
+    enabled: !!p && debouncedSearch.length >= 2,
+    staleTime: 10_000,
+  });
+
+  const studentsToShow = debouncedSearch.length >= 2 ? searchResults : recentStudents;
+  const isSearching = debouncedSearch.length >= 2 ? loadingSearch : loadingRecent;
+
+  function handleClose() {
+    setSearchTerm("");
+    setSelectedStudent(null);
+    setNotes("");
+    setSubmitting(false);
+    setSuccess(false);
+    onClose();
+  }
+
+  async function handleSubmit() {
+    if (!selectedStudent || !p) return;
+    setSubmitting(true);
+    try {
+      await apiFetch(`${BASE_URL}/api/course-finder/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: selectedStudent.id,
+          programId: p.id,
+          notes: notes || null,
+        }),
+      });
+      setSuccess(true);
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      toast({ title: "Başvuru oluşturuldu", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}` });
+      setTimeout(() => handleClose(), 1500);
+    } catch (err: any) {
+      toast({ title: "Hata", description: err.message || "Başvuru oluşturulamadı", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!p) return null;
+
+  const effectiveFee = p.discountedFee ?? p.tuitionFee;
+  const cur = p.currency ?? "USD";
+  const commissionAmount = p.commissionRate && effectiveFee ? Math.round((effectiveFee * p.commissionRate) / 100) : null;
+
+  return (
+    <Dialog open={!!p} onOpenChange={o => !o && handleClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-lg">Başvuru Oluştur</DialogTitle>
+        </DialogHeader>
+
+        {success ? (
+          <div className="flex flex-col items-center py-8 gap-3">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+              <Check className="w-8 h-8 text-emerald-600" />
+            </div>
+            <p className="text-lg font-semibold text-emerald-700">Başvuru Oluşturuldu!</p>
+            <p className="text-sm text-muted-foreground text-center">
+              Başvuru, komisyon ve hizmet bedeli kayıtları otomatik olarak oluşturuldu.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="bg-muted/40 rounded-xl p-3 space-y-1.5">
+              <p className="font-semibold text-sm">{p.name}</p>
+              <p className="text-xs text-muted-foreground">{p.universityName} — {p.universityCountry}</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {effectiveFee != null && (
+                  <Badge variant="outline" className="text-xs">{formatCurrency(effectiveFee, cur)}</Badge>
+                )}
+                {p.feeType && (
+                  <Badge variant="outline" className="text-xs">{p.feeType}</Badge>
+                )}
+                {p.scholarship != null && p.scholarship > 0 && (
+                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0">Burs: {formatCurrency(p.scholarship, cur)}</Badge>
+                )}
+                {commissionAmount != null && (
+                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0">Komisyon: {formatCurrency(commissionAmount, cur)}</Badge>
+                )}
+                {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
+                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0">H. Bedeli: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Öğrenci Seç</Label>
+              <div className="relative mb-3">
+                <UserSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="İsim, e-posta veya telefon ile ara..."
+                  value={searchTerm}
+                  onChange={e => { setSearchTerm(e.target.value); setSelectedStudent(null); }}
+                  className="pl-10 rounded-lg"
+                />
+              </div>
+
+              {!debouncedSearch && recentStudents.length > 0 && (
+                <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">Son Eklenen Öğrenciler</p>
+              )}
+
+              <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                {isSearching ? (
+                  <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Aranıyor...</span>
+                  </div>
+                ) : studentsToShow.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">{debouncedSearch.length >= 2 ? "Öğrenci bulunamadı" : "Henüz öğrenci yok"}</p>
+                  </div>
+                ) : (
+                  studentsToShow.map(s => {
+                    const isSelected = selectedStudent?.id === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => setSelectedStudent(isSelected ? null : s)}
+                        className={`w-full text-left p-3 rounded-lg border transition-all ${
+                          isSelected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary"
+                            : "border-muted hover:border-primary/30 hover:bg-muted/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            isSelected ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                          }`}>
+                            {(s.firstName?.[0] || "").toUpperCase()}{(s.lastName?.[0] || "").toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{s.firstName} {s.lastName}</p>
+                            <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                          </div>
+                          {s.nationality && (
+                            <Badge variant="outline" className="text-[10px] shrink-0">{s.nationality}</Badge>
+                          )}
+                          {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium mb-1.5 block">Not (Opsiyonel)</Label>
+              <Textarea
+                rows={2}
+                placeholder="Başvuru ile ilgili not ekleyebilirsiniz..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className="resize-none rounded-lg"
+              />
+            </div>
+
+            <div className="bg-blue-50 rounded-xl p-3 space-y-1">
+              <p className="text-xs font-semibold text-blue-700">Başvuru ile otomatik oluşturulacaklar:</p>
+              <ul className="text-xs text-blue-600 space-y-0.5">
+                <li>• Başvuru kaydı (Applications → inquiry aşaması)</li>
+                {commissionAmount != null && commissionAmount > 0 && (
+                  <li>• Komisyon kaydı ({formatCurrency(commissionAmount, cur)} — potansiyel)</li>
+                )}
+                {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
+                  <li>• Hizmet bedeli ({formatCurrency(p.serviceFeeAmount, cur)} — 2 taksit)</li>
+                )}
+              </ul>
+            </div>
+
+            <Button
+              onClick={handleSubmit}
+              disabled={!selectedStudent || submitting}
+              className="w-full rounded-xl h-11"
+            >
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Oluşturuluyor...</>
+              ) : (
+                <><Send className="w-4 h-4 mr-2" /> Başvuru Oluştur</>
+              )}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

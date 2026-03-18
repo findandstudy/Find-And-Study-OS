@@ -167,8 +167,11 @@ Both the **Add Application** modal and **Edit Application** dialog use cascading
 - Filters: Country, City, University Type, University, Study Level, Language, Tuition Fee Range (min/max), free-text search
 - Wishlists: `GET/POST/DELETE /api/wishlists` (authenticated, per-user)
 - Commission display: shows calculated commission **amount** (commissionRate × effectiveFee / 100), not percentage — visible to super_admin, agent, sub_agent roles
-- Program cards show: university logo, degree/language/duration/country badges, tuition & discounted fee, app fee, intakes, commission amount, open/closed status
-- Details dialog: full program info, university details, all fees breakdown, requirements
+- Program cards show: university logo, degree/language/duration/country badges, tuition & discounted fee (with feeType badge), scholarship, app fee, intakes, commission amount, open/closed status
+- Details dialog: full program info, university details, all fees breakdown (including feeType and scholarship highlight), requirements
+- **Apply button**: Opens ApplyDialog — shows program summary, AJAX student search (last 3 recent + full search by name/email/phone), notes field, submit creates application + commission + service fee atomically
+- Apply API: `POST /api/course-finder/apply` {studentId, programId, notes} — creates application (stage: inquiry), commission (if commissionRate > 0, status: potential), service fee (if serviceFeeAmount > 0, 50/50 installments, status: pending)
+- Student search API: `GET /api/course-finder/students?search=&limit=` — searches by firstName, lastName, email, phone, full name; returns most recent first
 
 ## Frontend Notes
 
