@@ -39,6 +39,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
     - **Course Finder (Staff/Agent):** Program search/filter, PDF proposal generation (with customizable branding), and direct application creation.
     - **Follow-Up System:** Tracks scheduled actions for leads/students.
 - **Data Handling:** Paginated API responses, consistent data structures for frontend consumption.
+    - **Table Pagination Component:** Reusable `TablePagination` component + `useTablePagination` hook in `artifacts/edcons/src/components/TablePagination.tsx`. Applied to all table/list views: Documents, Users, Activity, AuditLog, Leads, Students, Applications, Agents, Finance (commissions + fees), agent/Commissions, agent/Applications. Server-side paginated pages (AuditLog, Agents) use `TablePagination` for UI consistency without double-paginating.
 - **Type Safety:** Extensive use of TypeScript with pnpm workspaces, leveraging composite projects for robust type checking across the monorepo.
 
 ## External Dependencies

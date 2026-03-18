@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import {
   Users, Plus, Search, Edit, Trash2, X, Loader2, Save,
   Building2, Mail, Phone, MapPin, Upload, Eye, EyeOff,
@@ -499,7 +500,6 @@ export default function AgentsPage() {
         default: return 0;
       }
     });
-
     return (
       <div className="overflow-x-auto">
         {isManager && someChecked && (
@@ -620,18 +620,14 @@ export default function AgentsPage() {
     );
   }
 
-  function Pagination({ currentPage, total: tp, setPageFn }: { currentPage: number; total: number; setPageFn: (p: number) => void }) {
-    if (tp <= 1) return null;
+  function AgentPagination({ currentPage, totalItems, setPageFn }: { currentPage: number; totalItems: number; setPageFn: (p: number) => void }) {
     return (
-      <div className="flex items-center justify-center gap-2 mt-4">
-        <Button size="sm" variant="outline" disabled={currentPage <= 1} onClick={() => setPageFn(currentPage - 1)}>
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-        <span className="text-sm text-muted-foreground">{currentPage} / {tp}</span>
-        <Button size="sm" variant="outline" disabled={currentPage >= tp} onClick={() => setPageFn(currentPage + 1)}>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      </div>
+      <TablePagination
+        currentPage={currentPage}
+        totalItems={totalItems}
+        pageSize={20}
+        onPageChange={setPageFn}
+      />
     );
   }
 
@@ -672,7 +668,7 @@ export default function AgentsPage() {
               ) : (
                 <AgentTable data={agents} />
               )}
-              <Pagination currentPage={page} total={totalPages} setPageFn={setPage} />
+              <AgentPagination currentPage={page} totalItems={total} setPageFn={setPage} />
             </Card>
           </TabsContent>
 
@@ -704,7 +700,7 @@ export default function AgentsPage() {
               </div>
 
               <AgentTable data={subAgents} showParent />
-              <Pagination currentPage={subPage} total={subTotalPages} setPageFn={setSubPage} />
+              <AgentPagination currentPage={subPage} totalItems={subTotal} setPageFn={setSubPage} />
             </Card>
           </TabsContent>
         </Tabs>

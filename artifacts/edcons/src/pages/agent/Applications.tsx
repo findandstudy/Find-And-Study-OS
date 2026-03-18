@@ -3,6 +3,7 @@ import { useListApplications } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FileText, GraduationCap, Calendar, Clock, CheckCircle, XCircle, AlertCircle, TrendingUp } from "lucide-react";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 
 const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   inquiry:              { label: "Inquiry",           color: "bg-slate-100 text-slate-700 border-slate-200" },
@@ -16,8 +17,10 @@ const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export default function AgentApplications() {
+  const pg = useTablePagination(25);
   const { data: resp, isLoading } = useListApplications({ query: { queryKey: ["agent-applications"] } });
   const applications: any[] = (resp as any)?.data || resp || [];
+  const { paged: pagedApps, total: totalApps } = pg.paginate(applications);
 
   const enrolled = applications.filter(a => a.stage === "enrolled").length;
   const inProgress = applications.filter(a => !["enrolled","rejected"].includes(a.stage)).length;
@@ -75,7 +78,7 @@ export default function AgentApplications() {
                       ))}
                     </tr>
                   ))
-                ) : applications.length === 0 ? (
+                ) : pagedApps.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-16 text-center">
                       <GraduationCap className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
@@ -83,7 +86,7 @@ export default function AgentApplications() {
                       <p className="text-muted-foreground text-sm mt-1">Share your referral link to get started</p>
                     </td>
                   </tr>
-                ) : applications.map((app: any) => {
+                ) : pagedApps.map((app: any) => {
                   const stageCfg = STAGE_CONFIG[app.stage] || STAGE_CONFIG.inquiry;
                   return (
                     <tr key={app.id} className="hover:bg-secondary/30 transition-colors">
@@ -113,6 +116,13 @@ export default function AgentApplications() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={pg.page}
+            totalItems={totalApps}
+            pageSize={pg.pageSize}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+          />
         </Card>
       </div>
     </DashboardLayout>

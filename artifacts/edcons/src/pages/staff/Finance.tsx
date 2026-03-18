@@ -23,6 +23,7 @@ import {
   Landmark, CreditCard, PiggyBank, Eye, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -718,6 +719,8 @@ export default function FinancePage() {
   const [commSelected, setCommSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [commSort, setCommSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
+  const commPg = useTablePagination(25);
+  const feePg = useTablePagination(25);
 
   const commParams = { season, ...(commSearch ? { search: commSearch } : {}), ...(commStatus !== "all" ? { status: commStatus } : {}), limit: 200 } as any;
   const feeParams  = { season, limit: 200 } as any;
@@ -768,6 +771,8 @@ export default function FinancePage() {
       }
     });
   }, [commissions, commSort]);
+  const { paged: pagedCommissions, total: totalCommissions } = commPg.paginate(sortedCommissions);
+  const { paged: pagedFees, total: totalFees } = feePg.paginate(fees);
 
   async function deleteCommission(id: number) {
     setDeleting(id);
@@ -1065,8 +1070,8 @@ export default function FinancePage() {
                     <tr>
                       <th className="px-3 py-3 w-[40px]">
                         <Checkbox
-                          checked={sortedCommissions.length > 0 && sortedCommissions.every((c: any) => commSelected.has(c.id)) ? true : sortedCommissions.some((c: any) => commSelected.has(c.id)) ? ("indeterminate" as any) : false}
-                          onCheckedChange={() => toggleCommSelectAll(sortedCommissions.map((c: any) => c.id))}
+                          checked={pagedCommissions.length > 0 && pagedCommissions.every((c: any) => commSelected.has(c.id)) ? true : pagedCommissions.some((c: any) => commSelected.has(c.id)) ? ("indeterminate" as any) : false}
+                          onCheckedChange={() => toggleCommSelectAll(pagedCommissions.map((c: any) => c.id))}
                           aria-label="Select all"
                         />
                       </th>
@@ -1097,7 +1102,7 @@ export default function FinancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {sortedCommissions.map((c: any) => {
+                    {pagedCommissions.map((c: any) => {
                       const uAmt = toNum(c.universityCommissionAmount);
                       const aAmt = toNum(c.agentCommissionAmount);
                       const net  = uAmt - aAmt;
@@ -1226,7 +1231,7 @@ export default function FinancePage() {
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
                       <td className="px-3 py-3" />
-                      <td className="px-4 py-3 text-slate-600">Totals ({sortedCommissions.length})</td>
+                      <td className="px-4 py-3 text-slate-600">Totals ({totalCommissions})</td>
                       <td className="px-4 py-3 text-right text-slate-600 tabular-nums">
                         {fmt(commissions.reduce((s: number, c: any) => s + toNum(c.programFee), 0))}
                       </td>
@@ -1243,6 +1248,13 @@ export default function FinancePage() {
                     </tr>
                   </tfoot>
                 </table>
+                <TablePagination
+                  currentPage={commPg.page}
+                  totalItems={totalCommissions}
+                  pageSize={commPg.pageSize}
+                  onPageChange={commPg.setPage}
+                  onPageSizeChange={commPg.setPageSize}
+                />
               </div>
             )}
           </TabsContent>
@@ -1404,7 +1416,7 @@ export default function FinancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {fees.map((f: any) => {
+                    {pagedFees.map((f: any) => {
                       const status = FEE_STATUS[f.status] || FEE_STATUS.pending;
                       const half = toNum(f.totalAmount) / 2;
                       return (
@@ -1505,6 +1517,13 @@ export default function FinancePage() {
                     </tr>
                   </tfoot>
                 </table>
+                <TablePagination
+                  currentPage={feePg.page}
+                  totalItems={totalFees}
+                  pageSize={feePg.pageSize}
+                  onPageChange={feePg.setPage}
+                  onPageSizeChange={feePg.setPageSize}
+                />
               </div>
             )}
           </TabsContent>

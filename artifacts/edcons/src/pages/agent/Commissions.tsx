@@ -5,10 +5,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, TrendingUp, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 
 export default function AgentCommissions() {
   const { user } = useAuth(true);
+  const pg = useTablePagination(25);
 
   const { data, isLoading } = useQuery({
     queryKey: ["agent-commissions", user?.id],
@@ -21,6 +23,7 @@ export default function AgentCommissions() {
   });
 
   const commissions: any[] = (data as any)?.data || data || [];
+  const { paged: pagedComm, total: totalComm } = pg.paginate(commissions);
 
   const totalEarned = commissions.filter(c => c.status === "paid").reduce((s, c) => s + (c.amount || 0), 0);
   const totalPending = commissions.filter(c => c.status === "pending").reduce((s, c) => s + (c.amount || 0), 0);
@@ -111,14 +114,14 @@ export default function AgentCommissions() {
                       ))}
                     </tr>
                   ))
-                ) : commissions.length === 0 ? (
+                ) : pagedComm.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-16 text-center">
                       <DollarSign className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
                       <p className="text-muted-foreground font-medium">No commissions recorded yet</p>
                     </td>
                   </tr>
-                ) : commissions.map((c: any) => (
+                ) : pagedComm.map((c: any) => (
                   <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
                     <td className="px-5 py-4 text-sm font-mono font-bold text-primary">#{c.id}</td>
                     <td className="px-5 py-4 text-sm font-bold text-foreground">
@@ -144,6 +147,13 @@ export default function AgentCommissions() {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={pg.page}
+            totalItems={totalComm}
+            pageSize={pg.pageSize}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+          />
         </Card>
       </div>
     </DashboardLayout>

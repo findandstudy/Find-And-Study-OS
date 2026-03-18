@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import {
   Plus, Search, Filter, Eye, TrendingUp, Settings2, X,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
-  ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil, ChevronLeft, ChevronRight,
+  ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
 } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -1012,22 +1013,12 @@ export default function LeadsPage() {
               </Table>
             </div>
 
-            {totalListPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
-                <p className="text-sm text-muted-foreground">
-                  Showing {(listPage - 1) * LIST_PAGE_SIZE + 1}–{Math.min(listPage * LIST_PAGE_SIZE, sortedLeads.length)} of {sortedLeads.length}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <span className="text-sm font-medium">{listPage} / {totalListPages}</span>
-                  <Button variant="outline" size="sm" disabled={listPage >= totalListPages} onClick={() => setListPage(p => p + 1)}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <TablePagination
+              currentPage={listPage}
+              totalItems={sortedLeads.length}
+              pageSize={LIST_PAGE_SIZE}
+              onPageChange={setListPage}
+            />
           </div>
         )}
       </div>

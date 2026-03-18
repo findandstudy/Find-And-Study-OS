@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListUsers } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -101,6 +102,7 @@ function UsersTab() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const { toast } = useToast();
+  const pg = useTablePagination(25);
 
   useEffect(() => {
     customFetch("/api/roles").then((res: any) => {
@@ -128,6 +130,7 @@ function UsersTab() {
       default: return 0;
     }
   });
+  const { paged: pagedUsers, total: totalFilteredUsers } = pg.paginate(filtered);
 
   const handleCreate = async () => {
     if (!createForm.email || !createForm.firstName || !createForm.lastName) {
@@ -294,9 +297,9 @@ function UsersTab() {
                     ))}
                   </tr>
                 ))
-              ) : filtered.length === 0 ? (
+              ) : pagedUsers.length === 0 ? (
                 <tr><td colSpan={5} className="px-6 py-16 text-center text-muted-foreground">No users found</td></tr>
-              ) : filtered.map(user => {
+              ) : pagedUsers.map(user => {
                 const badge = roleBadge[user.role] || { color: "bg-secondary text-foreground border-border", label: user.role };
                 const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
                 return (
@@ -371,6 +374,13 @@ function UsersTab() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={pg.page}
+          totalItems={totalFilteredUsers}
+          pageSize={pg.pageSize}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
+        />
       </Card>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

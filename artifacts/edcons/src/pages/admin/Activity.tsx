@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { customFetch } from "@workspace/api-client-react";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,6 +104,7 @@ function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "activeDuration", dir: "desc" });
+  const pg = useTablePagination(25);
 
   useEffect(() => {
     const range = getDateRange(preset);
@@ -142,6 +144,7 @@ function OverviewPage() {
     });
     return list;
   }, [userData, search, sort]);
+  const { paged: pagedActivityUsers, total: totalActivityUsers } = pg.paginate(filteredUsers);
 
   function handleSort(key: string) {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
@@ -293,9 +296,9 @@ function OverviewPage() {
                 [...Array(5)].map((_, i) => (
                   <tr key={i}>{[...Array(10)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 w-16 bg-secondary animate-pulse rounded" /></td>)}</tr>
                 ))
-              ) : filteredUsers.length === 0 ? (
+              ) : pagedActivityUsers.length === 0 ? (
                 <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">No user activity data for this period</td></tr>
-              ) : filteredUsers.map((u: any) => (
+              ) : pagedActivityUsers.map((u: any) => (
                 <tr key={u.userId} className="hover:bg-secondary/30 transition-colors cursor-pointer" onClick={() => setLocation(`/admin/activity/${u.userId}`)}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
@@ -324,6 +327,13 @@ function OverviewPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={pg.page}
+          totalItems={totalActivityUsers}
+          pageSize={pg.pageSize}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
+        />
       </Card>
     </div>
   );

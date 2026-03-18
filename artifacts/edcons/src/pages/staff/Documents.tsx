@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, Plus, Search, Trash2, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 
 type DocSortKey = "name" | "type" | "status" | "studentId" | "uploaded";
 type SortDir = "asc" | "desc";
@@ -62,6 +63,7 @@ export default function DocumentsPage() {
   const [sort, setSort] = useState<{ key: DocSortKey; dir: SortDir }>({ key: "uploaded", dir: "desc" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const pg = useTablePagination(25);
 
   const { data: docs, isLoading } = useListDocuments();
   const createDoc = useCreateDocument();
@@ -86,7 +88,8 @@ export default function DocumentsPage() {
     }
   });
 
-  const filteredIds = filtered.map((d: any) => d.id as number);
+  const { paged: pagedDocs, total: totalFiltered } = pg.paginate(filtered);
+  const filteredIds = pagedDocs.map((d: any) => d.id as number);
   const allSelected = filteredIds.length > 0 && filteredIds.every(id => selected.has(id));
   const someSelected = filteredIds.some(id => selected.has(id));
 
@@ -255,7 +258,7 @@ export default function DocumentsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((doc: any) => (
+                  pagedDocs.map((doc: any) => (
                     <TableRow
                       key={doc.id}
                       className={`hover:bg-primary/5 transition-colors ${selected.has(doc.id) ? "bg-primary/5" : ""}`}
@@ -312,6 +315,13 @@ export default function DocumentsPage() {
               </TableBody>
             </Table>
           </div>
+          <TablePagination
+            currentPage={pg.page}
+            totalItems={totalFiltered}
+            pageSize={pg.pageSize}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+          />
         </div>
       </div>
 

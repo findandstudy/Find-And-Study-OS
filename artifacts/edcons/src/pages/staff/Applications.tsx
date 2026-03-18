@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TablePagination } from "@/components/TablePagination";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -1027,16 +1028,12 @@ export default function ApplicationsPage() {
                 </TableBody>
               </Table>
             </div>
-            {totalListPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
-                <p className="text-sm text-muted-foreground">Showing {(listPage - 1) * LIST_PAGE_SIZE + 1}–{Math.min(listPage * LIST_PAGE_SIZE, sortedApps.length)} of {sortedApps.length}</p>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
-                  <span className="text-sm font-medium">{listPage} / {totalListPages}</span>
-                  <Button variant="outline" size="sm" disabled={listPage >= totalListPages} onClick={() => setListPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
-                </div>
-              </div>
-            )}
+            <TablePagination
+              currentPage={listPage}
+              totalItems={sortedApps.length}
+              pageSize={LIST_PAGE_SIZE}
+              onPageChange={setListPage}
+            />
           </div>
         )}
       </div>

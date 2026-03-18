@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Activity, Search, User, Clock, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { Activity, Search, User, Clock, Filter } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 const ACTION_COLORS: Record<string, string> = {
   create_user: "bg-green-100 text-green-700 border-green-200",
@@ -173,30 +174,12 @@ export default function AdminAuditLog() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t border-border/50">
-              <p className="text-sm text-muted-foreground">
-                Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline" size="sm" className="rounded-lg gap-1"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                >
-                  <ChevronLeft className="w-4 h-4" /> Prev
-                </Button>
-                <span className="text-sm font-medium px-2">{page} / {totalPages}</span>
-                <Button
-                  variant="outline" size="sm" className="rounded-lg gap-1"
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                >
-                  Next <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+          <TablePagination
+            currentPage={page}
+            totalItems={total}
+            pageSize={limit}
+            onPageChange={setPage}
+          />
         </Card>
       </div>
     </DashboardLayout>
