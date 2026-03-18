@@ -73,7 +73,7 @@ type University = {
   contactPersonName?: string | null; contactPersonPhone?: string | null; contactPersonEmail?: string | null;
   status: string;
 };
-type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; isActive: boolean };
+type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; isActive: boolean };
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
@@ -1215,6 +1215,15 @@ function ProgramsTab() {
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {["USD", "EUR", "GBP", "TRY", "AED", "CAD", "AUD"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Fee Type</Label>
+                <Select value={form?.feeType ?? ""} onValueChange={v => setForm(f => ({ ...f, feeType: v || undefined }))}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {["Per Year", "Per Month", "Whole Study", "Per Program", "One-time Payment", "100% Scholarship"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

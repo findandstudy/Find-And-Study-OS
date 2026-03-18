@@ -44,6 +44,7 @@ type Program = {
   serviceFeeAmount?: number | null;
   discountedFee?: number | null;
   languageFee?: number | null;
+  feeType?: string | null;
   isActive?: boolean;
   universityId: number;
   universityName: string;
@@ -464,7 +465,12 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onUni
 
         <div className="bg-muted/40 rounded-xl p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Tuition</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Tuition</span>
+              {p.feeType && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 rounded font-normal text-muted-foreground">{p.feeType}</Badge>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {hasDiscount && (
                 <span className="text-xs text-muted-foreground line-through">{formatCurrency(p.tuitionFee, cur)}</span>
@@ -479,6 +485,13 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onUni
               )}
             </div>
           </div>
+
+          {p.scholarship != null && p.scholarship > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-emerald-600 font-medium">Scholarship</span>
+              <span className="text-xs font-semibold text-emerald-600">{formatCurrency(p.scholarship, cur)}</span>
+            </div>
+          )}
 
           {p.applicationFee != null && p.applicationFee > 0 && (
             <div className="flex items-center justify-between">
@@ -719,13 +732,14 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
       icon: DollarSign,
       items: [
         { label: "Tuition Fee", value: formatCurrency(p.tuitionFee, cur) },
+        ...(p.feeType ? [{ label: "Fee Type", value: p.feeType }] : []),
         ...(hasDiscount ? [{ label: "Discounted Fee", value: formatCurrency(p.discountedFee, cur), highlight: "amber" }] : []),
         { label: "Application Fee", value: formatCurrency(p.applicationFee, cur) },
         { label: "Deposit Fee", value: formatCurrency(p.depositFee, cur) },
         { label: "Advanced Fee", value: formatCurrency(p.advancedFee, cur) },
         { label: "Language Fee", value: formatCurrency(p.languageFee, cur) },
         { label: "Service Fee", value: formatCurrency(p.serviceFeeAmount, cur) },
-        { label: "Scholarship", value: p.scholarship != null ? formatCurrency(p.scholarship, cur) : null },
+        ...(p.scholarship != null && p.scholarship > 0 ? [{ label: "Scholarship", value: formatCurrency(p.scholarship, cur), highlight: "green" }] : []),
         ...(showCommission && commissionAmount != null ? [{ label: "Commission", value: formatCurrency(commissionAmount, cur), highlight: "indigo" }] : []),
       ],
     },
@@ -769,8 +783,8 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
               <div className="bg-muted/30 rounded-xl p-3 space-y-1.5">
                 {section.items.filter(item => item.value && item.value !== "—").map((item, i) => (
                   <div key={i} className="flex justify-between text-sm">
-                    <span className={item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600" : "text-muted-foreground"}>{item.label}</span>
-                    <span className={`font-medium text-right max-w-[60%] ${item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600 font-semibold" : ""}`}>{item.value}</span>
+                    <span className={item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600" : item.highlight === "green" ? "text-emerald-600" : "text-muted-foreground"}>{item.label}</span>
+                    <span className={`font-medium text-right max-w-[60%] ${item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600 font-semibold" : item.highlight === "green" ? "text-emerald-600 font-semibold" : ""}`}>{item.value}</span>
                   </div>
                 ))}
               </div>
