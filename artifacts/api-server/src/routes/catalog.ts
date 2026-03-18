@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, countriesTable, citiesTable, universitiesTable, programsTable } from "@workspace/db";
-import { eq, ilike, sql, and } from "drizzle-orm";
+import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable } from "@workspace/db";
+import { eq, ilike, sql, and, asc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 
@@ -182,6 +182,48 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
   const inserted = await db.insert(programsTable).values(values).returning();
   await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
+});
+
+/* ─── CATALOG OPTIONS ──────────────────────────────────────── */
+
+const VALID_CATEGORIES = ["degree", "language", "duration", "fee_type", "intake", "field"];
+
+router.get("/catalog-options", async (_req, res): Promise<void> => {
+  const data = await db.select().from(catalogOptionsTable).orderBy(asc(catalogOptionsTable.category), asc(catalogOptionsTable.sortOrder));
+  const grouped: Record<string, typeof data> = {};
+  for (const row of data) {
+    if (!grouped[row.category]) grouped[row.category] = [];
+    grouped[row.category].push(row);
+  }
+  res.json({ data, grouped });
+});
+
+router.post("/catalog-options", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const { category, value, sortOrder = 0 } = req.body;
+  if (!category || !value) { res.status(400).json({ error: "category and value are required" }); return; }
+  if (!VALID_CATEGORIES.includes(category)) { res.status(400).json({ error: "Invalid category" }); return; }
+  const [opt] = await db.insert(catalogOptionsTable).values({ category, value, sortOrder }).returning();
+  await logAudit(req.user!.id, "create_catalog_option", "catalog_option", opt.id, { category, value }, req.ip);
+  res.status(201).json(opt);
+});
+
+router.patch("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const { value, sortOrder, isActive } = req.body;
+  const updates: Record<string, unknown> = {};
+  if (value !== undefined) updates.value = value;
+  if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+  if (isActive !== undefined) updates.isActive = isActive;
+  const [opt] = await db.update(catalogOptionsTable).set(updates).where(eq(catalogOptionsTable.id, id)).returning();
+  if (!opt) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(opt);
+});
+
+router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  await db.delete(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
+  await logAudit(req.user!.id, "delete_catalog_option", "catalog_option", id, {}, req.ip);
+  res.sendStatus(204);
 });
 
 export default router;

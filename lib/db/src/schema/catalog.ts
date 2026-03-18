@@ -28,3 +28,15 @@ export type Country = typeof countriesTable.$inferSelect;
 export const insertCitySchema = createInsertSchema(citiesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCity = z.infer<typeof insertCitySchema>;
 export type City = typeof citiesTable.$inferSelect;
+
+export const catalogOptionsTable = pgTable("catalog_options", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(),
+  value: text("value").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type CatalogOption = typeof catalogOptionsTable.$inferSelect;

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
 
@@ -1062,6 +1062,10 @@ function ProgramsTab() {
   const universities: University[] = unisData?.data ?? [];
   const uniMap: Record<number, University> = Object.fromEntries(universities.map(u => [u.id, u]));
 
+  const { data: catOptsResp } = useQuery({ queryKey: ["catalog-options"], queryFn: () => api("/api/catalog-options") });
+  const catOpts: Record<string, CatalogOption[]> = (catOptsResp as any)?.grouped || {};
+  const activeOpts = (key: string) => (catOpts[key] || []).filter(o => o.isActive).map(o => o.value);
+
   const { data } = useQuery({
     queryKey: ["programs", page, dSearch, filterUni],
     queryFn: () => api(`/api/programs?page=${page}&limit=30${dSearch ? `&search=${encodeURIComponent(dSearch)}` : ""}${filterUni !== "all" ? `&universityId=${filterUni}` : ""}`),
@@ -1230,21 +1234,37 @@ function ProgramsTab() {
                 <Select value={form?.degree ?? ""} onValueChange={v => setForm(f => ({ ...f, degree: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    {["Bachelor", "Master", "Ph.D", "Associate", "Language Course", "Foundation", "Pathway Programs"].map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    {activeOpts("degree").map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Field</Label><Input className="mt-1" placeholder="Engineering" value={form?.field ?? ""} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} /></div>
+              <div>
+                <Label>Field</Label>
+                <Select value={form?.field ?? ""} onValueChange={v => setForm(f => ({ ...f, field: v }))}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {activeOpts("field").map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label>Language</Label>
                 <Select value={form?.language ?? ""} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    {["English", "Turkish", "Arabic", "French", "Russian", "German", "Other"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    {activeOpts("language").map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Duration</Label><Input className="mt-1" placeholder="4 years" value={form?.duration ?? ""} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} /></div>
+              <div>
+                <Label>Duration</Label>
+                <Select value={form?.duration ?? ""} onValueChange={v => setForm(f => ({ ...f, duration: v }))}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {activeOpts("duration").map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label>Annual Fee</Label>
                 <Input className="mt-1" type="number" value={form?.tuitionFee ?? ""} onChange={e => setForm(f => ({ ...f, tuitionFee: e.target.value ? Number(e.target.value) : undefined }))} />
@@ -1263,7 +1283,7 @@ function ProgramsTab() {
                 <Select value={form?.feeType ?? ""} onValueChange={v => setForm(f => ({ ...f, feeType: v || null }))}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    {["Per Year", "Per Month", "Whole Study", "Per Program", "One-time Payment", "100% Scholarship"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    {activeOpts("fee_type").map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -1302,7 +1322,26 @@ function ProgramsTab() {
               </div>
             </div>
 
-            <div><Label>Intake Periods</Label><Input className="mt-1" placeholder="Sep, Feb" value={form?.intakes ?? ""} onChange={e => setForm(f => ({ ...f, intakes: e.target.value }))} /></div>
+            <div>
+              <Label>Intake Periods</Label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {activeOpts("intake").map(ip => {
+                  const selected = (form?.intakes ?? "").split(",").map(s => s.trim()).filter(Boolean).includes(ip);
+                  return (
+                    <Badge
+                      key={ip}
+                      variant={selected ? "default" : "outline"}
+                      className={`cursor-pointer text-xs ${selected ? "" : "opacity-60 hover:opacity-100"}`}
+                      onClick={() => {
+                        const current = (form?.intakes ?? "").split(",").map(s => s.trim()).filter(Boolean);
+                        const next = selected ? current.filter(c => c !== ip) : [...current, ip];
+                        setForm(f => ({ ...f, intakes: next.join(", ") }));
+                      }}
+                    >{ip}</Badge>
+                  );
+                })}
+              </div>
+            </div>
             <div><Label>Requirements</Label><Textarea className="mt-1" rows={2} placeholder="IELTS 6.0, GPA 3.0…" value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
             <div className="flex items-center justify-between">
               <Label>Active</Label>
@@ -1346,6 +1385,163 @@ function ProgramsTab() {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   OPTIONS TAB
+══════════════════════════════════════════════════════════ */
+
+type CatalogOption = { id: number; category: string; value: string; sortOrder: number; isActive: boolean };
+
+const OPTION_CATEGORIES = [
+  { key: "degree", label: "Degree", description: "Academic degree types (Bachelor, Master, etc.)" },
+  { key: "language", label: "Language", description: "Languages of instruction" },
+  { key: "duration", label: "Duration", description: "Program duration options" },
+  { key: "fee_type", label: "Fee Type", description: "Fee calculation types" },
+  { key: "intake", label: "Intake Periods", description: "Enrollment periods" },
+  { key: "field", label: "Field", description: "Academic fields / study areas" },
+];
+
+function OptionsTab() {
+  const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
+  const [editItem, setEditItem] = useState<CatalogOption | null>(null);
+  const [newValue, setNewValue] = useState("");
+  const [addMode, setAddMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const qc = useQueryClient();
+
+  const { data: optionsResp, isLoading } = useQuery({
+    queryKey: ["catalog-options"],
+    queryFn: () => api("/api/catalog-options"),
+  });
+
+  const grouped: Record<string, CatalogOption[]> = (optionsResp as any)?.grouped || {};
+  const items = grouped[activeCategory] || [];
+  const catMeta = OPTION_CATEGORIES.find(c => c.key === activeCategory)!;
+
+  async function handleAdd() {
+    if (!newValue.trim()) return;
+    setSaving(true);
+    try {
+      await api("/api/catalog-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: activeCategory, value: newValue.trim(), sortOrder: items.length + 1 }),
+      });
+      setNewValue("");
+      setAddMode(false);
+      qc.invalidateQueries({ queryKey: ["catalog-options"] });
+    } catch { }
+    setSaving(false);
+  }
+
+  async function handleUpdate(item: CatalogOption, updates: Partial<CatalogOption>) {
+    await api(`/api/catalog-options/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    qc.invalidateQueries({ queryKey: ["catalog-options"] });
+    setEditItem(null);
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Are you sure you want to delete this option?")) return;
+    await api(`/api/catalog-options/${id}`, { method: "DELETE" });
+    qc.invalidateQueries({ queryKey: ["catalog-options"] });
+  }
+
+  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4">
+      <div className="space-y-1">
+        {OPTION_CATEGORIES.map(cat => (
+          <button
+            key={cat.key}
+            onClick={() => { setActiveCategory(cat.key); setAddMode(false); setEditItem(null); }}
+            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
+          >
+            {cat.label}
+            <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="border rounded-lg">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+          <div>
+            <h3 className="text-sm font-semibold">{catMeta.label}</h3>
+            <p className="text-xs text-muted-foreground">{catMeta.description}</p>
+          </div>
+          <Button size="sm" onClick={() => { setAddMode(true); setNewValue(""); }} disabled={addMode}>
+            <Plus className="w-4 h-4 mr-1" /> Add
+          </Button>
+        </div>
+
+        {addMode && (
+          <div className="flex items-center gap-2 px-4 py-3 border-b bg-green-50/50">
+            <Input
+              autoFocus
+              value={newValue}
+              onChange={e => setNewValue(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAddMode(false); }}
+              placeholder={`Enter new ${catMeta.label.toLowerCase()} value...`}
+              className="flex-1"
+            />
+            <Button size="sm" onClick={handleAdd} disabled={saving || !newValue.trim()}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setAddMode(false)}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
+        <div className="divide-y">
+          {items.length === 0 && !addMode && (
+            <p className="text-center text-muted-foreground text-sm py-8">No options yet. Click "Add" to create one.</p>
+          )}
+          {items.map((item, idx) => (
+            <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 group">
+              <span className="text-xs text-muted-foreground w-6 text-center">{idx + 1}</span>
+              {editItem?.id === item.id ? (
+                <Input
+                  autoFocus
+                  className="flex-1 h-8"
+                  value={editItem.value}
+                  onChange={e => setEditItem({ ...editItem, value: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") handleUpdate(item, { value: editItem.value });
+                    if (e.key === "Escape") setEditItem(null);
+                  }}
+                />
+              ) : (
+                <span className={`flex-1 text-sm ${!item.isActive ? "line-through text-muted-foreground" : ""}`}>{item.value}</span>
+              )}
+              {!item.isActive && <Badge variant="outline" className="text-[10px] bg-muted">Inactive</Badge>}
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {editItem?.id === item.id ? (
+                  <>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(item, { value: editItem.value })}><Check className="w-3.5 h-3.5 text-green-600" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditItem(null)}><X className="w-3.5 h-3.5" /></Button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditItem({ ...item })}><Pencil className="w-3.5 h-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(item, { isActive: !item.isActive })}>
+                      {item.isActive ? <Lock className="w-3.5 h-3.5 text-orange-500" /> : <Check className="w-3.5 h-3.5 text-green-600" />}
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function AdminCatalog() {
@@ -1354,6 +1550,7 @@ export default function AdminCatalog() {
     { value: "cities", label: "Cities", icon: Building2 },
     { value: "universities", label: "Universities", icon: GraduationCap },
     { value: "programs", label: "Programs", icon: BookOpen },
+    { value: "options", label: "Options", icon: Settings2 },
   ];
 
   return (
@@ -1363,7 +1560,7 @@ export default function AdminCatalog() {
         <p className="text-muted-foreground text-sm mt-1">Manage countries, cities, universities and programs</p>
       </div>
       <Tabs defaultValue="countries" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           {tabs.map(t => (
             <TabsTrigger key={t.value} value={t.value} className="flex items-center gap-1.5">
               <t.icon className="h-4 w-4" />
@@ -1409,6 +1606,16 @@ export default function AdminCatalog() {
               <p className="text-xs text-muted-foreground mt-0.5">Manage university programs, fees and commission rates</p>
             </div>
             <ProgramsTab />
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="options">
+          <Card className="p-4">
+            <div className="mb-4">
+              <h2 className="text-base font-semibold flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" />Catalog Options</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Manage dropdown values used across programs (Degree, Language, Duration, Fee Type, Intakes, Field)</p>
+            </div>
+            <OptionsTab />
           </Card>
         </TabsContent>
       </Tabs>

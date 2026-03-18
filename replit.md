@@ -72,6 +72,15 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Security:** Secrets (passwords, tokens, API keys) are masked on read (first 4 chars + dots). On save, masked values are skipped so existing secrets aren't overwritten.
 - **File:** `artifacts/api-server/src/routes/integrations.ts`, `artifacts/edcons/src/components/IntegrationsManager.tsx`
 
+## Catalog Options
+
+- **DB table:** `catalog_options` (id serial, category text, value text, sort_order int, is_active bool, timestamps). Unique index on `(category, value)`.
+- **Categories:** `degree`, `language`, `duration`, `fee_type`, `intake`, `field`
+- **API routes:** `GET /api/catalog-options` (public, returns grouped), `POST /api/catalog-options` (admin), `PATCH /api/catalog-options/:id`, `DELETE /api/catalog-options/:id`
+- **Frontend:** "Options" tab in Catalog Management page — sidebar navigation for categories, inline add/edit/delete/activate/deactivate per item.
+- **Integration:** Programs tab dropdowns (Degree, Language, Duration, Fee Type, Field) and Intake Periods badges all pull from `catalog-options` API dynamically instead of hardcoded values.
+- **Files:** `lib/db/src/schema/catalog.ts` (catalogOptionsTable), `artifacts/api-server/src/routes/catalog.ts`, `artifacts/edcons/src/pages/admin/Catalog.tsx` (OptionsTab + ProgramsTab integration)
+
 ## Student Profile
 
 - **Photo System:** Student photos stored as documents with `type = "photo"` in the `documents` table. Profile page displays latest photo (sorted by `createdAt` desc) as circular avatar in header. Hover reveals camera (upload) and download buttons. Photo upload creates a new document record with auto-naming `photo-firstname-lastname`.
