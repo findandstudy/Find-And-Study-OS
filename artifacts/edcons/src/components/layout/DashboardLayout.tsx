@@ -44,6 +44,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LogOut, ChevronUp, User } from "lucide-react";
 
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string };
 
@@ -268,26 +276,39 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
             {/* User Bottom */}
             <div className="p-3 border-t border-border/40">
-              <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors">
-                {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-primary/20" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-sm text-primary ring-2 ring-primary/20">
-                    {initials}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user.email || `ID #${user.id}`}</p>
-                </div>
-                <Button size="icon" variant="ghost" className="w-7 h-7 rounded-lg shrink-0" asChild>
-                  <a href="/api/auth/logout" title="Sign out">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                  </a>
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer text-left">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-primary/20" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-sm text-primary ring-2 ring-primary/20">
+                        {initials}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user.email || `ID #${user.id}`}</p>
+                    </div>
+                    <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-56 mb-1">
+                  <DropdownMenuItem asChild>
+                    <Link href={['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}>
+                      <User className="w-4 h-4 mr-2" />
+                      Profile & Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
+                    <a href="/api/auth/logout">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </SidebarContent>
         </Sidebar>
