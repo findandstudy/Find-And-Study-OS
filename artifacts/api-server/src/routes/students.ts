@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
+import { db, studentsTable, documentsTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 
@@ -20,6 +20,20 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   const [student] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
   if (!student) { res.status(404).json({ error: "Student profile not found" }); return; }
   res.json(student);
+});
+
+router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> => {
+  const studentId = parseInt(req.params.id, 10);
+  const [photoDoc] = await db.select({ fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
+    .from(documentsTable)
+    .where(and(eq(documentsTable.studentId, studentId), eq(documentsTable.type, "photo")))
+    .orderBy(desc(documentsTable.createdAt))
+    .limit(1);
+  if (!photoDoc?.fileData) { res.status(404).json({ error: "No photo" }); return; }
+  const buffer = Buffer.from(photoDoc.fileData, "base64");
+  res.set("Content-Type", photoDoc.mimeType || "image/jpeg");
+  res.set("Cache-Control", "public, max-age=300");
+  res.send(buffer);
 });
 
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as any, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
@@ -57,13 +71,27 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
     .from(studentsTable)
     .where(whereClause);
 
-  const data = await db
+  const rows = await db
     .select()
     .from(studentsTable)
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
     .orderBy(studentsTable.createdAt);
+
+  const studentIds = rows.map(r => r.id);
+  let photoSet = new Set<number>();
+  if (studentIds.length > 0) {
+    const photoDocs = await db.select({ studentId: documentsTable.studentId })
+      .from(documentsTable)
+      .where(and(
+        sql`${documentsTable.studentId} IN (${sql.join(studentIds.map(id => sql`${id}`), sql`, `)})`,
+        eq(documentsTable.type, "photo"),
+      ));
+    photoSet = new Set(photoDocs.map(d => d.studentId!));
+  }
+
+  const data = rows.map(r => ({ ...r, hasPhoto: photoSet.has(r.id) }));
 
   res.json({
     data,

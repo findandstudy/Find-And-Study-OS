@@ -1233,6 +1233,28 @@ function StuSortHeader({ label, sortKey, currentSort, onSort }: {
 
 type StuColVariant = "won" | "lost" | undefined;
 
+function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "md" }) {
+  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
+  const textSize = size === "md" ? "text-sm" : "text-xs";
+  const [imgError, setImgError] = useState(false);
+
+  if (student.hasPhoto && !imgError) {
+    return (
+      <img
+        src={`/api/students/${student.id}/photo`}
+        alt={`${student.firstName} ${student.lastName}`}
+        className={`${dim} rounded-full object-cover border border-primary/20 shrink-0`}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  return (
+    <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0`}>
+      <span className={`${textSize} font-bold text-primary`}>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+    </div>
+  );
+}
+
 function DraggableStudentCard({ student, onView, variant }: { student: any; onView: (id: number) => void; variant?: StuColVariant }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -1250,9 +1272,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
     >
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex items-center gap-2.5 mb-1.5">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
-            <span className="text-xs font-bold text-primary">{student.firstName?.[0]}{student.lastName?.[0]}</span>
-          </div>
+          <StudentAvatar student={student} />
           <div className="min-w-0">
             <h4 className="font-bold text-sm text-foreground line-clamp-1">{student.firstName} {student.lastName}</h4>
             <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || "No contact"}</p>
@@ -1624,9 +1644,7 @@ export default function StudentsPage() {
                   {activeStuCard ? (
                     <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
                       <div className="flex items-center gap-2.5 mb-1.5">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-primary">{activeStuCard.firstName?.[0]}{activeStuCard.lastName?.[0]}</span>
-                        </div>
+                        <StudentAvatar student={activeStuCard} />
                         <div className="min-w-0">
                           <h4 className="font-bold text-sm text-foreground line-clamp-1">{activeStuCard.firstName} {activeStuCard.lastName}</h4>
                           <p className="text-xs text-muted-foreground truncate">{activeStuCard.email || activeStuCard.phone || "No contact"}</p>
@@ -1667,9 +1685,7 @@ export default function StudentsPage() {
                       <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(student.id)} onCheckedChange={() => toggleSelect(student.id)} /></TableCell>
                       <TableCell className="font-medium" onClick={() => setLocation(`/staff/students/${student.id}`)}>
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-primary">{student.firstName?.[0]}{student.lastName?.[0]}</span>
-                          </div>
+                          <StudentAvatar student={student} />
                           <div>
                             <p className="text-sm font-semibold">{student.firstName} {student.lastName}</p>
                             {student.phone && <p className="text-xs text-muted-foreground">{student.phone}</p>}
