@@ -13,9 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Search, Users, UserPlus, Shield, MoreHorizontal, Mail, Edit2,
   Plus, Trash2, ChevronDown, ChevronRight, Check, X, Eye, Lock,
-  Settings2, ShieldCheck
+  Settings2, ShieldCheck, KeyRound, LogIn, ShieldOff, Loader2
 } from "lucide-react";
 
 const roleBadge: Record<string, { color: string; label: string }> = {
@@ -74,6 +77,9 @@ function UsersTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phone: "", language: "en" });
   const [creating, setCreating] = useState(false);
+  const [passwordDialog, setPasswordDialog] = useState<{ userId: number; userName: string } | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -112,6 +118,70 @@ function UsersTab() {
       setCreating(false);
     }
   };
+
+  async function handleDelete(id: number) {
+    if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) return;
+    try {
+      await customFetch(`/api/users/${id}`, { method: "DELETE" });
+      toast({ title: "User deleted" });
+      refetch();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleToggleStatus(user: any) {
+    const newActive = !user.isActive;
+    try {
+      await customFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: newActive }),
+      });
+      toast({ title: `User ${newActive ? "activated" : "deactivated"}` });
+      refetch();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleSetPassword() {
+    if (!passwordDialog) return;
+    if (!newPassword || newPassword.length < 6) {
+      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await customFetch(`/api/users/${passwordDialog.userId}/set-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      toast({ title: "Password updated" });
+      setPasswordDialog(null);
+      setNewPassword("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  async function handleImpersonate(user: any) {
+    if (!confirm(`Login as ${user.firstName} ${user.lastName}? You will be logged out of your current session.`)) return;
+    try {
+      const res = await customFetch(`/api/users/${user.id}/impersonate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if ((res as any).redirectTo) {
+        window.location.href = (res as any).redirectTo;
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
 
   const availableRoles = roles.length > 0
     ? roles.map(r => ({ value: r.name, label: r.displayName }))
@@ -229,13 +299,37 @@ function UsersTab() {
                       </Badge>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-primary/10 hover:text-primary">
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg">
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg">
+                              <MoreHorizontal className="w-3.5 h-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onClick={() => { setPasswordDialog({ userId: user.id, userName: `${user.firstName} ${user.lastName}` }); setNewPassword(""); }}>
+                              <KeyRound className="w-4 h-4 mr-2" /> Set Password
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleImpersonate(user)}>
+                              <LogIn className="w-4 h-4 mr-2" /> Login as {user.firstName}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
+                              {user.isActive ? (
+                                <><ShieldOff className="w-4 h-4 mr-2" /> Deactivate</>
+                              ) : (
+                                <><ShieldCheck className="w-4 h-4 mr-2" /> Activate</>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(user.id)}>
+                              <Trash2 className="w-4 h-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
@@ -308,6 +402,35 @@ function UsersTab() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button onClick={handleCreate} disabled={creating}>
               {creating ? "Creating..." : "Create User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!passwordDialog} onOpenChange={o => { if (!o) { setPasswordDialog(null); setNewPassword(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5" /> Set Password
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Set a new password for <strong>{passwordDialog?.userName}</strong>
+          </p>
+          <div className="space-y-2">
+            <Label>New Password</Label>
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="Minimum 6 characters"
+              onKeyDown={e => { if (e.key === "Enter") handleSetPassword(); }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPasswordDialog(null); setNewPassword(""); }}>Cancel</Button>
+            <Button onClick={handleSetPassword} disabled={passwordSaving || newPassword.length < 6}>
+              {passwordSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Set Password"}
             </Button>
           </DialogFooter>
         </DialogContent>

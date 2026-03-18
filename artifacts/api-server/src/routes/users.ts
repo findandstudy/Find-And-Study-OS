@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, usersTable, rolesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
+import { createSession, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 
 const router: IRouter = Router();
 
@@ -142,6 +144,57 @@ router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
   await db.delete(usersTable).where(eq(usersTable.id, id));
   await logAudit(req.user!.id, "delete_user", "user", id, {}, req.ip);
   res.sendStatus(204);
+});
+
+router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  const hash = await bcrypt.hash(password, 10);
+  await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, id));
+  await logAudit(req.user!.id, "set_password", "user", id, {}, req.ip);
+  res.json({ success: true });
+});
+
+router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (req.user!.id === id) {
+    res.status(400).json({ error: "Cannot impersonate yourself" });
+    return;
+  }
+  const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
+
+  const sessionData: SessionData = {
+    user: {
+      id: targetUser.id,
+      replitId: targetUser.replitId || `impersonated-${targetUser.id}`,
+      email: targetUser.email,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+      role: targetUser.role,
+      avatarUrl: targetUser.avatarUrl,
+      language: targetUser.language,
+      isActive: targetUser.isActive,
+    },
+    access_token: `impersonation-${Date.now()}`,
+  };
+
+  const sid = await createSession(sessionData);
+  res.cookie("sid", sid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
+  await logAudit(req.user!.id, "impersonate_user", "user", id, { targetRole: targetUser.role }, req.ip);
+  res.json({ success: true, redirectTo: "/" });
 });
 
 export default router;
