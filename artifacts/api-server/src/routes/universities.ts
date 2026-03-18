@@ -19,7 +19,7 @@ const PROG_PATCH_FIELDS = [
   "universityId", "name", "degree", "field", "language", "duration",
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
   "commissionRate", "applicationFee", "advancedFee", "depositFee",
-  "serviceFeeAmount", "discountedFee", "languageFee", "isActive",
+  "serviceFeeAmount", "discountedFee", "languageFee", "feeType", "isActive",
 ];
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
@@ -148,7 +148,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     universityId, name, degree, field, language, duration,
     tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate,
     applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
-    isActive = true,
+    feeType, isActive = true,
   } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
   const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
@@ -165,6 +165,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     serviceFeeAmount: n(serviceFeeAmount),
     discountedFee: n(discountedFee),
     languageFee: n(languageFee),
+    feeType: feeType || null,
     isActive,
   }).returning();
   await logAudit(req.user!.id, "create_program", "program", prog.id, { universityId, name }, req.ip);
