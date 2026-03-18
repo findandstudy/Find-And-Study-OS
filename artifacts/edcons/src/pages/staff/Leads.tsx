@@ -40,6 +40,8 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { EditStagesDialog } from "@/components/EditStagesDialog";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -75,30 +77,7 @@ interface ColDef {
   variant?: ColVariant;
 }
 
-const DEFAULT_COLUMNS: ColDef[] = [
-  { id: "new", title: "New" },
-  { id: "contacted", title: "Contacted" },
-  { id: "interested", title: "Interested" },
-  { id: "qualified", title: "Qualified" },
-  { id: "converted", title: "Converted" },
-  { id: "won", title: "WON", variant: "won" },
-  { id: "lost", title: "LOST", variant: "lost" },
-];
-
-const LS_KEY = "edcons_pipeline_labels";
 const VIEW_KEY = "edcons_leads_view";
-
-function loadLabels(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveLabels(labels: Record<string, string>) {
-  localStorage.setItem(LS_KEY, JSON.stringify(labels));
-}
 
 function formatCurrency(value: number | string | null | undefined): string {
   const num = typeof value === "string" ? parseFloat(value) : (value ?? 0);
@@ -111,15 +90,23 @@ function formatDate(dateStr: string | null | undefined): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-const statusColors: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700 border-blue-200",
-  contacted: "bg-amber-100 text-amber-700 border-amber-200",
-  interested: "bg-purple-100 text-purple-700 border-purple-200",
-  qualified: "bg-cyan-100 text-cyan-700 border-cyan-200",
-  converted: "bg-indigo-100 text-indigo-700 border-indigo-200",
-  won: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  lost: "bg-rose-100 text-rose-700 border-rose-200",
-};
+const LEAD_STAGE_COLORS = [
+  "bg-blue-100 text-blue-700 border-blue-200",
+  "bg-amber-100 text-amber-700 border-amber-200",
+  "bg-purple-100 text-purple-700 border-purple-200",
+  "bg-cyan-100 text-cyan-700 border-cyan-200",
+  "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "bg-teal-100 text-teal-700 border-teal-200",
+  "bg-orange-100 text-orange-700 border-orange-200",
+];
+const LEAD_WON_COLOR = "bg-emerald-100 text-emerald-700 border-emerald-200";
+const LEAD_LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200";
+
+function getLeadStageColor(stage: PipelineStage, index: number): string {
+  if (stage.variant === "won") return LEAD_WON_COLOR;
+  if (stage.variant === "lost") return LEAD_LOST_COLOR;
+  return LEAD_STAGE_COLORS[index % LEAD_STAGE_COLORS.length];
+}
 
 /* ── LeadCard ──────────────────────────────────────────────── */
 function LeadCard({ lead, onView, showRevenue, variant }: {
@@ -254,59 +241,12 @@ function DroppableColumn({ col, leads, showRevenue, onView }: {
   );
 }
 
-/* ── EditStagesDialog ─────────────────────────────────────── */
-function EditStagesDialog({ open, onClose, columns, onSave }: {
-  open: boolean; onClose: () => void;
-  columns: ColDef[];
-  onSave: (labels: Record<string, string>) => void;
-}) {
-  const [labels, setLabels] = useState<Record<string, string>>({});
-  useEffect(() => {
-    if (open) {
-      const init: Record<string, string> = {};
-      columns.forEach(c => { init[c.id] = c.title; });
-      setLabels(init);
-    }
-  }, [open, columns]);
-
-  return (
-    <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Pipeline Aşamalarını Düzenle</DialogTitle></DialogHeader>
-        <div className="space-y-3 py-1">
-          {columns.map(col => (
-            <div key={col.id} className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full shrink-0 ${
-                col.variant === "won" ? "bg-emerald-500" :
-                col.variant === "lost" ? "bg-rose-500" :
-                "bg-muted-foreground/40"
-              }`} />
-              <div className="flex-1">
-                <Input
-                  value={labels[col.id] ?? col.title}
-                  onChange={e => setLabels(l => ({ ...l, [col.id]: e.target.value }))}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <span className="text-xs text-muted-foreground w-16 shrink-0 font-mono">{col.id}</span>
-            </div>
-          ))}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>İptal</Button>
-          <Button onClick={() => { onSave(labels); onClose(); }}>
-            <Check className="h-3.5 w-3.5 mr-1.5" />Kaydet
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 /* ── FilterPopover ────────────────────────────────────────── */
-function FilterPopover({ filters, onChange }: {
+function FilterPopover({ filters, onChange, columns }: {
   filters: { source: string; status: string };
   onChange: (f: { source: string; status: string }) => void;
+  columns: ColDef[];
 }) {
   const [open, setOpen] = useState(false);
   const hasActive = filters.source !== "all" || filters.status !== "all";
@@ -359,7 +299,7 @@ function FilterPopover({ filters, onChange }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tümü</SelectItem>
-              {DEFAULT_COLUMNS.map(c => (
+              {columns.map(c => (
                 <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
               ))}
             </SelectContent>
@@ -431,8 +371,8 @@ function CountrySelect({ value, onChange }: { value: string; onChange: (v: strin
 }
 
 /* ── EditLeadDialog ───────────────────────────────────────── */
-function EditLeadDialog({ open, onClose, lead, canSeeRevenue }: {
-  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean;
+function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
+  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[];
 }) {
   const [form, setForm] = useState({ ...EMPTY_FORM, status: "new" });
   const updateLead = useUpdateLead();
@@ -519,7 +459,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue }: {
             <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {DEFAULT_COLUMNS.map(c => (
+                {columns.map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
                 ))}
               </SelectContent>
@@ -629,7 +569,7 @@ export default function LeadsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [filters, setFilters] = useState({ source: "all", status: "all" });
-  const [customLabels, setCustomLabels] = useState<Record<string, string>>(loadLabels);
+  const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("lead");
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
   });
@@ -662,12 +602,14 @@ export default function LeadsPage() {
 
   const allLeads = data?.data || [];
 
-  const columns: ColDef[] = DEFAULT_COLUMNS.map(c => ({
-    ...c,
-    title: customLabels[c.id] || c.title,
+  const columns: ColDef[] = pipelineStages.map(s => ({
+    id: s.key,
+    title: s.label,
+    variant: (s.variant as ColVariant) || undefined,
   }));
 
   const allColumnIds = new Set(columns.map(c => c.id));
+  const leadStageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const filteredLeads = allLeads.filter((l: any) => {
     if (filters.source !== "all" && l.source !== filters.source) return false;
@@ -805,19 +747,17 @@ export default function LeadsPage() {
     );
   };
 
-  function handleSaveLabels(labels: Record<string, string>) {
-    setCustomLabels(labels);
-    saveLabels(labels);
-    toast({ title: "Pipeline güncellendi" });
+  async function handleSaveStages(newStages: PipelineStage[]) {
+    await saveStages(newStages);
   }
 
   function handleCreate() {
     if (!form.firstName || !form.lastName) return;
-    const payload: any = { ...form, status: "new", season };
+    const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
+    const payload: any = { ...form, status: defaultStatus, season };
     const parsedCreate = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
     else delete payload.estimatedValue;
-    delete payload.status;
 
     createLead.mutate(
       { data: payload },
@@ -864,7 +804,7 @@ export default function LeadsPage() {
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
               />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} />
+            <FilterPopover filters={filters} onChange={setFilters} columns={columns} />
 
             <div className="flex items-center border rounded-full overflow-hidden">
               <button
@@ -1014,9 +954,11 @@ export default function LeadsPage() {
                         {lead.email || "-"}
                       </TableCell>
                       <TableCell onClick={() => setLocation(`/staff/leads/${lead.id}`)}>
-                        <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusColors[lead.status] || "bg-gray-100 text-gray-700"}`}>
-                          {lead.status}
-                        </span>
+                        {(() => {
+                          const sm = leadStageMap[lead.status];
+                          const color = sm ? getLeadStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
+                          return <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${color}`}>{sm?.label || lead.status}</span>;
+                        })()}
                       </TableCell>
                       <TableCell
                         className="text-muted-foreground capitalize"
@@ -1094,8 +1036,10 @@ export default function LeadsPage() {
       <EditStagesDialog
         open={editStagesOpen}
         onClose={() => setEditStagesOpen(false)}
-        columns={DEFAULT_COLUMNS}
-        onSave={handleSaveLabels}
+        stages={pipelineStages}
+        onSave={handleSaveStages}
+        isSaving={isSavingStages}
+        entityLabel="Lead"
       />
 
       {/* ── Edit Lead Dialog ───────────────────────────────── */}
@@ -1104,6 +1048,7 @@ export default function LeadsPage() {
         onClose={() => setEditLead(null)}
         lead={editLead}
         canSeeRevenue={canSeeRevenue}
+        columns={columns}
       />
 
       {/* ── Delete Confirm Dialog ──────────────────────────── */}

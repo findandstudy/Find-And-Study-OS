@@ -15,6 +15,7 @@ import auditRouter from "./audit";
 import statsRouter from "./stats";
 import catalogRouter from "./catalog";
 import aiExtractRouter from "./ai-extract";
+import pipelineRouter from "./pipeline";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(auditRouter);
 router.use(statsRouter);
 router.use(catalogRouter);
 router.use(aiExtractRouter);
+router.use(pipelineRouter);
 
 export default router;

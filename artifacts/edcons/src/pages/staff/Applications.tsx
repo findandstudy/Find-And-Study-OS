@@ -26,6 +26,8 @@ import {
   Eye, Stamp, CheckCircle, XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { EditStagesDialog } from "@/components/EditStagesDialog";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
@@ -37,21 +39,24 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return r.json();
 }
 
-const STAGE_ORDER = [
-  "inquiry", "documents_collected", "submitted", "offer_received",
-  "visa_applied", "visa_approved", "enrolled", "rejected",
+const STAGE_COLORS = [
+  "bg-slate-100 text-slate-700 border-slate-200",
+  "bg-blue-100 text-blue-700 border-blue-200",
+  "bg-violet-100 text-violet-700 border-violet-200",
+  "bg-amber-100 text-amber-700 border-amber-200",
+  "bg-orange-100 text-orange-700 border-orange-200",
+  "bg-cyan-100 text-cyan-700 border-cyan-200",
+  "bg-teal-100 text-teal-700 border-teal-200",
+  "bg-indigo-100 text-indigo-700 border-indigo-200",
 ];
+const WON_COLOR = "bg-green-100 text-green-700 border-green-200";
+const LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200";
 
-const STAGE_CONFIG: Record<string, { label: string; color: string; icon: any; variant?: "won" | "lost" }> = {
-  inquiry:             { label: "Inquiry",      color: "bg-slate-100 text-slate-700 border-slate-200",   icon: BookOpen },
-  documents_collected: { label: "Documents",    color: "bg-blue-100 text-blue-700 border-blue-200",     icon: FileCheck },
-  submitted:           { label: "Submitted",    color: "bg-violet-100 text-violet-700 border-violet-200", icon: Send },
-  offer_received:      { label: "Offer",        color: "bg-amber-100 text-amber-700 border-amber-200",  icon: Eye },
-  visa_applied:        { label: "Visa Applied", color: "bg-orange-100 text-orange-700 border-orange-200", icon: Stamp },
-  visa_approved:       { label: "Visa OK",      color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle },
-  enrolled:            { label: "Enrolled",     color: "bg-green-100 text-green-700 border-green-200",  icon: GraduationCap, variant: "won" },
-  rejected:            { label: "Rejected",     color: "bg-rose-100 text-rose-700 border-rose-200",     icon: XCircle, variant: "lost" },
-};
+function getStageColor(stage: PipelineStage, index: number): string {
+  if (stage.variant === "won") return WON_COLOR;
+  if (stage.variant === "lost") return LOST_COLOR;
+  return STAGE_COLORS[index % STAGE_COLORS.length];
+}
 
 const STUDY_LEVELS = [
   { value: "foundation", label: "Foundation" },
@@ -172,12 +177,10 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
 }
 
 /* ── PipelineColumn ──────────────────────────────────────── */
-function PipelineColumn({ stage, apps, onView }: {
-  stage: string; apps: any[]; onView: (id: number) => void;
+function PipelineColumn({ stage, label, variant, apps, onView }: {
+  stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
 }) {
-  const cfg = STAGE_CONFIG[stage] || { label: stage, color: "bg-gray-100 text-gray-700", icon: BookOpen };
-  const v = cfg.variant;
-  const Icon = cfg.icon;
+  const v = variant as "won" | "lost" | undefined;
   const totalRevenue = apps.reduce((sum, a) => sum + (a.tuitionFee || 0), 0);
 
   const colBg =
@@ -200,8 +203,7 @@ function PipelineColumn({ stage, apps, onView }: {
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5">
-            <Icon className={`w-4 h-4 shrink-0 ${v === "won" ? "text-emerald-500" : v === "lost" ? "text-rose-400" : "text-muted-foreground"}`} />
-            <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{cfg.label}</h3>
+            <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
           </div>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{apps.length}</span>
         </div>
@@ -267,7 +269,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 }
 
 /* ── EditApplicationDialog ───────────────────────────────── */
-function EditApplicationDialog({ open, onClose, app }: { open: boolean; onClose: () => void; app: any }) {
+function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
   const [form, setForm] = useState({ stage: "", level: "", country: "", universityName: "", programName: "", intake: "", instructionLanguage: "", tuitionFee: "", notes: "" });
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -311,7 +313,7 @@ function EditApplicationDialog({ open, onClose, app }: { open: boolean; onClose:
             <Label>Stage</Label>
             <Select value={form.stage} onValueChange={v => setForm({ ...form, stage: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{STAGE_ORDER.map(s => <SelectItem key={s} value={s}>{STAGE_CONFIG[s]?.label || s}</SelectItem>)}</SelectContent>
+              <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -387,7 +389,8 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 }
 
 /* ── FilterPopover ────────────────────────────────────────── */
-function FilterPopover({ filters, onChange }: {
+function FilterPopover({ filters, onChange, stages }: {
+  stages: PipelineStage[];
   filters: { stage: string; country: string };
   onChange: (f: { stage: string; country: string }) => void;
 }) {
@@ -413,7 +416,7 @@ function FilterPopover({ filters, onChange }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              {STAGE_ORDER.map(s => <SelectItem key={s} value={s}>{STAGE_CONFIG[s]?.label || s}</SelectItem>)}
+              {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -434,7 +437,7 @@ function FilterPopover({ filters, onChange }: {
 }
 
 /* ── AddApplicationModal ─────────────────────────────────── */
-function AddApplicationModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
   const { toast } = useToast();
   const { season } = useSeason();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -488,7 +491,7 @@ function AddApplicationModal({ open, onClose, onSuccess }: { open: boolean; onCl
     if (!form.level) { toast({ title: "Select a level", variant: "destructive" }); return; }
     const fee = parseFloat(form.tuitionFee);
     createApplication.mutate({
-      studentId: selectedStudent.id, stage: "inquiry", season,
+      studentId: selectedStudent.id, stage: defaultStage || "inquiry", season,
       country: form.country || null, universityName: form.universityName || null,
       level: form.level || null, programName: form.programName || null,
       instructionLanguage: form.instructionLanguage || null, intake: form.intake || null,
@@ -585,7 +588,12 @@ export default function ApplicationsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [listPage, setListPage] = useState(1);
+  const [editStagesOpen, setEditStagesOpen] = useState(false);
   const LIST_PAGE_SIZE = 50;
+
+  const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("application");
+  const stageOrder = pipelineStages.map(s => s.key);
+  const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const { data: applicationsResp, isLoading } = useQuery({
     queryKey: ["applications", season, search],
@@ -610,7 +618,7 @@ export default function ApplicationsPage() {
       let valA: any, valB: any;
       switch (sort.key) {
         case "student": valA = `${a.studentFirstName} ${a.studentLastName}`.toLowerCase(); valB = `${b.studentFirstName} ${b.studentLastName}`.toLowerCase(); break;
-        case "stage": valA = STAGE_ORDER.indexOf(a.stage); valB = STAGE_ORDER.indexOf(b.stage); break;
+        case "stage": valA = stageOrder.indexOf(a.stage); valB = stageOrder.indexOf(b.stage); break;
         case "country": valA = (a.country || "").toLowerCase(); valB = (b.country || "").toLowerCase(); break;
         case "university": valA = (a.universityName || "").toLowerCase(); valB = (b.universityName || "").toLowerCase(); break;
         case "program": valA = (a.programName || "").toLowerCase(); valB = (b.programName || "").toLowerCase(); break;
@@ -625,7 +633,7 @@ export default function ApplicationsPage() {
       return 0;
     });
     return arr;
-  }, [filteredApps, sort]);
+  }, [filteredApps, sort, stageOrder]);
 
   const totalListPages = Math.max(1, Math.ceil(sortedApps.length / LIST_PAGE_SIZE));
   const pagedApps = sortedApps.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE);
@@ -670,7 +678,7 @@ export default function ApplicationsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search applications..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} />
+            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
@@ -680,6 +688,9 @@ export default function ApplicationsPage() {
                 <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
               </Button>
             )}
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditStagesOpen(true)}>
+              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Stages
+            </Button>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> New Application
             </Button>
@@ -689,9 +700,9 @@ export default function ApplicationsPage() {
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
             <div className="flex gap-5 h-full min-w-max px-1">
-              {STAGE_ORDER.map(stage => {
-                const stageApps = filteredApps.filter((a: any) => a.stage === stage);
-                return <PipelineColumn key={stage} stage={stage} apps={stageApps} onView={id => setEditApp(allApps.find((a: any) => a.id === id))} />;
+              {pipelineStages.map(s => {
+                const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
+                return <PipelineColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setEditApp(allApps.find((a: any) => a.id === id))} />;
               })}
             </div>
           </div>
@@ -722,13 +733,15 @@ export default function ApplicationsPage() {
                   ) : pagedApps.length === 0 ? (
                     <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
                   ) : pagedApps.map((app: any) => {
-                    const stageCfg = STAGE_CONFIG[app.stage] || { label: app.stage, color: "bg-gray-100 text-gray-700" };
+                    const sm = stageMap[app.stage];
+                    const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
+                    const stageLabel = sm?.label || app.stage;
                     const levelLabel = STUDY_LEVELS.find(l => l.value === app.level)?.label || app.level || "-";
                     return (
                       <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`}>
                         <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
                         <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
-                        <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageCfg.color}`}>{stageCfg.label}</span></TableCell>
+                        <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.programName || "-"}</TableCell>
@@ -762,9 +775,17 @@ export default function ApplicationsPage() {
         )}
       </div>
 
-      <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} />
+      <EditStagesDialog
+        open={editStagesOpen}
+        onClose={() => setEditStagesOpen(false)}
+        stages={pipelineStages}
+        onSave={async (s) => { await saveStages(s); }}
+        isSaving={isSavingStages}
+        entityLabel="Application"
+      />
+      <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
       <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
-      <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} />
+      <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />
     </DashboardLayout>
   );
 }

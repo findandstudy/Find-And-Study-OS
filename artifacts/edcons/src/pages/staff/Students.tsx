@@ -22,16 +22,35 @@ import {
   ChevronRight, Filter, UserCheck, UserX, UserMinus, UserPlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { EditStagesDialog } from "@/components/EditStagesDialog";
 import { cn } from "@/lib/utils";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS_DEFAULT: Record<string, string> = {
   active: "bg-green-100 text-green-700 border-green-200",
   inactive: "bg-gray-100 text-gray-600 border-gray-200",
   graduated: "bg-blue-100 text-blue-700 border-blue-200",
   suspended: "bg-red-100 text-red-700 border-red-200",
 };
+
+const STU_STAGE_COLORS = [
+  "bg-green-100 text-green-700 border-green-200",
+  "bg-gray-100 text-gray-600 border-gray-200",
+  "bg-blue-100 text-blue-700 border-blue-200",
+  "bg-amber-100 text-amber-700 border-amber-200",
+  "bg-violet-100 text-violet-700 border-violet-200",
+  "bg-cyan-100 text-cyan-700 border-cyan-200",
+];
+const STU_WON_COLOR = "bg-blue-100 text-blue-700 border-blue-200";
+const STU_LOST_COLOR = "bg-red-100 text-red-700 border-red-200";
+
+function getStuStageColor(stage: PipelineStage, index: number): string {
+  if (stage.variant === "won") return STU_WON_COLOR;
+  if (stage.variant === "lost") return STU_LOST_COLOR;
+  return STU_STAGE_COLORS[index % STU_STAGE_COLORS.length];
+}
 
 type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
 type AppLevel = "undergraduate" | "graduate" | "doctorate";
@@ -290,10 +309,12 @@ function AddStudentModal({
   open,
   onClose,
   onSuccess,
+  defaultStatus,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  defaultStatus?: string;
 }) {
   const { toast } = useToast();
   const createStudent = useCreateStudent();
@@ -458,7 +479,7 @@ function AddStudentModal({
           gpa: form.gpa || null,
           languageScore: form.languageScore || null,
           notes: form.notes || null,
-          status: "active",
+          status: defaultStatus || "active",
           season,
         },
       },
@@ -984,19 +1005,6 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
 }
 
 const VIEW_KEY_STU = "edcons_students_view";
-const STUDENT_STATUSES = ["active", "inactive", "graduated", "suspended"];
-
-const STATUS_ICON: Record<string, any> = {
-  active: UserCheck,
-  inactive: UserMinus,
-  graduated: GraduationCap,
-  suspended: UserX,
-};
-
-const STATUS_VARIANT: Record<string, "won" | "lost" | undefined> = {
-  graduated: "won",
-  suspended: "lost",
-};
 
 type StuSortKey = "name" | "email" | "nationality" | "status" | "passport" | "date";
 type StuSortDir = "asc" | "desc";
@@ -1015,9 +1023,8 @@ function StuSortHeader({ label, sortKey, currentSort, onSort }: {
   );
 }
 
-function StuPipelineColumn({ status, students, onView }: { status: string; students: any[]; onView: (id: number) => void }) {
-  const v = STATUS_VARIANT[status];
-  const Icon = STATUS_ICON[status] || User;
+function StuPipelineColumn({ status, label, variant, students, onView }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void }) {
+  const v = variant as "won" | "lost" | undefined;
 
   const colBg = v === "won" ? "bg-emerald-50/60 border-emerald-200/50" : v === "lost" ? "bg-rose-50/60 border-rose-200/50" : "bg-secondary/50 border-border/50";
   const headerBg = v === "won" ? "bg-emerald-100/80 border-emerald-200/70" : v === "lost" ? "bg-rose-100/80 border-rose-200/70" : "bg-card/50 border-border/50";
@@ -1029,8 +1036,7 @@ function StuPipelineColumn({ status, students, onView }: { status: string; stude
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5">
-            <Icon className={`w-4 h-4 shrink-0 ${v === "won" ? "text-emerald-500" : v === "lost" ? "text-rose-400" : "text-muted-foreground"}`} />
-            <h3 className={`font-display font-bold text-sm capitalize ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{status}</h3>
+            <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
           </div>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{students.length}</span>
         </div>
@@ -1058,7 +1064,7 @@ function StuPipelineColumn({ status, students, onView }: { status: string; stude
   );
 }
 
-function EditStudentDialog({ open, onClose, student }: { open: boolean; onClose: () => void; student: any }) {
+function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", nationality: "", status: "active", dateOfBirth: "", passportNumber: "", notes: "" });
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1106,7 +1112,7 @@ function EditStudentDialog({ open, onClose, student }: { open: boolean; onClose:
             <Label>Status</Label>
             <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{STUDENT_STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}</SelectContent>
+              <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.dateOfBirth} onChange={e => setForm({ ...form, dateOfBirth: e.target.value })} /></div>
@@ -1138,7 +1144,8 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
   );
 }
 
-function StuFilterPopover({ filters, onChange }: {
+function StuFilterPopover({ filters, onChange, stages }: {
+  stages: PipelineStage[];
   filters: { status: string }; onChange: (f: { status: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1162,7 +1169,7 @@ function StuFilterPopover({ filters, onChange }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              {STUDENT_STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+              {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -1187,7 +1194,12 @@ export default function StudentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [listPage, setListPage] = useState(1);
+  const [editStagesOpen, setEditStagesOpen] = useState(false);
   const LIST_PAGE_SIZE = 50;
+
+  const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("student");
+  const studentStatuses = pipelineStages.map(s => s.key);
+  const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const { season } = useSeason();
   const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
@@ -1271,7 +1283,7 @@ export default function StudentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <StuFilterPopover filters={filters} onChange={setFilters} />
+            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
@@ -1284,6 +1296,9 @@ export default function StudentsPage() {
             <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
               <FileUp className="w-4 h-4" /> Bulk Import
             </Button>
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditStagesOpen(true)}>
+              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Stages
+            </Button>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Student
             </Button>
@@ -1293,9 +1308,9 @@ export default function StudentsPage() {
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
             <div className="flex gap-5 h-full min-w-max px-1">
-              {STUDENT_STATUSES.map(status => {
-                const statusStudents = filteredStudents.filter((s: any) => s.status === status);
-                return <StuPipelineColumn key={status} status={status} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} />;
+              {pipelineStages.map((ps, idx) => {
+                const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
+                return <StuPipelineColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} />;
               })}
             </div>
           </div>
@@ -1340,7 +1355,7 @@ export default function StudentsPage() {
                       <TableCell onClick={() => setLocation(`/staff/students/${student.id}`)}>{student.nationality || "-"}</TableCell>
                       <TableCell className="font-mono text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{student.passportNumber || "-"}</TableCell>
                       <TableCell onClick={() => setLocation(`/staff/students/${student.id}`)}>
-                        <Badge className={cn("text-xs border font-medium", STATUS_COLORS[student.status] || "bg-gray-100 text-gray-600 border-gray-200")}>{student.status}</Badge>
+                        <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
@@ -1368,9 +1383,17 @@ export default function StudentsPage() {
         )}
       </div>
 
-      <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} />
+      <EditStagesDialog
+        open={editStagesOpen}
+        onClose={() => setEditStagesOpen(false)}
+        stages={pipelineStages}
+        onSave={async (s) => { await saveStages(s); }}
+        isSaving={isSavingStages}
+        entityLabel="Student"
+      />
+      <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} stages={pipelineStages} />
       <StuDeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
-      <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} />
+      <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} defaultStatus={pipelineStages[0]?.key} />
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} onSuccess={invalidate} />
     </DashboardLayout>
   );

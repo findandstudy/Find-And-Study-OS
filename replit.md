@@ -56,8 +56,14 @@ artifacts-monorepo/
 - Paginated endpoints return `{ data: [...], meta: {...} }` — normalize with `(resp as any)?.data || resp || []`
 - Blog/Universities GET endpoints are public (no auth required)
 - Blog posts use `published: boolean` field (not `status`)
-- Application stages: `inquiry → documents_collected → submitted → offer_received → visa_applied → visa_approved → enrolled → rejected`
-- Lead stages: `new, contacted, interested, qualified, converted, lost`
+- **Pipeline stages are dynamic** — stored in `pipeline_stages` DB table, managed via API
+  - API: `GET/PUT /api/pipeline-stages/:entityType` (entity types: `lead`, `application`, `student`)
+  - Default stages auto-seeded on first fetch; managers can add/remove/reorder/rename stages
+  - Stage keys are immutable after creation (labels/variants/order can change)
+  - Frontend uses `usePipelineStages(entityType)` hook + shared `EditStagesDialog` component
+  - Default lead stages: new, contacted, interested, qualified, converted, won, lost
+  - Default application stages: inquiry, documents_collected, submitted, offer_received, visa_applied, visa_approved, enrolled, rejected
+  - Default student stages: active, inactive, graduated, suspended
 
 ## Frontend Key Files
 
