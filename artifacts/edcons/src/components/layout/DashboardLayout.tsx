@@ -76,6 +76,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Catalog", icon: Library, url: '/admin/catalog' },
             { title: "Users", icon: UserCheck, url: '/admin/users' },
             { title: "Audit Log", icon: Activity, url: '/admin/audit' },
+            { title: "User Activity", icon: Activity, url: '/admin/activity' },
             { title: "Settings", icon: Settings, url: '/admin/settings' },
           ]
         }

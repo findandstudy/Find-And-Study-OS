@@ -49,5 +49,6 @@ router.use(rolesRouter);
 router.use(messagesRouter);
 router.use(notificationsRouter);
 router.use(integrationsRouter);
+router.use(activityRouter);
 
 export default router;

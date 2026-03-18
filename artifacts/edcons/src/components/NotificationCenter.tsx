@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { customFetch } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -48,11 +49,13 @@ function timeAgo(dateStr: string) {
 }
 
 export function NotificationCenter() {
+  const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -152,7 +155,10 @@ export function NotificationCenter() {
                   return (
                     <div
                       key={n.id}
-                      onClick={() => !n.isRead && markRead(n.id)}
+                      onClick={() => {
+                        if (!n.isRead) markRead(n.id);
+                        if (n.actionUrl) { setLocation(n.actionUrl); setOpen(false); }
+                      }}
                       className={`flex items-start gap-3 px-4 py-3 border-b border-border/30 cursor-pointer transition-colors hover:bg-secondary/50 ${!n.isRead ? "bg-primary/5" : ""}`}
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${!n.isRead ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"}`}>

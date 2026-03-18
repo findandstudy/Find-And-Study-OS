@@ -68,7 +68,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
   - API: `POST /api/quick-contact` with server-side channel validation (requires recipientEmail for email, recipientPhone for WhatsApp)
   - Frontend: `artifacts/edcons/src/components/QuickContact.tsx` — integrated into LeadDetail, StudentDetail, ApplicationDetail, and Agents pages
 - **Message Notifications:** Sending a message to a conversation automatically creates in-app notifications for all other participants.
-- **Security:** Conversation participants endpoint has membership authorization check. Broadcast tab gated to admin/manager roles on frontend.
+- **Security:** All conversation/messaging endpoints protected with `requireRole(...STAFF_ROLES, ...ADMIN_ROLES)` to prevent non-staff access. Participant membership checks on message read/send. Unread counts exclude self-authored messages. Broadcast tab gated to admin/manager roles on frontend.
 - **ADMIN_ROLES:** `["super_admin", "admin", "manager"]` — used for notification rules, broadcast access, and other admin-level operations.
 
 ## Integrations System

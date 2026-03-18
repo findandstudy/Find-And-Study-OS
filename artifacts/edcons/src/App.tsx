@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
 import NotFound from "@/pages/not-found";
 
 // Public
@@ -37,6 +38,7 @@ import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminUsers from "@/pages/admin/Users";
 import AdminCatalog from "@/pages/admin/Catalog";
 import AdminAuditLog from "@/pages/admin/AuditLog";
+import AdminActivity from "@/pages/admin/Activity";
 
 // Student
 import StudentDashboard from "@/pages/student/Dashboard";
@@ -91,6 +93,12 @@ function Router() {
       </Route>
       <Route path="/admin/settings">
         <ProtectedRoute allowedRoles={ADMIN_ROLES}><StaffSettings /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/activity">
+        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity /></ProtectedRoute>
+      </Route>
+      <Route path="/admin/activity/:userId">
+        {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity userId={Number(params.userId)} /></ProtectedRoute>}
       </Route>
 
       {/* Staff / Consultant Portal */}
@@ -171,7 +179,9 @@ function App() {
         <SeasonProvider>
           <TooltipProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
+              <ActivityTrackerProvider>
+                <Router />
+              </ActivityTrackerProvider>
             </WouterRouter>
             <Toaster />
           </TooltipProvider>

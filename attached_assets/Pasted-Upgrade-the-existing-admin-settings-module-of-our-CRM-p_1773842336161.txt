@@ -1,0 +1,367 @@
+Upgrade the existing /admin/settings module of our CRM platform into a production-ready, premium settings center.
+
+IMPORTANT:
+- Do not rebuild the admin shell.
+- Do not replace the sidebar, topbar, year selector, or existing page layout.
+- Inspect the current project first and extend the existing Settings page.
+- Reuse the current UI system, spacing, cards, tabs, switches, uploads, and visual language.
+- Keep the current clean SaaS style.
+- Do not create a generic demo.
+- Do not overcomplicate what is already working.
+
+CRITICAL CONTEXT:
+The Notifications tab is already implemented and already contains:
+- personal notification preferences
+- grouped system notification rules
+- categories like Agents, Applications, Finance, Leads, Messages, Students, System
+- channel toggles like In-App, Email, WhatsApp, Telegram, SMS
+- recipient logic
+- active/inactive state per event
+
+So:
+- DO NOT rebuild Notifications from scratch
+- DO NOT duplicate notification architecture
+- ONLY polish Notifications if needed:
+  - improve spacing
+  - improve hierarchy
+  - improve readability
+  - improve permission safety
+  - improve save/load behavior if needed
+But keep the existing notification logic and structure intact.
+
+MAIN GOAL:
+Turn Settings into a strong, scalable, premium admin settings center focused on:
+1. Personal settings
+2. Branding and visual identity
+3. SEO and social sharing
+4. Company/contact settings
+5. Email and document branding
+6. Integrations and advanced site/app settings
+7. Strong role-based access control
+
+DESIGN DIRECTION:
+- premium SaaS
+- light, spacious, minimal
+- subtle borders and shadows
+- rounded cards
+- elegant tabs
+- clear section descriptions
+- modern but not flashy
+- consistent typography and spacing
+- preserve the current visual language from the existing screens
+
+BRAND COLORS:
+- Primary Blue: #143591
+- Red: #ED1C24
+- White: #FFFFFF
+
+SETTINGS SCOPE
+
+A) PERSONAL SETTINGS
+These are user-level settings and should remain clean and simple.
+
+1. Profile
+- first name
+- last name
+- display name
+- avatar upload
+- email (read-only if auth-controlled)
+- phone
+- preferred language
+- timezone
+- date format
+- save button
+- validation
+- success/error feedback
+- unsaved changes detection
+
+2. Language & Region
+- default UI language
+- available language selection
+- RTL awareness for Arabic
+- timezone
+- date/time formatting preview
+
+3. Security
+- auth provider info
+- current session
+- active sessions if supported
+- sign out current session
+- sign out all sessions if supported
+- password section only if local auth exists
+- 2FA architecture placeholder only if real backend support is not yet implemented
+- do not fake unsupported features
+
+4. Notifications
+- keep existing architecture
+- do not rebuild
+- only polish the UI and UX if necessary
+- preserve existing event categories, rule groups, recipient logic, and channel toggles
+
+B) ORGANIZATION / TENANT SETTINGS
+These are the real upgrade priority.
+
+5. Branding & Appearance
+Expand the current Branding tab into a much stronger, production-ready module.
+
+Include:
+- light mode logo upload
+- dark mode logo upload
+- square logo upload
+- favicon upload
+- Apple touch icon upload
+- app icon / PWA icon upload
+- email logo upload
+- PDF / document logo upload
+- appearance mode:
+  - light
+  - dark
+  - system
+- theme colors:
+  - primary color
+  - secondary color
+  - accent color
+  - button color
+  - hover color
+  - link color
+  - success color
+  - warning color
+  - danger color
+
+Add a live preview area showing:
+- sidebar logo preview
+- header/logo preview
+- favicon/browser tab mock preview
+- button preview
+- email header preview
+- PDF branding preview card
+
+For all uploads:
+- show recommended image dimensions
+- validate file type
+- validate file size
+- allow replace/remove
+- show thumbnails
+- keep UI polished and compact
+
+6. SEO & Social Sharing
+Create a dedicated SEO section or tab. This is very important.
+
+Fields:
+- site name
+- site title template (example: {{pageTitle}} | Find And Study)
+- default meta title
+- default meta description
+- canonical base URL
+- robots index toggle
+- robots follow toggle
+- staging noindex toggle
+- default Open Graph title
+- default Open Graph description
+- default Open Graph image upload
+- Twitter/X title
+- Twitter/X description
+- Twitter/X image upload
+- default share image upload
+- optional keywords field
+- Google Search Console verification code
+- Google Analytics / GA4 Measurement ID
+- Meta Pixel ID
+- TikTok Pixel ID
+
+Structured data defaults:
+- organization name
+- website URL
+- logo URL
+- social profile URLs
+
+Also include:
+- Google search result preview card
+- social share preview card
+- title/description character guidance
+- helper texts for non-technical admins
+
+7. Company & Contact Settings
+Create a dedicated section for reusable company/public brand details.
+
+Fields:
+- legal company name
+- public brand name
+- support email
+- sales email
+- general email
+- phone
+- WhatsApp number
+- address
+- city
+- country
+- working hours
+- footer short description
+- footer copyright text
+- contact CTA text
+
+Social links:
+- Instagram
+- Facebook
+- LinkedIn
+- X / Twitter
+- YouTube
+- TikTok
+
+This data should be reusable across:
+- public website
+- footer
+- contact page
+- emails
+- PDFs
+- future templates
+
+8. Email Branding
+Create a clean Email Branding section.
+
+Include:
+- sender name
+- sender email
+- reply-to email
+- email header logo
+- email footer text
+- email signature block
+- primary email button color
+- disclaimer text
+
+Add a branded email preview block.
+
+Do not build a full complex template editor unless the project already supports it.
+Instead:
+- structure the UI and backend to be extensible later
+- support a few basic editable template settings if easy to implement
+
+9. Documents / PDF Branding
+Create a section for document identity.
+
+Include:
+- PDF logo
+- header text
+- footer text
+- watermark text
+- signature label
+- optional seal / stamp image upload
+- primary document color
+
+Add a simple preview card showing how branded documents may look.
+
+10. Integrations
+Create a clean integrations settings section.
+
+Fields may include:
+- Google Analytics
+- Meta Pixel
+- TikTok Pixel
+- LinkedIn Insight Tag
+- Microsoft Clarity / Hotjar placeholder
+- reCAPTCHA site key
+- WhatsApp widget config
+- live chat script
+- custom head script
+- custom body-end script
+
+Requirements:
+- warning text for risky fields
+- secure handling
+- permissions restricted to high-level admins
+- do not expose secrets carelessly
+
+11. Advanced
+Create an advanced settings section for controlled admin use.
+
+Include:
+- canonical/base domain
+- sitemap URL display
+- robots.txt custom content
+- feature flags placeholder
+- cache refresh / branding refresh action after asset changes
+- environment-aware warnings
+- staging/production awareness if the app supports it
+
+ROLE / ACCESS CONTROL
+Implement strong permission boundaries:
+- Super Admin: full access
+- Admin: allowed organization-level settings only
+- Staff / normal users: personal settings only
+- Finance-only roles should not see unrelated settings
+- Keep permission logic scalable and reusable
+- Do not rely on UI hiding only; enforce on backend too
+
+ARCHITECTURE REQUIREMENTS
+- inspect current models, routes, components first
+- extend existing system carefully
+- use modular components by settings domain
+- keep user settings and tenant settings clearly separated
+- use strong typing
+- use reusable forms
+- server validation + client validation
+- proper loading/saving/error states
+- toasts or inline save feedback
+- dirty-state detection
+- avoid duplicated logic
+- keep code production-quality
+
+DATA MODEL GUIDANCE
+Inspect the current database schema first and extend cleanly.
+
+Prefer structured models such as:
+- user_settings
+- tenant_settings
+- tenant_branding
+- tenant_seo_settings
+- tenant_company_profile
+- tenant_integrations
+
+Do not dump everything into one messy JSON column unless there is a strong reason.
+If JSON is used, use it intentionally and document why.
+
+SAVE BEHAVIOR
+Choose the best UX:
+- section-level save is preferred
+- each card/section can save independently
+- show unsaved changes clearly
+- show saving spinner
+- show success confirmation
+- handle API failures gracefully
+
+UX REQUIREMENTS
+- keep the page easy to scan
+- do not overwhelm the user
+- use section descriptions and helper text
+- use previews where useful
+- use collapsible sections only when it truly improves UX
+- keep the final result elegant, clear, and polished
+
+DO NOT:
+- do not rebuild Notifications from scratch
+- do not duplicate notification schemas
+- do not remove current working functionality
+- do not make the settings page bloated
+- do not add fake features
+- do not create a generic admin template look
+- do not hardcode settings that should be persisted
+
+DELIVERABLES:
+1. upgraded /admin/settings experience
+2. preserved existing notification module with optional UI polish only
+3. new robust Branding / SEO / Company / Email / PDF / Integrations / Advanced sections
+4. real save/load/persist logic
+5. role-based access control
+6. clean migration/schema updates
+7. reusable components
+8. polished final UI matching the current product style
+
+FINAL QUALITY BAR:
+This should feel like a premium SaaS settings center for a real CRM product.
+It must preserve what already works, improve weak areas, and add the missing business-critical settings without making the system messy.
+
+Before coding:
+- inspect existing settings architecture
+- identify current tabs, routes, models, and components
+- preserve working notifications
+- then implement the missing premium settings areas carefully

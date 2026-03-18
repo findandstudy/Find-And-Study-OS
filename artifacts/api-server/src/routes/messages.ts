@@ -15,7 +15,7 @@ import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
-router.get("/conversations", requireAuth, async (req, res): Promise<void> => {
+router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { search } = req.query as Record<string, string>;
 
@@ -100,6 +100,7 @@ router.get("/conversations", requireAuth, async (req, res): Promise<void> => {
         .where(
           and(
             eq(messagesTable.conversationId, cid),
+            sql`${messagesTable.senderId} != ${userId}`,
             lr ? sql`${messagesTable.createdAt} > ${lr}` : sql`1=1`
           )
         );
@@ -116,7 +117,7 @@ router.get("/conversations", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.post("/conversations", requireAuth, async (req, res): Promise<void> => {
+router.post("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { type = "direct", title, participantIds } = req.body;
   const userId = req.user!.id;
 
@@ -167,7 +168,7 @@ router.post("/conversations", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(conv);
 });
 
-router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const conversationId = parseInt(req.params.id, 10);
   const userId = req.user!.id;
   const { limit = "50", before } = req.query as Record<string, string>;
@@ -227,7 +228,7 @@ router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise
   res.json({ data: messages.reverse() });
 });
 
-router.post("/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const conversationId = parseInt(req.params.id, 10);
   const userId = req.user!.id;
   const { content, channel = "internal", replyToId, metadata } = req.body;
@@ -310,7 +311,7 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   res.status(201).json(message);
 });
 
-router.get("/conversations/:id/participants", requireAuth, async (req, res): Promise<void> => {
+router.get("/conversations/:id/participants", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const conversationId = parseInt(req.params.id, 10);
   const userId = req.user!.id;
 
@@ -345,7 +346,7 @@ router.get("/conversations/:id/participants", requireAuth, async (req, res): Pro
   res.json({ data: participants });
 });
 
-router.get("/users-search", requireAuth, async (req, res): Promise<void> => {
+router.get("/users-search", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { search, limit = "20" } = req.query as Record<string, string>;
   const conditions = [eq(usersTable.isActive, true)];
   if (search) {
@@ -469,7 +470,7 @@ async function createQuickContactConversation(
   return conv;
 }
 
-router.post("/quick-contact", requireAuth, async (req, res): Promise<void> => {
+router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { channel, recipientName, recipientEmail, recipientPhone, subject, message, entityType, entityId } = req.body;
 
