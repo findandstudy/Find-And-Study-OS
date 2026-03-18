@@ -63,6 +63,15 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Security:** Conversation participants endpoint has membership authorization check. Broadcast tab gated to admin/manager roles on frontend.
 - **ADMIN_ROLES:** `["super_admin", "admin", "manager"]` — used for notification rules, broadcast access, and other admin-level operations.
 
+## Integrations System
+
+- **DB table:** `integrations` (id, key unique, name, category, isEnabled, config jsonb)
+- **API routes:** `GET/PUT /api/integrations/:key`, `PATCH /api/integrations/:key/toggle`, `POST /api/integrations/:key/test`
+- **Frontend:** `IntegrationsManager` component in Settings → Integrations tab (admin/manager only)
+- **Categories:** Communication (SMTP, WhatsApp, Telegram, SMS/Twilio), AI (OpenAI, Claude, Gemini, HeyGen), Social Media (Instagram, Meta, Twitter, TikTok, YouTube, VK), Third-Party (Custom Webhook, Google Sheets, Custom API)
+- **Security:** Secrets (passwords, tokens, API keys) are masked on read (first 4 chars + dots). On save, masked values are skipped so existing secrets aren't overwritten.
+- **File:** `artifacts/api-server/src/routes/integrations.ts`, `artifacts/edcons/src/components/IntegrationsManager.tsx`
+
 ## Student Profile
 
 - **Photo System:** Student photos stored as documents with `type = "photo"` in the `documents` table. Profile page displays latest photo (sorted by `createdAt` desc) as circular avatar in header. Hover reveals camera (upload) and download buttons. Photo upload creates a new document record with auto-naming `photo-firstname-lastname`.

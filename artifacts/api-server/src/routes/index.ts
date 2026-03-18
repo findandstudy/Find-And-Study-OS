@@ -21,6 +21,7 @@ import storageRouter from "./storage";
 import rolesRouter from "./roles";
 import messagesRouter from "./messages";
 import notificationsRouter from "./notifications";
+import integrationsRouter from "./integrations";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(courseFinderRouter);
 router.use(rolesRouter);
 router.use(messagesRouter);
 router.use(notificationsRouter);
+router.use(integrationsRouter);
 
 export default router;

@@ -16,3 +16,4 @@ export * from "./wishlists";
 export * from "./roles";
 export * from "./messages";
 export * from "./notifications";
+export * from "./integrations";

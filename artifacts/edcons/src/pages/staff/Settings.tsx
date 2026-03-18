@@ -12,9 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
-import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail, Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon } from "lucide-react";
+import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail, Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon, Plug } from "lucide-react";
 import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 import { CountryFlag } from "@/components/CountryFlag";
+import { IntegrationsManager } from "@/components/IntegrationsManager";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -186,6 +187,9 @@ export default function SettingsPage() {
             <TabsTrigger value="notifications" className="rounded-lg gap-2"><Bell className="w-4 h-4" /> Notifications</TabsTrigger>
             <TabsTrigger value="security"      className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
             {isManager && (
+              <TabsTrigger value="integrations" className="rounded-lg gap-2"><Plug className="w-4 h-4" /> Integrations</TabsTrigger>
+            )}
+            {isManager && (
               <TabsTrigger value="branding" className="rounded-lg gap-2"><Palette className="w-4 h-4" /> Branding</TabsTrigger>
             )}
           </TabsList>
@@ -301,6 +305,13 @@ export default function SettingsPage() {
               </div>
             </Card>
           </TabsContent>
+
+          {/* ── Integrations (Managers only) ── */}
+          {isManager && (
+            <TabsContent value="integrations" className="mt-6">
+              <IntegrationsManager />
+            </TabsContent>
+          )}
 
           {/* ── Branding (Managers only) ── */}
           {isManager && (
