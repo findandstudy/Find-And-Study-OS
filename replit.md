@@ -87,7 +87,12 @@ artifacts-monorepo/
 
 ### Admin Portal
 - Dashboard with area/bar charts and system alerts
-- Users management table with role badges and filters
+- **User Management** page with two tabs:
+  - **Users tab**: User listing with search, role filters, stats cards (Total/Staff/Students/Agents), "Create User" modal with role/language selection; role filter pills (All/Staff/Student/Agent/Admin)
+  - **Roles & Permissions tab**: Full role management system with 10 system roles (super_admin, admin, manager, staff, consultant, accountant, editor, student, agent, sub_agent); granular permission editor across 12 categories (Dashboard, Leads, Applications, Students, Documents, Course Finder, Agents, Finance, Catalog, Users, Audit, Settings) with 49 total permissions; create custom roles; select/deselect all; per-category toggle; system roles protected from deletion; role deletion blocked if users assigned
+- **Roles DB table**: `roles` — `id, name, displayName, description, color, isSystem, permissions (JSONB), createdAt, updatedAt`
+- **Roles API**: `GET /api/roles`, `GET /api/roles/:id`, `POST /api/roles`, `PATCH /api/roles/:id`, `DELETE /api/roles/:id`, `GET /api/roles/permissions-schema`
+- Default seeds auto-run on first API server start; role validation on user create/patch checks both built-in and DB roles
 
 ### Staff Portal
 - **Students page**: Pipeline view (status columns: active/inactive/graduated/suspended) + list view with sortable columns, bulk select/delete, inline edit dialog; AI-powered student creation (multi-step: upload docs → Claude reads & fills form → user reviews/completes); bulk CSV import with AI column mapping; filter by status; view toggle stored in localStorage (`edcons_students_view`)

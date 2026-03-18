@@ -1,0 +1,144 @@
+import { Router, type IRouter } from "express";
+import {
+  db,
+  rolesTable,
+  usersTable,
+  DEFAULT_ROLES,
+  DEFAULT_ROLE_PERMISSIONS,
+  PERMISSION_CATEGORIES,
+  getAllPermissions,
+} from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { ADMIN_ROLES } from "../lib/roles";
+
+const router: IRouter = Router();
+
+async function seedDefaultRoles() {
+  const existing = await db.select().from(rolesTable);
+  if (existing.length > 0) return;
+
+  for (const role of DEFAULT_ROLES) {
+    await db.insert(rolesTable).values({
+      ...role,
+      permissions: DEFAULT_ROLE_PERMISSIONS[role.name] || [],
+    });
+  }
+  console.log("[roles] Seeded default roles");
+}
+
+seedDefaultRoles().catch((err) => console.error("[roles] Seed error:", err));
+
+router.get("/roles", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  const roles = await db.select().from(rolesTable).orderBy(rolesTable.id);
+  res.json({ data: roles });
+});
+
+router.get("/roles/permissions-schema", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  res.json({ data: PERMISSION_CATEGORIES });
+});
+
+router.get("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [role] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
+  if (!role) {
+    res.status(404).json({ error: "Role not found" });
+    return;
+  }
+  res.json(role);
+});
+
+router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const { name, displayName, description, color, permissions } = req.body;
+  if (!name || !displayName) {
+    res.status(400).json({ error: "Name and display name are required" });
+    return;
+  }
+
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  const existingRole = await db.select().from(rolesTable).where(eq(rolesTable.name, slug));
+  if (existingRole.length > 0) {
+    res.status(409).json({ error: "Role name already exists" });
+    return;
+  }
+
+  const allPerms = getAllPermissions();
+  const validPerms = (permissions || []).filter((p: string) => allPerms.includes(p));
+
+  const [role] = await db
+    .insert(rolesTable)
+    .values({
+      name: slug,
+      displayName,
+      description: description || null,
+      color: color || "blue",
+      isSystem: false,
+      permissions: validPerms,
+    })
+    .returning();
+
+  await logAudit(req.user!.id, "create_role", "role", role.id, { name: slug }, req.ip);
+  res.status(201).json(role);
+});
+
+router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Role not found" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (req.body.displayName !== undefined) updates.displayName = req.body.displayName;
+  if (req.body.description !== undefined) updates.description = req.body.description;
+  if (req.body.color !== undefined) updates.color = req.body.color;
+  if (req.body.permissions !== undefined) {
+    const allPerms = getAllPermissions();
+    updates.permissions = (req.body.permissions as string[]).filter((p) => allPerms.includes(p));
+  }
+  if (!existing.isSystem && req.body.name !== undefined) {
+    updates.name = req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
+    return;
+  }
+
+  const [role] = await db.update(rolesTable).set(updates).where(eq(rolesTable.id, id)).returning();
+  await logAudit(req.user!.id, "update_role", "role", id, updates, req.ip);
+  res.json(role);
+});
+
+router.delete("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Role not found" });
+    return;
+  }
+  if (existing.isSystem) {
+    res.status(400).json({ error: "Cannot delete system roles" });
+    return;
+  }
+
+  const [{ count: assignedCount }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(usersTable)
+    .where(eq(usersTable.role, existing.name));
+  if (Number(assignedCount) > 0) {
+    res.status(400).json({ error: `Cannot delete role — ${assignedCount} user(s) are still assigned to it. Reassign them first.` });
+    return;
+  }
+
+  await db.delete(rolesTable).where(eq(rolesTable.id, id));
+  await logAudit(req.user!.id, "delete_role", "role", id, { name: existing.name }, req.ip);
+  res.sendStatus(204);
+});
+
+export default router;

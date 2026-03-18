@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, rolesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
@@ -66,8 +66,10 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     return;
   }
 
-  const VALID_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant", "student", "agent", "sub_agent", "pending"];
-  if (!VALID_ROLES.includes(role)) {
+  const BUILTIN_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant", "student", "agent", "sub_agent", "pending"];
+  const dbRoles = await db.select({ name: rolesTable.name }).from(rolesTable);
+  const validRoles = [...new Set([...BUILTIN_ROLES, ...dbRoles.map(r => r.name)])];
+  if (!validRoles.includes(role)) {
     res.status(400).json({ error: "Invalid role" });
     return;
   }
@@ -107,6 +109,16 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
 
   if (!isAdmin && updates.role !== undefined) {
     delete updates.role;
+  }
+
+  if (updates.role !== undefined) {
+    const BUILTIN = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant", "student", "agent", "sub_agent", "pending"];
+    const dbR = await db.select({ name: rolesTable.name }).from(rolesTable);
+    const valid = [...new Set([...BUILTIN, ...dbR.map(r => r.name)])];
+    if (!valid.includes(updates.role as string)) {
+      res.status(400).json({ error: "Invalid role" });
+      return;
+    }
   }
 
   if (Object.keys(updates).length === 0) {

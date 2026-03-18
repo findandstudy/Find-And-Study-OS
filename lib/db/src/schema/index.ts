@@ -13,3 +13,4 @@ export * from "./sessions";
 export * from "./catalog";
 export * from "./pipeline";
 export * from "./wishlists";
+export * from "./roles";
