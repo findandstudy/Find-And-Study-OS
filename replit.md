@@ -144,15 +144,18 @@ Added to `studentsTable`: `motherName`, `fatherName`, `passportIssueDate`, `addr
 - `PATCH/DELETE /api/service-fees/:id`
 - `GET /api/finance/summary?season=` — overall dashboard numbers
 
-## Application Cascading Selects
+## Application Cascading Selects & Auto-fill
 
 Both the **Add Application** modal and **Edit Application** dialog use cascading selects for university/program selection:
 - **Country** → fetched dynamically from `GET /api/universities/countries` (only countries with universities in DB)
 - **University** → filtered by country via `GET /api/universities?country=X&limit=100`
 - **Program** → filtered by university via `GET /api/programs?universityId=X&limit=100`
 - Changing a parent field resets all child fields (country change → clears university + program)
-- Program selection auto-fills Level (from degree) and Language (if available)
-- Edit dialog saves `universityId`, `universityName`, `programId`, `programName` to maintain referential integrity
+- **Auto-fill on program select**: `tuitionFee` = `discountedFee ?? tuitionFee` from the program record
+- If a `discountedFee` exists, an "İndirimli" badge is shown and fee breakdown (Standart / İndirimli / Komisyon %) is displayed
+- Program selection also auto-fills Level (from degree) and Language (if available)
+- Both dialogs save `universityId`, `universityName`, `programId`, `programName` to maintain referential integrity
+- Commission calculations should use the effective tuition fee (discountedFee takes priority)
 - Filter popover country dropdown also uses the dynamic countries list
 
 ## Frontend Notes

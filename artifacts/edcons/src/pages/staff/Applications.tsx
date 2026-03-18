@@ -286,7 +286,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
   });
   const universities = uniData?.data ?? [];
 
-  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null }> }>({
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; tuitionFee?: number | null; discountedFee?: number | null; commissionRate?: number | null }> }>({
     queryKey: ["programs-by-university", form.universityId],
     queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
     enabled: !!form.universityId,
@@ -344,7 +344,9 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     if (!prog) return;
     const autoLevel = degreeToLevel(prog.degree);
     const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
-    setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang });
+    const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
+    const autoFee = effectiveFee != null ? String(effectiveFee) : form.tuitionFee;
+    setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
   }
 
   function handleSave() {
@@ -364,6 +366,9 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     };
     updateApp.mutate(payload);
   }
+
+  const selectedProgForFee = programs.find(p => String(p.id) === form.programId);
+  const hasDiscountedFee = selectedProgForFee != null && selectedProgForFee.discountedFee != null;
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
@@ -438,8 +443,19 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label className="flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> Tuition Fee (USD)</Label>
+            <Label className="flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+              Tuition Fee (USD)
+              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">İndirimli</span>}
+            </Label>
             <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
+            {selectedProgForFee && (selectedProgForFee.tuitionFee != null || selectedProgForFee.discountedFee != null || selectedProgForFee.commissionRate != null) && (
+              <div className="flex flex-wrap gap-3 text-xs mt-1">
+                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standart: <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">İndirimli: <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.commissionRate != null && <span className="text-indigo-600">Komisyon: <strong>{selectedProgForFee.commissionRate}%</strong></span>}
+              </div>
+            )}
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label>Notes</Label>
@@ -538,7 +554,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   });
   const universities = uniData?.data ?? [];
 
-  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; intakes?: string | null }> }>({
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; intakes?: string | null; tuitionFee?: number | null; discountedFee?: number | null; commissionRate?: number | null }> }>({
     queryKey: ["programs-by-university", form.universityId],
     queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
     enabled: !!form.universityId,
@@ -562,7 +578,9 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
     if (!prog) return;
     const autoLevel = degreeToLevel(prog.degree);
     const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
-    setForm({ ...form, programId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang });
+    const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
+    const autoFee = effectiveFee != null ? String(effectiveFee) : form.tuitionFee;
+    setForm({ ...form, programId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
   }
 
   const createApplication = useMutation({
@@ -580,12 +598,18 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
     const fee = parseFloat(form.tuitionFee);
     createApplication.mutate({
       studentId: selectedStudent.id, stage: defaultStage || "inquiry", season,
-      country: form.country || null, universityName: form.universityName || null,
+      country: form.country || null,
+      universityId: form.universityId ? parseInt(form.universityId, 10) : null,
+      universityName: form.universityName || null,
+      programId: form.programId ? parseInt(form.programId, 10) : null,
       level: form.level || null, programName: form.programName || null,
       instructionLanguage: form.instructionLanguage || null, intake: form.intake || null,
       tuitionFee: form.tuitionFee && !isNaN(fee) ? fee : null, notes: form.notes || null,
     });
   }
+
+  const addSelProgForFee = programs.find(p => String(p.id) === form.programId);
+  const addHasDiscountedFee = addSelProgForFee != null && addSelProgForFee.discountedFee != null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -640,8 +664,19 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               </Select>
             </div>
             <div className="space-y-2 col-span-2">
-              <Label className="font-semibold flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> Tuition Fee (USD)</Label>
-              <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" />
+              <Label className="font-semibold flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                Tuition Fee (USD)
+                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">İndirimli</span>}
+              </Label>
+              <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" className="rounded-xl" />
+              {addSelProgForFee && (addSelProgForFee.tuitionFee != null || addSelProgForFee.discountedFee != null || addSelProgForFee.commissionRate != null) && (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standart: <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">İndirimli: <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.commissionRate != null && <span className="text-indigo-600">Komisyon: <strong>{addSelProgForFee.commissionRate}%</strong></span>}
+                </div>
+              )}
             </div>
             <div className="space-y-2 col-span-2">
               <Label className="font-semibold">Notes</Label>
