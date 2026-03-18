@@ -132,15 +132,46 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (re
 
 router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, id));
-  if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+  const [row] = await db
+    .select({
+      id: applicationsTable.id,
+      studentId: applicationsTable.studentId,
+      programId: applicationsTable.programId,
+      universityId: applicationsTable.universityId,
+      agentId: applicationsTable.agentId,
+      season: applicationsTable.season,
+      stage: applicationsTable.stage,
+      intake: applicationsTable.intake,
+      level: applicationsTable.level,
+      instructionLanguage: applicationsTable.instructionLanguage,
+      deadline: applicationsTable.deadline,
+      programName: applicationsTable.programName,
+      universityName: applicationsTable.universityName,
+      country: applicationsTable.country,
+      tuitionFee: applicationsTable.tuitionFee,
+      scholarship: applicationsTable.scholarship,
+      notes: applicationsTable.notes,
+      createdAt: applicationsTable.createdAt,
+      updatedAt: applicationsTable.updatedAt,
+      studentFirstName: studentsTable.firstName,
+      studentLastName: studentsTable.lastName,
+      studentEmail: studentsTable.email,
+      studentPhone: studentsTable.phone,
+      commissionAmount: commissionsTable.universityCommissionAmount,
+      commissionStatus: commissionsTable.status,
+    })
+    .from(applicationsTable)
+    .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+    .leftJoin(commissionsTable, eq(applicationsTable.id, commissionsTable.applicationId))
+    .where(eq(applicationsTable.id, id));
+  if (!row) { res.status(404).json({ error: "Application not found" }); return; }
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   if (!isStaff) {
     if (user.role === "student") {
       const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
-      if (!studentRec || studentRec.id !== app.studentId) {
+      if (!studentRec || studentRec.id !== row.studentId) {
         res.status(403).json({ error: "Access denied" }); return;
       }
     } else {
@@ -148,7 +179,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
     }
   }
 
-  res.json(app);
+  res.json(row);
 });
 
 router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
