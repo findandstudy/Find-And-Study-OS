@@ -61,13 +61,13 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
           label: "Operations",
           items: [
             { title: "Leads", icon: Users, url: '/staff/leads' },
-            { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Students", icon: GraduationCap, url: '/staff/students' },
+            { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
             { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
+            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
             { title: "Agents", icon: Handshake, url: '/staff/agents' },
             { title: "Finance", icon: DollarSign, url: '/staff/finance' },
-            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
           ]
         },
         {
@@ -100,9 +100,9 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
             { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
+            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
             { title: "Agents", icon: Handshake, url: '/staff/agents' },
             { title: "Finance", icon: Briefcase, url: '/staff/finance' },
-            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
           ]
         },
         {
