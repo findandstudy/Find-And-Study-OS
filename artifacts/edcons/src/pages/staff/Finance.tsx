@@ -20,7 +20,7 @@ import {
   DollarSign, TrendingUp, Building2, Users, Plus, Trash2, Pencil,
   CheckCircle, Clock, AlertCircle, Loader2, RefreshCw, ArrowUpRight,
   Upload, FileText, Download, BarChart3, AlertTriangle, Calendar,
-  Landmark, CreditCard, PiggyBank, Eye,
+  Landmark, CreditCard, PiggyBank, Eye, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -715,6 +715,9 @@ export default function FinancePage() {
     commissionId?: number; commissionLabel?: string; universityName?: string;
   }>({ open: false, type: "collection" });
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [commSelected, setCommSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [commSort, setCommSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
 
   const commParams = { season, ...(commSearch ? { search: commSearch } : {}), ...(commStatus !== "all" ? { status: commStatus } : {}), limit: 200 } as any;
   const feeParams  = { season, limit: 200 } as any;
@@ -745,6 +748,27 @@ export default function FinancePage() {
   const uniBreakdown: any[] = uniBreakdownData?.breakdown || [];
   const uniTotals: any = uniBreakdownData?.totals || {};
 
+  const sortedCommissions = useMemo(() => {
+    if (!commSort.key) return commissions;
+    const dir = commSort.dir === "asc" ? 1 : -1;
+    return [...commissions].sort((a, b) => {
+      switch (commSort.key) {
+        case "student": return dir * ((a.studentName || "").localeCompare(b.studentName || ""));
+        case "progFee": return dir * (toNum(a.programFee) - toNum(b.programFee));
+        case "univComm": return dir * (toNum(a.universityCommissionAmount) - toNum(b.universityCommissionAmount));
+        case "agentComm": return dir * (toNum(a.agentCommissionAmount) - toNum(b.agentCommissionAmount));
+        case "netIncome": {
+          const netA = toNum(a.universityCommissionAmount) - toNum(a.agentCommissionAmount);
+          const netB = toNum(b.universityCommissionAmount) - toNum(b.agentCommissionAmount);
+          return dir * (netA - netB);
+        }
+        case "collection": return dir * (toNum(a.universityCollected) - toNum(b.universityCollected));
+        case "status": return dir * ((a.status || "").localeCompare(b.status || ""));
+        default: return 0;
+      }
+    });
+  }, [commissions, commSort]);
+
   async function deleteCommission(id: number) {
     setDeleting(id);
     try {
@@ -766,6 +790,45 @@ export default function FinancePage() {
       toast({ title: "Service fee deleted" });
     } catch { toast({ title: "Error deleting", variant: "destructive" }); }
     finally { setDeleting(null); }
+  }
+
+  function toggleCommSelect(id: number) {
+    setCommSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleCommSelectAll(ids: number[]) {
+    const allIn = ids.length > 0 && ids.every(id => commSelected.has(id));
+    setCommSelected(allIn ? new Set() : new Set(ids));
+  }
+
+  async function bulkDeleteCommissions() {
+    const ids = Array.from(commSelected);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} selected commission${ids.length > 1 ? "s" : ""}?`)) return;
+    setBulkDeleting(true);
+    try {
+      await fetch(`${BASE}/api/commissions/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids }),
+      });
+      setCommSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["commissions"] });
+      qc.invalidateQueries({ queryKey: ["finance-summary"] });
+      qc.invalidateQueries({ queryKey: ["university-breakdown"] });
+      toast({ title: `${ids.length} commission${ids.length > 1 ? "s" : ""} deleted` });
+    } catch { toast({ title: "Error deleting commissions", variant: "destructive" }); }
+    finally { setBulkDeleting(false); }
+  }
+
+  function handleCommSort(key: string) {
+    setCommSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   }
 
   async function markInstallment(fee: any, installment: 1 | 2) {
@@ -965,6 +1028,27 @@ export default function FinancePage() {
               </div>
             </div>
 
+            {commSelected.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+                <span className="text-sm font-medium text-foreground">
+                  {commSelected.size} commission{commSelected.size > 1 ? "s" : ""} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={bulkDeleteCommissions}
+                  disabled={bulkDeleting}
+                  className="ml-auto"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  {bulkDeleting ? "Deleting..." : `Delete Selected (${commSelected.size})`}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCommSelected(new Set())}>
+                  Clear Selection
+                </Button>
+              </div>
+            )}
+
             {commLoading ? (
               <div className="text-center py-12 text-slate-400">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />Loading...
@@ -979,18 +1063,41 @@ export default function FinancePage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Student / University</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Prog. Fee</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Univ. Commission</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Agent Commission</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Net Income</th>
-                      <th className="text-center px-4 py-3 font-semibold text-slate-600">Collection</th>
-                      <th className="text-center px-4 py-3 font-semibold text-slate-600">Status</th>
+                      <th className="px-3 py-3 w-[40px]">
+                        <Checkbox
+                          checked={sortedCommissions.length > 0 && sortedCommissions.every((c: any) => commSelected.has(c.id)) ? true : sortedCommissions.some((c: any) => commSelected.has(c.id)) ? ("indeterminate" as any) : false}
+                          onCheckedChange={() => toggleCommSelectAll(sortedCommissions.map((c: any) => c.id))}
+                          aria-label="Select all"
+                        />
+                      </th>
+                      {([
+                        { key: "student", label: "Student / University", align: "text-left" },
+                        { key: "progFee", label: "Prog. Fee", align: "text-right" },
+                        { key: "univComm", label: "Univ. Commission", align: "text-right" },
+                        { key: "agentComm", label: "Agent Commission", align: "text-right" },
+                        { key: "netIncome", label: "Net Income", align: "text-right" },
+                        { key: "collection", label: "Collection", align: "text-center" },
+                        { key: "status", label: "Status", align: "text-center" },
+                      ] as const).map(col => {
+                        const active = commSort.key === col.key;
+                        return (
+                          <th
+                            key={col.key}
+                            className={`${col.align} px-4 py-3 font-semibold text-slate-600 cursor-pointer select-none hover:bg-slate-100 transition-colors`}
+                            onClick={() => handleCommSort(col.key)}
+                          >
+                            <div className={`flex items-center gap-1 ${col.align === "text-right" ? "justify-end" : col.align === "text-center" ? "justify-center" : ""}`}>
+                              {col.label}
+                              {active ? (commSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-slate-300" />}
+                            </div>
+                          </th>
+                        );
+                      })}
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {commissions.map((c: any) => {
+                    {sortedCommissions.map((c: any) => {
                       const uAmt = toNum(c.universityCommissionAmount);
                       const aAmt = toNum(c.agentCommissionAmount);
                       const net  = uAmt - aAmt;
@@ -999,7 +1106,14 @@ export default function FinancePage() {
                       const uRemaining = uAmt - uCollected;
                       const status = COMM_STATUS[c.status] || COMM_STATUS.potential;
                       return (
-                        <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={c.id} className={`hover:bg-slate-50 transition-colors ${commSelected.has(c.id) ? "bg-blue-50/50" : ""}`}>
+                          <td className="px-3 py-3">
+                            <Checkbox
+                              checked={commSelected.has(c.id)}
+                              onCheckedChange={() => toggleCommSelect(c.id)}
+                              aria-label={`Select ${c.studentName}`}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-slate-800">{c.studentName || "—"}</div>
                             <div className="text-xs text-slate-500">{c.universityName || "—"} · {c.programName || "—"}</div>
@@ -1111,7 +1225,8 @@ export default function FinancePage() {
                   </tbody>
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
-                      <td className="px-4 py-3 text-slate-600">Totals ({commissions.length})</td>
+                      <td className="px-3 py-3" />
+                      <td className="px-4 py-3 text-slate-600">Totals ({sortedCommissions.length})</td>
                       <td className="px-4 py-3 text-right text-slate-600 tabular-nums">
                         {fmt(commissions.reduce((s: number, c: any) => s + toNum(c.programFee), 0))}
                       </td>

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable } from "@workspace/db";
-import { eq, sql, and, desc } from "drizzle-orm";
+import { eq, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES } from "../lib/roles";
 
@@ -156,6 +156,19 @@ router.patch("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), asy
   if (!commission) { res.status(404).json({ error: "Commission not found" }); return; }
   await logAudit(req.user!.id, "update_commission", "commission", id, updates, req.ip);
   res.json(commission);
+});
+
+router.post("/commissions/bulk-delete", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids array is required" });
+    return;
+  }
+  const numericIds = ids.map((id: any) => parseInt(id, 10)).filter((id: number) => !isNaN(id));
+  if (numericIds.length === 0) { res.status(400).json({ error: "No valid ids" }); return; }
+  await db.delete(commissionsTable).where(inArray(commissionsTable.id, numericIds));
+  await logAudit(req.user!.id, "bulk_delete_commissions", "commission", null as any, { count: numericIds.length, ids: numericIds }, req.ip);
+  res.json({ deleted: numericIds.length });
 });
 
 router.delete("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
