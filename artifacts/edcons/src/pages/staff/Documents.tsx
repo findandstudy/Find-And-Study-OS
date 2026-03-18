@@ -9,8 +9,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, Plus, Search, Trash2, ExternalLink } from "lucide-react";
+import { FileText, Plus, Search, Trash2, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+type DocSortKey = "name" | "type" | "status" | "studentId" | "uploaded";
+type SortDir = "asc" | "desc";
+
+function DocSortHeader({ label, sortKey, currentSort, onSort }: {
+  label: string; sortKey: DocSortKey; currentSort: { key: DocSortKey; dir: SortDir }; onSort: (k: DocSortKey) => void;
+}) {
+  const active = currentSort.key === sortKey;
+  return (
+    <TableHead
+      className="font-semibold text-foreground cursor-pointer select-none hover:bg-muted/50 transition-colors"
+      onClick={() => onSort(sortKey)}
+    >
+      <div className="flex items-center gap-1.5">
+        {label}
+        {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
+      </div>
+    </TableHead>
+  );
+}
 
 const DOC_TYPES = [
   "passport",
@@ -36,15 +56,30 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", type: "passport", studentId: "" });
+  const [sort, setSort] = useState<{ key: DocSortKey; dir: SortDir }>({ key: "uploaded", dir: "desc" });
 
   const { data: docs, isLoading } = useListDocuments();
   const createDoc = useCreateDocument();
   const deleteDoc = useDeleteDocument();
 
+  function handleSort(key: DocSortKey) {
+    setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  }
+
   const allDocs: any[] = Array.isArray(docs) ? docs : (docs as any)?.data || [];
   const filtered = allDocs.filter((d: any) =>
     !search || d.name.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a: any, b: any) => {
+    const dir = sort.dir === "asc" ? 1 : -1;
+    switch (sort.key) {
+      case "name": return dir * ((a.name || "").localeCompare(b.name || ""));
+      case "type": return dir * ((a.type || "").localeCompare(b.type || ""));
+      case "status": return dir * ((a.status || "").localeCompare(b.status || ""));
+      case "studentId": return dir * ((a.studentId || 0) - (b.studentId || 0));
+      case "uploaded": return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      default: return 0;
+    }
+  });
 
   function handleCreate() {
     if (!form.name || !form.type) return;
@@ -112,11 +147,11 @@ export default function DocumentsPage() {
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
-                  <TableHead className="font-semibold text-foreground">Name</TableHead>
-                  <TableHead className="font-semibold text-foreground">Type</TableHead>
-                  <TableHead className="font-semibold text-foreground">Status</TableHead>
-                  <TableHead className="font-semibold text-foreground">Student ID</TableHead>
-                  <TableHead className="font-semibold text-foreground">Uploaded</TableHead>
+                  <DocSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
+                  <DocSortHeader label="Type" sortKey="type" currentSort={sort} onSort={handleSort} />
+                  <DocSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                  <DocSortHeader label="Student ID" sortKey="studentId" currentSort={sort} onSort={handleSort} />
+                  <DocSortHeader label="Uploaded" sortKey="uploaded" currentSort={sort} onSort={handleSort} />
                   <TableHead className="w-[80px]"></TableHead>
                 </TableRow>
               </TableHeader>

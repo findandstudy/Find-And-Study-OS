@@ -18,7 +18,8 @@ import {
 import {
   Search, Users, UserPlus, Shield, MoreHorizontal, Mail, Edit2,
   Plus, Trash2, ChevronDown, ChevronRight, Check, X, Eye, Lock,
-  Settings2, ShieldCheck, KeyRound, LogIn, ShieldOff, Loader2
+  Settings2, ShieldCheck, KeyRound, LogIn, ShieldOff, Loader2,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from "lucide-react";
 
 const roleBadge: Record<string, { color: string; label: string }> = {
@@ -68,9 +69,28 @@ interface PermCategory {
 
 type PermSchema = Record<string, PermCategory>;
 
+type UserSortKey = "user" | "email" | "role" | "status";
+type SortDir = "asc" | "desc";
+
+function UserSortHeader({ label, sortKey, currentSort, onSort }: {
+  label: string; sortKey: UserSortKey; currentSort: { key: UserSortKey; dir: SortDir }; onSort: (k: UserSortKey) => void;
+}) {
+  const active = currentSort.key === sortKey;
+  return (
+    <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:bg-muted/50 transition-colors"
+      onClick={() => onSort(sortKey)}>
+      <div className="flex items-center gap-1.5">
+        {label}
+        {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
+      </div>
+    </th>
+  );
+}
+
 function UsersTab() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [sort, setSort] = useState<{ key: UserSortKey; dir: SortDir }>({ key: "user", dir: "asc" });
   const { data: usersResp, isLoading, refetch } = useListUsers({ query: { queryKey: ['admin-users'] } });
   const users: any[] = (usersResp as any)?.data || usersResp || [];
   const [roles, setRoles] = useState<RoleData[]>([]);
@@ -88,12 +108,25 @@ function UsersTab() {
     }).catch(() => {});
   }, []);
 
+  function handleSort(key: UserSortKey) {
+    setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  }
+
   const filtered = users.filter((u: any) => {
     const matchSearch = !search ||
       (u.firstName || "").toLowerCase().includes(search.toLowerCase()) ||
       (u.email || "").toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === "all" || u.role === roleFilter;
     return matchSearch && matchRole;
+  }).sort((a: any, b: any) => {
+    const dir = sort.dir === "asc" ? 1 : -1;
+    switch (sort.key) {
+      case "user": { const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim(); const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim(); return dir * nameA.localeCompare(nameB); }
+      case "email": return dir * ((a.email || "").localeCompare(b.email || ""));
+      case "role": return dir * ((a.role || "").localeCompare(b.role || ""));
+      case "status": return dir * (Number(b.isActive ?? true) - Number(a.isActive ?? true));
+      default: return 0;
+    }
   });
 
   const handleCreate = async () => {
@@ -243,10 +276,10 @@ function UsersTab() {
           <table className="w-full">
             <thead>
               <tr className="bg-secondary/50 text-left">
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">User</th>
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Email</th>
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Role</th>
-                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</th>
+                <UserSortHeader label="User" sortKey="user" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label="Role" sortKey="role" currentSort={sort} onSort={handleSort} />
+                <UserSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
