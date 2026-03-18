@@ -179,7 +179,7 @@ function PipelineColumn({ stage, label, variant, apps, onView }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
 }) {
   const v = variant as "won" | "lost" | undefined;
-  const totalRevenue = apps.reduce((sum, a) => sum + (a.tuitionFee || 0), 0);
+  const totalRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
 
   const colBg =
     v === "won" ? "bg-emerald-50/60 border-emerald-200/50" :
@@ -228,10 +228,10 @@ function PipelineColumn({ stage, label, variant, apps, onView }: {
               )}
               <div className="mt-2 flex items-center justify-between">
                 {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
-                {app.tuitionFee && app.tuitionFee > 0 && (
+                {app.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
                   <div className="flex items-center gap-1">
                     <TrendingUp className="w-3 h-3 text-emerald-500" />
-                    <span className="text-xs font-semibold text-emerald-600">{formatCurrency(app.tuitionFee)}</span>
+                    <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(app.commissionAmount))}</span>
                   </div>
                 )}
               </div>
@@ -746,7 +746,7 @@ export default function ApplicationsPage() {
         case "program": valA = (a.programName || "").toLowerCase(); valB = (b.programName || "").toLowerCase(); break;
         case "level": valA = a.level || ""; valB = b.level || ""; break;
         case "intake": valA = a.intake || ""; valB = b.intake || ""; break;
-        case "fee": valA = a.tuitionFee || 0; valB = b.tuitionFee || 0; break;
+        case "fee": valA = parseFloat(a.commissionAmount) || 0; valB = parseFloat(b.commissionAmount) || 0; break;
         case "date": valA = a.createdAt || ""; valB = b.createdAt || ""; break;
         default: return 0;
       }
@@ -844,7 +844,7 @@ export default function ApplicationsPage() {
                     <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Level" sortKey="level" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Intake" sortKey="intake" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Fee" sortKey="fee" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Commission" sortKey="fee" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
                     <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
@@ -869,7 +869,7 @@ export default function ApplicationsPage() {
                         <TableCell className="max-w-[150px] truncate">{app.programName || "-"}</TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
-                        <TableCell>{app.tuitionFee ? <span className="text-emerald-600 font-medium">{formatCurrency(app.tuitionFee)}</span> : "-"}</TableCell>
+                        <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">

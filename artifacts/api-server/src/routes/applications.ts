@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
@@ -77,9 +77,11 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
       studentFirstName: studentsTable.firstName,
       studentLastName: studentsTable.lastName,
       studentEmail: studentsTable.email,
+      commissionAmount: commissionsTable.universityCommissionAmount,
     })
     .from(applicationsTable)
     .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+    .leftJoin(commissionsTable, eq(applicationsTable.id, commissionsTable.applicationId))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
