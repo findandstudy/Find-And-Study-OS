@@ -161,9 +161,18 @@ const EMPTY_FORM = {
   nationality: "", dateOfBirth: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
-  highSchool: "", graduationYear: "", gpa: "", languageScore: "",
+  highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4", languageScore: "",
   notes: "",
 };
+
+const GRADING_SYSTEMS = [
+  { value: "4", label: "Out of 4", placeholder: "e.g. 3.8", max: 4 },
+  { value: "5", label: "Out of 5", placeholder: "e.g. 4.5", max: 5 },
+  { value: "10", label: "Out of 10", placeholder: "e.g. 8.5", max: 10 },
+  { value: "12", label: "Out of 12", placeholder: "e.g. 10", max: 12 },
+  { value: "20", label: "Out of 20", placeholder: "e.g. 16.5", max: 20 },
+  { value: "100", label: "Out of 100", placeholder: "e.g. 85", max: 100 },
+];
 
 const PHONE_CODES = [
   { code: "+90", country: "TR", flag: "🇹🇷" },
@@ -501,6 +510,17 @@ function AddStudentModal({
               newForm.phone = phoneStr;
             }
             newExtracted.add("phone");
+          } else if (fk === "gpa") {
+            const gpaStr = String(val).trim();
+            const gpaMatch = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
+            if (gpaMatch) {
+              newForm.gpa = gpaMatch[1];
+              const matchedSystem = GRADING_SYSTEMS.find(g => g.value === gpaMatch[2]);
+              if (matchedSystem) newForm.gradingSystem = matchedSystem.value;
+            } else {
+              newForm.gpa = gpaStr;
+            }
+            newExtracted.add("gpa");
           } else {
             (newForm as any)[fk] = String(val);
             newExtracted.add(fk);
@@ -590,7 +610,7 @@ function AddStudentModal({
           address: form.address || null,
           highSchool: form.highSchool || null,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null,
-          gpa: form.gpa || null,
+          gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null,
           languageScore: form.languageScore || null,
           notes: form.notes || null,
           status: defaultStatus || "active",
@@ -850,7 +870,38 @@ function AddStudentModal({
                     <FormField label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" aiExtracted={ef.has("highSchool")} />
                   </div>
                   <FormField label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" aiExtracted={ef.has("graduationYear")} />
-                  <FormField label="GPA" value={form.gpa} onChange={field("gpa")} placeholder="e.g. 3.8 / 4.0" aiExtracted={ef.has("gpa")} />
+                  <div className="space-y-1.5">
+                    <Label className="font-semibold text-sm flex items-center">
+                      GPA{ef.has("gpa") && <AiBadge />}
+                    </Label>
+                    <div className="flex gap-1.5">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.max ?? 4}
+                        value={form.gpa}
+                        onChange={(e) => setForm(f => ({ ...f, gpa: e.target.value }))}
+                        placeholder={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.placeholder ?? "e.g. 3.8"}
+                        className={cn(
+                          "rounded-xl flex-1",
+                          ef.has("gpa") && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400"
+                        )}
+                      />
+                      <Select value={form.gradingSystem} onValueChange={(v) => setForm(f => ({ ...f, gradingSystem: v, gpa: "" }))}>
+                        <SelectTrigger className="w-[110px] h-9 text-sm rounded-xl shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GRADING_SYSTEMS.map(gs => (
+                            <SelectItem key={gs.value} value={gs.value}>
+                              / {gs.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <div className="col-span-2">
                     <FormField label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" aiExtracted={ef.has("languageScore")} />
                   </div>
