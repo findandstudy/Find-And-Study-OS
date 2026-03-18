@@ -149,7 +149,9 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
   if (role === 'agent' || role === 'sub_agent') {
     const agentItems: MenuItem[] = [
       { title: "Dashboard",    icon: LayoutDashboard, url: '/agent' },
-      { title: "My Referrals", icon: Link2,           url: '/agent/referrals' },
+      { title: "Leads",        icon: UserCheck,       url: '/agent/leads' },
+      { title: "Students",     icon: GraduationCap,   url: '/agent/students' },
+      { title: "Applications", icon: FileText,        url: '/agent/applications' },
       { title: "Course Finder", icon: Search,         url: '/staff/course-finder' },
       { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
     ];

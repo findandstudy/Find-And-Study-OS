@@ -13,6 +13,7 @@ export const leadsTable = pgTable("leads", {
   source: text("source"),
   status: text("status").notNull().default("new"),
   season: text("season").notNull().default("2026"),
+  agentId: integer("agent_id"),
   assignedToId: integer("assigned_to_id"),
   interestedProgram: text("interested_program"),
   interestedCountry: text("interested_country"),

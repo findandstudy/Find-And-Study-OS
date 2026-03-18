@@ -1,16 +1,17 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, lte, gte, asc, desc } from "drizzle-orm";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES } from "../lib/roles";
+import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 
 const router: IRouter = Router();
 
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "interestedProgram", "interestedCountry", "source",
-  "status", "assignedTo", "notes", "estimatedValue", "season",
+  "status", "assignedTo", "notes", "estimatedValue", "season", "agentId",
 ];
 
 router.get("/nationalities", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
@@ -53,7 +54,8 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
   res.status(201).json({ success: true, message: "Inquiry submitted successfully" });
 });
 
-router.get("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+  const user = req.user!;
   const { status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
@@ -62,6 +64,16 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
   const conditions = [];
   if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
+
+  if (user.role === "agent" || user.role === "sub_agent") {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (visibleIds.length === 0) {
+      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      return;
+    }
+    conditions.push(inArray(leadsTable.agentId, visibleIds));
+  }
+
   if (search) {
     conditions.push(
       or(
@@ -80,13 +92,19 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.post("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo, season } = req.body;
+router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo, season, agentId } = req.body;
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
     return;
   }
   const currentYear = String(new Date().getFullYear());
+  let resolvedAgentId = agentId || null;
+  if (user.role === "agent" || user.role === "sub_agent") {
+    const agentRec = await getAgentRecord(user.id);
+    resolvedAgentId = agentRec?.id || null;
+  }
   const [lead] = await db.insert(leadsTable).values({
     firstName, lastName, status, email: email || null,
     phone: phone || null, nationality: nationality || null,
@@ -94,17 +112,26 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
     interestedCountry: interestedCountry || null,
     source: source || null, notes: notes || null,
     assignedToId: assignedTo || null,
+    agentId: resolvedAgentId,
     season: season || currentYear,
   }).returning();
-  await logAudit(req.user!.id, "create_lead", "lead", lead.id, {}, req.ip);
+  await logAudit(user.id, "create_lead", "lead", lead.id, {}, req.ip);
   res.status(201).json(lead);
 });
 
-router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+  const user = req.user!;
+  if (user.role === "agent" || user.role === "sub_agent") {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  }
   res.json(lead);
 });
 

@@ -36,6 +36,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
     - **Application Management (Staff):** Pipeline and list views, cascading selects for university/program, auto-fill of tuition fees and program details.
     - **Lead Management (Staff):** Kanban pipeline and list views.
     - **Finance Management (Staff):** Redesigned system for commission tracking, service fees, financial transactions with file uploads, and comprehensive analytics.
+    - **Agent Portal:** Leads, Students, Applications pages with agent-scoped visibility (agent sees own + sub-agents' data; sub-agent sees only own). Create lead/student auto-assigns agentId. Application creation enforces student ownership validation. Sub-agent management (CRUD) for agents.
     - **Course Finder (Staff/Agent):** Program search/filter, PDF proposal generation (with customizable branding), and direct application creation.
     - **Follow-Up System:** Tracks scheduled actions for leads/students.
 - **Data Handling:** Paginated API responses, consistent data structures for frontend consumption.

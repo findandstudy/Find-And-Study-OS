@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, studentsTable, documentsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, desc } from "drizzle-orm";
+import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
+import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 
 const router: IRouter = Router();
 
@@ -51,8 +52,12 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
     conditions.push(eq(studentsTable.agentId, parseInt(agentId, 10)));
   }
   if (user.role === "agent" || user.role === "sub_agent") {
-    const agentRecord = await db.query?.agents?.findFirst?.({ where: (a: any, { eq: eq2 }: any) => eq2(a.userId, user.id) });
-    if (agentRecord) conditions.push(eq(studentsTable.agentId, agentRecord.id));
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (visibleIds.length === 0) {
+      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      return;
+    }
+    conditions.push(inArray(studentsTable.agentId, visibleIds));
   }
   if (search) {
     conditions.push(
@@ -119,6 +124,16 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
     return;
   }
 
+  let resolvedAgentId = agentId || null;
+  if (req.user!.role === "agent" || req.user!.role === "sub_agent") {
+    const agentRec = await getAgentRecord(req.user!.id);
+    if (!agentRec) {
+      res.status(403).json({ error: "No agent record found" });
+      return;
+    }
+    resolvedAgentId = agentRec.id;
+  }
+
   const [student] = await db.insert(studentsTable).values({
     firstName, lastName, status,
     email: email || null,
@@ -131,7 +146,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
     motherName: motherName || null,
     fatherName: fatherName || null,
     address: address || null,
-    agentId: agentId || null,
+    agentId: resolvedAgentId,
     userId: userId || null,
     notes: notes || null,
     highSchool: highSchool || null,

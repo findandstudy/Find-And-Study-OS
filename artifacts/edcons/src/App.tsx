@@ -48,6 +48,9 @@ import StudentAccount from "@/pages/student/Account";
 // Agent
 import AgentDashboard from "@/pages/agent/Dashboard";
 import AgentApplications from "@/pages/agent/Applications";
+import AgentApps from "@/pages/agent/AgentApps";
+import AgentLeads from "@/pages/agent/Leads";
+import AgentStudents from "@/pages/agent/Students";
 import AgentCommissions from "@/pages/agent/Commissions";
 import AgentAccount from "@/pages/agent/Account";
 import AgentSubAgents from "@/pages/agent/SubAgents";
@@ -160,6 +163,15 @@ function Router() {
       </Route>
       <Route path="/agent/referrals">
         <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApplications /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/leads">
+        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentLeads /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/students">
+        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentStudents /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/applications">
+        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApps /></ProtectedRoute>
       </Route>
       <Route path="/agent/commissions">
         <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>

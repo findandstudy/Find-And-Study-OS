@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
+import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 
 const router: IRouter = Router();
 
@@ -38,12 +39,13 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
     }
     conditions.push(eq(applicationsTable.studentId, studentRec.id));
   } else if (user.role === "agent" || user.role === "sub_agent") {
-    const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, user.id));
-    if (!agentRec) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (visibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
-    conditions.push(eq(applicationsTable.agentId, agentRec.id));
+    conditions.push(inArray(applicationsTable.agentId, visibleIds));
+    if (stage) conditions.push(eq(applicationsTable.stage, stage));
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -98,7 +100,8 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+  const user = req.user!;
   const {
     studentId, stage = "inquiry", universityId, programId, agentId,
     universityName, country, programName, intake, level, instructionLanguage,
@@ -109,12 +112,27 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES), async (re
     return;
   }
   const currentYear = String(new Date().getFullYear());
+  let resolvedAgentId = agentId || null;
+  if (user.role === "agent" || user.role === "sub_agent") {
+    const agentRec = await getAgentRecord(user.id);
+    if (!agentRec) {
+      res.status(403).json({ error: "No agent record found" });
+      return;
+    }
+    resolvedAgentId = agentRec.id;
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    const [studentRec] = await db.select({ agentId: studentsTable.agentId }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+    if (!studentRec || !visibleIds.includes(studentRec.agentId!)) {
+      res.status(403).json({ error: "Student not in your scope" });
+      return;
+    }
+  }
   const [app] = await db.insert(applicationsTable).values({
     studentId, stage,
     season: season || currentYear,
     universityId: universityId || null,
     programId: programId || null,
-    agentId: agentId || null,
+    agentId: resolvedAgentId,
     universityName: universityName || null,
     country: country || null,
     programName: programName || null,
