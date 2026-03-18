@@ -91,13 +91,13 @@ function BulkImportModal({ open, onClose, title, template, headers, onImport }: 
     if (!file) return;
     const text = await file.text();
     const rows = parseCsv(text);
-    if (rows.length === 0) { setError("CSV boş veya hatalı format"); return; }
+    if (rows.length === 0) { setError("CSV is empty or has invalid format"); return; }
     setLoading(true);
     setError("");
     try {
       const res = await onImport(rows);
       setResult(res);
-    } catch { setError("İçe aktarma başarısız oldu. Lütfen format şablonunu kontrol edin."); }
+    } catch { setError("Import failed. Please check the format template."); }
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
@@ -106,29 +106,29 @@ function BulkImportModal({ open, onClose, title, template, headers, onImport }: 
   return (
     <Dialog open={open} onOpenChange={reset}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>CSV İle Toplu Ekle — {title}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Bulk Import via CSV — {title}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-            <p className="font-medium mb-1">CSV Sütun Başlıkları:</p>
+            <p className="font-medium mb-1">CSV Column Headers:</p>
             <code className="text-xs text-muted-foreground break-all">{headers}</code>
           </div>
           <Button variant="outline" size="sm" onClick={() => downloadCsv(template, `${title.toLowerCase().replace(/\s/g, "_")}_template.csv`)}>
-            <Download className="h-4 w-4 mr-2" /> Şablon İndir (.csv)
+            <Download className="h-4 w-4 mr-2" /> Download Template (.csv)
           </Button>
           <div>
-            <Label htmlFor="csvfile">CSV Dosyası Seç</Label>
+            <Label htmlFor="csvfile">Select CSV File</Label>
             <Input id="csvfile" ref={fileRef} type="file" accept=".csv,text/csv" className="mt-1" onChange={handleFile} disabled={loading} />
           </div>
-          {loading && <p className="text-sm text-muted-foreground animate-pulse">İşleniyor…</p>}
+          {loading && <p className="text-sm text-muted-foreground animate-pulse">Processing…</p>}
           {error && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{error}</p>}
           {result && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
-              <p className="font-medium text-green-700">İçe aktarma tamamlandı</p>
-              <p className="text-green-600">Eklendi: <strong>{result.inserted}</strong> — Atlandı (mevcut): <strong>{result.skipped}</strong></p>
+              <p className="font-medium text-green-700">Import completed</p>
+              <p className="text-green-600">Added: <strong>{result.inserted}</strong> — Skipped (existing): <strong>{result.skipped}</strong></p>
             </div>
           )}
         </div>
-        <DialogFooter><Button variant="outline" onClick={reset}>Kapat</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={reset}>Close</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -246,22 +246,22 @@ function CountriesTab() {
   };
 
   const template = "name,code,flagEmoji\nTürkiye,TR,🇹🇷\nUnited Kingdom,GB,🇬🇧\nGermany,DE,🇩🇪\nFrance,FR,🇫🇷";
-  const headers = "name, code, flagEmoji (opsiyonel)";
+  const headers = "name, code, flagEmoji (optional)";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Ülke ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
+          <Input placeholder="Search countries…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
-        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Ülke Ekle</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Add Country</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -271,15 +271,15 @@ function CountriesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="Ülke" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Kod" col="code" sort={sort} onSort={handleSort} />
-              <SortTh label="Durum" col="status" sort={sort} onSort={handleSort} />
+              <SortTh label="Country" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Code" col="code" sort={sort} onSort={handleSort} />
+              <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">Ülke bulunamadı</td></tr>
+              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No countries found</td></tr>
             )}
             {sorted.map(c => (
               <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
@@ -289,7 +289,7 @@ function CountriesTab() {
                 <td className="px-4 py-2.5 font-medium">{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</td>
                 <td className="px-4 py-2.5 text-muted-foreground font-mono">{c.code}</td>
                 <td className="px-4 py-2.5">
-                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Aktif" : "Pasif"}</Badge>
+                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Active" : "Inactive"}</Badge>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
@@ -307,19 +307,19 @@ function CountriesTab() {
       {/* Add/Edit Modal */}
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{form?.id ? "Ülkeyi Düzenle" : "Yeni Ülke"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{form?.id ? "Edit Country" : "New Country"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Ülke Adı *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><Label>ISO Kodu (2 harf) *</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
-            <div><Label>Bayrak Emoji</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
+            <div><Label>Country Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>ISO Code (2 letters) *</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
+            <div><Label>Flag Emoji</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
             <div className="flex items-center justify-between">
-              <Label>Aktif</Label>
+              <Label>Active</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)}>İptal</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code}>Kaydet</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -327,11 +327,11 @@ function CountriesTab() {
       {/* Single delete confirm */}
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Ülkeyi Sil</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Bu ülkeyi silmek istediğinizden emin misiniz?</p>
+          <DialogHeader><DialogTitle>Delete Country</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this country?</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>İptal</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Sil</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -339,18 +339,18 @@ function CountriesTab() {
       {/* Bulk delete confirm */}
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> ülkeyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected countries? This action cannot be undone.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Siliniyor…" : `${selected.size} Ülkeyi Sil`}
+              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Countries`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Ülkeler" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" template={template} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -440,29 +440,29 @@ function CitiesTab() {
   };
 
   const template = "name,countryCode\nİstanbul,TR\nAnkara,TR\nLondon,GB\nBerlin,DE";
-  const headers = "name, countryCode (ISO 2 harfli ülke kodu)";
+  const headers = "name, countryCode (ISO 2-letter country code)";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Şehir ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
+          <Input placeholder="Search cities…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
         <Select value={filterCountry} onValueChange={v => { setFilterCountry(v); setPage(1); setSelected(new Set()); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm ülkeler" /></SelectTrigger>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All countries" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm ülkeler</SelectItem>
+            <SelectItem value="all">All countries</SelectItem>
             {countries.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
-        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Şehir Ekle</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Add City</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -472,15 +472,15 @@ function CitiesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="Şehir" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Ülke" col="country" sort={sort} onSort={handleSort} />
-              <SortTh label="Durum" col="status" sort={sort} onSort={handleSort} />
+              <SortTh label="City" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Country" col="country" sort={sort} onSort={handleSort} />
+              <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">Şehir bulunamadı</td></tr>
+              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No cities found</td></tr>
             )}
             {sorted.map(c => (
               <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
@@ -490,7 +490,7 @@ function CitiesTab() {
                 <td className="px-4 py-2.5 font-medium">{c.name}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{countryMap[c.countryId]?.flagEmoji ?? ""} {countryMap[c.countryId]?.name ?? c.countryId}</td>
                 <td className="px-4 py-2.5">
-                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Aktif" : "Pasif"}</Badge>
+                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Active" : "Inactive"}</Badge>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
@@ -507,53 +507,53 @@ function CitiesTab() {
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{form?.id ? "Şehri Düzenle" : "Yeni Şehir"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{form?.id ? "Edit City" : "New City"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Şehir Adı *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>City Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div>
-              <Label>Ülke *</Label>
+              <Label>Country *</Label>
               <Select value={form?.countryId ? String(form.countryId) : ""} onValueChange={v => setForm(f => ({ ...f, countryId: Number(v) }))}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Ülke seçin" /></SelectTrigger>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select country" /></SelectTrigger>
                 <SelectContent>{countries.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between">
-              <Label>Aktif</Label>
+              <Label>Active</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)}>İptal</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.countryId}>Kaydet</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.countryId}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Şehri Sil</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Bu şehri silmek istediğinizden emin misiniz?</p>
+          <DialogHeader><DialogTitle>Delete City</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this city?</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>İptal</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Sil</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> şehri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected cities? This action cannot be undone.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Siliniyor…" : `${selected.size} Şehri Sil`}
+              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Cities`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Şehirler" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" template={template} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -673,15 +673,15 @@ function UniversitiesTab() {
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Üniversite ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder="Search universities…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
-        <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />Üniversite Ekle</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />Add University</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -691,17 +691,17 @@ function UniversitiesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="Üniversite" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Ülke / Şehir" col="country" sort={sort} onSort={handleSort} />
-              <SortTh label="Tür" col="type" sort={sort} onSort={handleSort} />
+              <SortTh label="University" col="name" sort={sort} onSort={handleSort} />
+              <SortTh label="Country / City" col="country" sort={sort} onSort={handleSort} />
+              <SortTh label="Type" col="type" sort={sort} onSort={handleSort} />
               <SortTh label="QS" col="qs" sort={sort} onSort={handleSort} />
-              <SortTh label="Durum" col="status" sort={sort} onSort={handleSort} />
+              <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Üniversite bulunamadı</td></tr>
+              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No universities found</td></tr>
             )}
             {sorted.map(u => (
               <tr key={u.id} className={`hover:bg-muted/20 transition-colors ${selected.has(u.id) ? "bg-primary/5" : ""}`}>
@@ -722,15 +722,15 @@ function UniversitiesTab() {
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.country}{u.city ? `, ${u.city}` : ""}</td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                  {u.universityType === "state" ? "Devlet" : u.universityType === "private" ? "Özel" : u.universityType === "foundation" ? "Vakıf" : u.universityType ?? "—"}
+                  {u.universityType === "state" ? "State" : u.universityType === "private" ? "Private" : u.universityType === "foundation" ? "Foundation" : u.universityType ?? "—"}
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.qsRanking ?? "—"}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex flex-col gap-0.5">
                     <Badge variant={u.status === "open" ? "default" : "secondary"} className="text-xs w-fit">
-                      {u.status === "open" ? "Açık" : "Kapalı"}
+                      {u.status === "open" ? "Open" : "Closed"}
                     </Badge>
-                    {!u.isActive && <Badge variant="outline" className="text-xs w-fit text-muted-foreground">Pasif</Badge>}
+                    {!u.isActive && <Badge variant="outline" className="text-xs w-fit text-muted-foreground">Inactive</Badge>}
                   </div>
                 </td>
                 <td className="px-4 py-2.5">
@@ -749,7 +749,7 @@ function UniversitiesTab() {
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{form?.id ? "Üniversiteyi Düzenle" : "Yeni Üniversite"}</DialogTitle>
+            <DialogTitle>{form?.id ? "Edit University" : "New University"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
 
@@ -762,21 +762,21 @@ function UniversitiesTab() {
                 }
               </div>
               <div className="flex-1">
-                <Label className="text-sm font-medium">Üniversite Logosu</Label>
-                <p className="text-xs text-muted-foreground mt-0.5 mb-2">PNG, JPG veya SVG yükleyin</p>
+                <Label className="text-sm font-medium">University Logo</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-2">Upload PNG, JPG or SVG</p>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />Dosya Seç
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />Choose File
                   </Button>
                   {form?.logoUrl && (
                     <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setF({ logoUrl: undefined })}>
-                      Kaldır
+                      Remove
                     </Button>
                   )}
                 </div>
                 <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                 <div className="mt-2">
-                  <Input placeholder="veya Logo URL yapıştırın…" className="text-xs h-8"
+                  <Input placeholder="or paste Logo URL…" className="text-xs h-8"
                     value={form?.logoUrl?.startsWith("data:") ? "" : form?.logoUrl ?? ""}
                     onChange={e => setF({ logoUrl: e.target.value || undefined })}
                   />
@@ -784,16 +784,16 @@ function UniversitiesTab() {
               </div>
             </div>
 
-            {/* ── Temel Bilgiler ─────────────────────── */}
+            {/* ── Basic Information ───────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Temel Bilgiler</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Basic Information</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <Label>Üniversite Adı *</Label>
+                  <Label>University Name *</Label>
                   <Input className="mt-1" value={form?.name ?? ""} onChange={e => setF({ name: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Ülke *</Label>
+                  <Label>Country *</Label>
                   <Select
                     value={form?.country ?? ""}
                     onValueChange={v => {
@@ -803,7 +803,7 @@ function UniversitiesTab() {
                     }}
                   >
                     <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Ülke seçin…" />
+                      <SelectValue placeholder="Select country…" />
                     </SelectTrigger>
                     <SelectContent>
                       {allCountries.map(c => (
@@ -815,17 +815,17 @@ function UniversitiesTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Şehir</Label>
+                  <Label>City</Label>
                   <Select
                     value={form?.city ?? ""}
                     onValueChange={v => setF({ city: v === "__none__" ? null : (v || null) })}
                     disabled={!selCountryId}
                   >
                     <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={selCountryId ? "Şehir seçin…" : "Önce ülke seçin"} />
+                      <SelectValue placeholder={selCountryId ? "Select city…" : "Select country first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">— Şehir seçmeyin —</SelectItem>
+                      <SelectItem value="__none__">— No city —</SelectItem>
                       {formCities.map(c => (
                         <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                       ))}
@@ -833,60 +833,60 @@ function UniversitiesTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Üniversite Türü</Label>
+                  <Label>University Type</Label>
                   <Select value={form?.universityType ?? ""} onValueChange={v => setF({ universityType: v || null })}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Tür seçin…" /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select type…" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="state">Devlet</SelectItem>
-                      <SelectItem value="private">Özel</SelectItem>
-                      <SelectItem value="foundation">Vakıf</SelectItem>
-                      <SelectItem value="other">Diğer</SelectItem>
+                      <SelectItem value="state">State</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="foundation">Foundation</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Başvuru Durumu</Label>
+                  <Label>Application Status</Label>
                   <Select value={form?.status ?? "open"} onValueChange={v => setF({ status: v })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="open">Açık</SelectItem>
-                      <SelectItem value="closed">Kapalı</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="col-span-2">
-                  <Label>Adres</Label>
-                  <Input className="mt-1" placeholder="Tam adres…" value={form?.address ?? ""} onChange={e => setF({ address: e.target.value })} />
+                  <Label>Address</Label>
+                  <Input className="mt-1" placeholder="Full address…" value={form?.address ?? ""} onChange={e => setF({ address: e.target.value })} />
                 </div>
                 <div className="col-span-2">
-                  <Label>Açıklama</Label>
+                  <Label>Description</Label>
                   <Textarea className="mt-1" rows={2} value={form?.description ?? ""} onChange={e => setF({ description: e.target.value })} />
                 </div>
                 <div className="col-span-2 flex items-center justify-between">
-                  <Label>Sistemde Aktif</Label>
+                  <Label>Active in System</Label>
                   <Switch checked={form?.isActive ?? true} onCheckedChange={v => setF({ isActive: v })} />
                 </div>
               </div>
             </div>
 
-            {/* ── Vergi ─────────────────────────────── */}
+            {/* ── Tax ───────────────────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Vergi Bilgileri</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tax Information</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Vergi Türü</Label>
-                  <Input className="mt-1" placeholder="KDV, Stopaj…" value={form?.taxType ?? ""} onChange={e => setF({ taxType: e.target.value })} />
+                  <Label>Tax Type</Label>
+                  <Input className="mt-1" placeholder="VAT, Withholding…" value={form?.taxType ?? ""} onChange={e => setF({ taxType: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Vergi Oranı (%)</Label>
+                  <Label>Tax Rate (%)</Label>
                   <Input className="mt-1" type="number" step="0.01" placeholder="18" value={form?.taxPercent ?? ""} onChange={e => setF({ taxPercent: e.target.value ? Number(e.target.value) : undefined })} />
                 </div>
               </div>
             </div>
 
-            {/* ── Sıralamalar ───────────────────────── */}
+            {/* ── Rankings ──────────────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Dünya Sıralamaları</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">World Rankings</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>QS World Ranking</Label>
@@ -907,9 +907,9 @@ function UniversitiesTab() {
               </div>
             </div>
 
-            {/* ── Bağlantılar ───────────────────────── */}
+            {/* ── Links ─────────────────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Bağlantılar ve Belgeler</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Links & Documents</p>
               <div className="grid grid-cols-1 gap-3">
                 <div>
                   <Label>Website</Label>
@@ -919,57 +919,57 @@ function UniversitiesTab() {
                   </div>
                 </div>
                 <div>
-                  <Label>Online Ödeme Linki</Label>
+                  <Label>Online Payment Link</Label>
                   <Input className="mt-1" placeholder="https://…" value={form?.onlinePaymentUrl ?? ""} onChange={e => setF({ onlinePaymentUrl: e.target.value })} />
                 </div>
                 <div>
-                  <Label>CRICOS Linki</Label>
+                  <Label>CRICOS Link</Label>
                   <Input className="mt-1" placeholder="https://cricos.education.gov.au/…" value={form?.cricosLink ?? ""} onChange={e => setF({ cricosLink: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Belgeler Linki</Label>
+                  <Label>Documents Link</Label>
                   <Input className="mt-1" placeholder="https://…" value={form?.documentsLink ?? ""} onChange={e => setF({ documentsLink: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Güncel Ücret Listesi</Label>
+                  <Label>Current Fee List</Label>
                   <Input className="mt-1" placeholder="https://…" value={form?.currentFeeListLink ?? ""} onChange={e => setF({ currentFeeListLink: e.target.value })} />
                 </div>
               </div>
             </div>
 
-            {/* ── Kabul Süreci ──────────────────────── */}
+            {/* ── Admission Process ─────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Kabul Süreci</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Admission Process</p>
               <div className="space-y-3">
                 <div>
-                  <Label>Başlangıç Depozito Seçenekleri</Label>
-                  <Textarea className="mt-1" rows={2} placeholder="Depozito miktarları ve koşulları…" value={form?.initialDepositOptions ?? ""} onChange={e => setF({ initialDepositOptions: e.target.value })} />
+                  <Label>Initial Deposit Options</Label>
+                  <Textarea className="mt-1" rows={2} placeholder="Deposit amounts and conditions…" value={form?.initialDepositOptions ?? ""} onChange={e => setF({ initialDepositOptions: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Kabul Süreci Açıklaması</Label>
-                  <Textarea className="mt-1" rows={3} placeholder="Adım adım başvuru ve kabul süreci…" value={form?.admissionProcess ?? ""} onChange={e => setF({ admissionProcess: e.target.value })} />
+                  <Label>Admission Process Description</Label>
+                  <Textarea className="mt-1" rows={3} placeholder="Step-by-step application and admission process…" value={form?.admissionProcess ?? ""} onChange={e => setF({ admissionProcess: e.target.value })} />
                 </div>
               </div>
             </div>
 
-            {/* ── İletişim (sadece Super Admin) ─────── */}
+            {/* ── Contact Person (Super Admin only) ─── */}
             {isSuperAdmin && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Lock className="h-4 w-4 text-amber-600" />
-                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">İletişim Kişisi — Sadece Super Admin</p>
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Contact Person — Super Admin Only</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <Label>İsim Soyisim</Label>
+                    <Label>Full Name</Label>
                     <Input className="mt-1 bg-white" placeholder="John Doe" value={form?.contactPersonName ?? ""} onChange={e => setF({ contactPersonName: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Telefon</Label>
+                    <Label>Phone</Label>
                     <Input className="mt-1 bg-white" placeholder="+1 555 000 0000" value={form?.contactPersonPhone ?? ""} onChange={e => setF({ contactPersonPhone: e.target.value })} />
                   </div>
                   <div>
-                    <Label>E-posta</Label>
+                    <Label>Email</Label>
                     <Input className="mt-1 bg-white" type="email" placeholder="contact@university.edu" value={form?.contactPersonEmail ?? ""} onChange={e => setF({ contactPersonEmail: e.target.value })} />
                   </div>
                 </div>
@@ -978,9 +978,9 @@ function UniversitiesTab() {
           </div>
 
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setForm(null)}>İptal</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
             <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.country}>
-              {save.isPending ? "Kaydediliyor…" : "Kaydet"}
+              {save.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -988,29 +988,29 @@ function UniversitiesTab() {
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Üniversiteyi Sil</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Bu üniversiteyi silmek istediğinizden emin misiniz? Bağlı programlar da etkilenebilir.</p>
+          <DialogHeader><DialogTitle>Delete University</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this university? Linked programs may also be affected.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>İptal</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Sil</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> üniversiteyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected universities? This action cannot be undone.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Siliniyor…" : `${selected.size} Üniversiteyi Sil`}
+              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Universities`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Üniversiteler" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" template={template} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -1102,29 +1102,29 @@ function ProgramsTab() {
   };
 
   const template = `universityName,name,degree,field,language,duration,tuitionFee,currency,scholarship,commissionRate,applicationFee,advancedFee,depositFee,serviceFeeAmount,discountedFee,languageFee\nIstanbul University,Computer Engineering,BSc,Engineering,English,4 years,5000,USD,0,10,200,0,500,300,4500,0\nIstanbul University,Business Administration,MBA,Business,English,2 years,8000,USD,2000,12,150,0,500,300,7000,0`;
-  const headers = "universityName* (veya universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee";
+  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Program ara…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder="Search programs…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <Select value={filterUni} onValueChange={v => { setFilterUni(v); setPage(1); }}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tüm üniversiteler" /></SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="All universities" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm üniversiteler</SelectItem>
+            <SelectItem value="all">All universities</SelectItem>
             {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
           </SelectContent>
         </Select>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Seçilenleri Sil ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />CSV İle Ekle</Button>
-        <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />Program Ekle</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />Add Program</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -1135,16 +1135,16 @@ function ProgramsTab() {
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
               <SortTh label="Program" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Üniversite" col="university" sort={sort} onSort={handleSort} />
-              <SortTh label="Derece / Alan" col="degree" sort={sort} onSort={handleSort} />
-              <SortTh label="Ücret" col="fee" sort={sort} onSort={handleSort} />
-              <SortTh label="Komisyon" col="commission" sort={sort} onSort={handleSort} />
+              <SortTh label="University" col="university" sort={sort} onSort={handleSort} />
+              <SortTh label="Degree / Field" col="degree" sort={sort} onSort={handleSort} />
+              <SortTh label="Fee" col="fee" sort={sort} onSort={handleSort} />
+              <SortTh label="Commission" col="commission" sort={sort} onSort={handleSort} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Program bulunamadı</td></tr>
+              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No programs found</td></tr>
             )}
             {sorted.map(p => (
               <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${selected.has(p.id) ? "bg-primary/5" : ""}`}>
@@ -1174,43 +1174,43 @@ function ProgramsTab() {
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{form?.id ? "Programı Düzenle" : "Yeni Program"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{form?.id ? "Edit Program" : "New Program"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Üniversite *</Label>
+              <Label>University *</Label>
               <Select value={form?.universityId ? String(form.universityId) : ""} onValueChange={v => setForm(f => ({ ...f, universityId: Number(v) }))}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Üniversite seçin" /></SelectTrigger>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select university" /></SelectTrigger>
                 <SelectContent>{universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Program Adı *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>Program Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Derece</Label>
+                <Label>Degree</Label>
                 <Select value={form?.degree ?? ""} onValueChange={v => setForm(f => ({ ...f, degree: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     {["Bachelor", "Master", "Ph.D", "Associate", "Language Course", "Foundation", "Pathway Programs"].map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Alan</Label><Input className="mt-1" placeholder="Engineering" value={form?.field ?? ""} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} /></div>
+              <div><Label>Field</Label><Input className="mt-1" placeholder="Engineering" value={form?.field ?? ""} onChange={e => setForm(f => ({ ...f, field: e.target.value }))} /></div>
               <div>
-                <Label>Dil</Label>
+                <Label>Language</Label>
                 <Select value={form?.language ?? ""} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     {["English", "Turkish", "Arabic", "French", "Russian", "German", "Other"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Süre</Label><Input className="mt-1" placeholder="4 years" value={form?.duration ?? ""} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} /></div>
+              <div><Label>Duration</Label><Input className="mt-1" placeholder="4 years" value={form?.duration ?? ""} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} /></div>
               <div>
-                <Label>Yıllık Ücret</Label>
+                <Label>Annual Fee</Label>
                 <Input className="mt-1" type="number" value={form?.tuitionFee ?? ""} onChange={e => setForm(f => ({ ...f, tuitionFee: e.target.value ? Number(e.target.value) : undefined }))} />
               </div>
               <div>
-                <Label>Para Birimi</Label>
+                <Label>Currency</Label>
                 <Select value={form?.currency ?? "USD"} onValueChange={v => setForm(f => ({ ...f, currency: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1221,86 +1221,86 @@ function ProgramsTab() {
               <div>
                 <Label>Fee Type</Label>
                 <Select value={form?.feeType ?? ""} onValueChange={v => setForm(f => ({ ...f, feeType: v || null }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     {["Per Year", "Per Month", "Whole Study", "Per Program", "One-time Payment", "100% Scholarship"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Burs</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : null }))} /></div>
-              <div><Label>Komisyon %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : null }))} /></div>
+              <div><Label>Scholarship</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : null }))} /></div>
+              <div><Label>Commission %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : null }))} /></div>
             </div>
 
-            {/* ── Ek Ücret Alanları ─────────────────────────── */}
+            {/* ── Additional Fees ────────────────────────────── */}
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Ek Ücretler ({form?.currency ?? "USD"})</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Additional Fees ({form?.currency ?? "USD"})</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Application Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Advanced Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Deposit Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Service Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Discounted Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="İndirimli tutar" value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" placeholder="Discounted amount" value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Language Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
               </div>
             </div>
 
-            <div><Label>Başvuru Dönemleri</Label><Input className="mt-1" placeholder="Sep, Feb" value={form?.intakes ?? ""} onChange={e => setForm(f => ({ ...f, intakes: e.target.value }))} /></div>
-            <div><Label>Gereksinimler</Label><Textarea className="mt-1" rows={2} placeholder="IELTS 6.0, GPA 3.0…" value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
+            <div><Label>Intake Periods</Label><Input className="mt-1" placeholder="Sep, Feb" value={form?.intakes ?? ""} onChange={e => setForm(f => ({ ...f, intakes: e.target.value }))} /></div>
+            <div><Label>Requirements</Label><Textarea className="mt-1" rows={2} placeholder="IELTS 6.0, GPA 3.0…" value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
             <div className="flex items-center justify-between">
-              <Label>Aktif</Label>
+              <Label>Active</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)}>İptal</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.universityId}>Kaydet</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.universityId}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Programı Sil</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Bu programı silmek istediğinizden emin misiniz?</p>
+          <DialogHeader><DialogTitle>Delete Program</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this program?</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>İptal</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Sil</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Toplu Silme</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Seçilen <strong>{selected.size}</strong> programı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected programs? This action cannot be undone.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>İptal</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Siliniyor…" : `${selected.size} Programı Sil`}
+              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Programs`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programlar" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" template={template} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -1310,17 +1310,17 @@ function ProgramsTab() {
 ══════════════════════════════════════════════════════════ */
 export default function AdminCatalog() {
   const tabs = [
-    { value: "countries", label: "Ülkeler", icon: Globe },
-    { value: "cities", label: "Şehirler", icon: Building2 },
-    { value: "universities", label: "Üniversiteler", icon: GraduationCap },
-    { value: "programs", label: "Programlar", icon: BookOpen },
+    { value: "countries", label: "Countries", icon: Globe },
+    { value: "cities", label: "Cities", icon: Building2 },
+    { value: "universities", label: "Universities", icon: GraduationCap },
+    { value: "programs", label: "Programs", icon: BookOpen },
   ];
 
   return (
     <DashboardLayout>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Katalog Yönetimi</h1>
-        <p className="text-muted-foreground text-sm mt-1">Ülkeler, şehirler, üniversiteler ve programları yönetin</p>
+        <h1 className="text-2xl font-bold tracking-tight">Catalog Management</h1>
+        <p className="text-muted-foreground text-sm mt-1">Manage countries, cities, universities and programs</p>
       </div>
       <Tabs defaultValue="countries" className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">
@@ -1335,8 +1335,8 @@ export default function AdminCatalog() {
         <TabsContent value="countries">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><Globe className="h-4 w-4 text-primary" />Ülkeler</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Sistemdeki tüm ülkeleri yönetin</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><Globe className="h-4 w-4 text-primary" />Countries</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Manage all countries in the system</p>
             </div>
             <CountriesTab />
           </Card>
@@ -1345,8 +1345,8 @@ export default function AdminCatalog() {
         <TabsContent value="cities">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" />Şehirler</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Ülkelere bağlı şehirleri yönetin</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" />Cities</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Manage cities linked to countries</p>
             </div>
             <CitiesTab />
           </Card>
@@ -1355,8 +1355,8 @@ export default function AdminCatalog() {
         <TabsContent value="universities">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><GraduationCap className="h-4 w-4 text-primary" />Üniversiteler</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Partner üniversiteleri ve kurumları yönetin</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><GraduationCap className="h-4 w-4 text-primary" />Universities</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Manage partner universities and institutions</p>
             </div>
             <UniversitiesTab />
           </Card>
@@ -1365,8 +1365,8 @@ export default function AdminCatalog() {
         <TabsContent value="programs">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Programlar</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Üniversite programlarını, ücretlerini ve komisyon oranlarını yönetin</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Programs</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Manage university programs, fees and commission rates</p>
             </div>
             <ProgramsTab />
           </Card>
