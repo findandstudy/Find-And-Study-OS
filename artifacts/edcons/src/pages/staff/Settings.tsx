@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -11,7 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail, Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon } from "lucide-react";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const LANGUAGES = [
   { code: "en", label: "English",   flag: "🇬🇧" },
@@ -27,17 +30,29 @@ const ROLE_LABELS: Record<string, string> = {
   student: "Student", agent: "Agent", sub_agent: "Sub Agent",
 };
 
+const MANAGER_ROLES = ["super_admin", "admin", "manager"];
+
 export default function SettingsPage() {
   const { user } = useAuth(true);
   const { lang, setLang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
   const [notifications, setNotifications] = useState({
     newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false,
   });
+
+  const [brandForm, setBrandForm] = useState({
+    logoUrl: "", logoDarkUrl: "", themePrimary: "", themeButton: "", themeHover: "",
+  });
+  const [brandSaving, setBrandSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoDarkUploading, setLogoDarkUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const logoDarkInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -48,6 +63,16 @@ export default function SettingsPage() {
       });
     }
   }, [user]);
+
+  useEffect(() => {
+    setBrandForm({
+      logoUrl: themeSettings.logoUrl || "",
+      logoDarkUrl: themeSettings.logoDarkUrl || "",
+      themePrimary: themeSettings.themePrimary || "",
+      themeButton: themeSettings.themeButton || "",
+      themeHover: themeSettings.themeHover || "",
+    });
+  }, [themeSettings]);
 
   async function handleSaveProfile() {
     if (!user) return;
@@ -85,7 +110,63 @@ export default function SettingsPage() {
     } catch {}
   }
 
+  async function uploadLogo(file: File, field: "logoUrl" | "logoDarkUrl") {
+    const setUploading = field === "logoUrl" ? setLogoUploading : setLogoDarkUploading;
+    setUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error(`Upload failed with status ${putRes.status}`);
+      const publicUrl = `${BASE_URL}/api/storage/objects${urlRes.objectPath}`;
+      setBrandForm(f => ({ ...f, [field]: publicUrl }));
+      toast({ title: "Logo uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function isValidHex(v: string): boolean {
+    return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v);
+  }
+
+  async function handleSaveBrand() {
+    for (const key of ["themePrimary", "themeButton", "themeHover"] as const) {
+      if (brandForm[key] && !isValidHex(brandForm[key])) {
+        toast({ title: "Invalid color", description: `"${brandForm[key]}" is not a valid hex color (e.g. #3B82F6).`, variant: "destructive" });
+        return;
+      }
+    }
+    setBrandSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          logoUrl: brandForm.logoUrl || null,
+          logoDarkUrl: brandForm.logoDarkUrl || null,
+          themePrimary: brandForm.themePrimary || null,
+          themeButton: brandForm.themeButton || null,
+          themeHover: brandForm.themeHover || null,
+        }),
+      });
+      await refreshSettings();
+      toast({ title: "Branding saved", description: "Theme and logos have been updated." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setBrandSaving(false);
+    }
+  }
+
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
+  const isManager = MANAGER_ROLES.includes(user?.role || "");
 
   return (
     <DashboardLayout>
@@ -96,11 +177,14 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="profile">
-          <TabsList className="rounded-xl bg-secondary/50 p-1">
+          <TabsList className="rounded-xl bg-secondary/50 p-1 flex-wrap h-auto">
             <TabsTrigger value="profile"       className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
             <TabsTrigger value="language"      className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
             <TabsTrigger value="notifications" className="rounded-lg gap-2"><Bell className="w-4 h-4" /> Notifications</TabsTrigger>
             <TabsTrigger value="security"      className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
+            {isManager && (
+              <TabsTrigger value="branding" className="rounded-lg gap-2"><Palette className="w-4 h-4" /> Branding</TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── Profile ── */}
@@ -199,11 +283,11 @@ export default function SettingsPage() {
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Security & Access</h2>
               <div className="space-y-4">
-                <div className="p-5 rounded-xl bg-blue-50 border border-blue-200">
-                  <p className="font-bold text-blue-800 flex items-center gap-2">
+                <div className="p-5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                  <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2">
                     <Shield className="w-5 h-5" /> Authentication via Replit
                   </p>
-                  <p className="text-sm text-blue-700 mt-2">
+                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">
                     Your account is secured through Replit's authentication system. No password management required.
                   </p>
                 </div>
@@ -236,6 +320,132 @@ export default function SettingsPage() {
               </div>
             </Card>
           </TabsContent>
+
+          {/* ── Branding (Managers only) ── */}
+          {isManager && (
+            <TabsContent value="branding" className="mt-6 space-y-6">
+              {/* Theme Mode */}
+              <Card className="border-none shadow-lg shadow-black/5 p-6">
+                <h2 className="font-display font-bold text-lg mb-2">Appearance</h2>
+                <p className="text-sm text-muted-foreground mb-5">Choose between light and dark mode for the entire system.</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { value: "light" as const, label: "Light", icon: Sun, desc: "Light background" },
+                    { value: "dark" as const, label: "Dark", icon: Moon, desc: "Dark background" },
+                    { value: "system" as const, label: "System", icon: Monitor, desc: "Follows device" },
+                  ]).map(opt => (
+                    <button key={opt.value} onClick={() => setMode(opt.value)}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all hover:border-primary/50
+                        ${mode === opt.value ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:bg-secondary/30"}`}>
+                      <opt.icon className={`w-6 h-6 ${mode === opt.value ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className="font-semibold text-sm text-foreground">{opt.label}</span>
+                      <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Logos */}
+              <Card className="border-none shadow-lg shadow-black/5 p-6">
+                <h2 className="font-display font-bold text-lg mb-2">System Logos</h2>
+                <p className="text-sm text-muted-foreground mb-5">Upload your company logo. The dark mode logo will be used when dark theme is active.</p>
+                <div className="grid sm:grid-cols-2 gap-6">
+                  {/* Light Logo */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> Light Mode Logo</Label>
+                    <div className="relative w-full h-32 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors bg-white flex items-center justify-center overflow-hidden">
+                      {brandForm.logoUrl ? (
+                        <>
+                          <img src={brandForm.logoUrl} alt="Logo" className="max-h-24 max-w-full object-contain" />
+                          <button onClick={() => setBrandForm(f => ({ ...f, logoUrl: "" }))}
+                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => logoInputRef.current?.click()}
+                          className="flex flex-col items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
+                          disabled={logoUploading}>
+                          {logoUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
+                          <span className="text-xs font-medium">{logoUploading ? "Uploading..." : "Click to upload"}</span>
+                        </button>
+                      )}
+                    </div>
+                    <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f, "logoUrl"); e.target.value = ""; }} />
+                  </div>
+
+                  {/* Dark Logo */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-1.5"><Moon className="w-3.5 h-3.5" /> Dark Mode Logo</Label>
+                    <div className="relative w-full h-32 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors bg-gray-900 flex items-center justify-center overflow-hidden">
+                      {brandForm.logoDarkUrl ? (
+                        <>
+                          <img src={brandForm.logoDarkUrl} alt="Dark Logo" className="max-h-24 max-w-full object-contain" />
+                          <button onClick={() => setBrandForm(f => ({ ...f, logoDarkUrl: "" }))}
+                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => logoDarkInputRef.current?.click()}
+                          className="flex flex-col items-center gap-2 text-gray-400 hover:text-blue-400 transition-colors"
+                          disabled={logoDarkUploading}>
+                          {logoDarkUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
+                          <span className="text-xs font-medium">{logoDarkUploading ? "Uploading..." : "Click to upload"}</span>
+                        </button>
+                      )}
+                    </div>
+                    <input ref={logoDarkInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f, "logoDarkUrl"); e.target.value = ""; }} />
+                  </div>
+                </div>
+              </Card>
+
+              {/* Theme Colors */}
+              <Card className="border-none shadow-lg shadow-black/5 p-6">
+                <h2 className="font-display font-bold text-lg mb-2">Theme Colors</h2>
+                <p className="text-sm text-muted-foreground mb-5">Customize the main colors of the system. Leave empty to use defaults.</p>
+                <div className="space-y-5">
+                  {([
+                    { key: "themePrimary" as const, label: "Primary Color", desc: "Main theme color used for navigation, links, and accents", default: "#3B82F6" },
+                    { key: "themeButton" as const, label: "Button Color", desc: "Color used for primary action buttons", default: "#3B82F6" },
+                    { key: "themeHover" as const, label: "Hover Color", desc: "Color shown when hovering over buttons and interactive elements", default: "#2563EB" },
+                  ]).map(c => (
+                    <div key={c.key} className="flex items-center gap-4 p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
+                      <div className="relative shrink-0">
+                        <div className="w-10 h-10 rounded-lg border-2 border-border shadow-sm cursor-pointer overflow-hidden"
+                          style={{ backgroundColor: brandForm[c.key] || c.default }}
+                          onClick={() => document.getElementById(`color-${c.key}`)?.click()} />
+                        <input id={`color-${c.key}`} type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          value={brandForm[c.key] || c.default}
+                          onChange={e => setBrandForm(f => ({ ...f, [c.key]: e.target.value }))} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-foreground">{c.label}</p>
+                        <p className="text-xs text-muted-foreground">{c.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Input value={brandForm[c.key]} onChange={e => setBrandForm(f => ({ ...f, [c.key]: e.target.value }))}
+                          placeholder={c.default} className="w-28 rounded-lg text-xs font-mono h-8" />
+                        {brandForm[c.key] && (
+                          <button onClick={() => setBrandForm(f => ({ ...f, [c.key]: "" }))}
+                            className="text-muted-foreground hover:text-destructive transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Button onClick={handleSaveBrand} disabled={brandSaving} className="rounded-xl gap-2 px-8">
+                {brandSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Branding
+              </Button>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </DashboardLayout>

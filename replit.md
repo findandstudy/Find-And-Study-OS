@@ -95,7 +95,7 @@ artifacts-monorepo/
 - **Leads page**: Pipeline view (Kanban columns) + list view with sortable columns, bulk select/delete, edit dialog; estimatedValue revenue display (role-gated); view toggle stored in localStorage (`edcons_leads_view`)
 - Finance page — full redesign with commission tracking, service fees, Article 6 offsets, university breakdown, financial transaction recording with file uploads, analytics dashboard
 - **Course Finder** — Program search/filter with PDF proposal generation; select individual or bulk programs → generate premium PDF proposal with university logos, tuition info, scholarships, commissions; logo logic: agents get their agency logo, staff/admin/students get system logo; selection clears on page/filter change
-- Settings page (profile/language/notifications/security tabs)
+- **Settings page** (profile/language/notifications/security tabs) + **Branding tab** (manager+ only): system logo upload (light + dark mode), theme color pickers (primary/button/hover as hex), dark mode toggle (light/dark/system); public branding API: `GET /api/settings/branding`; dark mode toggle also in header bar (Moon/Sun icon)
 
 ### Agent Portal
 - Dashboard with commission bar chart, referral link copier, referred-students list

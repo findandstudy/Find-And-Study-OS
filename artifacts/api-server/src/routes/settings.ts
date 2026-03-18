@@ -11,7 +11,20 @@ const SETTINGS_PATCH_FIELDS = [
   "companyPhone", "companyAddress", "smtpHost", "smtpPort", "smtpUser",
   "smtpPassword", "whatsappEnabled", "whatsappToken",
   "metaLeadEnabled", "n8nWebhookUrl", "googleSheetsId",
+  "logoUrl", "logoDarkUrl", "themePrimary", "themeButton", "themeHover",
 ];
+
+router.get("/settings/branding", async (req, res): Promise<void> => {
+  const [settings] = await db.select({
+    logoUrl: settingsTable.logoUrl,
+    logoDarkUrl: settingsTable.logoDarkUrl,
+    themePrimary: settingsTable.themePrimary,
+    themeButton: settingsTable.themeButton,
+    themeHover: settingsTable.themeHover,
+    companyName: settingsTable.companyName,
+  }).from(settingsTable);
+  res.json(settings || {});
+});
 
 router.get("/settings", requireAuth, async (req, res): Promise<void> => {
   const [settings] = await db.select().from(settingsTable);

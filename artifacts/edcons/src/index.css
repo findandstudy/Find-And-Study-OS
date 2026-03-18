@@ -48,6 +48,10 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
+  --color-button: hsl(var(--button, var(--primary)));
+  --color-button-foreground: hsl(var(--button-foreground, var(--primary-foreground)));
+  --color-hover: hsl(var(--hover, var(--primary)));
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

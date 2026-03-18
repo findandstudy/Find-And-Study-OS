@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useSeason, SEASON_YEARS } from "@/contexts/SeasonContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   SidebarProvider, 
@@ -35,6 +36,8 @@ import {
   UserCircle,
   CalendarDays,
   Search,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -191,7 +194,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const roleBadgeColor = ROLE_COLORS[user.role] || "bg-secondary text-muted-foreground";
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
   const { season, setSeason } = useSeason();
+  const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isOperationalRole = ["super_admin","admin","manager","staff","consultant","accountant","editor","agent","sub_agent"].includes(user.role);
+
+  const sidebarLogo = resolvedTheme === "dark" && themeSettings.logoDarkUrl
+    ? themeSettings.logoDarkUrl
+    : themeSettings.logoUrl || null;
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
@@ -201,11 +209,15 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             {/* Logo */}
             <div className="p-5 pb-4 border-b border-border/40">
                <Link href="/" className="flex items-center gap-2.5 group">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
+                {sidebarLogo ? (
+                  <img src={sidebarLogo} alt="Logo" className="h-9 max-w-[120px] object-contain group-hover:scale-105 transition-transform" />
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
+                    <GraduationCap className="w-5 h-5" />
+                  </div>
+                )}
                 <div>
-                  <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>
+                  {!sidebarLogo && <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>}
                   <div className={`text-xs font-semibold px-1.5 py-0.5 rounded-md mt-0.5 inline-block ${roleBadgeColor}`}>
                     {ROLE_LABELS[user.role] || user.role}
                   </div>
@@ -298,6 +310,11 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   </Select>
                 </div>
               )}
+              <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg"
+                onClick={() => setMode(resolvedTheme === "dark" ? "light" : "dark")}
+                title={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+                {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
               <Badge className={`hidden sm:flex text-xs font-semibold border-0 ${roleBadgeColor}`}>
                 <Shield className="w-3 h-3 mr-1" />
                 {ROLE_LABELS[user.role] || user.role}
