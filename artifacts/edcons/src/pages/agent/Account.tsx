@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   User, Globe, Shield, Save, Check, Briefcase,
   Loader2, Phone, Mail, TrendingUp, Link2, Copy, MapPin,
   Upload, X, FileText, Download, Image as ImageIcon, Eye,
+  Camera, Lock, KeyRound,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 
@@ -28,21 +30,96 @@ const LANGUAGES = [
   { code: "ru", label: "Русский",   country: "RU" },
 ];
 
+const PHONE_CODES = [
+  { code: "+90", country: "TR" },
+  { code: "+1", country: "US" },
+  { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" },
+  { code: "+33", country: "FR" },
+  { code: "+971", country: "AE" },
+  { code: "+966", country: "SA" },
+  { code: "+91", country: "IN" },
+  { code: "+86", country: "CN" },
+  { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" },
+  { code: "+55", country: "BR" },
+  { code: "+234", country: "NG" },
+  { code: "+20", country: "EG" },
+  { code: "+254", country: "KE" },
+  { code: "+27", country: "ZA" },
+  { code: "+62", country: "ID" },
+  { code: "+60", country: "MY" },
+  { code: "+63", country: "PH" },
+  { code: "+92", country: "PK" },
+  { code: "+880", country: "BD" },
+  { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" },
+  { code: "+48", country: "PL" },
+  { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" },
+  { code: "+31", country: "NL" },
+  { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" },
+  { code: "+358", country: "FI" },
+  { code: "+212", country: "MA" },
+  { code: "+216", country: "TN" },
+  { code: "+213", country: "DZ" },
+  { code: "+964", country: "IQ" },
+  { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" },
+  { code: "+994", country: "AZ" },
+  { code: "+995", country: "GE" },
+  { code: "+998", country: "UZ" },
+  { code: "+993", country: "TM" },
+];
+
+function splitPhone(phone: string | null) {
+  if (!phone) return { code: "+90", number: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  for (const pc of sorted) {
+    if (phone.startsWith(pc.code)) {
+      return { code: pc.code, number: phone.slice(pc.code.length).trim() };
+    }
+  }
+  return { code: "+90", number: phone };
+}
+
+async function uploadFileToStorage(file: File): Promise<string> {
+  const urlRes = await customFetch<any>(`/api/storage/uploads/request-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+  });
+  if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
+  const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  if (!putRes.ok) throw new Error("Upload failed");
+  const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
+  return `${BASE_URL}/api/storage/objects${strippedPath}`;
+}
+
 export default function AgentAccount() {
   const { user } = useAuth(true);
   const { lang, setLang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phoneNumber: "", email: "", avatarUrl: "" });
   const [saving, setSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [changingPw, setChangingPw] = useState(false);
 
   useEffect(() => {
     if (user) {
+      const { code, number } = splitPhone((user as any).phone || "");
       setForm({
         firstName: user.firstName || "",
         lastName:  user.lastName  || "",
-        phone:     (user as any).phone || "",
+        phoneCode: code,
+        phoneNumber: number,
+        email: user.email || "",
+        avatarUrl: user.avatarUrl || "",
       });
     }
   }, [user]);
@@ -53,17 +130,52 @@ export default function AgentAccount() {
     queryFn: () => customFetch<any>("/api/agents/me"),
   });
 
+  async function handleAvatarUpload(file: File) {
+    if (!user) return;
+    setAvatarUploading(true);
+    try {
+      const avatarUrl = await uploadFileToStorage(file);
+      setForm(f => ({ ...f, avatarUrl }));
+      await customFetch(`/api/users/${user.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl }),
+      });
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      toast({ title: "Profile photo updated" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally { setAvatarUploading(false); }
+  }
+
+  async function handleRemoveAvatar() {
+    if (!user) return;
+    try {
+      setForm(f => ({ ...f, avatarUrl: "" }));
+      await customFetch(`/api/users/${user.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: null }),
+      });
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      toast({ title: "Profile photo removed" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleSaveProfile() {
     if (!user) return;
     setSaving(true);
     try {
+      const phone = form.phoneNumber ? `${form.phoneCode}${form.phoneNumber}` : undefined;
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           firstName: form.firstName,
           lastName:  form.lastName,
-          phone:     form.phone || undefined,
+          phone,
+          email: form.email || undefined,
+          avatarUrl: form.avatarUrl || null,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["me"] });
@@ -73,6 +185,29 @@ export default function AgentAccount() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleChangePassword() {
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    if (pwForm.newPassword.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    setChangingPw(true);
+    try {
+      await customFetch("/api/users/me/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword }),
+      });
+      setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast({ title: "Password changed", description: "Your password has been updated successfully." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally { setChangingPw(false); }
   }
 
   async function handleSaveLang(code: string) {
@@ -112,12 +247,31 @@ export default function AgentAccount() {
             <TabsTrigger value="security" className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="profile" className="mt-6">
+          <TabsContent value="profile" className="mt-6 space-y-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Personal Information</h2>
               <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg shrink-0">
-                  {initials}
+                <div className="relative group shrink-0">
+                  {form.avatarUrl ? (
+                    <img src={form.avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shadow-lg" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg">
+                      {initials}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                  >
+                    {avatarUploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-6 h-6 text-white" />}
+                  </button>
+                  {form.avatarUrl && (
+                    <button onClick={handleRemoveAvatar} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                  <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
                 </div>
                 <div>
                   <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
@@ -125,6 +279,7 @@ export default function AgentAccount() {
                   <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs mt-2">
                     {user?.role === "sub_agent" ? "Sub Agent" : "Agent"}
                   </Badge>
+                  <p className="text-xs text-muted-foreground mt-1">Hover photo to change</p>
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-5">
@@ -138,18 +293,63 @@ export default function AgentAccount() {
                 </div>
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
-                  <Input type="email" value={user?.email || ""} disabled className="rounded-xl bg-secondary/40 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground">Email is managed by your login provider</p>
+                  <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone</Label>
-                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 234 567 8900" className="rounded-xl" />
+                  <div className="flex gap-2">
+                    <Select value={form.phoneCode} onValueChange={v => setForm(f => ({ ...f, phoneCode: v }))}>
+                      <SelectTrigger className="w-[120px] rounded-xl shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {PHONE_CODES.map(pc => (
+                          <SelectItem key={pc.code + pc.country} value={pc.code}>
+                            <span className="inline-flex items-center gap-1.5">
+                              <CountryFlag code={pc.country} size="sm" />
+                              {pc.code}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={form.phoneNumber}
+                      onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
+                      placeholder="555 123 4567"
+                      className="rounded-xl flex-1"
+                    />
+                  </div>
                 </div>
               </div>
               <Button onClick={handleSaveProfile} disabled={saving} className="mt-6 rounded-xl gap-2 px-8">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Changes
               </Button>
+            </Card>
+
+            <Card className="border-none shadow-lg shadow-black/5 p-6">
+              <h2 className="font-display font-bold text-lg mb-6 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-primary" /> Change Password
+              </h2>
+              <div className="space-y-4 max-w-md">
+                <div className="space-y-1.5">
+                  <Label>Current Password</Label>
+                  <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} className="rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>New Password</Label>
+                  <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min 6 characters" className="rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Confirm New Password</Label>
+                  <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} className="rounded-xl" />
+                </div>
+                <Button onClick={handleChangePassword} disabled={changingPw || !pwForm.currentPassword || !pwForm.newPassword} className="rounded-xl gap-2 px-8">
+                  {changingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                  Change Password
+                </Button>
+              </div>
             </Card>
           </TabsContent>
 
@@ -207,12 +407,12 @@ export default function AgentAccount() {
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Security & Access</h2>
               <div className="space-y-4">
-                <div className="p-5 rounded-xl bg-blue-50 border border-blue-200">
-                  <p className="font-bold text-blue-800 flex items-center gap-2">
+                <div className="p-5 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
+                  <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2">
                     <Shield className="w-5 h-5" /> Secured Account
                   </p>
-                  <p className="text-sm text-blue-700 mt-2">
-                    Your account is secured through Replit's authentication system.
+                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">
+                    Your account is secured with email and password authentication.
                   </p>
                 </div>
                 <div className="p-5 rounded-xl border border-border/50 space-y-2">
@@ -252,19 +452,6 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
     }
   }, [agentProfile]);
 
-  async function uploadFile(file: File): Promise<string> {
-    const urlRes = await customFetch<any>(`/api/storage/uploads/request-url`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-    });
-    if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
-    const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-    if (!putRes.ok) throw new Error("Upload failed");
-    const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
-    return `${BASE_URL}/api/storage/objects${strippedPath}`;
-  }
-
   async function handleSaveAgency() {
     setSaving(true);
     try {
@@ -284,7 +471,7 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
 
   async function handleDocUpload(field: "logoUrl" | "businessCertUrl", file: File) {
     try {
-      const url = await uploadFile(file);
+      const url = await uploadFileToStorage(file);
       await customFetch("/api/agents/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
