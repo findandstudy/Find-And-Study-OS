@@ -79,30 +79,37 @@ function getStuStageColor(stage: PipelineStage, index: number): string {
 }
 
 type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
-type AppLevel = "undergraduate" | "graduate" | "doctorate";
+type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 
 const LEVELS: { key: AppLevel; label: string; badge: string; color: string }[] = [
-  { key: "undergraduate", label: "Lisans / Ön Lisans", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  { key: "graduate", label: "Yüksek Lisans (Master)", badge: "Graduate", color: "bg-violet-100 text-violet-700 border-violet-200" },
-  { key: "doctorate", label: "Doktora (PhD)", badge: "Doctorate", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  { key: "pathway", label: "Language / Prep", badge: "Pathway", color: "bg-teal-100 text-teal-700 border-teal-200" },
+  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  { key: "graduate", label: "Master's Degree", badge: "Graduate", color: "bg-violet-100 text-violet-700 border-violet-200" },
+  { key: "doctorate", label: "Doctorate (PhD)", badge: "Doctorate", color: "bg-amber-100 text-amber-700 border-amber-200" },
 ];
 
 const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
+  pathway: [
+    { key: "passport",        label: "Passport",         icon: "🛂", accept: "image/*,.pdf", required: true  },
+    { key: "hs_diploma",      label: "HS Diploma",       icon: "🎓", accept: "image/*,.pdf", required: false },
+    { key: "hs_transcript",   label: "HS Transcript",    icon: "📋", accept: "image/*,.pdf", required: false },
+    { key: "photo",           label: "Photograph",       icon: "📷", accept: "image/*",      required: false },
+  ],
   undergraduate: [
     { key: "hs_diploma",      label: "HS Diploma",       icon: "🎓", accept: "image/*,.pdf", required: true  },
     { key: "hs_transcript",   label: "HS Transcript",    icon: "📋", accept: "image/*,.pdf", required: true  },
     { key: "passport",        label: "Passport",         icon: "🛂", accept: "image/*,.pdf", required: true  },
     { key: "photo",           label: "Photograph",       icon: "📷", accept: "image/*",      required: true  },
-    { key: "language_proof",  label: "Language Proof",   icon: "🌐", accept: "image/*,.pdf", required: false, note: "EN/TR (varsa)" },
+    { key: "language_proof",  label: "Language Proof",   icon: "🌐", accept: "image/*,.pdf", required: false, note: "If available" },
   ],
   graduate: [
     { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "🎓", accept: "image/*,.pdf", required: true  },
     { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "📋", accept: "image/*,.pdf", required: true  },
     { key: "passport",            label: "Passport",             icon: "🛂", accept: "image/*,.pdf", required: true  },
     { key: "photo",               label: "Photograph",           icon: "📷", accept: "image/*",      required: true  },
-    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Okul Tanınırlık" },
-    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "Programa göre" },
-    { key: "sop",                 label: "SOP",                  icon: "✍️", accept: "image/*,.pdf", required: false, note: "Programa göre" },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Recognition" },
+    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
+    { key: "sop",                 label: "SOP",                  icon: "✍️", accept: "image/*,.pdf", required: false, note: "If required" },
   ],
   doctorate: [
     { key: "master_diploma",      label: "Master Diploma",       icon: "🎓", accept: "image/*,.pdf", required: true  },
@@ -111,9 +118,9 @@ const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
     { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "📋", accept: "image/*,.pdf", required: true  },
     { key: "passport",            label: "Passport",             icon: "🛂", accept: "image/*,.pdf", required: true  },
     { key: "photo",               label: "Photograph",           icon: "📷", accept: "image/*",      required: true  },
-    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Okul Tanınırlık" },
-    { key: "research_proposal",   label: "Research Proposal",    icon: "🔬", accept: "image/*,.pdf", required: false, note: "Programa göre" },
-    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "Programa göre" },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Recognition" },
+    { key: "research_proposal",   label: "Research Proposal",    icon: "🔬", accept: "image/*,.pdf", required: false, note: "If required" },
+    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
   ],
 };
 
@@ -237,8 +244,8 @@ function DropZone({
   );
 
   const requiredBadge = docType.required
-    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Zorunlu</span>
-    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Opsiyonel</span>;
+    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Required</span>
+    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Optional</span>;
 
   if (uploaded) {
     return (
@@ -565,8 +572,8 @@ function AddStudentModal({
             <div className="space-y-4">
               {/* Level Selector */}
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Başvuru Seviyesi</p>
-                <div className="grid grid-cols-3 gap-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Application Level</p>
+                <div className="grid grid-cols-4 gap-2">
                   {LEVELS.map(lv => (
                     <button
                       key={lv.key}
@@ -590,9 +597,9 @@ function AddStudentModal({
               <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-2xl p-3 flex items-start gap-3">
                 <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-foreground">AI Otomatik Form Doldurma</p>
+                  <p className="text-sm font-semibold text-foreground">AI Auto-Fill</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Belgeleri yükleyin — AI okuyup formu dolduracak. <span className="font-medium text-rose-600">Zorunlu</span> belgeler önceliklidir.
+                    Upload documents — AI will read and fill the form. <span className="font-medium text-rose-600">Required</span> documents take priority.
                   </p>
                 </div>
               </div>
@@ -600,9 +607,9 @@ function AddStudentModal({
               {/* Document Grid */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-foreground">Gerekli Belgeler</p>
+                  <p className="text-sm font-semibold text-foreground">Required Documents</p>
                   <p className="text-xs text-muted-foreground">
-                    {uploadedCount}/{currentDocs.length} yüklendi
+                    {uploadedCount}/{currentDocs.length} uploaded
                   </p>
                 </div>
                 <div className={cn(
@@ -624,7 +631,7 @@ function AddStudentModal({
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                 <p className="text-xs text-amber-700">
-                  Belge yoksa <strong>"Skip to Form"</strong> ile formu manuel doldurun.
+                  No documents? Use <strong>"Skip to Form"</strong> to fill the form manually.
                 </p>
               </div>
             </div>
