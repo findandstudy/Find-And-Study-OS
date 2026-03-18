@@ -16,7 +16,7 @@ import {
   User, Globe, Shield, Save, Check, Briefcase,
   Loader2, Phone, Mail, TrendingUp, Link2, Copy, MapPin,
   Upload, X, FileText, Download, Image as ImageIcon, Eye,
-  Camera, Lock, KeyRound,
+  Camera, Lock, KeyRound, LogOut,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 
@@ -232,168 +232,199 @@ export default function AgentAccount() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 max-w-3xl">
-        <div>
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
           <h1 className="text-2xl font-display font-bold text-foreground">My Account</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage your agent profile and preferences</p>
         </div>
 
-        <Tabs defaultValue="profile">
-          <TabsList className="rounded-xl bg-secondary/50 p-1">
-            <TabsTrigger value="profile"  className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
-            <TabsTrigger value="agency"   className="rounded-lg gap-2"><Briefcase className="w-4 h-4" /> Agency</TabsTrigger>
-            <TabsTrigger value="referral" className="rounded-lg gap-2"><Link2 className="w-4 h-4" /> Referral</TabsTrigger>
-            <TabsTrigger value="language" className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
-            <TabsTrigger value="security" className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
+        <Tabs defaultValue="profile" className="space-y-0">
+          <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-auto gap-0">
+            {[
+              { value: "profile", label: "Profile", icon: User },
+              { value: "agency", label: "Agency", icon: Briefcase },
+              { value: "referral", label: "Referral", icon: Link2 },
+              { value: "language", label: "Language", icon: Globe },
+              { value: "security", label: "Security", icon: Shield },
+            ].map(tab => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-5 py-3 gap-2 text-sm font-medium"
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <TabsContent value="profile" className="mt-6 space-y-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Personal Information</h2>
-              <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
-                <div className="relative group shrink-0">
+          {/* ── Profile Tab ── */}
+          <TabsContent value="profile" className="pt-6 space-y-6">
+            <div className="grid lg:grid-cols-[280px_1fr] gap-6">
+              {/* Left: Avatar Card */}
+              <Card className="border shadow-sm p-6 flex flex-col items-center text-center h-fit">
+                <div className="relative group mb-4">
                   {form.avatarUrl ? (
-                    <img src={form.avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shadow-lg" />
+                    <img src={form.avatarUrl} alt="" className="w-28 h-28 rounded-full object-cover ring-4 ring-primary/10" />
                   ) : (
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg">
+                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-display font-bold text-3xl ring-4 ring-primary/10">
                       {initials}
                     </div>
                   )}
                   <button
                     onClick={() => avatarInputRef.current?.click()}
                     disabled={avatarUploading}
-                    className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                    className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
                   >
                     {avatarUploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-6 h-6 text-white" />}
                   </button>
                   {form.avatarUrl && (
-                    <button onClick={handleRemoveAvatar} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90">
-                      <X className="w-3 h-3" />
+                    <button onClick={handleRemoveAvatar} className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90 shadow-md">
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
                 </div>
-                <div>
-                  <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-muted-foreground text-sm">{user?.email}</p>
-                  <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs mt-2">
-                    {user?.role === "sub_agent" ? "Sub Agent" : "Agent"}
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-1">Hover photo to change</p>
-                </div>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <Label>First Name</Label>
-                  <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Last Name</Label>
-                  <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" />
-                </div>
-                <div className="sm:col-span-2 space-y-1.5">
-                  <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
-                  <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" />
-                </div>
-                <div className="sm:col-span-2 space-y-1.5">
-                  <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone</Label>
-                  <div className="flex gap-2">
-                    <Select value={form.phoneCode} onValueChange={v => setForm(f => ({ ...f, phoneCode: v }))}>
-                      <SelectTrigger className="w-[120px] rounded-xl shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {PHONE_CODES.map(pc => (
-                          <SelectItem key={pc.code + pc.country} value={pc.code}>
-                            <span className="inline-flex items-center gap-1.5">
-                              <CountryFlag code={pc.country} size="sm" />
-                              {pc.code}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      value={form.phoneNumber}
-                      onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
-                      placeholder="555 123 4567"
-                      className="rounded-xl flex-1"
-                    />
-                  </div>
-                </div>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={saving} className="mt-6 rounded-xl gap-2 px-8">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Changes
-              </Button>
-            </Card>
+                <h3 className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</h3>
+                <p className="text-muted-foreground text-sm mt-0.5">{user?.email}</p>
+                <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs mt-3">
+                  {user?.role === "sub_agent" ? "Sub Agent" : "Agent"}
+                </Badge>
+                <p className="text-[11px] text-muted-foreground mt-3">Hover photo to change</p>
+              </Card>
 
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6 flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-primary" /> Change Password
-              </h2>
-              <div className="space-y-4 max-w-md">
-                <div className="space-y-1.5">
-                  <Label>Current Password</Label>
-                  <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} className="rounded-xl" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>New Password</Label>
-                  <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min 6 characters" className="rounded-xl" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Confirm New Password</Label>
-                  <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} className="rounded-xl" />
-                </div>
-                <Button onClick={handleChangePassword} disabled={changingPw || !pwForm.currentPassword || !pwForm.newPassword} className="rounded-xl gap-2 px-8">
-                  {changingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                  Change Password
-                </Button>
+              {/* Right: Profile Form */}
+              <div className="space-y-6">
+                <Card className="border shadow-sm p-6">
+                  <h3 className="font-display font-semibold text-base mb-5">Personal Information</h3>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">First Name</Label>
+                      <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Last Name</Label>
+                      <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-10" />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Mail className="w-3 h-3" /> Email
+                      </Label>
+                      <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-10" />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Phone className="w-3 h-3" /> Phone
+                      </Label>
+                      <div className="flex gap-2">
+                        <Select value={form.phoneCode} onValueChange={v => setForm(f => ({ ...f, phoneCode: v }))}>
+                          <SelectTrigger className="w-[110px] h-10 shrink-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {PHONE_CODES.map(pc => (
+                              <SelectItem key={pc.code + pc.country} value={pc.code}>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <CountryFlag code={pc.country} size="sm" />
+                                  {pc.code}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={form.phoneNumber}
+                          onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
+                          placeholder="555 123 4567"
+                          className="h-10 flex-1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
+                    <Button onClick={handleSaveProfile} disabled={saving} size="sm" className="gap-2 px-6">
+                      {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Save Changes
+                    </Button>
+                  </div>
+                </Card>
+
+                <Card className="border shadow-sm p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                      <KeyRound className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <h3 className="font-display font-semibold text-base">Change Password</h3>
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Current Password</Label>
+                      <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">New Password</Label>
+                      <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min 6 characters" className="h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Confirm Password</Label>
+                      <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} className="h-10" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
+                    <Button onClick={handleChangePassword} disabled={changingPw || !pwForm.currentPassword || !pwForm.newPassword} variant="outline" size="sm" className="gap-2 px-6">
+                      {changingPw ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
+                      Update Password
+                    </Button>
+                  </div>
+                </Card>
               </div>
-            </Card>
+            </div>
           </TabsContent>
 
-          <TabsContent value="agency" className="mt-6">
+          {/* ── Agency Tab ── */}
+          <TabsContent value="agency" className="pt-6">
             <AgencyTab agentProfile={agentProfile} agentLoading={agentLoading} />
           </TabsContent>
 
-          <TabsContent value="referral" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Your Referral Link</h2>
-              <div className="p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20 mb-5">
-                <p className="text-sm text-muted-foreground mb-3 font-medium">Share this link with prospective students to track your referrals</p>
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-background border border-border/50 mb-4">
+          {/* ── Referral Tab ── */}
+          <TabsContent value="referral" className="pt-6">
+            <div className="grid lg:grid-cols-[1fr_300px] gap-6">
+              <Card className="border shadow-sm p-6">
+                <h3 className="font-display font-semibold text-base mb-4">Your Referral Link</h3>
+                <p className="text-sm text-muted-foreground mb-4">Share this link with prospective students to track your referrals and earn commissions.</p>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border/50 mb-4">
                   <Link2 className="w-4 h-4 text-primary shrink-0" />
-                  <p className="text-sm font-mono text-foreground flex-1 truncate">{referralLink}</p>
+                  <p className="text-sm font-mono text-foreground flex-1 truncate select-all">{referralLink}</p>
                 </div>
-                <Button onClick={copyLink} className="w-full rounded-xl gap-2">
+                <Button onClick={copyLink} className="w-full gap-2">
                   <Copy className="w-4 h-4" /> Copy Referral Link
                 </Button>
+              </Card>
+              <div className="space-y-4">
+                <Card className="border shadow-sm p-5 text-center">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Agent ID</p>
+                  <p className="font-mono font-bold text-xl text-foreground">#{agentProfile?.id || user?.id}</p>
+                </Card>
+                <Card className="border shadow-sm p-5 text-center">
+                  <p className="text-xs text-muted-foreground font-medium mb-1">Commission Rate</p>
+                  <p className="font-bold text-xl text-foreground">{agentProfile?.commissionRate ? `${agentProfile.commissionRate}%` : "—"}</p>
+                </Card>
               </div>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="p-4 rounded-xl bg-secondary/40 border border-border/40">
-                  <p className="text-xs text-muted-foreground mb-1">Agent ID</p>
-                  <p className="font-mono font-bold text-foreground">#{agentProfile?.id || user?.id}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-secondary/40 border border-border/40">
-                  <p className="text-xs text-muted-foreground mb-1">Commission Rate</p>
-                  <p className="font-bold text-foreground">{agentProfile?.commissionRate ? `${agentProfile.commissionRate}%` : "—"}</p>
-                </div>
-              </div>
-            </Card>
+            </div>
           </TabsContent>
 
-          <TabsContent value="language" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Language Preference</h2>
-              <div className="grid sm:grid-cols-2 gap-3">
+          {/* ── Language Tab ── */}
+          <TabsContent value="language" className="pt-6">
+            <Card className="border shadow-sm p-6">
+              <h3 className="font-display font-semibold text-base mb-5">Language Preference</h3>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {LANGUAGES.map(l => (
                   <button key={l.code} onClick={() => handleSaveLang(l.code)}
-                    className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
-                      ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
+                    className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
+                      ${lang === l.code ? "border-primary bg-primary/5 shadow-sm" : "border-border/60 hover:bg-secondary/30"}`}>
                     <CountryFlag code={l.country} size="xl" />
                     <div className="flex-1">
-                      <p className="font-bold text-foreground">{l.label}</p>
+                      <p className="font-semibold text-foreground text-sm">{l.label}</p>
                       <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>
                     </div>
                     {lang === l.code && <Check className="w-5 h-5 text-primary" />}
@@ -403,36 +434,53 @@ export default function AgentAccount() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="security" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Security & Access</h2>
-              <div className="space-y-4">
-                <div className="p-5 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
-                  <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                    <Shield className="w-5 h-5" /> Secured Account
-                  </p>
-                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">
-                    Your account is secured with email and password authentication.
-                  </p>
+          {/* ── Security Tab ── */}
+          <TabsContent value="security" className="pt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <Card className="border shadow-sm p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <Shield className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <h3 className="font-display font-semibold text-base">Account Security</h3>
                 </div>
-                <div className="p-5 rounded-xl border border-border/50 space-y-2">
-                  <p className="font-semibold text-foreground">Account Details</p>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Role</span>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-3 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Account Status</span>
+                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Role</span>
                     <Badge className="bg-amber-500/10 text-amber-600 border-amber-200 text-xs capitalize">
                       {user?.role?.replace("_", " ")}
                     </Badge>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Account ID</span>
-                    <span className="font-mono text-foreground">#{user?.id}</span>
+                  <div className="flex justify-between items-center py-3 border-b border-border/50">
+                    <span className="text-sm text-muted-foreground">Account ID</span>
+                    <span className="font-mono text-sm text-foreground">#{user?.id}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3">
+                    <span className="text-sm text-muted-foreground">Authentication</span>
+                    <span className="text-sm text-foreground">Email & Password</span>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>
-                  <a href="/api/auth/logout">Sign Out</a>
+              </Card>
+              <Card className="border shadow-sm p-6 flex flex-col">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+                    <LogOut className="w-4 h-4 text-red-500" />
+                  </div>
+                  <h3 className="font-display font-semibold text-base">Session</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-5 flex-1">Sign out of your current session on this device. You will need to log in again to access your account.</p>
+                <Button variant="outline" className="w-full text-destructive hover:bg-destructive/5 hover:border-destructive/30 gap-2" asChild>
+                  <a href="/api/auth/logout">
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </a>
                 </Button>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -500,10 +548,10 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
 
   if (agentLoading) {
     return (
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
+      <Card className="border shadow-sm p-6">
+        <h3 className="font-display font-semibold text-base mb-6">Agency Information</h3>
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-xl" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-lg" />)}
         </div>
       </Card>
     );
@@ -511,9 +559,9 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
 
   if (!agentProfile) {
     return (
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
-        <div className="text-center py-10 text-muted-foreground">
+      <Card className="border shadow-sm p-6">
+        <h3 className="font-display font-semibold text-base mb-6">Agency Information</h3>
+        <div className="text-center py-12 text-muted-foreground">
           <Briefcase className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
           <p className="font-medium">No agency profile yet</p>
           <p className="text-sm mt-1">Your agency details will appear here once set up by an admin</p>
@@ -524,66 +572,68 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
 
   return (
     <div className="space-y-6">
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
-        <div className="space-y-5">
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-secondary/20">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Briefcase className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Agency Code</p>
-                <p className="text-sm font-bold text-foreground font-mono">
-                  {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal">Not assigned yet</span>}
-                </p>
-              </div>
-            </div>
-            <Badge variant="outline" className="text-[10px]">Set by Admin</Badge>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-semibold">Business Name</Label>
-            <p className="text-xs text-muted-foreground">Enter your legal company / business name</p>
-            <Input
-              value={businessName}
-              onChange={e => setBusinessName(e.target.value)}
-              placeholder="e.g. Global Education Consulting Ltd."
-              className="rounded-xl"
-            />
-          </div>
-
+      <div className="grid lg:grid-cols-[1fr_280px] gap-6">
+        <Card className="border shadow-sm p-6">
+          <h3 className="font-display font-semibold text-base mb-5">Agency Details</h3>
           <div className="space-y-4">
-            {[
-              { label: "Country",         icon: MapPin,      value: agentProfile.country },
-              { label: "Commission Rate", icon: TrendingUp,  value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null },
-              { label: "Status",          icon: Check,        value: agentProfile.status },
-            ].map((f, i) => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <f.icon className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">{f.label}</p>
-                    <p className="text-sm font-semibold text-foreground capitalize">
-                      {f.value || <span className="text-muted-foreground italic font-normal">Not set</span>}
-                    </p>
-                  </div>
+            <div className="flex items-center justify-between p-3.5 rounded-lg bg-secondary/40 border border-border/50">
+              <div className="flex items-center gap-3">
+                <Briefcase className="w-4 h-4 text-primary" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Agency Code</p>
+                  <p className="text-sm font-bold text-foreground font-mono">
+                    {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal text-xs">Not assigned</span>}
+                  </p>
                 </div>
               </div>
-            ))}
+              <Badge variant="outline" className="text-[10px] shrink-0">Admin</Badge>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Business Name</Label>
+              <Input
+                value={businessName}
+                onChange={e => setBusinessName(e.target.value)}
+                placeholder="Your legal company name"
+                className="h-10"
+              />
+              <p className="text-[11px] text-muted-foreground">Enter your registered legal company / business name</p>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-border/50">
+              <Button onClick={handleSaveAgency} disabled={saving} size="sm" className="gap-2 px-6">
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Save Changes
+              </Button>
+            </div>
           </div>
+        </Card>
 
-          <Button onClick={handleSaveAgency} disabled={saving} className="rounded-xl gap-2 px-8">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Changes
-          </Button>
+        <div className="space-y-3">
+          {[
+            { label: "Country",         icon: MapPin,      value: agentProfile.country, color: "bg-blue-500/10 text-blue-600" },
+            { label: "Commission Rate", icon: TrendingUp,  value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null, color: "bg-green-500/10 text-green-600" },
+            { label: "Status",          icon: Check,        value: agentProfile.status, color: "bg-emerald-500/10 text-emerald-600" },
+          ].map((f, i) => (
+            <Card key={i} className="border shadow-sm p-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-lg ${f.color} flex items-center justify-center`}>
+                  <f.icon className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{f.label}</p>
+                  <p className="text-sm font-semibold text-foreground capitalize">
+                    {f.value || <span className="text-muted-foreground italic font-normal text-xs">Not set</span>}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
-      </Card>
+      </div>
 
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <h2 className="font-display font-bold text-lg mb-6">Documents</h2>
+      <Card className="border shadow-sm p-6">
+        <h3 className="font-display font-semibold text-base mb-5">Documents</h3>
         <div className="grid sm:grid-cols-3 gap-5">
           <DocumentUploader
             label="Logo for Agent Panel"
@@ -591,7 +641,7 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
             value={agentProfile.logoUrl}
             onUpload={file => handleDocUpload("logoUrl", file)}
             onRemove={() => handleDocRemove("logoUrl")}
-            icon={<ImageIcon className="w-6 h-6" />}
+            icon={<ImageIcon className="w-5 h-5" />}
           />
           <DocumentViewer
             label="Contract"
@@ -603,7 +653,7 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
             value={agentProfile.businessCertUrl}
             onUpload={file => handleDocUpload("businessCertUrl", file)}
             onRemove={() => handleDocRemove("businessCertUrl")}
-            icon={<FileText className="w-6 h-6" />}
+            icon={<FileText className="w-5 h-5" />}
           />
         </div>
       </Card>
@@ -632,33 +682,33 @@ function DocumentUploader({
 
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-semibold">{label}</Label>
-      <div className="relative w-full h-36 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/10">
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      <div className="relative w-full aspect-[4/3] rounded-lg border-2 border-dashed border-border/60 hover:border-primary/40 transition-colors flex items-center justify-center overflow-hidden bg-secondary/30">
         {value ? (
           <>
-            {accept.includes("image") && value.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
-              <img src={value} alt={label} className="max-h-28 max-w-full object-contain" />
+            {accept.includes("image") && !value.match(/\.pdf$/i) ? (
+              <img src={value} alt={label} className="max-h-full max-w-full object-contain p-2" />
             ) : (
-              <div className="flex flex-col items-center gap-2 text-primary">
-                <FileText className="w-8 h-8" />
+              <div className="flex flex-col items-center gap-1.5 text-primary">
+                <FileText className="w-7 h-7" />
                 <span className="text-[10px] font-medium">Uploaded</span>
               </div>
             )}
-            <div className="absolute top-2 right-2 flex gap-1">
+            <div className="absolute top-1.5 right-1.5 flex gap-1">
               <a href={value} target="_blank" rel="noopener noreferrer"
-                className="w-6 h-6 rounded-full bg-primary/90 text-white flex items-center justify-center hover:bg-primary">
+                className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90 shadow-sm">
                 <Eye className="w-3 h-3" />
               </a>
               <button onClick={onRemove}
-                className="w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                className="w-6 h-6 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90 shadow-sm">
                 <X className="w-3 h-3" />
               </button>
             </div>
           </>
         ) : (
           <button onClick={() => inputRef.current?.click()} disabled={uploading}
-            className="flex flex-col items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
-            {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : icon || <Upload className="w-6 h-6" />}
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors p-4">
+            {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : icon || <Upload className="w-5 h-5" />}
             <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload"}</span>
           </button>
         )}
@@ -673,32 +723,31 @@ function DocumentViewer({ label, value }: { label: string; value?: string | null
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Label className="text-xs font-semibold">{label}</Label>
+        <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
         <Badge variant="outline" className="text-[9px] px-1.5 py-0">Admin Only</Badge>
       </div>
-      <div className="relative w-full h-36 rounded-xl border-2 border-dashed border-border bg-secondary/10 flex items-center justify-center overflow-hidden">
+      <div className="relative w-full aspect-[4/3] rounded-lg border-2 border-dashed border-border/60 bg-secondary/30 flex items-center justify-center overflow-hidden">
         {value ? (
           <>
             {value.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
-              <img src={value} alt={label} className="max-h-28 max-w-full object-contain" />
+              <img src={value} alt={label} className="max-h-full max-w-full object-contain p-2" />
             ) : (
-              <div className="flex flex-col items-center gap-2 text-green-600">
-                <FileText className="w-8 h-8" />
+              <div className="flex flex-col items-center gap-1.5 text-green-600">
+                <FileText className="w-7 h-7" />
                 <span className="text-[10px] font-medium">Contract uploaded</span>
               </div>
             )}
-            <div className="absolute top-2 right-2">
+            <div className="absolute top-1.5 right-1.5">
               <a href={value} target="_blank" rel="noopener noreferrer"
-                className="w-7 h-7 rounded-full bg-primary/90 text-white flex items-center justify-center hover:bg-primary shadow-sm">
-                <Download className="w-3.5 h-3.5" />
+                className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90 shadow-sm">
+                <Download className="w-3 h-3" />
               </a>
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground/50">
-            <FileText className="w-8 h-8" />
-            <span className="text-[10px] font-medium">No contract uploaded</span>
-            <span className="text-[9px]">Uploaded by admin</span>
+          <div className="flex flex-col items-center gap-1.5 text-muted-foreground/40 p-4">
+            <FileText className="w-7 h-7" />
+            <span className="text-[10px] font-medium text-center">No contract<br />Uploaded by admin</span>
           </div>
         )}
       </div>
