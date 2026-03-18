@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
-import { TablePagination } from "@/components/TablePagination";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import {
   Search, Plus, FileText, FileUp, Sparkles, ChevronLeft,
   User, GraduationCap, X, CheckCircle2, AlertCircle,
@@ -1470,10 +1470,9 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
-  const [listPage, setListPage] = useState(1);
+  const pg = useTablePagination(25);
   const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const LIST_PAGE_SIZE = 50;
 
   const stuSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1513,11 +1512,9 @@ export default function StudentsPage() {
     return arr;
   }, [filteredStudents, sort]);
 
-  const totalListPages = Math.max(1, Math.ceil(sortedStudents.length / LIST_PAGE_SIZE));
-  const pagedStudents = sortedStudents.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE);
+  const { paged: pagedStudents, total: totalStudentsCount } = pg.paginate(sortedStudents);
 
-  useEffect(() => { setListPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
-  useEffect(() => { if (listPage > totalListPages) setListPage(Math.max(1, totalListPages)); }, [totalListPages, listPage]);
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
 
   const pagedIds = useMemo(() => new Set(pagedStudents.map((s: any) => s.id)), [pagedStudents]);
   const allPageSelected = pagedStudents.length > 0 && pagedStudents.every((s: any) => selectedIds.has(s.id));
@@ -1712,10 +1709,11 @@ export default function StudentsPage() {
               </Table>
             </div>
             <TablePagination
-              currentPage={listPage}
-              totalItems={sortedStudents.length}
-              pageSize={LIST_PAGE_SIZE}
-              onPageChange={setListPage}
+              currentPage={pg.page}
+              totalItems={totalStudentsCount}
+              pageSize={pg.pageSize}
+              onPageChange={pg.setPage}
+              onPageSizeChange={pg.setPageSize}
             />
           </div>
         )}

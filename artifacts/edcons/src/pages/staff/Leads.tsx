@@ -10,7 +10,7 @@ import {
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
 } from "lucide-react";
-import { TablePagination } from "@/components/TablePagination";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -581,8 +581,7 @@ export default function LeadsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
 
-  const [listPage, setListPage] = useState(1);
-  const LIST_PAGE_SIZE = 50;
+  const pg = useTablePagination(25);
 
   const { user } = useAuth(true, [
     "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
@@ -640,14 +639,9 @@ export default function LeadsPage() {
     return arr;
   }, [filteredLeads, sort]);
 
-  const totalListPages = Math.max(1, Math.ceil(sortedLeads.length / LIST_PAGE_SIZE));
-  const pagedLeads = sortedLeads.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE);
+  const { paged: pagedLeads, total: totalLeadsCount } = pg.paginate(sortedLeads);
 
-  useEffect(() => { setListPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
-
-  useEffect(() => {
-    if (listPage > totalListPages) setListPage(Math.max(1, totalListPages));
-  }, [totalListPages, listPage]);
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
 
   const activeCard = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
 
@@ -1014,10 +1008,11 @@ export default function LeadsPage() {
             </div>
 
             <TablePagination
-              currentPage={listPage}
-              totalItems={sortedLeads.length}
-              pageSize={LIST_PAGE_SIZE}
-              onPageChange={setListPage}
+              currentPage={pg.page}
+              totalItems={totalLeadsCount}
+              pageSize={pg.pageSize}
+              onPageChange={pg.setPage}
+              onPageSizeChange={pg.setPageSize}
             />
           </div>
         )}

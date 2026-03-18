@@ -36,7 +36,7 @@ export function TablePagination({
     return pages;
   }
 
-  if (totalItems <= pageSize && !onPageSizeChange) return null;
+  if (totalItems === 0 && !onPageSizeChange) return null;
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-3">

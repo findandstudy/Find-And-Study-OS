@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { TablePagination } from "@/components/TablePagination";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -775,10 +775,9 @@ export default function ApplicationsPage() {
   const [editApp, setEditApp] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
-  const [listPage, setListPage] = useState(1);
+  const pg = useTablePagination(25);
   const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const LIST_PAGE_SIZE = 50;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -829,11 +828,9 @@ export default function ApplicationsPage() {
     return arr;
   }, [filteredApps, sort, stageOrder]);
 
-  const totalListPages = Math.max(1, Math.ceil(sortedApps.length / LIST_PAGE_SIZE));
-  const pagedApps = sortedApps.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE);
+  const { paged: pagedApps, total: totalAppsCount } = pg.paginate(sortedApps);
 
-  useEffect(() => { setListPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
-  useEffect(() => { if (listPage > totalListPages) setListPage(Math.max(1, totalListPages)); }, [totalListPages, listPage]);
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
 
   const pagedIds = useMemo(() => new Set(pagedApps.map((a: any) => a.id)), [pagedApps]);
   const allPageSelected = pagedApps.length > 0 && pagedApps.every((a: any) => selectedIds.has(a.id));
@@ -1029,10 +1026,11 @@ export default function ApplicationsPage() {
               </Table>
             </div>
             <TablePagination
-              currentPage={listPage}
-              totalItems={sortedApps.length}
-              pageSize={LIST_PAGE_SIZE}
-              onPageChange={setListPage}
+              currentPage={pg.page}
+              totalItems={totalAppsCount}
+              pageSize={pg.pageSize}
+              onPageChange={pg.setPage}
+              onPageSizeChange={pg.setPageSize}
             />
           </div>
         )}
