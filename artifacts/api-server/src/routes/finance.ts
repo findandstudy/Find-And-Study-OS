@@ -535,11 +535,15 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
     return daysSince > 90;
   });
 
+  const potentialComms = commissions.filter(c => c.status === "potential");
+  const confirmedComms = commissions.filter(c => c.status !== "potential");
+  const paidComms = commissions.filter(c => c.status === "collected_partial" || c.status === "collected_full" || c.status === "settled");
+
   res.json({
     season: season || "all",
     commissions: {
-      potential: commissions.filter(c => c.status === "potential").length,
-      confirmed: commissions.filter(c => c.status !== "potential").length,
+      potential: potentialComms.length,
+      confirmed: confirmedComms.length,
       totalUniversityCommission: commissions.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
       totalUniversityCollected: commissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
       totalUniversityPending: commissions.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
@@ -549,6 +553,14 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
       totalNetAgency: commissions.reduce((s, c) => s + (toNum(c.universityCollected) - toNum(c.agentPaid)), 0),
       overdueCount: overdueItems.length,
       overdueAmount: overdueItems.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
+      potentialUniversityCommission: potentialComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
+      potentialAgentCommission: potentialComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+      confirmedUniversityCommission: confirmedComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
+      confirmedAgentCommission: confirmedComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+      paidToAgents: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
+      collectedFromUniversities: commissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
+      pendingToCollect: confirmedComms.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
+      pendingToPay: confirmedComms.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
     },
     serviceFees: {
       total: fees.reduce((s, f) => s + toNum(f.totalAmount), 0),

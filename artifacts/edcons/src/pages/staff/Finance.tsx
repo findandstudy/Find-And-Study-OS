@@ -68,6 +68,31 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: 
   );
 }
 
+function FinanceStatCard({ icon: Icon, label, rows, color = "text-indigo-600", borderColor = "border-t-blue-500" }: {
+  icon: any; label: string; rows: { label: string; value: string }[]; color?: string; borderColor?: string;
+}) {
+  return (
+    <Card className={`border-t-2 ${borderColor}`}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`p-1.5 rounded-md bg-slate-50 ${color}`}>
+            <Icon className="w-4 h-4" />
+          </div>
+          <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">{label}</p>
+        </div>
+        <div className="space-y-2">
+          {rows.map((row, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">{row.label}</span>
+              <span className="text-sm font-bold text-slate-800">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ProgressBar({ value, max, color = "bg-blue-500" }: { value: number; max: number; color?: string }) {
   const p = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
@@ -783,9 +808,10 @@ export default function FinancePage() {
     return bins;
   }, [commissions]);
 
+  const cs = summary?.commissions || {};
   const collectionRate = pct(
-    toNum(summary?.commissions?.totalUniversityCollected || 0),
-    toNum(summary?.commissions?.totalUniversityCommission || 0)
+    toNum(cs?.totalUniversityCollected || 0),
+    toNum(cs?.totalUniversityCommission || 0)
   );
 
   const offSummary = summary?.offset || {};
@@ -809,26 +835,45 @@ export default function FinancePage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <StatCard
-            icon={Building2}
-            label="University Commission"
-            value={fmt(summary?.commissions?.totalUniversityCommission || commSummary.totalUniversityCommission || 0)}
-            sub={`${fmt(summary?.commissions?.totalUniversityCollected || commSummary.totalUniversityCollected || 0)} collected (${collectionRate}%)`}
-            color="text-blue-600"
-          />
-          <StatCard
-            icon={Users}
-            label="Agent Commission"
-            value={fmt(summary?.commissions?.totalAgentCommission || commSummary.totalAgentCommission || 0)}
-            sub={`${fmt(summary?.commissions?.totalAgentPaid || commSummary.totalAgentPaid || 0)} paid`}
+          <FinanceStatCard
+            icon={Clock}
+            label="Potential Commission"
+            borderColor="border-t-amber-400"
             color="text-amber-600"
+            rows={[
+              { label: "Agency", value: fmt(cs?.potentialAgentCommission || 0) },
+              { label: "Our Commission", value: fmt((toNum(cs?.potentialUniversityCommission) - toNum(cs?.potentialAgentCommission)) || 0) },
+            ]}
           />
-          <StatCard
-            icon={TrendingUp}
-            label="Net Income"
-            value={fmt(summary?.commissions?.totalNetAgency || commSummary.totalNetAgency || 0)}
-            sub="collected - paid to agents"
+          <FinanceStatCard
+            icon={CheckCircle}
+            label="Confirmed Commission"
+            borderColor="border-t-blue-500"
+            color="text-blue-600"
+            rows={[
+              { label: "Agency", value: fmt(cs?.confirmedAgentCommission || 0) },
+              { label: "Our Commission", value: fmt((toNum(cs?.confirmedUniversityCommission) - toNum(cs?.confirmedAgentCommission)) || 0) },
+            ]}
+          />
+          <FinanceStatCard
+            icon={CreditCard}
+            label="Commission Paid"
+            borderColor="border-t-emerald-500"
             color="text-emerald-600"
+            rows={[
+              { label: "Paid (To agents)", value: fmt(cs?.paidToAgents || 0) },
+              { label: "Collected (From unis)", value: fmt(cs?.collectedFromUniversities || 0) },
+            ]}
+          />
+          <FinanceStatCard
+            icon={AlertCircle}
+            label="Pending Commission"
+            borderColor="border-t-rose-400"
+            color="text-rose-600"
+            rows={[
+              { label: "Pending (To pay)", value: fmt(cs?.pendingToPay || 0) },
+              { label: "Pending (To get)", value: fmt(cs?.pendingToCollect || 0) },
+            ]}
           />
           <StatCard
             icon={DollarSign}
@@ -836,13 +881,6 @@ export default function FinancePage() {
             value={fmt(feeSummary.totalServiceFees || 0)}
             sub={`${fmt(feeSummary.totalCollected || 0)} collected`}
             color="text-indigo-600"
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="Receivables"
-            value={fmt(summary?.commissions?.totalUniversityPending || 0)}
-            sub={`${overdueCommissions.length} overdue (90+ days)`}
-            color="text-rose-600"
           />
         </div>
 
