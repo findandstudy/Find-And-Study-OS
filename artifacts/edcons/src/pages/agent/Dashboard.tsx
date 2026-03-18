@@ -49,7 +49,7 @@ export default function AgentDashboard() {
             <h1 className="text-3xl font-display font-bold text-foreground">Agent Portal</h1>
             <p className="text-muted-foreground mt-1">Track your referrals, commissions, and student progress</p>
           </div>
-          <Link href="/agent/referrals">
+          <Link href="/agent/applications">
             <Button className="rounded-xl gap-2">
               <FileText className="w-4 h-4" /> View All Referrals
             </Button>
@@ -121,7 +121,7 @@ export default function AgentDashboard() {
                 <Star className="w-5 h-5 text-amber-500" /> Quick Access
               </h3>
               <div className="space-y-2">
-                <Link href="/agent/referrals">
+                <Link href="/agent/applications">
                   <div className="flex items-center justify-between p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
                     <span className="text-sm font-medium text-foreground">My Referrals</span>
                     <ArrowRight className="w-4 h-4 text-muted-foreground" />
@@ -142,7 +142,7 @@ export default function AgentDashboard() {
         <Card className="border-none shadow-lg shadow-black/5">
           <div className="p-6 border-b border-border/50 flex items-center justify-between">
             <h3 className="font-display font-bold text-lg">Recent Referral Applications</h3>
-            <Link href="/agent/referrals">
+            <Link href="/agent/applications">
               <Button variant="ghost" size="sm" className="text-primary gap-1 text-xs">
                 See All <ArrowRight className="w-3 h-3" />
               </Button>

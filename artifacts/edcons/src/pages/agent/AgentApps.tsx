@@ -1,179 +1,1037 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useAuth } from "@/hooks/use-auth";
-import { customFetch } from "@workspace/api-client-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeason } from "@/contexts/SeasonContext";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { TablePagination } from "@/components/TablePagination";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  FileText, Search, Loader2, Calendar, GraduationCap,
-  MapPin, BookOpen, TrendingUp, Filter,
+  Search, Plus, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown,
+  Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
+  User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
+  Eye, Stamp, CheckCircle, XCircle, Trophy,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
-type Application = {
-  id: number; studentId: number; programId: number | null; universityId: number | null;
-  agentId: number | null; season: string; stage: string; intake: string | null;
-  level: string | null; programName: string | null; universityName: string | null;
-  country: string | null; tuitionFee: number | null; scholarship: number | null;
-  createdAt: string; studentFirstName?: string; studentLastName?: string;
-};
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+const VIEW_KEY = "edcons_applications_view";
 
-const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
-  inquiry:              { label: "Inquiry",           color: "bg-slate-100 text-slate-700 border-slate-200" },
-  documents_collected:  { label: "Docs Collected",    color: "bg-blue-100 text-blue-700 border-blue-200" },
-  submitted:            { label: "Submitted",         color: "bg-violet-100 text-violet-700 border-violet-200" },
-  offer_received:       { label: "Offer Received",    color: "bg-amber-100 text-amber-700 border-amber-200" },
-  visa_applied:         { label: "Visa Applied",      color: "bg-orange-100 text-orange-700 border-orange-200" },
-  visa_approved:        { label: "Visa Approved",     color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  enrolled:             { label: "Enrolled",          color: "bg-green-100 text-green-700 border-green-200" },
-  rejected:             { label: "Rejected",          color: "bg-rose-100 text-rose-700 border-rose-200" },
-};
+async function apiFetch(url: string, opts?: RequestInit) {
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (r.status === 204) return undefined;
+  return r.json();
+}
 
-export default function AgentApps() {
-  const { user } = useAuth(true);
-  const { toast } = useToast();
-  const { selectedYear } = useSeason();
+const STAGE_COLORS = [
+  "bg-slate-100 text-slate-700 border-slate-200",
+  "bg-blue-100 text-blue-700 border-blue-200",
+  "bg-violet-100 text-violet-700 border-violet-200",
+  "bg-amber-100 text-amber-700 border-amber-200",
+  "bg-orange-100 text-orange-700 border-orange-200",
+  "bg-cyan-100 text-cyan-700 border-cyan-200",
+  "bg-teal-100 text-teal-700 border-teal-200",
+  "bg-indigo-100 text-indigo-700 border-indigo-200",
+];
+const WON_COLOR = "bg-green-100 text-green-700 border-green-200";
+const LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200";
 
-  const [page, setPage] = useState(1);
-  const [stageFilter, setStageFilter] = useState("all");
-  const limit = 15;
+function getStageColor(stage: PipelineStage, index: number): string {
+  if (stage.variant === "won") return WON_COLOR;
+  if (stage.variant === "lost") return LOST_COLOR;
+  return STAGE_COLORS[index % STAGE_COLORS.length];
+}
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["agent-apps-list", page, limit, stageFilter, selectedYear],
-    enabled: !!user,
-    queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), limit: String(limit), season: selectedYear });
-      if (stageFilter && stageFilter !== "all") params.set("stage", stageFilter);
-      return customFetch<{ data: Application[]; meta: { total: number; page: number; limit: number; totalPages: number } }>(`/api/applications?${params}`);
-    },
+const STUDY_LEVELS = [
+  { value: "Bachelor", label: "Bachelor" },
+  { value: "Master", label: "Master" },
+  { value: "Ph.D", label: "Ph.D" },
+  { value: "Associate", label: "Associate" },
+  { value: "Language Course", label: "Language Course" },
+  { value: "Foundation", label: "Foundation" },
+  { value: "Pathway Programs", label: "Pathway Programs" },
+];
+
+const INSTRUCTION_LANGUAGES = [
+  "English", "Turkish", "French", "German", "Arabic", "Russian",
+  "Dutch", "Spanish", "Italian", "Chinese", "Japanese", "Portuguese",
+];
+
+function useUniversityCountries() {
+  return useQuery<string[]>({
+    queryKey: ["university-countries"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities/countries`),
+    staleTime: 5 * 60_000,
   });
+}
 
-  const applications = data?.data || [];
-  const meta = data?.meta;
+function generateIntakes(): string[] {
+  const intakes: string[] = [];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const months = [
+    { label: "Sep", month: 8 }, { label: "Jan", month: 0 },
+    { label: "Feb", month: 1 }, { label: "May", month: 4 },
+  ];
+  for (let y = year; y <= year + 3; y++) {
+    for (const m of months) {
+      if (y === year && m.month < month) continue;
+      intakes.push(`${m.label} ${y}`);
+    }
+  }
+  return intakes;
+}
+const INTAKES = generateIntakes();
 
-  const enrolled = applications.filter(a => a.stage === "enrolled").length;
-  const inProgress = applications.filter(a => !["enrolled", "rejected"].includes(a.stage)).length;
+function formatCurrency(value: number | string | null | undefined): string {
+  const num = typeof value === "string" ? parseFloat(value) : (value ?? 0);
+  if (!num || isNaN(num)) return "";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+type Student = { id: number; firstName: string; lastName: string; email?: string | null; nationality?: string | null };
+
+/* ── StudentSearchInput ──────────────────────────────────── */
+function StudentSearchInput({ value, onChange }: { value: Student | null; onChange: (s: Student | null) => void }) {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const { data: studentsResp, isLoading } = useQuery({
+    queryKey: ["students-search", debouncedQuery],
+    queryFn: () => apiFetch(`${BASE_URL}/api/students?limit=20${debouncedQuery ? `&search=${encodeURIComponent(debouncedQuery)}` : ""}`),
+    enabled: open,
+  });
+  const students: Student[] = studentsResp?.data ?? [];
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 p-2.5 border border-primary rounded-xl bg-primary/5">
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <User className="w-4 h-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">{value.firstName} {value.lastName}</p>
+          {value.email && <p className="text-xs text-muted-foreground truncate">{value.email}</p>}
+        </div>
+        <button type="button" onClick={() => { onChange(null); setQuery(""); }} className="p-1 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <DashboardLayout>
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-display font-bold text-foreground">Applications</h1>
-          <p className="text-muted-foreground text-sm mt-1">Track your student applications and their progress</p>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative cursor-text" onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input ref={inputRef} placeholder="Search student..." value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} className="pl-9 rounded-xl" autoComplete="off" />
         </div>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-64 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+        {isLoading && <div className="p-3 text-sm text-muted-foreground text-center">Searching...</div>}
+        {!isLoading && students.length === 0 && <div className="p-4 text-sm text-muted-foreground text-center">{query.length === 0 ? "Start typing to search" : "No students found"}</div>}
+        {students.map(student => (
+          <button key={student.id} type="button" className="w-full flex items-center gap-3 p-3 hover:bg-secondary/70 transition-colors text-left border-b border-border/50 last:border-0" onMouseDown={e => { e.preventDefault(); onChange(student); setQuery(""); setOpen(false); }}>
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><User className="w-4 h-4 text-primary" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">{student.firstName} {student.lastName}</p>
+              <p className="text-xs text-muted-foreground truncate">{student.email || student.nationality || "—"}</p>
+            </div>
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <Card className="border shadow-sm p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium">Total</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{meta?.total || 0}</p>
-          </Card>
-          <Card className="border shadow-sm p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium">In Progress</p>
-            <p className="text-2xl font-bold text-amber-600 mt-1">{inProgress}</p>
-          </Card>
-          <Card className="border shadow-sm p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium">Enrolled</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{enrolled}</p>
-          </Card>
+type ColVariant = "won" | "lost" | undefined;
+
+/* ── DraggableAppCard ─────────────────────────────────────── */
+function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: number) => void; variant?: ColVariant }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  const cardBg =
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    "bg-card border-border hover:shadow-md";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-xl border ${isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg} mb-3 transition-shadow duration-200`}
+    >
+      <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
+        <div className="flex justify-between items-start mb-1.5">
+          <h4 className="font-bold text-sm text-foreground line-clamp-1">
+            {app.studentFirstName} {app.studentLastName}
+          </h4>
         </div>
+        {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
+        {app.programName && (
+          <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">{app.programName}</p>
+        )}
+        <div className="mt-2 flex items-center justify-between">
+          {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
+          {app.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
+            <div className="flex items-center gap-1">
+              <TrendingUp className="w-3 h-3 text-emerald-500" />
+              <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(app.commissionAmount))}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="px-4 pb-3 flex justify-end">
+        <button
+          onClick={() => onView(app.id)}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Eye className="w-3 h-3" /> View
+        </button>
+      </div>
+    </div>
+  );
+}
 
-        <Card className="border shadow-sm">
-          <div className="p-4 border-b border-border/50 flex items-center gap-3">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <Select value={stageFilter} onValueChange={v => { setStageFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder="All Stages" />
+/* ── DroppableAppColumn ──────────────────────────────────── */
+function DroppableAppColumn({ stage, label, variant, apps, onView }: {
+  stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const v = variant as ColVariant;
+  const totalRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
+
+  const colBg =
+    v === "won" ? "bg-emerald-50/60 border-emerald-200/50" :
+    v === "lost" ? "bg-rose-50/60 border-rose-200/50" :
+    "bg-secondary/50 border-border/50";
+
+  const headerBg =
+    v === "won" ? "bg-emerald-100/80 border-emerald-200/70" :
+    v === "lost" ? "bg-rose-100/80 border-rose-200/70" :
+    "bg-card/50 border-border/50";
+
+  const badgeBg =
+    v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50" :
+    v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" :
+    "bg-background text-muted-foreground border shadow-sm";
+
+  const dropBg =
+    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    (isOver ? "bg-primary/5" : "");
+
+  const emptyBorder =
+    v === "won" ? "border-emerald-300/50 text-emerald-500" :
+    v === "lost" ? "border-rose-300/50 text-rose-400" :
+    "border-border/50 text-muted-foreground";
+
+  const icon =
+    v === "won" ? <Trophy className="w-4 h-4 text-emerald-500 shrink-0" /> :
+    v === "lost" ? <XCircle className="w-4 h-4 text-rose-400 shrink-0" /> :
+    null;
+
+  return (
+    <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
+      <div className={`p-4 border-b shrink-0 ${headerBg}`}>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-1.5">
+            {icon}
+            <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
+          </div>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{apps.length}</span>
+        </div>
+        {totalRevenue > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-lg px-2.5 py-1">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="text-xs font-bold text-emerald-700">{formatCurrency(totalRevenue)}</span>
+          </div>
+        )}
+      </div>
+      <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
+        <SortableContext items={apps.map(a => a.id)} strategy={verticalListSortingStrategy}>
+          {apps.map((app: any) => (
+            <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} />
+          ))}
+          {apps.length === 0 && (
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
+              Drop here
+            </div>
+          )}
+        </SortableContext>
+      </div>
+    </div>
+  );
+}
+
+/* ── SortHeader ──────────────────────────────────────────── */
+type SortKey = "student" | "stage" | "country" | "university" | "program" | "level" | "intake" | "fee" | "date";
+type SortDir = "asc" | "desc";
+
+function SortHeader({ label, sortKey, currentSort, onSort }: {
+  label: string; sortKey: SortKey; currentSort: { key: SortKey; dir: SortDir }; onSort: (k: SortKey) => void;
+}) {
+  const active = currentSort.key === sortKey;
+  return (
+    <TableHead className="cursor-pointer select-none hover:bg-muted/50 transition-colors" onClick={() => onSort(sortKey)}>
+      <div className="flex items-center gap-1">
+        {label}
+        {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
+      </div>
+    </TableHead>
+  );
+}
+
+/* ── EditApplicationDialog ───────────────────────────────── */
+function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
+  const [form, setForm] = useState({
+    stage: "", level: "", country: "", universityId: "", universityName: "",
+    programId: "", programName: "", intake: "", instructionLanguage: "",
+    tuitionFee: "", notes: "",
+  });
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: countries = [] } = useUniversityCountries();
+
+  const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
+    queryKey: ["universities-by-country", form.country],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities?country=${encodeURIComponent(form.country)}&limit=100`),
+    enabled: !!form.country,
+  });
+  const universities = uniData?.data ?? [];
+
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; tuitionFee?: number | null; discountedFee?: number | null; commissionRate?: number | null }> }>({
+    queryKey: ["programs-by-university", form.universityId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
+    enabled: !!form.universityId,
+  });
+  const programs = progData?.data ?? [];
+
+  function degreeToLevel(degree?: string | null): string {
+    if (!degree) return "";
+    const d = degree.toLowerCase();
+    if (d.includes("phd") || d.includes("doctorate")) return "doctorate";
+    if (d.includes("mba")) return "mba";
+    if (d.includes("msc") || d.includes("ma") || d.includes("master")) return "masters";
+    if (d.includes("bsc") || d.includes("ba") || d.includes("undergrad")) return "undergraduate";
+    if (d.includes("diploma")) return "diploma";
+    if (d.includes("foundation")) return "foundation";
+    return "";
+  }
+
+  const updateApp = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications/${app?.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => { toast({ title: "Application updated" }); queryClient.invalidateQueries({ queryKey: ["applications"] }); onClose(); },
+    onError: () => { toast({ title: "Error", description: "Failed to update", variant: "destructive" }); },
+  });
+
+  useEffect(() => {
+    if (open && app) {
+      setForm({
+        stage: app.stage || "inquiry",
+        level: app.level || "",
+        country: app.country || "",
+        universityId: app.universityId ? String(app.universityId) : "",
+        universityName: app.universityName || "",
+        programId: app.programId ? String(app.programId) : "",
+        programName: app.programName || "",
+        intake: app.intake || "",
+        instructionLanguage: app.instructionLanguage || "",
+        tuitionFee: app.tuitionFee ? String(app.tuitionFee) : "",
+        notes: app.notes || "",
+      });
+    }
+  }, [open, app]);
+
+  function handleCountryChange(country: string) {
+    if (country === form.country) return;
+    setForm({ ...form, country, universityId: "", universityName: "", programId: "", programName: "" });
+  }
+
+  function handleUniversityChange(uniId: string) {
+    const uni = universities.find(u => String(u.id) === uniId);
+    setForm({ ...form, universityId: uniId, universityName: uni?.name ?? "", programId: "", programName: "" });
+  }
+
+  function handleProgramChange(progId: string) {
+    const prog = programs.find(p => String(p.id) === progId);
+    if (!prog) return;
+    const autoLevel = degreeToLevel(prog.degree);
+    const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
+    const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
+    const autoFee = effectiveFee != null ? String(effectiveFee) : form.tuitionFee;
+    setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
+  }
+
+  function handleSave() {
+    const fee = parseFloat(form.tuitionFee);
+    const payload: any = {
+      stage: form.stage,
+      level: form.level || null,
+      country: form.country || null,
+      universityId: form.universityId ? parseInt(form.universityId, 10) : null,
+      universityName: form.universityName || null,
+      programId: form.programId ? parseInt(form.programId, 10) : null,
+      programName: form.programName || null,
+      intake: form.intake || null,
+      instructionLanguage: form.instructionLanguage || null,
+      tuitionFee: form.tuitionFee && !isNaN(fee) ? fee : null,
+      notes: form.notes || null,
+    };
+    updateApp.mutate(payload);
+  }
+
+  const selectedProgForFee = programs.find(p => String(p.id) === form.programId);
+  const hasDiscountedFee = selectedProgForFee != null && selectedProgForFee.discountedFee != null;
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Edit Application</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Stage</Label>
+            <Select value={form.stage} onValueChange={v => setForm({ ...form, stage: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Country</Label>
+            <Select value={form.country} onValueChange={handleCountryChange}>
+              <SelectTrigger><SelectValue placeholder="Select country..." /></SelectTrigger>
+              <SelectContent className="max-h-60">{countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>University</Label>
+            <Select value={form.universityId} onValueChange={handleUniversityChange} disabled={!form.country}>
+              <SelectTrigger>
+                <SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities found" : "Select university..."} />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stages</SelectItem>
-                {Object.entries(STAGE_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+              <SelectContent className="max-h-60">
+                {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {form.universityName && !form.universityId && (
+              <p className="text-xs text-muted-foreground mt-1">Current: {form.universityName}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Level</Label>
+            <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
+              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectContent>{STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Program</Label>
+            <Select value={form.programId} onValueChange={handleProgramChange} disabled={!form.universityId}>
+              <SelectTrigger>
+                <SelectValue placeholder={!form.universityId ? "Select university first..." : programs.length === 0 ? "No programs found" : "Select program..."} />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {programs.map(p => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}{p.degree && <span className="text-muted-foreground ml-1 text-xs">({p.degree})</span>}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {form.programName && !form.programId && (
+              <p className="text-xs text-muted-foreground mt-1">Current: {form.programName}</p>
+            )}
           </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          ) : applications.length === 0 ? (
-            <div className="text-center py-20">
-              <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-              <p className="font-medium text-foreground">No applications yet</p>
-              <p className="text-sm text-muted-foreground mt-1">Applications will appear here once your students apply</p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50 bg-secondary/30">
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">App #</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Student</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">University / Program</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Stage</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Intake</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {applications.map(app => {
-                      const stage = STAGE_CONFIG[app.stage] || { label: app.stage, color: "bg-slate-100 text-slate-700 border-slate-200" };
-                      return (
-                        <tr key={app.id} className="border-b border-border/30 hover:bg-secondary/20 transition-colors">
-                          <td className="px-4 py-3">
-                            <span className="font-mono text-xs font-medium text-primary">#{app.id}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <GraduationCap className="w-4 h-4 text-muted-foreground" />
-                              <span className="font-medium text-foreground">
-                                {app.studentFirstName ? `${app.studentFirstName} ${app.studentLastName}` : `Student #${app.studentId}`}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            {app.universityName && <p className="text-foreground text-sm">{app.universityName}</p>}
-                            {app.programName && <p className="text-xs text-muted-foreground">{app.programName}</p>}
-                            {app.country && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <MapPin className="w-3 h-3" />{app.country}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge className={`text-xs ${stage.color}`}>{stage.label}</Badge>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-foreground">{app.intake || "—"}</td>
-                          <td className="px-4 py-3 text-muted-foreground text-xs">
-                            <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" />{new Date(app.createdAt).toLocaleDateString()}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          <div className="space-y-1.5">
+            <Label>Language</Label>
+            <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
+              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Intake</Label>
+            <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
+              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label className="flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+              Tuition Fee (USD)
+              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
+            </Label>
+            <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
+            {selectedProgForFee && (selectedProgForFee.tuitionFee != null || selectedProgForFee.discountedFee != null || selectedProgForFee.commissionRate != null) && (
+              <div className="flex flex-wrap gap-3 text-xs mt-1">
+                {selectedProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${selectedProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${selectedProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                {selectedProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{selectedProgForFee.commissionRate}%</strong></span>}
               </div>
-              {meta && meta.totalPages > 1 && (
-                <div className="p-4 border-t border-border/50">
-                  <TablePagination page={meta.page} totalPages={meta.totalPages} total={meta.total} limit={meta.limit} onPageChange={setPage} />
+            )}
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>Notes</Label>
+            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? "Saving..." : "Save Changes"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── DeleteConfirmDialog ─────────────────────────────────── */
+function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
+  open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Delete {count} Application{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── FilterPopover ────────────────────────────────────────── */
+function FilterPopover({ filters, onChange, stages }: {
+  stages: PipelineStage[];
+  filters: { stage: string; country: string };
+  onChange: (f: { stage: string; country: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasActive = filters.stage !== "all" || filters.country !== "all";
+  const { data: countries = [] } = useUniversityCountries();
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon" className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}>
+          <Filter className="w-4 h-4" />
+          {hasActive && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-4 space-y-4" align="end">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Filters</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ stage: "all", country: "all" })}>Clear</Button>}
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Stage</Label>
+          <Select value={filters.stage} onValueChange={v => onChange({ ...filters, stage: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Country</Label>
+          <Select value={filters.country} onValueChange={v => onChange({ ...filters, country: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-60">
+              <SelectItem value="all">All</SelectItem>
+              {countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* ── AddApplicationModal ─────────────────────────────────── */
+function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
+  const { toast } = useToast();
+  const { season } = useSeason();
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [form, setForm] = useState({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" });
+
+  const { data: countries = [] } = useUniversityCountries();
+
+  const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
+    queryKey: ["universities-by-country", form.country],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities?country=${encodeURIComponent(form.country)}&limit=100`),
+    enabled: !!form.country,
+  });
+  const universities = uniData?.data ?? [];
+
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; intakes?: string | null; tuitionFee?: number | null; discountedFee?: number | null; commissionRate?: number | null }> }>({
+    queryKey: ["programs-by-university", form.universityId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
+    enabled: !!form.universityId,
+  });
+  const programs = progData?.data ?? [];
+
+  function degreeToLevel(degree?: string | null): string {
+    if (!degree) return "";
+    const d = degree.toLowerCase();
+    if (d.includes("phd") || d.includes("doctorate")) return "doctorate";
+    if (d.includes("mba")) return "mba";
+    if (d.includes("msc") || d.includes("ma") || d.includes("master")) return "masters";
+    if (d.includes("bsc") || d.includes("ba") || d.includes("undergrad")) return "undergraduate";
+    if (d.includes("diploma")) return "diploma";
+    if (d.includes("foundation")) return "foundation";
+    return "";
+  }
+
+  function handleProgramSelect(programId: string) {
+    const prog = programs.find(p => String(p.id) === programId);
+    if (!prog) return;
+    const autoLevel = degreeToLevel(prog.degree);
+    const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
+    const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
+    const autoFee = effectiveFee != null ? String(effectiveFee) : form.tuitionFee;
+    setForm({ ...form, programId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
+  }
+
+  const createApplication = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    onSuccess: () => { toast({ title: "Application created" }); handleClose(); onSuccess(); },
+    onError: (err: any) => { toast({ title: "Failed", description: err?.message, variant: "destructive" }); },
+  });
+
+  function handleClose() { setSelectedStudent(null); setForm({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" }); onClose(); }
+
+  function handleSubmit() {
+    if (!selectedStudent) { toast({ title: "Select a student", variant: "destructive" }); return; }
+    if (!form.country) { toast({ title: "Select a country", variant: "destructive" }); return; }
+    if (!form.level) { toast({ title: "Select a level", variant: "destructive" }); return; }
+    const fee = parseFloat(form.tuitionFee);
+    createApplication.mutate({
+      studentId: selectedStudent.id, stage: defaultStage || "inquiry", season,
+      country: form.country || null,
+      universityId: form.universityId ? parseInt(form.universityId, 10) : null,
+      universityName: form.universityName || null,
+      programId: form.programId ? parseInt(form.programId, 10) : null,
+      level: form.level || null, programName: form.programName || null,
+      instructionLanguage: form.instructionLanguage || null, intake: form.intake || null,
+      tuitionFee: form.tuitionFee && !isNaN(fee) ? fee : null, notes: form.notes || null,
+    });
+  }
+
+  const addSelProgForFee = programs.find(p => String(p.id) === form.programId);
+  const addHasDiscountedFee = addSelProgForFee != null && addSelProgForFee.discountedFee != null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-xl font-display">New Application</DialogTitle></DialogHeader>
+        <div className="space-y-5 py-2">
+          <div className="space-y-2">
+            <Label className="font-semibold flex items-center gap-1.5"><User className="w-4 h-4 text-primary" /> Student <span className="text-destructive">*</span></Label>
+            <StudentSearchInput value={selectedStudent} onChange={setSelectedStudent} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="font-semibold">Country <span className="text-destructive">*</span></Label>
+              <Select value={form.country} onValueChange={v => setForm({ ...form, country: v, universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" })}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent className="max-h-60">{countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">University</Label>
+              <Select value={form.universityId} onValueChange={v => { const uni = universities.find(u => String(u.id) === v); setForm({ ...form, universityId: v, universityName: uni?.name ?? "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" }); }} disabled={!form.country || universities.length === 0}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities" : "Select..."} /></SelectTrigger>
+                <SelectContent className="max-h-60">{universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Level <span className="text-destructive">*</span></Label>
+              <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>{STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Program</Label>
+              <Select value={form.programId} onValueChange={handleProgramSelect} disabled={!form.universityId || programs.length === 0}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder={!form.universityId ? "Select uni first..." : programs.length === 0 ? "No programs" : "Select..."} /></SelectTrigger>
+                <SelectContent className="max-h-60">{programs.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}{p.degree && <span className="text-muted-foreground ml-1 text-xs">({p.degree})</span>}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Language</Label>
+              <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-semibold">Intake</Label>
+              <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label className="font-semibold flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                Tuition Fee (USD)
+                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
+              </Label>
+              <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" className="rounded-xl" />
+              {addSelProgForFee && (addSelProgForFee.tuitionFee != null || addSelProgForFee.discountedFee != null || addSelProgForFee.commissionRate != null) && (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {addSelProgForFee.tuitionFee != null && <span className="text-muted-foreground">Standard: <strong>${addSelProgForFee.tuitionFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.discountedFee != null && <span className="text-amber-600">Discounted: <strong>${addSelProgForFee.discountedFee.toLocaleString()}</strong></span>}
+                  {addSelProgForFee.commissionRate != null && <span className="text-indigo-600">Commission: <strong>{addSelProgForFee.commissionRate}%</strong></span>}
                 </div>
               )}
-            </>
-          )}
-        </Card>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label className="font-semibold">Notes</Label>
+              <textarea placeholder="Notes..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" onClick={handleClose} className="rounded-xl">Cancel</Button>
+          <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? "Creating..." : "Create Application"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-        {meta && <p className="text-xs text-muted-foreground mt-3 text-center">{meta.total} application{meta.total !== 1 ? "s" : ""} total</p>}
+/* ── ApplicationsPage ────────────────────────────────────── */
+export default function AgentAppsPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { season } = useSeason();
+  const { user } = useAuth(true, ["agent", "sub_agent"]);
+
+  const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
+  const [filters, setFilters] = useState({ stage: "all", country: "all" });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
+  const [editApp, setEditApp] = useState<any>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const pg = useTablePagination(25);
+  const [activeId, setActiveId] = useState<number | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const { stages: pipelineStages } = usePipelineStages("application");
+  const stageOrder = pipelineStages.map(s => s.key);
+  const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
+
+  const { data: applicationsResp, isLoading } = useQuery({
+    queryKey: ["applications", season, search],
+    queryFn: () => apiFetch(`${BASE_URL}/api/applications?season=${encodeURIComponent(season)}&limit=500${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+  });
+  const allApps: any[] = applicationsResp?.data || [];
+
+  const filteredApps = allApps.filter((a: any) => {
+    if (filters.stage !== "all" && a.stage !== filters.stage) return false;
+    if (filters.country !== "all" && a.country !== filters.country) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const name = `${a.studentFirstName || ""} ${a.studentLastName || ""}`.toLowerCase();
+      if (!name.includes(q) && !(a.universityName || "").toLowerCase().includes(q) && !(a.programName || "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const sortedApps = useMemo(() => {
+    const arr = [...filteredApps];
+    arr.sort((a: any, b: any) => {
+      let valA: any, valB: any;
+      switch (sort.key) {
+        case "student": valA = `${a.studentFirstName} ${a.studentLastName}`.toLowerCase(); valB = `${b.studentFirstName} ${b.studentLastName}`.toLowerCase(); break;
+        case "stage": valA = stageOrder.indexOf(a.stage); valB = stageOrder.indexOf(b.stage); break;
+        case "country": valA = (a.country || "").toLowerCase(); valB = (b.country || "").toLowerCase(); break;
+        case "university": valA = (a.universityName || "").toLowerCase(); valB = (b.universityName || "").toLowerCase(); break;
+        case "program": valA = (a.programName || "").toLowerCase(); valB = (b.programName || "").toLowerCase(); break;
+        case "level": valA = a.level || ""; valB = b.level || ""; break;
+        case "intake": valA = a.intake || ""; valB = b.intake || ""; break;
+        case "fee": valA = parseFloat(a.commissionAmount) || 0; valB = parseFloat(b.commissionAmount) || 0; break;
+        case "date": valA = a.createdAt || ""; valB = b.createdAt || ""; break;
+        default: return 0;
+      }
+      if (valA < valB) return sort.dir === "asc" ? -1 : 1;
+      if (valA > valB) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [filteredApps, sort, stageOrder]);
+
+  const { paged: pagedApps, total: totalAppsCount } = pg.paginate(sortedApps);
+
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
+
+  const pagedIds = useMemo(() => new Set(pagedApps.map((a: any) => a.id)), [pagedApps]);
+  const allPageSelected = pagedApps.length > 0 && pagedApps.every((a: any) => selectedIds.has(a.id));
+
+  function toggleView(mode: "pipeline" | "list") { setViewMode(mode); localStorage.setItem(VIEW_KEY, mode); setSelectedIds(new Set()); }
+  function handleSort(key: SortKey) { setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }); }
+  function toggleSelect(id: number) { setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
+  function toggleSelectAll() {
+    if (allPageSelected) { setSelectedIds(prev => { const next = new Set(prev); pagedIds.forEach(id => next.delete(id)); return next; }); }
+    else { setSelectedIds(prev => { const next = new Set(prev); pagedIds.forEach(id => next.add(id)); return next; }); }
+  }
+
+  const allColumnIds = new Set(pipelineStages.map(s => s.key));
+  const activeCard = activeId ? allApps.find((a: any) => a.id === activeId) : null;
+
+  const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over) return;
+
+    const appId = active.id as number;
+    const overId = over.id;
+
+    let targetStage: string;
+    if (allColumnIds.has(overId as string)) {
+      targetStage = overId as string;
+    } else {
+      const overApp = allApps.find((a: any) => a.id === overId);
+      if (!overApp) return;
+      targetStage = overApp.stage;
+    }
+
+    const app = allApps.find((a: any) => a.id === appId);
+    if (!app || app.stage === targetStage) return;
+
+    apiFetch(`${BASE_URL}/api/applications/${appId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: targetStage }),
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
+      toast({ title: `Application moved → ${colLabel}` });
+    }).catch(() => {
+      toast({ title: "Error", description: "Could not move application", variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+    });
+  };
+
+  const deleteApp = useMutation({ mutationFn: (id: number) => apiFetch(`${BASE_URL}/api/applications/${id}`, { method: "DELETE" }) });
+
+  async function handleBulkDelete() {
+    setDeleteInProgress(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) { try { await deleteApp.mutateAsync(id); } catch { failed++; } }
+    setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["applications"] });
+    if (failed === 0) toast({ title: `${ids.length} application${ids.length > 1 ? "s" : ""} deleted` });
+    else toast({ title: "Some could not be deleted", variant: "destructive" });
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="h-[calc(100vh-8rem)] flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
+          <div>
+            <h1 className="text-3xl font-display font-bold text-foreground">Applications</h1>
+            <p className="text-muted-foreground text-sm mt-1">Track student applications through every stage.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search applications..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+            </div>
+            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} />
+            <div className="flex items-center border rounded-full overflow-hidden">
+              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
+            </div>
+            {selectedIds.size > 0 && (
+              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
+              </Button>
+            )}
+            <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> New Application
+            </Button>
+          </div>
+        </div>
+
+        {viewMode === "pipeline" && (
+          <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+            <div className="flex gap-5 h-full min-w-max px-1">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                {pipelineStages.map(s => {
+                  const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
+                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => { const a = allApps.find((x: any) => x.id === id); if (a) setEditApp(a); }} />;
+                })}
+
+                <DragOverlay>
+                  {activeCard ? (
+                    <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
+                      <div className="flex justify-between items-start mb-1.5">
+                        <h4 className="font-bold text-sm text-foreground">
+                          {activeCard.studentFirstName} {activeCard.studentLastName}
+                        </h4>
+                      </div>
+                      {activeCard.universityName && <p className="text-xs text-muted-foreground truncate">{activeCard.universityName}</p>}
+                      {activeCard.programName && (
+                        <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
+                          {activeCard.programName}
+                        </p>
+                      )}
+                      <div className="mt-2 flex items-center justify-between">
+                        {activeCard.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{activeCard.country}</span>}
+                        {activeCard.commissionAmount && parseFloat(activeCard.commissionAmount) > 0 && (
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3 text-emerald-500" />
+                            <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(activeCard.commissionAmount))}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            </div>
+          </div>
+        )}
+
+        {viewMode === "list" && (
+          <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-2xl border">
+            <div className="flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
+                    <SortHeader label="Student" sortKey="student" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Stage" sortKey="stage" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="University" sortKey="university" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Level" sortKey="level" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Intake" sortKey="intake" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Commission" sortKey="fee" currentSort={sort} onSort={handleSort} />
+                    <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <TableHead className="w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                  ) : pagedApps.length === 0 ? (
+                    <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
+                  ) : pagedApps.map((app: any) => {
+                    const sm = stageMap[app.stage];
+                    const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
+                    const stageLabel = sm?.label || app.stage;
+                    const levelLabel = STUDY_LEVELS.find(l => l.value === app.level)?.label || app.level || "-";
+                    return (
+                      <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setEditApp(app)}>
+                        <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
+                        <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
+                        <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
+                        <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{app.programName || "-"}</TableCell>
+                        <TableCell>{levelLabel}</TableCell>
+                        <TableCell>{app.intake || "-"}</TableCell>
+                        <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => setEditApp(app)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <TablePagination
+              currentPage={pg.page}
+              totalItems={totalAppsCount}
+              pageSize={pg.pageSize}
+              onPageChange={pg.setPage}
+              onPageSizeChange={pg.setPageSize}
+            />
+          </div>
+        )}
       </div>
+
+      <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
+      <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
+      <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />
     </DashboardLayout>
   );
 }
