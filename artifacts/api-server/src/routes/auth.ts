@@ -61,12 +61,17 @@ function generateVerificationCode(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-router.get("/auth/me", (req: Request, res: Response) => {
+router.get("/auth/me", async (req: Request, res: Response) => {
   if (!req.user) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  res.json(req.user);
+  const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
+  if (freshUser) {
+    res.json(buildSessionUser(freshUser));
+  } else {
+    res.json(req.user);
+  }
 });
 
 router.post("/auth/login", async (req: Request, res: Response) => {

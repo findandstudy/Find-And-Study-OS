@@ -18,7 +18,7 @@ import {
   Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon, Plug,
   Building2, Search as SearchIcon, FileText, Code, ChevronRight,
   ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
-  Youtube, Facebook, Twitter,
+  Youtube, Facebook, Twitter, Camera,
 } from "lucide-react";
 import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -167,7 +167,9 @@ export default function SettingsPage() {
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", avatarUrl: "" });
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [notifications, setNotifications] = useState({ newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false });
   const [settings, setSettings] = useState<Record<string, any>>({});
@@ -178,7 +180,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phone: (user as any).phone || "" });
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phone: (user as any).phone || "", avatarUrl: user.avatarUrl || "" });
     }
   }, [user]);
 
@@ -210,13 +212,51 @@ export default function SettingsPage() {
     } finally { setSectionSaving(null); }
   }
 
+  async function handleAvatarUpload(file: File) {
+    setAvatarUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      const avatarUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
+      setForm(f => ({ ...f, avatarUrl }));
+      await customFetch(`/api/users/${user!.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl }),
+      });
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      toast({ title: "Profile photo updated" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally { setAvatarUploading(false); }
+  }
+
+  async function handleRemoveAvatar() {
+    try {
+      setForm(f => ({ ...f, avatarUrl: "" }));
+      await customFetch(`/api/users/${user!.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: null }),
+      });
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      toast({ title: "Profile photo removed" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleSaveProfile() {
     if (!user) return;
     setSaving(true);
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone || undefined }),
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone || undefined, avatarUrl: form.avatarUrl || null }),
       });
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated" });
@@ -262,11 +302,31 @@ export default function SettingsPage() {
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader title="Personal Information" description="Update your profile details and contact information." />
         <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg shrink-0">{initials}</div>
+          <div className="relative group shrink-0">
+            {form.avatarUrl ? (
+              <img src={form.avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shadow-lg" />
+            ) : (
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg">{initials}</div>
+            )}
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+            >
+              {avatarUploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-6 h-6 text-white" />}
+            </button>
+            {form.avatarUrl && (
+              <button onClick={handleRemoveAvatar} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
+          </div>
           <div>
             <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
             <p className="text-muted-foreground text-sm">{user?.email}</p>
             <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs mt-2 capitalize">{ROLE_LABELS[user?.role || ""] || user?.role}</Badge>
+            <p className="text-xs text-muted-foreground mt-1">Hover to change photo</p>
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-5">
