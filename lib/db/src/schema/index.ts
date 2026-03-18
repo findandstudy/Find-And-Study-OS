@@ -12,3 +12,4 @@ export * from "./audit";
 export * from "./sessions";
 export * from "./catalog";
 export * from "./pipeline";
+export * from "./wishlists";

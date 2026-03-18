@@ -34,6 +34,7 @@ import {
   Library,
   UserCircle,
   CalendarDays,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Students", icon: GraduationCap, url: '/staff/students' },
             { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
+            { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
             { title: "Finance", icon: DollarSign, url: '/staff/finance' },
           ]
         },
@@ -89,6 +91,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Students", icon: GraduationCap, url: '/staff/students' },
             { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
+            { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
             { title: "Finance", icon: Briefcase, url: '/staff/finance' },
           ]
         },
@@ -130,6 +133,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
           items: [
             { title: "Dashboard",    icon: LayoutDashboard, url: '/agent' },
             { title: "My Referrals", icon: Link2,           url: '/agent/referrals' },
+            { title: "Course Finder", icon: Search,         url: '/staff/course-finder' },
             { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
           ]
         },

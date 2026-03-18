@@ -16,6 +16,7 @@ import statsRouter from "./stats";
 import catalogRouter from "./catalog";
 import aiExtractRouter from "./ai-extract";
 import pipelineRouter from "./pipeline";
+import courseFinderRouter from "./course-finder";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(statsRouter);
 router.use(catalogRouter);
 router.use(aiExtractRouter);
 router.use(pipelineRouter);
+router.use(courseFinderRouter);
 
 export default router;
