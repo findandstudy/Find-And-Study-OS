@@ -13,6 +13,7 @@ export const agentsTable = pgTable("agents", {
   country: text("country"),
   commissionRate: real("commission_rate"),
   status: text("status").notNull().default("active"),
+  logoUrl: text("logo_url"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

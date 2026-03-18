@@ -15,7 +15,9 @@ import {
   Languages, DollarSign, BookOpen, Building2, MapPin,
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
+  Download, CheckSquare, Square, FileDown,
 } from "lucide-react";
+import { generateProposalPdf } from "@/lib/generateProposalPdf";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -120,7 +122,10 @@ export default function CourseFinder() {
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedUniversity, setSelectedUniversity] = useState<Program | null>(null);
   const [applyProgram, setApplyProgram] = useState<Program | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
+  const isAgent = user && ["agent", "sub_agent"].includes(user.role);
 
   const { data: filterOptions } = useQuery<FilterOptions>({
     queryKey: ["course-finder-filters"],
@@ -173,14 +178,87 @@ export default function CourseFinder() {
     else addWishlist.mutate(programId);
   }
 
+  function toggleSelect(programId: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(programId)) next.delete(programId);
+      else next.add(programId);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === programs.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(programs.map(p => p.id)));
+    }
+  }
+
+  const { data: settings } = useQuery<{ companyName?: string; companyEmail?: string; companyPhone?: string; logoUrl?: string | null }>({
+    queryKey: ["settings-for-pdf"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
+    staleTime: 10 * 60_000,
+  });
+
+  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string }>({
+    queryKey: ["agent-me-pdf"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
+    enabled: !!isAgent,
+    staleTime: 10 * 60_000,
+  });
+
+  async function handleGeneratePdf() {
+    const selected = programs.filter(p => selectedIds.has(p.id));
+    if (selected.length === 0) {
+      toast({ title: "No programs selected", description: "Select one or more programs to generate a proposal.", variant: "destructive" });
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      let logoDataUrl: string | null = null;
+      const logoSrc = isAgent && agentProfile?.logoUrl ? agentProfile.logoUrl : settings?.logoUrl;
+      if (logoSrc) {
+        try {
+          const resp = await fetch(logoSrc);
+          const blob = await resp.blob();
+          logoDataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(blob);
+          });
+        } catch {}
+      }
+
+      const name = isAgent && agentProfile?.companyName ? agentProfile.companyName : settings?.companyName || "EduCons";
+
+      await generateProposalPdf({
+        programs: selected,
+        logoDataUrl,
+        companyName: name,
+        companyEmail: settings?.companyEmail || undefined,
+        companyPhone: settings?.companyPhone || undefined,
+        showCommission: !!showCommission,
+      });
+      toast({ title: "PDF generated", description: `Proposal with ${selected.length} program${selected.length !== 1 ? "s" : ""} downloaded.` });
+    } catch (err: any) {
+      toast({ title: "PDF generation failed", description: err.message || "Unknown error", variant: "destructive" });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
   function handleFilterChange(key: keyof Filters, value: string) {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1);
+    setSelectedIds(new Set());
   }
 
   function clearFilters() {
     setFilters({ country: "", city: "", universityType: "", universityId: "", level: "", language: "", search: "", feeMin: "", feeMax: "" });
     setPage(1);
+    setSelectedIds(new Set());
   }
 
   const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.search || filters.feeMin || filters.feeMax;
@@ -307,11 +385,45 @@ export default function CourseFinder() {
                 </Button>
               )}
             </div>
-            {meta && (
-              <div className="text-sm text-muted-foreground">
-                {meta.total} program{meta.total !== 1 ? "s" : ""} found
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {programs.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleSelectAll}
+                    className="h-8 text-xs gap-1.5"
+                  >
+                    {selectedIds.size === programs.length ? (
+                      <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5" />
+                    )}
+                    {selectedIds.size === programs.length ? "Deselect All" : "Select All"}
+                  </Button>
+                  {selectedIds.size > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleGeneratePdf}
+                      disabled={generatingPdf}
+                      className="h-8 text-xs gap-1.5 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white border-0 rounded-lg"
+                    >
+                      {generatingPdf ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FileDown className="w-3.5 h-3.5" />
+                      )}
+                      Download Proposal ({selectedIds.size})
+                    </Button>
+                  )}
+                </div>
+              )}
+              {meta && (
+                <div className="text-sm text-muted-foreground">
+                  {meta.total} program{meta.total !== 1 ? "s" : ""} found
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -349,6 +461,8 @@ export default function CourseFinder() {
                 onApply={() => setApplyProgram(prog)}
                 onUniversityClick={() => setSelectedUniversity(prog)}
                 showCommission={!!showCommission}
+                isSelected={selectedIds.has(prog.id)}
+                onToggleSelect={() => toggleSelect(prog.id)}
               />
             ))}
           </div>
@@ -356,13 +470,13 @@ export default function CourseFinder() {
 
         {meta && meta.totalPages > 1 && (
           <div className="flex items-center justify-center gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage(p => p - 1); setSelectedIds(new Set()); }}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <span className="text-sm text-muted-foreground px-3">
               Page {meta.page} of {meta.totalPages}
             </span>
-            <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage(p => p + 1)}>
+            <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => { setPage(p => p + 1); setSelectedIds(new Set()); }}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -388,7 +502,7 @@ export default function CourseFinder() {
   );
 }
 
-function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission }: {
+function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, isSelected, onToggleSelect }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
@@ -396,6 +510,8 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
   onApply: () => void;
   onUniversityClick: () => void;
   showCommission: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
 }) {
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const commissionAmount = calcCommissionAmount(p);
@@ -403,9 +519,20 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
   const websiteUrl = ensureUrl(p.universityWebsite);
 
   return (
-    <div className="bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-200 group flex flex-col">
+    <div className={`bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-200 group flex flex-col ${isSelected ? "ring-2 ring-primary border-primary/50" : ""}`}>
       <div className="p-5 space-y-4 flex-1">
         <div className="flex items-start gap-3">
+          <button
+            onClick={onToggleSelect}
+            className="shrink-0 mt-1 p-0.5 rounded hover:bg-muted/80 transition-colors"
+            title={isSelected ? "Deselect" : "Select for proposal"}
+          >
+            {isSelected ? (
+              <CheckSquare className="w-4.5 h-4.5 text-primary" />
+            ) : (
+              <Square className="w-4.5 h-4.5 text-muted-foreground/50 group-hover:text-muted-foreground" />
+            )}
+          </button>
           {websiteUrl ? (
             <a
               href={websiteUrl}

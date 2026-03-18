@@ -94,6 +94,7 @@ artifacts-monorepo/
 - **Applications page**: Pipeline view (8 stage columns with revenue totals per column) + list view with sortable columns, bulk select/delete, edit dialog; tuition fee displayed on cards and column headers; filter by stage/country; "New Application" modal with student search, cascading country→university→program dropdowns; view toggle stored in localStorage (`edcons_applications_view`)
 - **Leads page**: Pipeline view (Kanban columns) + list view with sortable columns, bulk select/delete, edit dialog; estimatedValue revenue display (role-gated); view toggle stored in localStorage (`edcons_leads_view`)
 - Finance page — full redesign with commission tracking, service fees, Article 6 offsets, university breakdown, financial transaction recording with file uploads, analytics dashboard
+- **Course Finder** — Program search/filter with PDF proposal generation; select individual or bulk programs → generate premium PDF proposal with university logos, tuition info, scholarships, commissions; logo logic: agents get their agency logo, staff/admin/students get system logo; selection clears on page/filter change
 - Settings page (profile/language/notifications/security tabs)
 
 ### Agent Portal
