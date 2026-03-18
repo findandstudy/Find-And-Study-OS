@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/contexts/ThemeContext";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ type Tab = "login" | "register" | "verify";
 
 export default function Login() {
   const { user, isLoading } = useAuth(false);
+  const { settings, resolvedTheme } = useTheme();
   const [, setLocation] = useLocation();
   const returnTo = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
@@ -33,6 +35,12 @@ export default function Login() {
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [resending, setResending] = useState(false);
+
+  const hasLogo = resolvedTheme === "dark" && settings.logoDarkUrl ? settings.logoDarkUrl : settings.logoUrl;
+  const logoSrc = hasLogo
+    ? `${BASE_URL}/api/settings/branding/logo${resolvedTheme === "dark" && settings.logoDarkUrl ? "?variant=dark" : ""}`
+    : null;
+  const companyName = settings.companyName || "Find & Study";
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -175,10 +183,16 @@ export default function Login() {
         </div>
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-16">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
-              <GraduationCap className="w-7 h-7 text-white" />
-            </div>
-            <span className="font-display font-bold text-3xl text-white">Find & Study</span>
+            {logoSrc ? (
+              <img src={logoSrc} alt={companyName} className="h-12 max-w-[220px] object-contain brightness-0 invert" />
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <GraduationCap className="w-7 h-7 text-white" />
+                </div>
+                <span className="font-display font-bold text-3xl text-white">{companyName}</span>
+              </>
+            )}
           </div>
           <h1 className="text-4xl font-display font-bold text-white mb-6 leading-tight">
             Your Global Education<br />Journey Starts Here
@@ -207,10 +221,16 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center bg-background p-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-2 justify-center mb-10">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-white" />
-            </div>
-            <span className="font-display font-bold text-2xl">Find & Study</span>
+            {logoSrc ? (
+              <img src={logoSrc} alt={companyName} className="h-10 max-w-[180px] object-contain" />
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                  <GraduationCap className="w-6 h-6 text-white" />
+                </div>
+                <span className="font-display font-bold text-2xl">{companyName}</span>
+              </>
+            )}
           </div>
 
           {tab !== "verify" && (
