@@ -16,7 +16,7 @@ const APP_PATCH_FIELDS = [
 router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   const { studentId, agentId, stage, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const user = req.user!;
@@ -53,16 +53,40 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
     .from(applicationsTable)
     .where(whereClause);
 
-  const data = await db
-    .select()
+  const rows = await db
+    .select({
+      id: applicationsTable.id,
+      studentId: applicationsTable.studentId,
+      programId: applicationsTable.programId,
+      universityId: applicationsTable.universityId,
+      agentId: applicationsTable.agentId,
+      season: applicationsTable.season,
+      stage: applicationsTable.stage,
+      intake: applicationsTable.intake,
+      level: applicationsTable.level,
+      instructionLanguage: applicationsTable.instructionLanguage,
+      deadline: applicationsTable.deadline,
+      programName: applicationsTable.programName,
+      universityName: applicationsTable.universityName,
+      country: applicationsTable.country,
+      tuitionFee: applicationsTable.tuitionFee,
+      scholarship: applicationsTable.scholarship,
+      notes: applicationsTable.notes,
+      createdAt: applicationsTable.createdAt,
+      updatedAt: applicationsTable.updatedAt,
+      studentFirstName: studentsTable.firstName,
+      studentLastName: studentsTable.lastName,
+      studentEmail: studentsTable.email,
+    })
     .from(applicationsTable)
+    .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
     .orderBy(applicationsTable.createdAt);
 
   res.json({
-    data,
+    data: rows,
     meta: {
       total: Number(count),
       page: pageNum,

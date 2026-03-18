@@ -84,9 +84,9 @@ artifacts-monorepo/
 - Users management table with role badges and filters
 
 ### Staff Portal
-- **Students page**: AI-powered student creation (multi-step: upload docs → Claude reads & fills form → user reviews/completes); bulk CSV import with AI column mapping; new fields: motherName, fatherName, passportIssueDate
-- Applications page with stage filter + pipeline summary; "New Application" modal with student search, country/university/level/program/language/intake selects
-- Leads page: Kanban drag-and-drop with estimatedValue revenue display (role-gated)
+- **Students page**: Pipeline view (status columns: active/inactive/graduated/suspended) + list view with sortable columns, bulk select/delete, inline edit dialog; AI-powered student creation (multi-step: upload docs → Claude reads & fills form → user reviews/completes); bulk CSV import with AI column mapping; filter by status; view toggle stored in localStorage (`edcons_students_view`)
+- **Applications page**: Pipeline view (8 stage columns with revenue totals per column) + list view with sortable columns, bulk select/delete, edit dialog; tuition fee displayed on cards and column headers; filter by stage/country; "New Application" modal with student search, cascading country→university→program dropdowns; view toggle stored in localStorage (`edcons_applications_view`)
+- **Leads page**: Pipeline view (Kanban columns) + list view with sortable columns, bulk select/delete, edit dialog; estimatedValue revenue display (role-gated); view toggle stored in localStorage (`edcons_leads_view`)
 - Finance page — full redesign with commission tracking, service fees, Article 6 offsets
 - Settings page (profile/language/notifications/security tabs)
 

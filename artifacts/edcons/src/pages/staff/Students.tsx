@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListStudents, useCreateStudent } from "@workspace/api-client-react";
@@ -9,13 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import {
   Search, Plus, FileText, FileUp, Sparkles, ChevronLeft,
   User, GraduationCap, X, CheckCircle2, AlertCircle,
-  Users, Download, Eye, Loader2,
+  Users, Download, Eye, Loader2, LayoutGrid, List,
+  ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
+  ChevronRight, Filter, UserCheck, UserX, UserMinus, UserPlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -979,164 +983,393 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
   );
 }
 
+const VIEW_KEY_STU = "edcons_students_view";
+const STUDENT_STATUSES = ["active", "inactive", "graduated", "suspended"];
+
+const STATUS_ICON: Record<string, any> = {
+  active: UserCheck,
+  inactive: UserMinus,
+  graduated: GraduationCap,
+  suspended: UserX,
+};
+
+const STATUS_VARIANT: Record<string, "won" | "lost" | undefined> = {
+  graduated: "won",
+  suspended: "lost",
+};
+
+type StuSortKey = "name" | "email" | "nationality" | "status" | "passport" | "date";
+type StuSortDir = "asc" | "desc";
+
+function StuSortHeader({ label, sortKey, currentSort, onSort }: {
+  label: string; sortKey: StuSortKey; currentSort: { key: StuSortKey; dir: StuSortDir }; onSort: (k: StuSortKey) => void;
+}) {
+  const active = currentSort.key === sortKey;
+  return (
+    <TableHead className="cursor-pointer select-none hover:bg-muted/50 transition-colors" onClick={() => onSort(sortKey)}>
+      <div className="flex items-center gap-1">
+        {label}
+        {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
+      </div>
+    </TableHead>
+  );
+}
+
+function StuPipelineColumn({ status, students, onView }: { status: string; students: any[]; onView: (id: number) => void }) {
+  const v = STATUS_VARIANT[status];
+  const Icon = STATUS_ICON[status] || User;
+
+  const colBg = v === "won" ? "bg-emerald-50/60 border-emerald-200/50" : v === "lost" ? "bg-rose-50/60 border-rose-200/50" : "bg-secondary/50 border-border/50";
+  const headerBg = v === "won" ? "bg-emerald-100/80 border-emerald-200/70" : v === "lost" ? "bg-rose-100/80 border-rose-200/70" : "bg-card/50 border-border/50";
+  const badgeBg = v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50" : v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" : "bg-background text-muted-foreground border shadow-sm";
+  const cardBg = v === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" : v === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" : "bg-card border-border hover:shadow-md";
+
+  return (
+    <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
+      <div className={`p-4 border-b shrink-0 ${headerBg}`}>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-1.5">
+            <Icon className={`w-4 h-4 shrink-0 ${v === "won" ? "text-emerald-500" : v === "lost" ? "text-rose-400" : "text-muted-foreground"}`} />
+            <h3 className={`font-display font-bold text-sm capitalize ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{status}</h3>
+          </div>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{students.length}</span>
+        </div>
+      </div>
+      <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
+        {students.map((s: any) => (
+          <div key={s.id} onClick={() => onView(s.id)} className={`rounded-xl border ${cardBg} mb-3 p-4 cursor-pointer transition-shadow duration-200`}>
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-primary">{s.firstName?.[0]}{s.lastName?.[0]}</span>
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-sm text-foreground line-clamp-1">{s.firstName} {s.lastName}</h4>
+                <p className="text-xs text-muted-foreground truncate">{s.email || s.phone || "No contact"}</p>
+              </div>
+            </div>
+            {s.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{s.nationality}</span>}
+          </div>
+        ))}
+        {students.length === 0 && (
+          <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${v === "won" ? "border-emerald-300/50 text-emerald-500" : v === "lost" ? "border-rose-300/50 text-rose-400" : "border-border/50 text-muted-foreground"}`}>No students</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EditStudentDialog({ open, onClose, student }: { open: boolean; onClose: () => void; student: any }) {
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", nationality: "", status: "active", dateOfBirth: "", passportNumber: "", notes: "" });
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open && student) {
+      setForm({
+        firstName: student.firstName || "", lastName: student.lastName || "",
+        email: student.email || "", phone: student.phone || "",
+        nationality: student.nationality || "", status: student.status || "active",
+        dateOfBirth: student.dateOfBirth || "", passportNumber: student.passportNumber || "",
+        notes: student.notes || "",
+      });
+    }
+  }, [open, student]);
+
+  async function handleSave() {
+    if (!student || !form.firstName || !form.lastName) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/${student.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Student updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      onClose();
+    } catch {
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-1.5"><Label>First Name *</Label><Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Nationality</Label><Input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} /></div>
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{STUDENT_STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.dateOfBirth} onChange={e => setForm({ ...form, dateOfBirth: e.target.value })} /></div>
+          <div className="space-y-1.5"><Label>Passport Number</Label><Input value={form.passportNumber} onChange={e => setForm({ ...form, passportNumber: e.target.value })} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.firstName || !form.lastName}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
+  open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Delete {count} Student{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StuFilterPopover({ filters, onChange }: {
+  filters: { status: string }; onChange: (f: { status: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasActive = filters.status !== "all";
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon" className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}>
+          <Filter className="w-4 h-4" />
+          {hasActive && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-4 space-y-4" align="end">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Filter</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ status: "all" })}>Clear</Button>}
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Status</Label>
+          <Select value={filters.status} onValueChange={v => onChange({ status: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {STUDENT_STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function StudentsPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
+  const [filters, setFilters] = useState({ status: "all" });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
+  const [editStudent, setEditStudent] = useState<any>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [listPage, setListPage] = useState(1);
+  const LIST_PAGE_SIZE = 50;
 
   const { season } = useSeason();
-  const { data, isLoading } = useListStudents({ search, season } as any);
-  const students = data?.data ?? [];
+  const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
+  const allStudents: any[] = data?.data ?? [];
 
-  function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+  const filteredStudents = allStudents.filter((s: any) => {
+    if (filters.status !== "all" && s.status !== filters.status) return false;
+    return true;
+  });
+
+  const sortedStudents = useMemo(() => {
+    const arr = [...filteredStudents];
+    arr.sort((a: any, b: any) => {
+      let valA: any, valB: any;
+      switch (sort.key) {
+        case "name": valA = `${a.firstName} ${a.lastName}`.toLowerCase(); valB = `${b.firstName} ${b.lastName}`.toLowerCase(); break;
+        case "email": valA = (a.email || "").toLowerCase(); valB = (b.email || "").toLowerCase(); break;
+        case "nationality": valA = (a.nationality || "").toLowerCase(); valB = (b.nationality || "").toLowerCase(); break;
+        case "status": valA = a.status || ""; valB = b.status || ""; break;
+        case "passport": valA = a.passportNumber || ""; valB = b.passportNumber || ""; break;
+        case "date": valA = a.createdAt || ""; valB = b.createdAt || ""; break;
+        default: return 0;
+      }
+      if (valA < valB) return sort.dir === "asc" ? -1 : 1;
+      if (valA > valB) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [filteredStudents, sort]);
+
+  const totalListPages = Math.max(1, Math.ceil(sortedStudents.length / LIST_PAGE_SIZE));
+  const pagedStudents = sortedStudents.slice((listPage - 1) * LIST_PAGE_SIZE, listPage * LIST_PAGE_SIZE);
+
+  useEffect(() => { setListPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
+  useEffect(() => { if (listPage > totalListPages) setListPage(Math.max(1, totalListPages)); }, [totalListPages, listPage]);
+
+  const pagedIds = useMemo(() => new Set(pagedStudents.map((s: any) => s.id)), [pagedStudents]);
+  const allPageSelected = pagedStudents.length > 0 && pagedStudents.every((s: any) => selectedIds.has(s.id));
+
+  function toggleView(mode: "pipeline" | "list") { setViewMode(mode); localStorage.setItem(VIEW_KEY_STU, mode); setSelectedIds(new Set()); }
+  function handleSort(key: StuSortKey) { setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }); }
+  function toggleSelect(id: number) { setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
+  function toggleSelectAll() {
+    if (allPageSelected) { setSelectedIds(prev => { const next = new Set(prev); pagedIds.forEach(id => next.delete(id)); return next; }); }
+    else { setSelectedIds(prev => { const next = new Set(prev); pagedIds.forEach(id => next.add(id)); return next; }); }
+  }
+
+  function invalidate() { queryClient.invalidateQueries({ queryKey: ["/api/students"] }); }
+
+  async function handleBulkDelete() {
+    setDeleteInProgress(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        const res = await fetch(`${BASE_URL}/api/students/${id}`, { method: "DELETE", credentials: "include" });
+        if (!res.ok) failed++;
+      } catch { failed++; }
+    }
+    setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
+    invalidate();
+    if (failed === 0) toast({ title: `${ids.length} student${ids.length > 1 ? "s" : ""} deleted` });
+    else toast({ title: "Some could not be deleted", variant: "destructive" });
+  }
+
+  function formatDate(d: string | null | undefined) {
+    if (!d) return "-";
+    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="h-[calc(100vh-8rem)] flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">Students</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              {data?.meta?.total ?? 0} total students
-            </p>
+            <h1 className="text-3xl font-display font-bold text-foreground">Students</h1>
+            <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} total students</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search students…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 rounded-xl"
-              />
+              <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <Button
-              variant="outline"
-              className="rounded-xl gap-2 border-primary/30 text-primary hover:bg-primary/5"
-              onClick={() => setBulkOpen(true)}
-            >
+            <StuFilterPopover filters={filters} onChange={setFilters} />
+            <div className="flex items-center border rounded-full overflow-hidden">
+              <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
+            </div>
+            {selectedIds.size > 0 && (
+              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
+              </Button>
+            )}
+            <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
               <FileUp className="w-4 h-4" /> Bulk Import
             </Button>
-            <Button
-              className="rounded-xl gap-2 shadow-md shadow-primary/20"
-              onClick={() => setAddOpen(true)}
-            >
-              <Plus className="w-4 h-4" /> Add Student
+            <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Add Student
             </Button>
           </div>
         </div>
 
-        <div className="bg-card rounded-2xl border border-border/50 shadow-md shadow-black/5 overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-secondary/30">
-                <TableRow>
-                  <TableHead className="font-semibold text-xs uppercase tracking-wide pl-6">Name</TableHead>
-                  <TableHead className="font-semibold text-xs uppercase tracking-wide">Contact</TableHead>
-                  <TableHead className="font-semibold text-xs uppercase tracking-wide">Nationality</TableHead>
-                  <TableHead className="font-semibold text-xs uppercase tracking-wide">Passport</TableHead>
-                  <TableHead className="font-semibold text-xs uppercase tracking-wide">Status</TableHead>
-                  <TableHead className="font-semibold text-xs uppercase tracking-wide">Joined</TableHead>
-                  <TableHead className="w-[60px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground text-sm">Loading students…</td>
-                  </tr>
-                )}
-                {!isLoading && students.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm">
-                      <div className="flex flex-col items-center gap-3">
-                        <User className="w-12 h-12 text-muted-foreground/20" />
-                        <div>
-                          <p className="font-semibold text-foreground">No students yet</p>
-                          <p className="text-muted-foreground text-xs mt-1">
-                            Add a student or{" "}
-                            <button onClick={() => setBulkOpen(true)} className="text-primary hover:underline font-medium">
-                              bulk import from CSV
-                            </button>
-                          </p>
-                        </div>
-                        <Button size="sm" className="rounded-xl gap-1 mt-1" onClick={() => setAddOpen(true)}>
-                          <Plus className="w-3.5 h-3.5" /> Add First Student
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                {students.map((student: any) => (
-                  <TableRow
-                    key={student.id}
-                    className="cursor-pointer hover:bg-secondary/20 transition-colors"
-                    onClick={() => setLocation(`/staff/students/${student.id}`)}
-                  >
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
-                          <span className="text-sm font-bold text-primary">
-                            {student.firstName[0]}{student.lastName[0]}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {student.firstName} {student.lastName}
-                          </p>
-                          {(student.motherName || student.fatherName) && (
-                            <p className="text-xs text-muted-foreground">
-                              {[student.motherName, student.fatherName].filter(Boolean).join(" / ")}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        {student.email && <p className="text-xs text-foreground">{student.email}</p>}
-                        {student.phone && <p className="text-xs text-muted-foreground">{student.phone}</p>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{student.nationality || "—"}</TableCell>
-                    <TableCell>
-                      <div className="text-xs">
-                        {student.passportNumber && <p className="font-mono text-foreground">{student.passportNumber}</p>}
-                        {student.passportExpiry && <p className="text-muted-foreground">Exp: {student.passportExpiry}</p>}
-                        {student.passportIssueDate && <p className="text-muted-foreground">Iss: {student.passportIssueDate}</p>}
-                        {!student.passportNumber && <span className="text-muted-foreground">—</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={cn("text-xs border font-medium", STATUS_COLORS[student.status] || "bg-gray-100 text-gray-600 border-gray-200")}>
-                        {student.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {new Date(student.createdAt).toLocaleDateString("tr-TR")}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="w-8 h-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-                        onClick={(e) => { e.stopPropagation(); setLocation(`/staff/students/${student.id}`); }}
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        {viewMode === "pipeline" && (
+          <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+            <div className="flex gap-5 h-full min-w-max px-1">
+              {STUDENT_STATUSES.map(status => {
+                const statusStudents = filteredStudents.filter((s: any) => s.status === status);
+                return <StuPipelineColumn key={status} status={status} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} />;
+              })}
+            </div>
           </div>
-        </div>
+        )}
+
+        {viewMode === "list" && (
+          <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-2xl border">
+            <div className="flex-1 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
+                    <StuSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label="Nationality" sortKey="nationality" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label="Passport" sortKey="passport" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                    <StuSortHeader label="Joined" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <TableHead className="w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                  ) : pagedStudents.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+                  ) : pagedStudents.map((student: any) => (
+                    <TableRow key={student.id} className={`cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(student.id) ? "bg-primary/5" : ""}`}>
+                      <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(student.id)} onCheckedChange={() => toggleSelect(student.id)} /></TableCell>
+                      <TableCell className="font-medium" onClick={() => setLocation(`/staff/students/${student.id}`)}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-primary">{student.firstName?.[0]}{student.lastName?.[0]}</span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold">{student.firstName} {student.lastName}</p>
+                            {student.phone && <p className="text-xs text-muted-foreground">{student.phone}</p>}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground" onClick={() => setLocation(`/staff/students/${student.id}`)}>{student.email || "-"}</TableCell>
+                      <TableCell onClick={() => setLocation(`/staff/students/${student.id}`)}>{student.nationality || "-"}</TableCell>
+                      <TableCell className="font-mono text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{student.passportNumber || "-"}</TableCell>
+                      <TableCell onClick={() => setLocation(`/staff/students/${student.id}`)}>
+                        <Badge className={cn("text-xs border font-medium", STATUS_COLORS[student.status] || "bg-gray-100 text-gray-600 border-gray-200")}>{student.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
+                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => { setSelectedIds(new Set([student.id])); setDeleteOpen(true); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {totalListPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
+                <p className="text-sm text-muted-foreground">Showing {(listPage - 1) * LIST_PAGE_SIZE + 1}–{Math.min(listPage * LIST_PAGE_SIZE, sortedStudents.length)} of {sortedStudents.length}</p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={listPage <= 1} onClick={() => setListPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
+                  <span className="text-sm font-medium">{listPage} / {totalListPages}</span>
+                  <Button variant="outline" size="sm" disabled={listPage >= totalListPages} onClick={() => setListPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
+      <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} />
+      <StuDeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} />
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} onSuccess={invalidate} />
     </DashboardLayout>

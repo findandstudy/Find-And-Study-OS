@@ -25,7 +25,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
   const user = req.user!;
   const { agentId, status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
@@ -195,6 +195,14 @@ router.patch("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (r
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "update_student", "student", id, updates, req.ip);
   res.json(student);
+});
+
+router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [deleted] = await db.delete(studentsTable).where(eq(studentsTable.id, id)).returning();
+  if (!deleted) { res.status(404).json({ error: "Student not found" }); return; }
+  await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
+  res.status(204).end();
 });
 
 export default router;
