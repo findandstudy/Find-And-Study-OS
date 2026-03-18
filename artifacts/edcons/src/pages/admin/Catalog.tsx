@@ -1220,15 +1220,15 @@ function ProgramsTab() {
               </div>
               <div>
                 <Label>Fee Type</Label>
-                <Select value={form?.feeType ?? ""} onValueChange={v => setForm(f => ({ ...f, feeType: v || undefined }))}>
+                <Select value={form?.feeType ?? ""} onValueChange={v => setForm(f => ({ ...f, feeType: v || null }))}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Seçin" /></SelectTrigger>
                   <SelectContent>
                     {["Per Year", "Per Month", "Whole Study", "Per Program", "One-time Payment", "100% Scholarship"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Burs</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : undefined }))} /></div>
-              <div><Label>Komisyon %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : undefined }))} /></div>
+              <div><Label>Burs</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : null }))} /></div>
+              <div><Label>Komisyon %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : null }))} /></div>
             </div>
 
             {/* ── Ek Ücret Alanları ─────────────────────────── */}
@@ -1237,27 +1237,27 @@ function ProgramsTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Application Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Advanced Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Deposit Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Service Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Discounted Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="İndirimli tutar" value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Input className="mt-1" type="number" placeholder="İndirimli tutar" value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Language Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : undefined }))} />
+                  <Input className="mt-1" type="number" placeholder="0 = Yok" value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
               </div>
             </div>
