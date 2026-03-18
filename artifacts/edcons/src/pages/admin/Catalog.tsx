@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { CountryFlag } from "@/components/CountryFlag";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
@@ -286,7 +287,7 @@ function CountriesTab() {
                 <td className="px-4 py-2.5">
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleOne(c.id)} className="rounded cursor-pointer" />
                 </td>
-                <td className="px-4 py-2.5 font-medium">{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</td>
+                <td className="px-4 py-2.5 font-medium"><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="md" /> : null}{c.name}</span></td>
                 <td className="px-4 py-2.5 text-muted-foreground font-mono">{c.code}</td>
                 <td className="px-4 py-2.5">
                   <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Active" : "Inactive"}</Badge>
@@ -453,7 +454,7 @@ function CitiesTab() {
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="All countries" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All countries</SelectItem>
-            {countries.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</SelectItem>)}
+            {countries.map(c => <SelectItem key={c.id} value={String(c.id)}><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span></SelectItem>)}
           </SelectContent>
         </Select>
         {selected.size > 0 && (
@@ -488,7 +489,7 @@ function CitiesTab() {
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleOne(c.id)} className="rounded cursor-pointer" />
                 </td>
                 <td className="px-4 py-2.5 font-medium">{c.name}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{countryMap[c.countryId]?.flagEmoji ?? ""} {countryMap[c.countryId]?.name ?? c.countryId}</td>
+                <td className="px-4 py-2.5 text-muted-foreground"><span className="inline-flex items-center gap-1.5">{countryMap[c.countryId]?.code ? <CountryFlag code={countryMap[c.countryId].code} size="sm" /> : null}{countryMap[c.countryId]?.name ?? c.countryId}</span></td>
                 <td className="px-4 py-2.5">
                   <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Active" : "Inactive"}</Badge>
                 </td>
@@ -514,7 +515,7 @@ function CitiesTab() {
               <Label>Country *</Label>
               <Select value={form?.countryId ? String(form.countryId) : ""} onValueChange={v => setForm(f => ({ ...f, countryId: Number(v) }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select country" /></SelectTrigger>
-                <SelectContent>{countries.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{countries.map(c => <SelectItem key={c.id} value={String(c.id)}><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span></SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between">
@@ -808,7 +809,7 @@ function UniversitiesTab() {
                     <SelectContent>
                       {allCountries.map(c => (
                         <SelectItem key={c.id} value={c.name}>
-                          {c.flagEmoji ? `${c.flagEmoji} ` : ""}{c.name}
+                          <span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>

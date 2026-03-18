@@ -14,15 +14,16 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
 import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail, Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon } from "lucide-react";
 import { NotificationRulesManager } from "@/components/NotificationRulesManager";
+import { CountryFlag } from "@/components/CountryFlag";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const LANGUAGES = [
-  { code: "en", label: "English",   flag: "🇬🇧" },
-  { code: "tr", label: "Türkçe",    flag: "🇹🇷" },
-  { code: "ar", label: "العربية",   flag: "🇸🇦" },
-  { code: "fr", label: "Français",  flag: "🇫🇷" },
-  { code: "ru", label: "Русский",   flag: "🇷🇺" },
+  { code: "en", label: "English",   country: "GB" },
+  { code: "tr", label: "Türkçe",    country: "TR" },
+  { code: "ar", label: "العربية",   country: "SA" },
+  { code: "fr", label: "Français",  country: "FR" },
+  { code: "ru", label: "Русский",   country: "RU" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -240,7 +241,7 @@ export default function SettingsPage() {
                   <button key={l.code} onClick={() => handleSaveLang(l.code)}
                     className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
                       ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
-                    <span className="text-3xl">{l.flag}</span>
+                    <CountryFlag code={l.country} size="xl" />
                     <div className="flex-1">
                       <p className="font-bold text-foreground">{l.label}</p>
                       <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>

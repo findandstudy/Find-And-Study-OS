@@ -18,6 +18,7 @@ import {
   ChevronLeft, ChevronRight, UserPlus, Network,
   MoreHorizontal, KeyRound, LogIn, Power, ShieldCheck, ShieldOff,
 } from "lucide-react";
+import { CountryFlag } from "@/components/CountryFlag";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -30,46 +31,46 @@ const MANAGER_ROLES = ["super_admin", "admin", "manager"];
 const CATEGORIES = ["Big", "Medium", "Small"];
 
 const PHONE_CODES = [
-  { code: "+90", country: "TR", flag: "🇹🇷" },
-  { code: "+1", country: "US", flag: "🇺🇸" },
-  { code: "+44", country: "GB", flag: "🇬🇧" },
-  { code: "+49", country: "DE", flag: "🇩🇪" },
-  { code: "+33", country: "FR", flag: "🇫🇷" },
-  { code: "+971", country: "AE", flag: "🇦🇪" },
-  { code: "+966", country: "SA", flag: "🇸🇦" },
-  { code: "+91", country: "IN", flag: "🇮🇳" },
-  { code: "+86", country: "CN", flag: "🇨🇳" },
-  { code: "+81", country: "JP", flag: "🇯🇵" },
-  { code: "+82", country: "KR", flag: "🇰🇷" },
-  { code: "+55", country: "BR", flag: "🇧🇷" },
-  { code: "+234", country: "NG", flag: "🇳🇬" },
-  { code: "+20", country: "EG", flag: "🇪🇬" },
-  { code: "+254", country: "KE", flag: "🇰🇪" },
-  { code: "+27", country: "ZA", flag: "🇿🇦" },
-  { code: "+62", country: "ID", flag: "🇮🇩" },
-  { code: "+60", country: "MY", flag: "🇲🇾" },
-  { code: "+63", country: "PH", flag: "🇵🇭" },
-  { code: "+92", country: "PK", flag: "🇵🇰" },
-  { code: "+880", country: "BD", flag: "🇧🇩" },
-  { code: "+7", country: "RU", flag: "🇷🇺" },
-  { code: "+380", country: "UA", flag: "🇺🇦" },
-  { code: "+48", country: "PL", flag: "🇵🇱" },
-  { code: "+39", country: "IT", flag: "🇮🇹" },
-  { code: "+34", country: "ES", flag: "🇪🇸" },
-  { code: "+31", country: "NL", flag: "🇳🇱" },
-  { code: "+46", country: "SE", flag: "🇸🇪" },
-  { code: "+47", country: "NO", flag: "🇳🇴" },
-  { code: "+358", country: "FI", flag: "🇫🇮" },
-  { code: "+212", country: "MA", flag: "🇲🇦" },
-  { code: "+216", country: "TN", flag: "🇹🇳" },
-  { code: "+213", country: "DZ", flag: "🇩🇿" },
-  { code: "+964", country: "IQ", flag: "🇮🇶" },
-  { code: "+962", country: "JO", flag: "🇯🇴" },
-  { code: "+961", country: "LB", flag: "🇱🇧" },
-  { code: "+994", country: "AZ", flag: "🇦🇿" },
-  { code: "+995", country: "GE", flag: "🇬🇪" },
-  { code: "+998", country: "UZ", flag: "🇺🇿" },
-  { code: "+993", country: "TM", flag: "🇹🇲" },
+  { code: "+90", country: "TR" },
+  { code: "+1", country: "US" },
+  { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" },
+  { code: "+33", country: "FR" },
+  { code: "+971", country: "AE" },
+  { code: "+966", country: "SA" },
+  { code: "+91", country: "IN" },
+  { code: "+86", country: "CN" },
+  { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" },
+  { code: "+55", country: "BR" },
+  { code: "+234", country: "NG" },
+  { code: "+20", country: "EG" },
+  { code: "+254", country: "KE" },
+  { code: "+27", country: "ZA" },
+  { code: "+62", country: "ID" },
+  { code: "+60", country: "MY" },
+  { code: "+63", country: "PH" },
+  { code: "+92", country: "PK" },
+  { code: "+880", country: "BD" },
+  { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" },
+  { code: "+48", country: "PL" },
+  { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" },
+  { code: "+31", country: "NL" },
+  { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" },
+  { code: "+358", country: "FI" },
+  { code: "+212", country: "MA" },
+  { code: "+216", country: "TN" },
+  { code: "+213", country: "DZ" },
+  { code: "+964", country: "IQ" },
+  { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" },
+  { code: "+994", country: "AZ" },
+  { code: "+995", country: "GE" },
+  { code: "+998", country: "UZ" },
+  { code: "+993", country: "TM" },
 ];
 
 type Agent = {
@@ -756,7 +757,7 @@ export default function AgentsPage() {
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
                         {PHONE_CODES.map(pc => (
-                          <SelectItem key={pc.code + pc.country} value={pc.code}>{pc.flag} {pc.code}</SelectItem>
+                          <SelectItem key={pc.code + pc.country} value={pc.code}><span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span></SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

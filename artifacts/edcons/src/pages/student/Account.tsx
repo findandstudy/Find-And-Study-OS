@@ -15,13 +15,14 @@ import {
   User, Globe, Shield, Save, Check, GraduationCap,
   Loader2, FileText, MapPin, Phone, Mail, Calendar,
 } from "lucide-react";
+import { CountryFlag } from "@/components/CountryFlag";
 
 const LANGUAGES = [
-  { code: "en", label: "English",   flag: "🇬🇧" },
-  { code: "tr", label: "Türkçe",    flag: "🇹🇷" },
-  { code: "ar", label: "العربية",   flag: "🇸🇦" },
-  { code: "fr", label: "Français",  flag: "🇫🇷" },
-  { code: "ru", label: "Русский",   flag: "🇷🇺" },
+  { code: "en", label: "English",   country: "GB" },
+  { code: "tr", label: "Türkçe",    country: "TR" },
+  { code: "ar", label: "العربية",   country: "SA" },
+  { code: "fr", label: "Français",  country: "FR" },
+  { code: "ru", label: "Русский",   country: "RU" },
 ];
 
 export default function StudentAccount() {
@@ -195,7 +196,7 @@ export default function StudentAccount() {
                   <button key={l.code} onClick={() => handleSaveLang(l.code)}
                     className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
                       ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
-                    <span className="text-3xl">{l.flag}</span>
+                    <CountryFlag code={l.country} size="xl" />
                     <div className="flex-1">
                       <p className="font-bold text-foreground">{l.label}</p>
                       <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>
