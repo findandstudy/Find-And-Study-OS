@@ -13,17 +13,42 @@ const SETTINGS_PATCH_FIELDS = [
   "companyPhone", "companyAddress", "smtpHost", "smtpPort", "smtpUser",
   "smtpPassword", "whatsappEnabled", "whatsappToken",
   "metaLeadEnabled", "n8nWebhookUrl", "googleSheetsId",
-  "logoUrl", "logoDarkUrl", "themePrimary", "themeButton", "themeHover",
+  "logoUrl", "logoDarkUrl", "faviconUrl", "themePrimary", "themeButton", "themeHover",
+  "seoDefaultTitle", "seoDefaultDescription",
+  "logoSquareUrl", "appleTouchIconUrl", "pwaIconUrl", "emailLogoUrl", "pdfLogoUrl",
+  "themeSecondary", "themeAccent", "themeLinkColor", "themeSuccess", "themeWarning", "themeDanger",
+  "legalCompanyName", "publicBrandName", "supportEmail", "salesEmail",
+  "whatsappNumber", "companyCity", "companyCountry", "workingHours",
+  "footerDescription", "footerCopyright", "contactCtaText",
+  "socialInstagram", "socialFacebook", "socialLinkedin", "socialTwitter", "socialYoutube", "socialTiktok",
+  "siteName", "siteTitleTemplate", "seoMetaTitle", "seoMetaDescription",
+  "canonicalBaseUrl", "robotsIndex", "robotsFollow", "stagingNoindex",
+  "ogTitle", "ogDescription", "ogImageUrl",
+  "twitterTitle", "twitterDescription", "twitterImageUrl", "shareImageUrl",
+  "seoKeywords", "googleSearchConsoleCode", "googleAnalyticsId", "metaPixelId", "tiktokPixelId",
+  "orgSchemaName", "orgSchemaUrl", "orgSchemaLogoUrl", "orgSchemaSocials",
+  "emailSenderName", "emailSenderEmail", "emailReplyTo",
+  "emailFooterText", "emailSignatureBlock", "emailButtonColor", "emailDisclaimerText",
+  "pdfHeaderText", "pdfFooterText", "pdfWatermarkText", "pdfSignatureLabel",
+  "pdfSealImageUrl", "pdfPrimaryColor",
+  "sitemapUrl", "robotsTxtContent", "customHeadScript", "customBodyEndScript",
+  "linkedinInsightTag", "clarityId", "recaptchaSiteKey",
+  "whatsappWidgetNumber", "liveChatScript", "featureFlags",
 ];
+
+const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
+const SUPER_ADMIN_ONLY_FIELDS = ["customHeadScript", "customBodyEndScript", "liveChatScript", "featureFlags"];
 
 router.get("/settings/branding", async (req, res): Promise<void> => {
   const [settings] = await db.select({
     logoUrl: settingsTable.logoUrl,
     logoDarkUrl: settingsTable.logoDarkUrl,
+    faviconUrl: settingsTable.faviconUrl,
     themePrimary: settingsTable.themePrimary,
     themeButton: settingsTable.themeButton,
     themeHover: settingsTable.themeHover,
     companyName: settingsTable.companyName,
+    publicBrandName: settingsTable.publicBrandName,
   }).from(settingsTable);
   res.json(settings || {});
 });
@@ -40,14 +65,21 @@ router.get("/settings", requireAuth, async (req, res): Promise<void> => {
     res.json(created);
     return;
   }
-  const { smtpPassword, whatsappToken, ...safe } = settings;
+  const safe: Record<string, any> = { ...settings };
+  for (const f of CREDENTIAL_FIELDS) {
+    delete safe[f];
+  }
   res.json(safe);
 });
 
 router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const userRole = (req as any).user?.role || "";
   const updates: Record<string, unknown> = {};
   for (const key of SETTINGS_PATCH_FIELDS) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+    if (req.body[key] !== undefined) {
+      if (SUPER_ADMIN_ONLY_FIELDS.includes(key) && userRole !== "super_admin") continue;
+      updates[key] = req.body[key];
+    }
   }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
@@ -69,7 +101,10 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
     const [u] = await db.update(settingsTable).set(updates).where(eq(settingsTable.id, existing.id)).returning();
     updated = u;
   }
-  const { smtpPassword, whatsappToken, ...safe } = updated;
+  const safe: Record<string, any> = { ...updated };
+  for (const f of CREDENTIAL_FIELDS) {
+    delete safe[f];
+  }
   res.json(safe);
 });
 

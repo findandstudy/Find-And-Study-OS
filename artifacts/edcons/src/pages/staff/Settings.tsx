@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -8,11 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
-import { User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail, Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon, Plug } from "lucide-react";
+import {
+  User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail,
+  Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon, Plug,
+  Building2, Search as SearchIcon, FileText, Code, ChevronRight,
+  ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
+  Youtube, Facebook, Twitter,
+} from "lucide-react";
 import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 import { CountryFlag } from "@/components/CountryFlag";
 import { IntegrationsManager } from "@/components/IntegrationsManager";
@@ -20,11 +27,11 @@ import { IntegrationsManager } from "@/components/IntegrationsManager";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const LANGUAGES = [
-  { code: "en", label: "English",   country: "GB" },
-  { code: "tr", label: "Türkçe",    country: "TR" },
-  { code: "ar", label: "العربية",   country: "SA" },
-  { code: "fr", label: "Français",  country: "FR" },
-  { code: "ru", label: "Русский",   country: "RU" },
+  { code: "en", label: "English", country: "GB" },
+  { code: "tr", label: "Türkçe", country: "TR" },
+  { code: "ar", label: "العربية", country: "SA" },
+  { code: "fr", label: "Français", country: "FR" },
+  { code: "ru", label: "Русский", country: "RU" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -35,6 +42,123 @@ const ROLE_LABELS: Record<string, string> = {
 
 const MANAGER_ROLES = ["super_admin", "admin", "manager"];
 
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="mb-6">
+      <h2 className="font-display font-bold text-xl text-foreground">{title}</h2>
+      {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
+    </div>
+  );
+}
+
+function FieldGroup({ label, description, children, className }: { label: string; description?: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`space-y-1.5 ${className || ""}`}>
+      <Label className="text-sm font-semibold">{label}</Label>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      {children}
+    </div>
+  );
+}
+
+function ColorField({ label, description, value, onChange, defaultColor }: { label: string; description: string; value: string; onChange: (v: string) => void; defaultColor: string }) {
+  return (
+    <div className="flex items-center gap-4 p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
+      <div className="relative shrink-0">
+        <div className="w-10 h-10 rounded-lg border-2 border-border shadow-sm cursor-pointer overflow-hidden"
+          style={{ backgroundColor: value || defaultColor }}
+          onClick={() => document.getElementById(`color-${label.replace(/\s/g, "")}`)?.click()} />
+        <input id={`color-${label.replace(/\s/g, "")}`} type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+          value={value || defaultColor}
+          onChange={e => onChange(e.target.value)} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-sm text-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Input value={value} onChange={e => onChange(e.target.value)} placeholder={defaultColor} className="w-28 rounded-lg text-xs font-mono h-8" />
+        {value && <button onClick={() => onChange("")} className="text-muted-foreground hover:text-destructive transition-colors"><X className="w-4 h-4" /></button>}
+      </div>
+    </div>
+  );
+}
+
+function LogoUploader({ label, description, value, onChange, bgClass, dims }: { label: string; description?: string; value: string; onChange: (v: string) => void; bgClass?: string; dims?: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
+
+  async function upload(file: File) {
+    setUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      onChange(`${BASE_URL}/api/storage/objects${strippedPath}`);
+      toast({ title: `${label} uploaded` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally { setUploading(false); }
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs font-semibold">{label}</Label>
+      {dims && <p className="text-[11px] text-muted-foreground">Recommended: {dims}</p>}
+      <div className={`relative w-full h-28 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden ${bgClass || "bg-secondary/20"}`}>
+        {value ? (
+          <>
+            <img src={value} alt={label} className="max-h-20 max-w-full object-contain" />
+            <button onClick={() => onChange("")}
+              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive"><X className="w-3 h-3" /></button>
+          </>
+        ) : (
+          <button onClick={() => inputRef.current?.click()} disabled={uploading}
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+            {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
+            <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload"}</span>
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
+    </div>
+  );
+}
+
+function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: boolean; label?: string }) {
+  return (
+    <Button onClick={onClick} disabled={saving} className="rounded-xl gap-2 px-8">
+      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+      {label || "Save Changes"}
+    </Button>
+  );
+}
+
+type SettingsTab = "profile" | "language" | "notifications" | "security" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "advanced";
+
+interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean }
+
+const NAV_ITEMS: NavItem[] = [
+  { id: "profile", label: "Profile", icon: User, group: "personal" },
+  { id: "language", label: "Language & Region", icon: Globe, group: "personal" },
+  { id: "notifications", label: "Notifications", icon: Bell, group: "personal" },
+  { id: "security", label: "Security", icon: Shield, group: "personal" },
+  { id: "branding", label: "Branding & Appearance", icon: Palette, group: "organization", managerOnly: true },
+  { id: "company", label: "Company & Contact", icon: Building2, group: "organization", managerOnly: true },
+  { id: "seo", label: "SEO & Social", icon: SearchIcon, group: "organization", managerOnly: true },
+  { id: "email", label: "Email Branding", icon: Mail, group: "organization", managerOnly: true },
+  { id: "documents", label: "Documents / PDF", icon: FileText, group: "organization", managerOnly: true },
+  { id: "integrations", label: "Integrations", icon: Plug, group: "organization", managerOnly: true },
+  { id: "advanced", label: "Advanced", icon: Code, group: "organization", managerOnly: true },
+];
+
 export default function SettingsPage() {
   const { user } = useAuth(true);
   const { lang, setLang } = useI18n();
@@ -42,62 +166,63 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
-  const [notifications, setNotifications] = useState({
-    newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false,
-  });
+  const [notifications, setNotifications] = useState({ newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false });
+  const [settings, setSettings] = useState<Record<string, any>>({});
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [sectionSaving, setSectionSaving] = useState<string | null>(null);
 
-  const [brandForm, setBrandForm] = useState({
-    logoUrl: "", logoDarkUrl: "", themePrimary: "", themeButton: "", themeHover: "",
-  });
-  const [brandSaving, setBrandSaving] = useState(false);
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [logoDarkUploading, setLogoDarkUploading] = useState(false);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const logoDarkInputRef = useRef<HTMLInputElement>(null);
+  const isManager = MANAGER_ROLES.includes(user?.role || "");
 
   useEffect(() => {
     if (user) {
-      setForm({
-        firstName: user.firstName || "",
-        lastName:  user.lastName  || "",
-        phone:     (user as any).phone || "",
-      });
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phone: (user as any).phone || "" });
     }
   }, [user]);
 
   useEffect(() => {
-    setBrandForm({
-      logoUrl: themeSettings.logoUrl || "",
-      logoDarkUrl: themeSettings.logoDarkUrl || "",
-      themePrimary: themeSettings.themePrimary || "",
-      themeButton: themeSettings.themeButton || "",
-      themeHover: themeSettings.themeHover || "",
-    });
-  }, [themeSettings]);
+    if (isManager) {
+      customFetch("/api/settings").then((data: any) => {
+        setSettings(data || {});
+        setSettingsLoaded(true);
+      }).catch(() => setSettingsLoaded(true));
+    }
+  }, [isManager]);
+
+  function updateSettings(updates: Record<string, any>) {
+    setSettings(prev => ({ ...prev, ...updates }));
+  }
+
+  async function saveSection(section: string, fields: Record<string, any>) {
+    setSectionSaving(section);
+    try {
+      const res = await customFetch("/api/settings", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      setSettings(prev => ({ ...prev, ...(res as any) }));
+      if (section === "branding") await refreshSettings();
+      toast({ title: `${section.charAt(0).toUpperCase() + section.slice(1)} saved` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally { setSectionSaving(null); }
+  }
 
   async function handleSaveProfile() {
     if (!user) return;
     setSaving(true);
     try {
-      const res = await customFetch(`/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName:  form.lastName,
-          phone:     form.phone || undefined,
-        }),
+      await customFetch(`/api/users/${user.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone || undefined }),
       });
-      if (!res.ok) throw new Error("Failed to update profile");
       await qc.invalidateQueries({ queryKey: ["me"] });
-      toast({ title: "Profile updated", description: "Your changes have been saved." });
+      toast({ title: "Profile updated" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   async function handleSaveLang(code: string) {
@@ -105,340 +230,650 @@ export default function SettingsPage() {
     setLang(code as any);
     try {
       await customFetch(`/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language: code }),
       });
       toast({ title: "Language updated" });
     } catch {}
   }
 
-  async function uploadLogo(file: File, field: "logoUrl" | "logoDarkUrl") {
-    const setUploading = field === "logoUrl" ? setLogoUploading : setLogoDarkUploading;
-    setUploading(true);
-    try {
-      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-      });
-      if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
-      const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      if (!putRes.ok) throw new Error(`Upload failed with status ${putRes.status}`);
-      const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
-      const publicUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
-      setBrandForm(f => ({ ...f, [field]: publicUrl }));
-      toast({ title: "Logo uploaded" });
-    } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function isValidHex(v: string): boolean {
-    return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v);
-  }
-
-  async function handleSaveBrand() {
-    for (const key of ["themePrimary", "themeButton", "themeHover"] as const) {
-      if (brandForm[key] && !isValidHex(brandForm[key])) {
-        toast({ title: "Invalid color", description: `"${brandForm[key]}" is not a valid hex color (e.g. #3B82F6).`, variant: "destructive" });
-        return;
-      }
-    }
-    setBrandSaving(true);
-    try {
-      await customFetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          logoUrl: brandForm.logoUrl || null,
-          logoDarkUrl: brandForm.logoDarkUrl || null,
-          themePrimary: brandForm.themePrimary || null,
-          themeButton: brandForm.themeButton || null,
-          themeHover: brandForm.themeHover || null,
-        }),
-      });
-      await refreshSettings();
-      toast({ title: "Branding saved", description: "Theme and logos have been updated." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setBrandSaving(false);
-    }
-  }
-
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
-  const isManager = MANAGER_ROLES.includes(user?.role || "");
+  const visibleNav = NAV_ITEMS.filter(n => !n.managerOnly || isManager);
+
+  function renderContent() {
+    switch (activeTab) {
+      case "profile": return <ProfileTab />;
+      case "language": return <LanguageTab />;
+      case "notifications": return <NotificationsTab />;
+      case "security": return <SecurityTab />;
+      case "branding": return isManager ? <BrandingTab /> : null;
+      case "company": return isManager ? <CompanyTab /> : null;
+      case "seo": return isManager ? <SeoTab /> : null;
+      case "email": return isManager ? <EmailBrandingTab /> : null;
+      case "documents": return isManager ? <DocumentsTab /> : null;
+      case "integrations": return isManager ? <IntegrationsTab /> : null;
+      case "advanced": return isManager ? <AdvancedTab /> : null;
+      default: return null;
+    }
+  }
+
+  function ProfileTab() {
+    return (
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <SectionHeader title="Personal Information" description="Update your profile details and contact information." />
+        <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg shrink-0">{initials}</div>
+          <div>
+            <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
+            <p className="text-muted-foreground text-sm">{user?.email}</p>
+            <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs mt-2 capitalize">{ROLE_LABELS[user?.role || ""] || user?.role}</Badge>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-5">
+          <FieldGroup label="First Name"><Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" /></FieldGroup>
+          <FieldGroup label="Last Name"><Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" /></FieldGroup>
+          <FieldGroup label="Email" description="Managed by your login provider" className="sm:col-span-2">
+            <Input type="email" value={user?.email || ""} disabled className="rounded-xl bg-secondary/40 text-muted-foreground" />
+          </FieldGroup>
+          <FieldGroup label="Phone" className="sm:col-span-2">
+            <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 234 567 8900" className="rounded-xl" />
+          </FieldGroup>
+        </div>
+        <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
+      </Card>
+    );
+  }
+
+  function LanguageTab() {
+    return (
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <SectionHeader title="Language & Region" description="Choose your preferred interface language." />
+        <div className="grid sm:grid-cols-2 gap-3">
+          {LANGUAGES.map(l => (
+            <button key={l.code} onClick={() => handleSaveLang(l.code)}
+              className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
+                ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
+              <CountryFlag code={l.country} size="xl" />
+              <div className="flex-1">
+                <p className="font-bold text-foreground">{l.label}</p>
+                <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>
+              </div>
+              {lang === l.code && <Check className="w-5 h-5 text-primary" />}
+            </button>
+          ))}
+        </div>
+        <p className="text-muted-foreground text-sm mt-4">RTL (right-to-left) is automatically applied for Arabic.</p>
+      </Card>
+    );
+  }
+
+  function NotificationsTab() {
+    return <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />;
+  }
+
+  function SecurityTab() {
+    return (
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <SectionHeader title="Security & Access" description="Manage your authentication and active sessions." />
+        <div className="space-y-4">
+          <div className="p-5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+            <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Shield className="w-5 h-5" /> Authentication via Replit</p>
+            <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">Your account is secured through Replit's authentication system. No password management required.</p>
+          </div>
+          <div className="p-5 rounded-xl border border-border/50 space-y-2">
+            <p className="font-semibold text-foreground">Account Details</p>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Role</span><Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs capitalize">{ROLE_LABELS[user?.role || ""] || user?.role}</Badge></div>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Account ID</span><span className="font-mono text-foreground">#{user?.id}</span></div>
+          </div>
+          <div className="p-5 rounded-xl border border-border/50">
+            <p className="font-semibold text-foreground mb-3">Active Sessions</p>
+            <div className="flex items-center justify-between">
+              <div><p className="text-sm text-foreground">Current session</p><p className="text-xs text-muted-foreground">This device</p></div>
+              <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
+            </div>
+          </div>
+          <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>
+            <a href="/api/auth/logout">Sign Out</a>
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  function BrandingTab() {
+    const s = settings;
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Appearance Mode" description="Choose between light, dark, or system-following theme." />
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              { value: "light" as const, label: "Light", icon: Sun, desc: "Light background" },
+              { value: "dark" as const, label: "Dark", icon: Moon, desc: "Dark background" },
+              { value: "system" as const, label: "System", icon: Monitor, desc: "Follows device" },
+            ]).map(opt => (
+              <button key={opt.value} onClick={() => setMode(opt.value)}
+                className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all hover:border-primary/50
+                  ${mode === opt.value ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:bg-secondary/30"}`}>
+                <opt.icon className={`w-6 h-6 ${mode === opt.value ? "text-primary" : "text-muted-foreground"}`} />
+                <span className="font-semibold text-sm">{opt.label}</span>
+                <span className="text-xs text-muted-foreground">{opt.desc}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="System Logos" description="Upload your company logos for different contexts. Use PNG or SVG with transparent backgrounds." />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <LogoUploader label="Light Mode Logo" dims="300x80px, PNG/SVG" value={s.logoUrl || ""} onChange={v => updateSettings({ logoUrl: v })} bgClass="bg-white" />
+            <LogoUploader label="Dark Mode Logo" dims="300x80px, PNG/SVG" value={s.logoDarkUrl || ""} onChange={v => updateSettings({ logoDarkUrl: v })} bgClass="bg-gray-900" />
+            <LogoUploader label="Square Logo" dims="200x200px" value={s.logoSquareUrl || ""} onChange={v => updateSettings({ logoSquareUrl: v })} />
+            <LogoUploader label="Favicon" dims="32x32px, ICO/PNG" value={s.faviconUrl || ""} onChange={v => updateSettings({ faviconUrl: v })} />
+            <LogoUploader label="Apple Touch Icon" dims="180x180px, PNG" value={s.appleTouchIconUrl || ""} onChange={v => updateSettings({ appleTouchIconUrl: v })} />
+            <LogoUploader label="PWA / App Icon" dims="512x512px, PNG" value={s.pwaIconUrl || ""} onChange={v => updateSettings({ pwaIconUrl: v })} />
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Theme Colors" description="Customize the color palette. Leave empty to use system defaults." />
+          <div className="space-y-3">
+            <ColorField label="Primary Color" description="Navigation, links, and accents" value={s.themePrimary || ""} onChange={v => updateSettings({ themePrimary: v })} defaultColor="#3B82F6" />
+            <ColorField label="Secondary Color" description="Secondary elements and backgrounds" value={s.themeSecondary || ""} onChange={v => updateSettings({ themeSecondary: v })} defaultColor="#6B7280" />
+            <ColorField label="Accent Color" description="Highlights and special elements" value={s.themeAccent || ""} onChange={v => updateSettings({ themeAccent: v })} defaultColor="#8B5CF6" />
+            <ColorField label="Button Color" description="Primary action buttons" value={s.themeButton || ""} onChange={v => updateSettings({ themeButton: v })} defaultColor="#3B82F6" />
+            <ColorField label="Hover Color" description="Button and link hover state" value={s.themeHover || ""} onChange={v => updateSettings({ themeHover: v })} defaultColor="#2563EB" />
+            <ColorField label="Link Color" description="Hyperlinks and text links" value={s.themeLinkColor || ""} onChange={v => updateSettings({ themeLinkColor: v })} defaultColor="#2563EB" />
+            <ColorField label="Success" description="Success states and positive feedback" value={s.themeSuccess || ""} onChange={v => updateSettings({ themeSuccess: v })} defaultColor="#22C55E" />
+            <ColorField label="Warning" description="Warning states and caution indicators" value={s.themeWarning || ""} onChange={v => updateSettings({ themeWarning: v })} defaultColor="#F59E0B" />
+            <ColorField label="Danger" description="Error states and destructive actions" value={s.themeDanger || ""} onChange={v => updateSettings({ themeDanger: v })} defaultColor="#EF4444" />
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Brand Preview" description="See how your branding appears across the system." />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl border border-border/50 bg-background">
+              <p className="text-xs font-semibold text-muted-foreground mb-3">Sidebar Logo</p>
+              <div className="h-12 bg-secondary/30 rounded-lg flex items-center px-4">
+                {s.logoUrl ? <img src={s.logoUrl} className="max-h-8 object-contain" alt="" /> : <span className="text-sm font-bold text-muted-foreground">Your Logo</span>}
+              </div>
+            </div>
+            <div className="p-4 rounded-xl border border-border/50 bg-background">
+              <p className="text-xs font-semibold text-muted-foreground mb-3">Button Preview</p>
+              <div className="flex gap-2">
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeButton || s.themePrimary || "#3B82F6" }}>Primary</button>
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeSuccess || "#22C55E" }}>Success</button>
+                <button className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.themeDanger || "#EF4444" }}>Danger</button>
+              </div>
+            </div>
+            <div className="p-4 rounded-xl border border-border/50 bg-gray-900 sm:col-span-2">
+              <p className="text-xs font-semibold text-gray-400 mb-3">Dark Mode Logo</p>
+              <div className="h-12 bg-gray-800 rounded-lg flex items-center px-4">
+                {s.logoDarkUrl ? <img src={s.logoDarkUrl} className="max-h-8 object-contain" alt="" /> : <span className="text-sm font-bold text-gray-500">Dark Logo</span>}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <SaveButton onClick={() => saveSection("branding", {
+          logoUrl: s.logoUrl || null, logoDarkUrl: s.logoDarkUrl || null,
+          logoSquareUrl: s.logoSquareUrl || null, faviconUrl: s.faviconUrl || null,
+          appleTouchIconUrl: s.appleTouchIconUrl || null, pwaIconUrl: s.pwaIconUrl || null,
+          themePrimary: s.themePrimary || null, themeSecondary: s.themeSecondary || null,
+          themeAccent: s.themeAccent || null, themeButton: s.themeButton || null,
+          themeHover: s.themeHover || null, themeLinkColor: s.themeLinkColor || null,
+          themeSuccess: s.themeSuccess || null, themeWarning: s.themeWarning || null,
+          themeDanger: s.themeDanger || null,
+        })} saving={sectionSaving === "branding"} label="Save Branding" />
+      </div>
+    );
+  }
+
+  function CompanyTab() {
+    const s = settings;
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Company Information" description="Core business details used across the platform, emails, PDFs, and public pages." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="Legal Company Name" description="Official registered company name"><Input value={s.legalCompanyName || ""} onChange={e => updateSettings({ legalCompanyName: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Public Brand Name" description="The name shown to clients and on the website"><Input value={s.publicBrandName || ""} onChange={e => updateSettings({ publicBrandName: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="General Email"><Input value={s.companyEmail || ""} onChange={e => updateSettings({ companyEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Support Email"><Input value={s.supportEmail || ""} onChange={e => updateSettings({ supportEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Sales Email"><Input value={s.salesEmail || ""} onChange={e => updateSettings({ salesEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Phone"><Input value={s.companyPhone || ""} onChange={e => updateSettings({ companyPhone: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="WhatsApp Number"><Input value={s.whatsappNumber || ""} onChange={e => updateSettings({ whatsappNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Working Hours"><Input value={s.workingHours || ""} onChange={e => updateSettings({ workingHours: e.target.value })} placeholder="Mon-Fri 9:00-18:00" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Address" className="sm:col-span-2"><Input value={s.companyAddress || ""} onChange={e => updateSettings({ companyAddress: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="City"><Input value={s.companyCity || ""} onChange={e => updateSettings({ companyCity: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Country"><Input value={s.companyCountry || ""} onChange={e => updateSettings({ companyCountry: e.target.value })} className="rounded-xl" /></FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Footer & Public Content" description="Texts displayed on the website footer and contact pages." />
+          <div className="space-y-5">
+            <FieldGroup label="Footer Description" description="Short company description for the website footer">
+              <Textarea value={s.footerDescription || ""} onChange={e => updateSettings({ footerDescription: e.target.value })} className="rounded-xl min-h-[70px]" />
+            </FieldGroup>
+            <FieldGroup label="Footer Copyright Text" description="e.g. © 2025 Find & Study. All rights reserved.">
+              <Input value={s.footerCopyright || ""} onChange={e => updateSettings({ footerCopyright: e.target.value })} className="rounded-xl" />
+            </FieldGroup>
+            <FieldGroup label="Contact CTA Text" description="Call-to-action text on contact sections">
+              <Input value={s.contactCtaText || ""} onChange={e => updateSettings({ contactCtaText: e.target.value })} placeholder="Get in touch with us today!" className="rounded-xl" />
+            </FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Social Media Links" description="Your social media profile URLs." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            {[
+              { key: "socialInstagram", label: "Instagram", icon: Instagram, placeholder: "https://instagram.com/..." },
+              { key: "socialFacebook", label: "Facebook", icon: Facebook, placeholder: "https://facebook.com/..." },
+              { key: "socialLinkedin", label: "LinkedIn", icon: Linkedin, placeholder: "https://linkedin.com/company/..." },
+              { key: "socialTwitter", label: "X / Twitter", icon: Twitter, placeholder: "https://x.com/..." },
+              { key: "socialYoutube", label: "YouTube", icon: Youtube, placeholder: "https://youtube.com/@..." },
+              { key: "socialTiktok", label: "TikTok", icon: Globe, placeholder: "https://tiktok.com/@..." },
+            ].map(item => (
+              <FieldGroup key={item.key} label={item.label}>
+                <div className="relative">
+                  <item.icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input value={s[item.key] || ""} onChange={e => updateSettings({ [item.key]: e.target.value })} placeholder={item.placeholder} className="rounded-xl pl-10" />
+                </div>
+              </FieldGroup>
+            ))}
+          </div>
+        </Card>
+
+        <SaveButton onClick={() => saveSection("company", {
+          legalCompanyName: s.legalCompanyName || null, publicBrandName: s.publicBrandName || null,
+          companyEmail: s.companyEmail || null, supportEmail: s.supportEmail || null,
+          salesEmail: s.salesEmail || null, companyPhone: s.companyPhone || null,
+          whatsappNumber: s.whatsappNumber || null, companyAddress: s.companyAddress || null,
+          companyCity: s.companyCity || null, companyCountry: s.companyCountry || null,
+          workingHours: s.workingHours || null,
+          footerDescription: s.footerDescription || null, footerCopyright: s.footerCopyright || null,
+          contactCtaText: s.contactCtaText || null,
+          socialInstagram: s.socialInstagram || null, socialFacebook: s.socialFacebook || null,
+          socialLinkedin: s.socialLinkedin || null, socialTwitter: s.socialTwitter || null,
+          socialYoutube: s.socialYoutube || null, socialTiktok: s.socialTiktok || null,
+        })} saving={sectionSaving === "company"} label="Save Company Details" />
+      </div>
+    );
+  }
+
+  function SeoTab() {
+    const s = settings;
+    const titleLen = (s.seoMetaTitle || "").length;
+    const descLen = (s.seoMetaDescription || "").length;
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Site Identity" description="Configure your site name and title format for search engines." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="Site Name" description="Used in structured data and browser tabs"><Input value={s.siteName || ""} onChange={e => updateSettings({ siteName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Title Template" description="Use {{pageTitle}} as placeholder"><Input value={s.siteTitleTemplate || ""} onChange={e => updateSettings({ siteTitleTemplate: e.target.value })} placeholder="{{pageTitle}} | Find & Study" className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Canonical Base URL" className="sm:col-span-2"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Default Meta Tags" description="Default SEO metadata used when pages don't specify their own." />
+          <div className="space-y-5">
+            <FieldGroup label="Meta Title" description={`${titleLen}/60 characters recommended`}>
+              <Input value={s.seoMetaTitle || ""} onChange={e => updateSettings({ seoMetaTitle: e.target.value })} maxLength={70} className="rounded-xl" />
+            </FieldGroup>
+            <FieldGroup label="Meta Description" description={`${descLen}/160 characters recommended`}>
+              <Textarea value={s.seoMetaDescription || ""} onChange={e => updateSettings({ seoMetaDescription: e.target.value })} maxLength={200} className="rounded-xl min-h-[70px]" />
+            </FieldGroup>
+            <FieldGroup label="Keywords" description="Comma-separated keywords">
+              <Input value={s.seoKeywords || ""} onChange={e => updateSettings({ seoKeywords: e.target.value })} placeholder="education, consultancy, study abroad" className="rounded-xl" />
+            </FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Robots & Indexing" />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">Allow Search Indexing</p><p className="text-xs text-muted-foreground">Let search engines index your site</p></div>
+              <Switch checked={s.robotsIndex !== false} onCheckedChange={v => updateSettings({ robotsIndex: v })} />
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">Allow Link Following</p><p className="text-xs text-muted-foreground">Let search engines follow links on your pages</p></div>
+              <Switch checked={s.robotsFollow !== false} onCheckedChange={v => updateSettings({ robotsFollow: v })} />
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+              <div><p className="text-sm font-semibold">Staging Noindex</p><p className="text-xs text-muted-foreground">Block indexing on staging/development environments</p></div>
+              <Switch checked={s.stagingNoindex === true} onCheckedChange={v => updateSettings({ stagingNoindex: v })} />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Open Graph / Social Sharing" description="Control how your site appears when shared on social media." />
+          <div className="space-y-5">
+            <div className="grid sm:grid-cols-2 gap-5">
+              <FieldGroup label="OG Title"><Input value={s.ogTitle || ""} onChange={e => updateSettings({ ogTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
+              <FieldGroup label="Twitter/X Title"><Input value={s.twitterTitle || ""} onChange={e => updateSettings({ twitterTitle: e.target.value })} className="rounded-xl" /></FieldGroup>
+            </div>
+            <FieldGroup label="OG Description"><Textarea value={s.ogDescription || ""} onChange={e => updateSettings({ ogDescription: e.target.value })} className="rounded-xl min-h-[60px]" /></FieldGroup>
+            <FieldGroup label="Twitter/X Description"><Textarea value={s.twitterDescription || ""} onChange={e => updateSettings({ twitterDescription: e.target.value })} className="rounded-xl min-h-[60px]" /></FieldGroup>
+            <div className="grid sm:grid-cols-3 gap-5">
+              <LogoUploader label="OG Image" dims="1200x630px" value={s.ogImageUrl || ""} onChange={v => updateSettings({ ogImageUrl: v })} />
+              <LogoUploader label="Twitter/X Image" dims="1200x628px" value={s.twitterImageUrl || ""} onChange={v => updateSettings({ twitterImageUrl: v })} />
+              <LogoUploader label="Default Share Image" dims="1200x630px" value={s.shareImageUrl || ""} onChange={v => updateSettings({ shareImageUrl: v })} />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Search Preview" description="How your site may appear on Google search results." />
+          <div className="p-5 rounded-xl border border-border/50 bg-white dark:bg-gray-950 max-w-lg">
+            <p className="text-sm text-blue-700 dark:text-blue-400 truncate">{s.canonicalBaseUrl || "https://yoursite.com"}</p>
+            <p className="text-lg text-blue-800 dark:text-blue-300 font-medium truncate hover:underline cursor-pointer mt-0.5">{s.seoMetaTitle || s.siteName || "Your Site Title"}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mt-1">{s.seoMetaDescription || "Your site description will appear here. Write a compelling description to improve click-through rates."}</p>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Analytics & Tracking" description="Third-party tracking and verification codes." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="Google Search Console" description="Verification code"><Input value={s.googleSearchConsoleCode || ""} onChange={e => updateSettings({ googleSearchConsoleCode: e.target.value })} placeholder="google-site-verification=..." className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Google Analytics (GA4)" description="Measurement ID"><Input value={s.googleAnalyticsId || ""} onChange={e => updateSettings({ googleAnalyticsId: e.target.value })} placeholder="G-XXXXXXXXXX" className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Meta Pixel ID"><Input value={s.metaPixelId || ""} onChange={e => updateSettings({ metaPixelId: e.target.value })} placeholder="123456789012345" className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="TikTok Pixel ID"><Input value={s.tiktokPixelId || ""} onChange={e => updateSettings({ tiktokPixelId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Structured Data (Schema.org)" description="Organization data for rich search results." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="Organization Name"><Input value={s.orgSchemaName || ""} onChange={e => updateSettings({ orgSchemaName: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Website URL"><Input value={s.orgSchemaUrl || ""} onChange={e => updateSettings({ orgSchemaUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Logo URL"><Input value={s.orgSchemaLogoUrl || ""} onChange={e => updateSettings({ orgSchemaLogoUrl: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Social Profiles" description="Comma-separated URLs"><Input value={s.orgSchemaSocials || ""} onChange={e => updateSettings({ orgSchemaSocials: e.target.value })} className="rounded-xl text-xs" /></FieldGroup>
+          </div>
+        </Card>
+
+        <SaveButton onClick={() => saveSection("seo", {
+          siteName: s.siteName || null, siteTitleTemplate: s.siteTitleTemplate || null,
+          seoMetaTitle: s.seoMetaTitle || null, seoMetaDescription: s.seoMetaDescription || null,
+          canonicalBaseUrl: s.canonicalBaseUrl || null, seoKeywords: s.seoKeywords || null,
+          robotsIndex: s.robotsIndex, robotsFollow: s.robotsFollow, stagingNoindex: s.stagingNoindex,
+          ogTitle: s.ogTitle || null, ogDescription: s.ogDescription || null, ogImageUrl: s.ogImageUrl || null,
+          twitterTitle: s.twitterTitle || null, twitterDescription: s.twitterDescription || null,
+          twitterImageUrl: s.twitterImageUrl || null, shareImageUrl: s.shareImageUrl || null,
+          googleSearchConsoleCode: s.googleSearchConsoleCode || null, googleAnalyticsId: s.googleAnalyticsId || null,
+          metaPixelId: s.metaPixelId || null, tiktokPixelId: s.tiktokPixelId || null,
+          orgSchemaName: s.orgSchemaName || null, orgSchemaUrl: s.orgSchemaUrl || null,
+          orgSchemaLogoUrl: s.orgSchemaLogoUrl || null, orgSchemaSocials: s.orgSchemaSocials || null,
+        })} saving={sectionSaving === "seo"} label="Save SEO Settings" />
+      </div>
+    );
+  }
+
+  function EmailBrandingTab() {
+    const s = settings;
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Email Identity" description="Configure the sender details for all outgoing emails." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="Sender Name" description="Displayed as the 'From' name"><Input value={s.emailSenderName || ""} onChange={e => updateSettings({ emailSenderName: e.target.value })} placeholder="Find & Study" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Sender Email"><Input value={s.emailSenderEmail || ""} onChange={e => updateSettings({ emailSenderEmail: e.target.value })} type="email" placeholder="info@findandstudy.com" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Reply-To Email" className="sm:col-span-2"><Input value={s.emailReplyTo || ""} onChange={e => updateSettings({ emailReplyTo: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Email Branding" description="Customize the look of outgoing emails." />
+          <div className="space-y-5">
+            <LogoUploader label="Email Header Logo" dims="300x80px, PNG" value={s.emailLogoUrl || ""} onChange={v => updateSettings({ emailLogoUrl: v })} />
+            <ColorField label="Email Button Color" description="Primary button color in emails" value={s.emailButtonColor || ""} onChange={v => updateSettings({ emailButtonColor: v })} defaultColor="#143591" />
+            <FieldGroup label="Email Footer Text" description="Shown at the bottom of every email">
+              <Textarea value={s.emailFooterText || ""} onChange={e => updateSettings({ emailFooterText: e.target.value })} className="rounded-xl min-h-[60px]" placeholder="Find & Study Educational Consulting&#10;Istanbul, Turkey" />
+            </FieldGroup>
+            <FieldGroup label="Email Signature Block" description="Rich signature text appended to emails">
+              <Textarea value={s.emailSignatureBlock || ""} onChange={e => updateSettings({ emailSignatureBlock: e.target.value })} className="rounded-xl min-h-[60px]" />
+            </FieldGroup>
+            <FieldGroup label="Disclaimer Text" description="Legal disclaimer at the bottom of emails">
+              <Textarea value={s.emailDisclaimerText || ""} onChange={e => updateSettings({ emailDisclaimerText: e.target.value })} className="rounded-xl min-h-[50px]" placeholder="This email and any attachments are confidential..." />
+            </FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Email Preview" description="How a branded email might look." />
+          <div className="max-w-md mx-auto rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950">
+            <div className="px-6 py-4 border-b border-border/30 text-center" style={{ backgroundColor: (s.emailButtonColor || "#143591") + "10" }}>
+              {s.emailLogoUrl ? <img src={s.emailLogoUrl} className="max-h-10 mx-auto object-contain" alt="" /> : <p className="font-bold text-lg" style={{ color: s.emailButtonColor || "#143591" }}>{s.emailSenderName || "Your Company"}</p>}
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-gray-800 dark:text-gray-200 mb-4">Hello,</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">This is a preview of how your branded emails will appear to recipients.</p>
+              <div className="text-center my-4">
+                <button className="px-6 py-2.5 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: s.emailButtonColor || "#143591" }}>View Details</button>
+              </div>
+            </div>
+            <div className="px-6 py-3 border-t border-border/30 bg-gray-50 dark:bg-gray-900">
+              <p className="text-[10px] text-gray-500 text-center whitespace-pre-line">{s.emailFooterText || "Your company footer text"}</p>
+              {s.emailDisclaimerText && <p className="text-[9px] text-gray-400 text-center mt-2 italic">{s.emailDisclaimerText}</p>}
+            </div>
+          </div>
+        </Card>
+
+        <SaveButton onClick={() => saveSection("email", {
+          emailSenderName: s.emailSenderName || null, emailSenderEmail: s.emailSenderEmail || null,
+          emailReplyTo: s.emailReplyTo || null, emailLogoUrl: s.emailLogoUrl || null,
+          emailFooterText: s.emailFooterText || null, emailSignatureBlock: s.emailSignatureBlock || null,
+          emailButtonColor: s.emailButtonColor || null, emailDisclaimerText: s.emailDisclaimerText || null,
+        })} saving={sectionSaving === "email"} label="Save Email Branding" />
+      </div>
+    );
+  }
+
+  function DocumentsTab() {
+    const s = settings;
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="PDF / Document Branding" description="Customize the identity of generated PDFs and documents." />
+          <div className="space-y-5">
+            <LogoUploader label="PDF Logo" dims="300x80px, PNG/SVG" value={s.pdfLogoUrl || ""} onChange={v => updateSettings({ pdfLogoUrl: v })} />
+            <div className="grid sm:grid-cols-2 gap-5">
+              <FieldGroup label="Header Text" description="Displayed at the top of PDF documents">
+                <Input value={s.pdfHeaderText || ""} onChange={e => updateSettings({ pdfHeaderText: e.target.value })} placeholder="Find & Study Educational Consulting" className="rounded-xl" />
+              </FieldGroup>
+              <FieldGroup label="Footer Text" description="Displayed at the bottom of every page">
+                <Input value={s.pdfFooterText || ""} onChange={e => updateSettings({ pdfFooterText: e.target.value })} placeholder="© 2025 Find & Study. All rights reserved." className="rounded-xl" />
+              </FieldGroup>
+              <FieldGroup label="Watermark Text" description="Faint text overlaid on document pages">
+                <Input value={s.pdfWatermarkText || ""} onChange={e => updateSettings({ pdfWatermarkText: e.target.value })} placeholder="CONFIDENTIAL" className="rounded-xl" />
+              </FieldGroup>
+              <FieldGroup label="Signature Label" description="Label above the signature line">
+                <Input value={s.pdfSignatureLabel || ""} onChange={e => updateSettings({ pdfSignatureLabel: e.target.value })} placeholder="Authorized Representative" className="rounded-xl" />
+              </FieldGroup>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-5">
+              <LogoUploader label="Seal / Stamp Image" dims="200x200px, PNG" value={s.pdfSealImageUrl || ""} onChange={v => updateSettings({ pdfSealImageUrl: v })} />
+              <div>
+                <ColorField label="Document Primary Color" description="Accent color for PDF headers, borders, and highlights" value={s.pdfPrimaryColor || ""} onChange={v => updateSettings({ pdfPrimaryColor: v })} defaultColor="#143591" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Document Preview" description="How your branded documents may look." />
+          <div className="max-w-sm mx-auto">
+            <div className="rounded-xl border border-border/50 overflow-hidden bg-white dark:bg-gray-950 shadow-sm">
+              <div className="h-2 w-full" style={{ backgroundColor: s.pdfPrimaryColor || "#143591" }} />
+              <div className="px-5 py-4 flex items-center justify-between border-b border-border/30">
+                {s.pdfLogoUrl ? <img src={s.pdfLogoUrl} className="max-h-8 object-contain" alt="" /> : <p className="text-sm font-bold" style={{ color: s.pdfPrimaryColor || "#143591" }}>Company Logo</p>}
+                <p className="text-[10px] text-muted-foreground">{s.pdfHeaderText || "Header Text"}</p>
+              </div>
+              <div className="px-5 py-6">
+                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2" />
+                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2" />
+                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-5/6 mb-4" />
+                {s.pdfWatermarkText && (
+                  <p className="text-center text-2xl font-bold text-gray-100 dark:text-gray-800 my-4 select-none">{s.pdfWatermarkText}</p>
+                )}
+                <div className="mt-4 pt-3 border-t border-dashed border-border/50 flex items-end justify-between">
+                  <div>
+                    <p className="text-[9px] text-muted-foreground">{s.pdfSignatureLabel || "Signature"}</p>
+                    <div className="h-px w-24 bg-gray-300 mt-3" />
+                  </div>
+                  {s.pdfSealImageUrl && <img src={s.pdfSealImageUrl} className="w-12 h-12 object-contain opacity-60" alt="" />}
+                </div>
+              </div>
+              <div className="px-5 py-2 border-t border-border/30 bg-gray-50 dark:bg-gray-900">
+                <p className="text-[9px] text-gray-500 text-center">{s.pdfFooterText || "Footer text"}</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <SaveButton onClick={() => saveSection("documents", {
+          pdfLogoUrl: s.pdfLogoUrl || null, pdfHeaderText: s.pdfHeaderText || null,
+          pdfFooterText: s.pdfFooterText || null, pdfWatermarkText: s.pdfWatermarkText || null,
+          pdfSignatureLabel: s.pdfSignatureLabel || null, pdfSealImageUrl: s.pdfSealImageUrl || null,
+          pdfPrimaryColor: s.pdfPrimaryColor || null,
+        })} saving={sectionSaving === "documents"} label="Save Document Settings" />
+      </div>
+    );
+  }
+
+  function IntegrationsTab() {
+    return <IntegrationsManager />;
+  }
+
+  function AdvancedTab() {
+    const s = settings;
+    const isSuperAdmin = user?.role === "super_admin";
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Site Configuration" description="Domain, sitemap, and robots settings." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="Canonical Domain"><Input value={s.canonicalBaseUrl || ""} onChange={e => updateSettings({ canonicalBaseUrl: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Sitemap URL"><Input value={s.sitemapUrl || ""} onChange={e => updateSettings({ sitemapUrl: e.target.value })} placeholder="/sitemap.xml" className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="robots.txt Content" description="Custom robots.txt rules" className="sm:col-span-2">
+              <Textarea value={s.robotsTxtContent || ""} onChange={e => updateSettings({ robotsTxtContent: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder="User-agent: *&#10;Allow: /" />
+            </FieldGroup>
+          </div>
+        </Card>
+
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title="Tracking & Widgets" description="Third-party integrations and widget configurations." />
+          <div className="grid sm:grid-cols-2 gap-5">
+            <FieldGroup label="LinkedIn Insight Tag"><Input value={s.linkedinInsightTag || ""} onChange={e => updateSettings({ linkedinInsightTag: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="Microsoft Clarity / Hotjar ID"><Input value={s.clarityId || ""} onChange={e => updateSettings({ clarityId: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="reCAPTCHA Site Key"><Input value={s.recaptchaSiteKey || ""} onChange={e => updateSettings({ recaptchaSiteKey: e.target.value })} className="rounded-xl font-mono text-xs" /></FieldGroup>
+            <FieldGroup label="WhatsApp Widget Number" description="Floating chat widget"><Input value={s.whatsappWidgetNumber || ""} onChange={e => updateSettings({ whatsappWidgetNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
+          </div>
+        </Card>
+
+        {isSuperAdmin && (
+          <Card className="border-none shadow-lg shadow-black/5 p-6 border-l-4 border-l-amber-400">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <SectionHeader title="Custom Scripts" description="Inject custom code into the page. Use with caution — incorrect scripts may break the application." />
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-4">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Only Super Admins can edit these fields. Malicious or broken scripts can compromise security and functionality.</p>
+                </div>
+                <div className="space-y-5">
+                  <FieldGroup label="Custom Head Script" description="Injected before </head> — for analytics, fonts, etc.">
+                    <Textarea value={s.customHeadScript || ""} onChange={e => updateSettings({ customHeadScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder="<!-- Google Tag Manager -->" />
+                  </FieldGroup>
+                  <FieldGroup label="Custom Body-End Script" description="Injected before </body> — for chat widgets, etc.">
+                    <Textarea value={s.customBodyEndScript || ""} onChange={e => updateSettings({ customBodyEndScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" placeholder="<!-- Live chat widget -->" />
+                  </FieldGroup>
+                  <FieldGroup label="Live Chat Script" description="Full live chat embed code">
+                    <Textarea value={s.liveChatScript || ""} onChange={e => updateSettings({ liveChatScript: e.target.value })} className="rounded-xl font-mono text-xs min-h-[80px]" />
+                  </FieldGroup>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <SaveButton onClick={() => {
+          const payload: Record<string, any> = {
+            canonicalBaseUrl: s.canonicalBaseUrl || null, sitemapUrl: s.sitemapUrl || null,
+            robotsTxtContent: s.robotsTxtContent || null,
+            linkedinInsightTag: s.linkedinInsightTag || null, clarityId: s.clarityId || null,
+            recaptchaSiteKey: s.recaptchaSiteKey || null, whatsappWidgetNumber: s.whatsappWidgetNumber || null,
+          };
+          if (isSuperAdmin) {
+            payload.customHeadScript = s.customHeadScript || null;
+            payload.customBodyEndScript = s.customBodyEndScript || null;
+            payload.liveChatScript = s.liveChatScript || null;
+          }
+          saveSection("advanced", payload);
+        }} saving={sectionSaving === "advanced"} label="Save Advanced Settings" />
+      </div>
+    );
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your profile and preferences</p>
+          <p className="text-muted-foreground text-sm mt-1">Manage your profile, organization settings, and system configuration.</p>
         </div>
 
-        <Tabs defaultValue="profile">
-          <TabsList className="rounded-xl bg-secondary/50 p-1 flex-wrap h-auto">
-            <TabsTrigger value="profile"       className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
-            <TabsTrigger value="language"      className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
-            <TabsTrigger value="notifications" className="rounded-lg gap-2"><Bell className="w-4 h-4" /> Notifications</TabsTrigger>
-            <TabsTrigger value="security"      className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
-            {isManager && (
-              <TabsTrigger value="integrations" className="rounded-lg gap-2"><Plug className="w-4 h-4" /> Integrations</TabsTrigger>
-            )}
-            {isManager && (
-              <TabsTrigger value="branding" className="rounded-lg gap-2"><Palette className="w-4 h-4" /> Branding</TabsTrigger>
-            )}
-          </TabsList>
+        <div className="lg:hidden mb-4">
+          <div className="flex flex-wrap gap-1.5 p-1 bg-secondary/50 rounded-xl">
+            {visibleNav.map(n => (
+              <button key={n.id} onClick={() => setActiveTab(n.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                  ${activeTab === n.id ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <n.icon className="w-3.5 h-3.5" />
+                {n.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {/* ── Profile ── */}
-          <TabsContent value="profile" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Personal Information</h2>
-              <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg shrink-0">
-                  {initials}
-                </div>
-                <div>
-                  <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-muted-foreground text-sm">{user?.email}</p>
-                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs mt-2 capitalize">
-                    {ROLE_LABELS[user?.role || ""] || user?.role}
-                  </Badge>
-                </div>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <Label>First Name</Label>
-                  <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Last Name</Label>
-                  <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" />
-                </div>
-                <div className="sm:col-span-2 space-y-1.5">
-                  <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
-                  <Input type="email" value={user?.email || ""} disabled className="rounded-xl bg-secondary/40 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground">Email is managed by your login provider</p>
-                </div>
-                <div className="sm:col-span-2 space-y-1.5">
-                  <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone</Label>
-                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 234 567 8900" className="rounded-xl" />
-                </div>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={saving} className="mt-6 rounded-xl gap-2 px-8">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Changes
-              </Button>
-            </Card>
-          </TabsContent>
-
-          {/* ── Language ── */}
-          <TabsContent value="language" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Language & Region</h2>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {LANGUAGES.map(l => (
-                  <button key={l.code} onClick={() => handleSaveLang(l.code)}
-                    className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
-                      ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
-                    <CountryFlag code={l.country} size="xl" />
-                    <div className="flex-1">
-                      <p className="font-bold text-foreground">{l.label}</p>
-                      <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>
-                    </div>
-                    {lang === l.code && <Check className="w-5 h-5 text-primary" />}
-                  </button>
-                ))}
-              </div>
-              <p className="text-muted-foreground text-sm mt-4">RTL (right-to-left) is automatically applied for Arabic.</p>
-            </Card>
-          </TabsContent>
-
-          {/* ── Notifications ── */}
-          <TabsContent value="notifications" className="mt-6">
-            <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
-          </TabsContent>
-
-          {/* ── Security ── */}
-          <TabsContent value="security" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Security & Access</h2>
-              <div className="space-y-4">
-                <div className="p-5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                  <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                    <Shield className="w-5 h-5" /> Authentication via Replit
-                  </p>
-                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">
-                    Your account is secured through Replit's authentication system. No password management required.
-                  </p>
-                </div>
-                <div className="p-5 rounded-xl border border-border/50 space-y-2">
-                  <p className="font-semibold text-foreground">Account Details</p>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Role</span>
-                    <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs capitalize">
-                      {ROLE_LABELS[user?.role || ""] || user?.role}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Account ID</span>
-                    <span className="font-mono text-foreground">#{user?.id}</span>
-                  </div>
-                </div>
-                <div className="p-5 rounded-xl border border-border/50">
-                  <p className="font-semibold text-foreground mb-3">Active Sessions</p>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-foreground">Current session</p>
-                      <p className="text-xs text-muted-foreground">This device · Active now</p>
-                    </div>
-                    <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>
-                  <a href="/api/auth/logout">Sign Out</a>
-                </Button>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* ── Integrations (Managers only) ── */}
-          {isManager && (
-            <TabsContent value="integrations" className="mt-6">
-              <IntegrationsManager />
-            </TabsContent>
-          )}
-
-          {/* ── Branding (Managers only) ── */}
-          {isManager && (
-            <TabsContent value="branding" className="mt-6 space-y-6">
-              {/* Theme Mode */}
-              <Card className="border-none shadow-lg shadow-black/5 p-6">
-                <h2 className="font-display font-bold text-lg mb-2">Appearance</h2>
-                <p className="text-sm text-muted-foreground mb-5">Choose between light and dark mode for the entire system.</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {([
-                    { value: "light" as const, label: "Light", icon: Sun, desc: "Light background" },
-                    { value: "dark" as const, label: "Dark", icon: Moon, desc: "Dark background" },
-                    { value: "system" as const, label: "System", icon: Monitor, desc: "Follows device" },
-                  ]).map(opt => (
-                    <button key={opt.value} onClick={() => setMode(opt.value)}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all hover:border-primary/50
-                        ${mode === opt.value ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:bg-secondary/30"}`}>
-                      <opt.icon className={`w-6 h-6 ${mode === opt.value ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className="font-semibold text-sm text-foreground">{opt.label}</span>
-                      <span className="text-xs text-muted-foreground">{opt.desc}</span>
+        <div className="flex gap-6 min-h-[600px]">
+          <nav className="w-56 shrink-0 hidden lg:block">
+            <div className="sticky top-20 space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 py-2">Personal</p>
+              {visibleNav.filter(n => n.group === "personal").map(n => (
+                <button key={n.id} onClick={() => setActiveTab(n.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left
+                    ${activeTab === n.id ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}>
+                  <n.icon className="w-4 h-4 shrink-0" />
+                  {n.label}
+                </button>
+              ))}
+              {isManager && (
+                <>
+                  <div className="h-px bg-border/50 my-3" />
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 py-2">Organization</p>
+                  {visibleNav.filter(n => n.group === "organization").map(n => (
+                    <button key={n.id} onClick={() => setActiveTab(n.id)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left
+                        ${activeTab === n.id ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}>
+                      <n.icon className="w-4 h-4 shrink-0" />
+                      {n.label}
                     </button>
                   ))}
-                </div>
-              </Card>
+                </>
+              )}
+            </div>
+          </nav>
 
-              {/* Logos */}
-              <Card className="border-none shadow-lg shadow-black/5 p-6">
-                <h2 className="font-display font-bold text-lg mb-2">System Logos</h2>
-                <p className="text-sm text-muted-foreground mb-5">Upload your company logo. The dark mode logo will be used when dark theme is active.</p>
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {/* Light Logo */}
-                  <div className="space-y-3">
-                    <Label className="flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> Light Mode Logo</Label>
-                    <div className="relative w-full h-32 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors bg-white flex items-center justify-center overflow-hidden">
-                      {brandForm.logoUrl ? (
-                        <>
-                          <img src={brandForm.logoUrl} alt="Logo" className="max-h-24 max-w-full object-contain" />
-                          <button onClick={() => setBrandForm(f => ({ ...f, logoUrl: "" }))}
-                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </>
-                      ) : (
-                        <button onClick={() => logoInputRef.current?.click()}
-                          className="flex flex-col items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
-                          disabled={logoUploading}>
-                          {logoUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
-                          <span className="text-xs font-medium">{logoUploading ? "Uploading..." : "Click to upload"}</span>
-                        </button>
-                      )}
-                    </div>
-                    <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f, "logoUrl"); e.target.value = ""; }} />
-                  </div>
-
-                  {/* Dark Logo */}
-                  <div className="space-y-3">
-                    <Label className="flex items-center gap-1.5"><Moon className="w-3.5 h-3.5" /> Dark Mode Logo</Label>
-                    <div className="relative w-full h-32 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors bg-gray-900 flex items-center justify-center overflow-hidden">
-                      {brandForm.logoDarkUrl ? (
-                        <>
-                          <img src={brandForm.logoDarkUrl} alt="Dark Logo" className="max-h-24 max-w-full object-contain" />
-                          <button onClick={() => setBrandForm(f => ({ ...f, logoDarkUrl: "" }))}
-                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </>
-                      ) : (
-                        <button onClick={() => logoDarkInputRef.current?.click()}
-                          className="flex flex-col items-center gap-2 text-gray-400 hover:text-blue-400 transition-colors"
-                          disabled={logoDarkUploading}>
-                          {logoDarkUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
-                          <span className="text-xs font-medium">{logoDarkUploading ? "Uploading..." : "Click to upload"}</span>
-                        </button>
-                      )}
-                    </div>
-                    <input ref={logoDarkInputRef} type="file" accept="image/*" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f, "logoDarkUrl"); e.target.value = ""; }} />
-                  </div>
-                </div>
-              </Card>
-
-              {/* Theme Colors */}
-              <Card className="border-none shadow-lg shadow-black/5 p-6">
-                <h2 className="font-display font-bold text-lg mb-2">Theme Colors</h2>
-                <p className="text-sm text-muted-foreground mb-5">Customize the main colors of the system. Leave empty to use defaults.</p>
-                <div className="space-y-5">
-                  {([
-                    { key: "themePrimary" as const, label: "Primary Color", desc: "Main theme color used for navigation, links, and accents", default: "#3B82F6" },
-                    { key: "themeButton" as const, label: "Button Color", desc: "Color used for primary action buttons", default: "#3B82F6" },
-                    { key: "themeHover" as const, label: "Hover Color", desc: "Color shown when hovering over buttons and interactive elements", default: "#2563EB" },
-                  ]).map(c => (
-                    <div key={c.key} className="flex items-center gap-4 p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
-                      <div className="relative shrink-0">
-                        <div className="w-10 h-10 rounded-lg border-2 border-border shadow-sm cursor-pointer overflow-hidden"
-                          style={{ backgroundColor: brandForm[c.key] || c.default }}
-                          onClick={() => document.getElementById(`color-${c.key}`)?.click()} />
-                        <input id={`color-${c.key}`} type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          value={brandForm[c.key] || c.default}
-                          onChange={e => setBrandForm(f => ({ ...f, [c.key]: e.target.value }))} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm text-foreground">{c.label}</p>
-                        <p className="text-xs text-muted-foreground">{c.desc}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Input value={brandForm[c.key]} onChange={e => setBrandForm(f => ({ ...f, [c.key]: e.target.value }))}
-                          placeholder={c.default} className="w-28 rounded-lg text-xs font-mono h-8" />
-                        {brandForm[c.key] && (
-                          <button onClick={() => setBrandForm(f => ({ ...f, [c.key]: "" }))}
-                            className="text-muted-foreground hover:text-destructive transition-colors">
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              <Button onClick={handleSaveBrand} disabled={brandSaving} className="rounded-xl gap-2 px-8">
-                {brandSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Branding
-              </Button>
-            </TabsContent>
-          )}
-        </Tabs>
+          <div className="flex-1 min-w-0 max-w-3xl">
+            {renderContent()}
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

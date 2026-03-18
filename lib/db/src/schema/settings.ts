@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -30,6 +30,93 @@ export const settingsTable = pgTable("settings", {
   seoDefaultDescription: text("seo_default_description"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+
+  // Branding extended
+  logoSquareUrl: text("logo_square_url"),
+  appleTouchIconUrl: text("apple_touch_icon_url"),
+  pwaIconUrl: text("pwa_icon_url"),
+  emailLogoUrl: text("email_logo_url"),
+  pdfLogoUrl: text("pdf_logo_url"),
+  themeSecondary: text("theme_secondary"),
+  themeAccent: text("theme_accent"),
+  themeLinkColor: text("theme_link_color"),
+  themeSuccess: text("theme_success"),
+  themeWarning: text("theme_warning"),
+  themeDanger: text("theme_danger"),
+
+  // Company / Contact
+  legalCompanyName: text("legal_company_name"),
+  publicBrandName: text("public_brand_name"),
+  supportEmail: text("support_email"),
+  salesEmail: text("sales_email"),
+  whatsappNumber: text("whatsapp_number"),
+  companyCity: text("company_city"),
+  companyCountry: text("company_country"),
+  workingHours: text("working_hours"),
+  footerDescription: text("footer_description"),
+  footerCopyright: text("footer_copyright"),
+  contactCtaText: text("contact_cta_text"),
+  socialInstagram: text("social_instagram"),
+  socialFacebook: text("social_facebook"),
+  socialLinkedin: text("social_linkedin"),
+  socialTwitter: text("social_twitter"),
+  socialYoutube: text("social_youtube"),
+  socialTiktok: text("social_tiktok"),
+
+  // SEO
+  siteName: text("site_name"),
+  siteTitleTemplate: text("site_title_template"),
+  seoMetaTitle: text("seo_meta_title"),
+  seoMetaDescription: text("seo_meta_description"),
+  canonicalBaseUrl: text("canonical_base_url"),
+  robotsIndex: boolean("robots_index").notNull().default(true),
+  robotsFollow: boolean("robots_follow").notNull().default(true),
+  stagingNoindex: boolean("staging_noindex").notNull().default(false),
+  ogTitle: text("og_title"),
+  ogDescription: text("og_description"),
+  ogImageUrl: text("og_image_url"),
+  twitterTitle: text("twitter_title"),
+  twitterDescription: text("twitter_description"),
+  twitterImageUrl: text("twitter_image_url"),
+  shareImageUrl: text("share_image_url"),
+  seoKeywords: text("seo_keywords"),
+  googleSearchConsoleCode: text("google_search_console_code"),
+  googleAnalyticsId: text("google_analytics_id"),
+  metaPixelId: text("meta_pixel_id"),
+  tiktokPixelId: text("tiktok_pixel_id"),
+  orgSchemaName: text("org_schema_name"),
+  orgSchemaUrl: text("org_schema_url"),
+  orgSchemaLogoUrl: text("org_schema_logo_url"),
+  orgSchemaSocials: text("org_schema_socials"),
+
+  // Email Branding
+  emailSenderName: text("email_sender_name"),
+  emailSenderEmail: text("email_sender_email"),
+  emailReplyTo: text("email_reply_to"),
+  emailFooterText: text("email_footer_text"),
+  emailSignatureBlock: text("email_signature_block"),
+  emailButtonColor: text("email_button_color"),
+  emailDisclaimerText: text("email_disclaimer_text"),
+
+  // PDF / Document Branding
+  pdfHeaderText: text("pdf_header_text"),
+  pdfFooterText: text("pdf_footer_text"),
+  pdfWatermarkText: text("pdf_watermark_text"),
+  pdfSignatureLabel: text("pdf_signature_label"),
+  pdfSealImageUrl: text("pdf_seal_image_url"),
+  pdfPrimaryColor: text("pdf_primary_color"),
+
+  // Advanced
+  sitemapUrl: text("sitemap_url"),
+  robotsTxtContent: text("robots_txt_content"),
+  customHeadScript: text("custom_head_script"),
+  customBodyEndScript: text("custom_body_end_script"),
+  linkedinInsightTag: text("linkedin_insight_tag"),
+  clarityId: text("clarity_id"),
+  recaptchaSiteKey: text("recaptcha_site_key"),
+  whatsappWidgetNumber: text("whatsapp_widget_number"),
+  liveChatScript: text("live_chat_script"),
+  featureFlags: jsonb("feature_flags").default({}),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

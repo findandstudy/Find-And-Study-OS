@@ -71,6 +71,22 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Security:** All conversation/messaging endpoints protected with `requireRole(...STAFF_ROLES, ...ADMIN_ROLES)` to prevent non-staff access. Participant membership checks on message read/send. Unread counts exclude self-authored messages. Broadcast tab gated to admin/manager roles on frontend.
 - **ADMIN_ROLES:** `["super_admin", "admin", "manager"]` — used for notification rules, broadcast access, and other admin-level operations.
 
+## Admin Settings Center
+
+- **Route:** `/admin/settings` (managers) and `/staff/settings` (all staff — personal tabs only)
+- **Layout:** Vertical sidebar navigation on desktop (lg:), horizontal chip bar on mobile. Two groups: Personal + Organization.
+- **Personal Tabs (all users):** Profile, Language & Region, Notifications, Security
+- **Organization Tabs (managers only):** Branding & Appearance, Company & Contact, SEO & Social, Email Branding, Documents / PDF, Integrations, Advanced
+- **Branding Tab:** Theme mode (light/dark/system), 6 logo uploads (light, dark, square, favicon, Apple touch, PWA), 9 color pickers (primary, secondary, accent, button, hover, link, success, warning, danger), live brand preview
+- **Company Tab:** Legal name, brand name, 3 emails, phone, WhatsApp, working hours, address/city/country, footer description/copyright/CTA, 6 social media links
+- **SEO Tab:** Site name/title template, canonical URL, meta title/description/keywords with character counters, robots toggles, OG + Twitter cards with image uploads, Google search preview mock, analytics IDs (GA4, Meta Pixel, TikTok Pixel), Schema.org structured data
+- **Email Branding Tab:** Sender name/email/reply-to, email header logo, button color, footer/signature/disclaimer text, live email preview
+- **Documents Tab:** PDF logo, header/footer/watermark/signature text, seal image, primary color, live document preview
+- **Advanced Tab:** Sitemap URL, robots.txt content, LinkedIn Insight/Clarity/reCAPTCHA/WhatsApp widget, custom scripts (super_admin only)
+- **Security:** Custom scripts (customHeadScript, customBodyEndScript, liveChatScript, featureFlags) restricted to `super_admin` role on both frontend and backend
+- **DB:** All settings in single `settings` table with ~80 columns. Credentials (smtpPassword, whatsappToken) redacted from API responses.
+- **Files:** `lib/db/src/schema/settings.ts`, `artifacts/api-server/src/routes/settings.ts`, `artifacts/edcons/src/pages/staff/Settings.tsx`
+
 ## Integrations System
 
 - **DB table:** `integrations` (id, key unique, name, category, isEnabled, config jsonb)
