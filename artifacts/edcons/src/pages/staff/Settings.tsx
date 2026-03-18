@@ -122,7 +122,8 @@ export default function SettingsPage() {
       if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
       const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error(`Upload failed with status ${putRes.status}`);
-      const publicUrl = `${BASE_URL}/api/storage/objects${urlRes.objectPath}`;
+      const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
+      const publicUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
       setBrandForm(f => ({ ...f, [field]: publicUrl }));
       toast({ title: "Logo uploaded" });
     } catch (err: any) {
