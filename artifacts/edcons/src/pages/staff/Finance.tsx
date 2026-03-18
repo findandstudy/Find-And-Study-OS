@@ -218,7 +218,7 @@ function CommissionModal({
                   <div className="font-bold text-amber-700">{fmt(aAmt, form.currency)}</div>
                 </div>
                 <div className="rounded bg-emerald-50 border border-emerald-200 p-2 text-center">
-                  <div className="text-xs text-emerald-600 font-medium">Net Agency Income</div>
+                  <div className="text-xs text-emerald-600 font-medium">Net Income</div>
                   <div className="font-bold text-emerald-700">{fmt(netAgency, form.currency)}</div>
                 </div>
               </div>
@@ -555,7 +555,7 @@ export default function FinancePage() {
           />
           <StatCard
             icon={TrendingUp}
-            label="Net Agency Income"
+            label="Net Income"
             value={fmt(summary?.commissions?.totalNetAgency || commSummary.totalNetAgency || 0)}
             sub="collected − paid to agents"
             color="text-emerald-600"
@@ -639,7 +639,7 @@ export default function FinancePage() {
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Prog. Fee</th>
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Univ. Commission</th>
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Agent Commission</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Net Agency</th>
+                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Net Income</th>
                       <th className="text-center px-4 py-3 font-semibold text-slate-600">Status</th>
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
                     </tr>
