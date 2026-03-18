@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
-  MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown
+  MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
+  FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe
 } from "lucide-react";
 
 interface Conversation {
@@ -442,6 +443,456 @@ function BroadcastTab() {
   );
 }
 
+const TEMPLATE_CATEGORIES = [
+  { value: "general", label: "General" },
+  { value: "welcome", label: "Welcome" },
+  { value: "follow_up", label: "Follow Up" },
+  { value: "application", label: "Application" },
+  { value: "visa", label: "Visa" },
+  { value: "payment", label: "Payment" },
+  { value: "offer", label: "Offer" },
+  { value: "rejection", label: "Rejection" },
+  { value: "reminder", label: "Reminder" },
+  { value: "agent", label: "Agent" },
+];
+
+const TEMPLATE_CHANNELS = [
+  { value: "all", label: "All Channels" },
+  { value: "internal", label: "Internal" },
+  { value: "email", label: "Email" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "telegram", label: "Telegram" },
+  { value: "sms", label: "SMS" },
+];
+
+const TEMPLATE_LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "tr", label: "Türkçe" },
+  { value: "ar", label: "العربية" },
+  { value: "fr", label: "Français" },
+  { value: "ru", label: "Русский" },
+  { value: "es", label: "Español" },
+  { value: "de", label: "Deutsch" },
+  { value: "zh", label: "中文" },
+];
+
+interface Template {
+  id: number;
+  name: string;
+  category: string;
+  subject: string | null;
+  content: string;
+  channel: string;
+  language: string;
+  variables: string[];
+  isActive: boolean;
+  createdById: number | null;
+  createdAt: string;
+  updatedAt: string;
+  creatorFirstName: string | null;
+  creatorLastName: string | null;
+}
+
+function TemplatesTab() {
+  const { toast } = useToast();
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [previewId, setPreviewId] = useState<number | null>(null);
+
+  const [formName, setFormName] = useState("");
+  const [formCategory, setFormCategory] = useState("general");
+  const [formSubject, setFormSubject] = useState("");
+  const [formContent, setFormContent] = useState("");
+  const [formChannel, setFormChannel] = useState("all");
+  const [formLanguage, setFormLanguage] = useState("en");
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await customFetch("/api/message-templates");
+      setTemplates((res as any)?.data || []);
+    } catch {
+      toast({ title: "Failed to load templates", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+
+  function openNew() {
+    setEditingTemplate(null);
+    setFormName("");
+    setFormCategory("general");
+    setFormSubject("");
+    setFormContent("");
+    setFormChannel("all");
+    setFormLanguage("en");
+    setEditOpen(true);
+  }
+
+  function openEdit(t: Template) {
+    setEditingTemplate(t);
+    setFormName(t.name);
+    setFormCategory(t.category);
+    setFormSubject(t.subject || "");
+    setFormContent(t.content);
+    setFormChannel(t.channel);
+    setFormLanguage(t.language);
+    setEditOpen(true);
+  }
+
+  async function saveTemplate() {
+    if (!formName.trim() || !formContent.trim()) {
+      toast({ title: "Name and content are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        name: formName.trim(),
+        category: formCategory,
+        subject: formSubject.trim() || null,
+        content: formContent.trim(),
+        channel: formChannel,
+        language: formLanguage,
+      };
+
+      if (editingTemplate) {
+        const res = await customFetch(`/api/message-templates/${editingTemplate.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, ...(res as any) } : t));
+        toast({ title: "Template updated" });
+      } else {
+        const res = await customFetch("/api/message-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        fetchTemplates();
+        toast({ title: "Template created" });
+      }
+      setEditOpen(false);
+    } catch (err: any) {
+      toast({ title: "Failed to save template", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteTemplate(id: number) {
+    try {
+      await customFetch(`/api/message-templates/${id}`, { method: "DELETE" });
+      setTemplates(prev => prev.filter(t => t.id !== id));
+      toast({ title: "Template deleted" });
+    } catch (err: any) {
+      toast({ title: "Failed to delete", description: err.message, variant: "destructive" });
+    }
+    setDeleteConfirm(null);
+  }
+
+  async function toggleActive(t: Template) {
+    try {
+      await customFetch(`/api/message-templates/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !t.isActive }),
+      });
+      setTemplates(prev => prev.map(x => x.id === t.id ? { ...x, isActive: !x.isActive } : x));
+    } catch {
+      toast({ title: "Failed to update template", variant: "destructive" });
+    }
+  }
+
+  function copyContent(content: string) {
+    navigator.clipboard.writeText(content);
+    toast({ title: "Template content copied to clipboard" });
+  }
+
+  const filtered = templates.filter(t => {
+    if (filterCategory !== "all" && t.category !== filterCategory) return false;
+    if (searchTerm && !t.name.toLowerCase().includes(searchTerm.toLowerCase()) && !t.content.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+
+  const grouped = filtered.reduce<Record<string, Template[]>>((acc, t) => {
+    (acc[t.category] = acc[t.category] || []).push(t);
+    return acc;
+  }, {});
+
+  const channelBadge = (ch: string) => {
+    const colors: Record<string, string> = {
+      all: "bg-gray-500/10 text-gray-600",
+      internal: "bg-blue-500/10 text-blue-600",
+      email: "bg-purple-500/10 text-purple-600",
+      whatsapp: "bg-green-500/10 text-green-600",
+      telegram: "bg-sky-500/10 text-sky-600",
+      sms: "bg-amber-500/10 text-amber-600",
+    };
+    return colors[ch] || colors.all;
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" /> Message Templates
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Create and manage reusable message templates for quick communication.
+            </p>
+          </div>
+          <Button onClick={openNew} className="rounded-xl gap-2">
+            <Plus className="w-4 h-4" /> New Template
+          </Button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search templates..."
+              className="pl-9 rounded-xl"
+            />
+          </div>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-full sm:w-48 rounded-xl">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {TEMPLATE_CATEGORIES.map(c => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <FileText className="w-12 h-12 mb-3 opacity-20" />
+            <p className="font-medium">No templates found</p>
+            <p className="text-sm mt-1">Create your first template to get started</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {Object.entries(grouped).map(([cat, catTemplates]) => {
+              const catLabel = TEMPLATE_CATEGORIES.find(c => c.value === cat)?.label || cat;
+              return (
+                <div key={cat}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{catLabel}</h4>
+                    <Badge variant="secondary" className="text-[10px] h-5">{catTemplates.length}</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {catTemplates.map(t => (
+                      <div
+                        key={t.id}
+                        className={`border rounded-xl p-4 transition-all hover:shadow-md ${!t.isActive ? "opacity-50 bg-secondary/30" : "bg-card hover:border-primary/30"}`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">{t.name}</p>
+                            {t.subject && (
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">Subject: {t.subject}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge variant="secondary" className={`text-[10px] h-5 ${channelBadge(t.channel)}`}>
+                              {TEMPLATE_CHANNELS.find(c => c.value === t.channel)?.label || t.channel}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] h-5 gap-0.5">
+                              <Globe className="w-2.5 h-2.5" />
+                              {t.language.toUpperCase()}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="relative mb-3">
+                          {previewId === t.id ? (
+                            <div className="bg-secondary/50 rounded-lg p-3 text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+                              {t.content}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{t.content}</p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-muted-foreground">
+                            {t.creatorFirstName && `by ${t.creatorFirstName} ${t.creatorLastName}`}
+                            {t.updatedAt && ` • ${new Date(t.updatedAt).toLocaleDateString()}`}
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPreviewId(previewId === t.id ? null : t.id)}
+                              className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                              title={previewId === t.id ? "Collapse" : "Preview"}
+                            >
+                              {previewId === t.id ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => copyContent(t.content)}
+                              className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                              title="Copy content"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => openEdit(t)}
+                              className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                              title="Edit"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => toggleActive(t)}
+                              className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                              title={t.isActive ? "Deactivate" : "Activate"}
+                            >
+                              {t.isActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            {deleteConfirm === t.id ? (
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => deleteTemplate(t.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors" title="Confirm delete">
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => setDeleteConfirm(null)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground" title="Cancel">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteConfirm(t.id)}
+                                className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-600"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              {editingTemplate ? "Edit Template" : "New Template"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Template Name *</Label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Welcome Email" className="rounded-xl" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={formCategory} onValueChange={setFormCategory}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_CATEGORIES.map(c => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Channel</Label>
+                <Select value={formChannel} onValueChange={setFormChannel}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_CHANNELS.map(c => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Language</Label>
+                <Select value={formLanguage} onValueChange={setFormLanguage}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_LANGUAGES.map(l => (
+                      <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {(formChannel === "email" || formChannel === "all") && (
+              <div className="space-y-2">
+                <Label>Subject Line</Label>
+                <Input value={formSubject} onChange={e => setFormSubject(e.target.value)} placeholder="Email subject..." className="rounded-xl" />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Content *</Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Use {"{{variable}}"} for dynamic placeholders, e.g. {"{{studentName}}"}, {"{{programName}}"}
+                </p>
+              </div>
+              <Textarea
+                value={formContent}
+                onChange={e => setFormContent(e.target.value)}
+                placeholder="Write your template content here..."
+                rows={8}
+                className="rounded-xl font-mono text-sm"
+              />
+            </div>
+
+            {formContent && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Preview</Label>
+                <div className="bg-secondary/50 rounded-xl p-4 text-sm whitespace-pre-wrap border border-border/50">
+                  {formContent}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={saveTemplate} disabled={saving} className="rounded-xl gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {saving ? "Saving..." : editingTemplate ? "Update Template" : "Create Template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 const BROADCAST_ROLES = ["super_admin", "admin", "manager"];
 
 export default function MessagesPage() {
@@ -534,6 +985,9 @@ export default function MessagesPage() {
                 <Megaphone className="w-4 h-4" /> Broadcast
               </TabsTrigger>
             )}
+            <TabsTrigger value="templates" className="gap-2 px-4">
+              <FileText className="w-4 h-4" /> Templates
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="messages">
@@ -569,6 +1023,10 @@ export default function MessagesPage() {
               <BroadcastTab />
             </TabsContent>
           )}
+
+          <TabsContent value="templates">
+            <TemplatesTab />
+          </TabsContent>
         </Tabs>
       </div>
 

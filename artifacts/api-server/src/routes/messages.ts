@@ -7,6 +7,7 @@ import {
   broadcastsTable,
   usersTable,
   notificationsTable,
+  messageTemplatesTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, ilike, or } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -521,6 +522,114 @@ router.post("/quick-contact", requireAuth, async (req, res): Promise<void> => {
     console.error("Quick contact error:", err);
     res.status(500).json({ error: "Failed to send message" });
   }
+});
+
+/* ─── MESSAGE TEMPLATES ─────────────────────────────────────── */
+
+router.get("/message-templates", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
+  const { category, channel, language, activeOnly } = req.query as Record<string, string>;
+  const conditions: any[] = [];
+  if (category) conditions.push(eq(messageTemplatesTable.category, category));
+  if (channel && channel !== "all") conditions.push(
+    or(eq(messageTemplatesTable.channel, channel), eq(messageTemplatesTable.channel, "all"))
+  );
+  if (language) conditions.push(eq(messageTemplatesTable.language, language));
+  if (activeOnly === "true") conditions.push(eq(messageTemplatesTable.isActive, true));
+
+  const templates = await db
+    .select({
+      id: messageTemplatesTable.id,
+      name: messageTemplatesTable.name,
+      category: messageTemplatesTable.category,
+      subject: messageTemplatesTable.subject,
+      content: messageTemplatesTable.content,
+      channel: messageTemplatesTable.channel,
+      language: messageTemplatesTable.language,
+      variables: messageTemplatesTable.variables,
+      isActive: messageTemplatesTable.isActive,
+      createdById: messageTemplatesTable.createdById,
+      createdAt: messageTemplatesTable.createdAt,
+      updatedAt: messageTemplatesTable.updatedAt,
+      creatorFirstName: usersTable.firstName,
+      creatorLastName: usersTable.lastName,
+    })
+    .from(messageTemplatesTable)
+    .leftJoin(usersTable, eq(messageTemplatesTable.createdById, usersTable.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(messageTemplatesTable.category, messageTemplatesTable.name);
+
+  res.json({ data: templates });
+});
+
+router.post("/message-templates", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const { name, category, subject, content, channel, language, variables } = req.body;
+
+  if (!name || !content) {
+    res.status(400).json({ error: "Name and content are required" });
+    return;
+  }
+
+  const [template] = await db
+    .insert(messageTemplatesTable)
+    .values({
+      name, content,
+      category: category || "general",
+      subject: subject || null,
+      channel: channel || "all",
+      language: language || "en",
+      variables: variables || [],
+      createdById: userId,
+    })
+    .returning();
+
+  await logAudit(userId, "create_message_template", "message_template", template.id, { name, category }, req.ip);
+  res.status(201).json(template);
+});
+
+router.patch("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const updates: Record<string, unknown> = {};
+
+  const allowed = ["name", "category", "subject", "content", "channel", "language", "variables", "isActive"];
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) updates[key] = req.body[key];
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
+    return;
+  }
+
+  const [template] = await db
+    .update(messageTemplatesTable)
+    .set(updates)
+    .where(eq(messageTemplatesTable.id, id))
+    .returning();
+
+  if (!template) {
+    res.status(404).json({ error: "Template not found" });
+    return;
+  }
+
+  await logAudit(req.user!.id, "update_message_template", "message_template", id, updates, req.ip);
+  res.json(template);
+});
+
+router.delete("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const [deleted] = await db
+    .delete(messageTemplatesTable)
+    .where(eq(messageTemplatesTable.id, id))
+    .returning();
+
+  if (!deleted) {
+    res.status(404).json({ error: "Template not found" });
+    return;
+  }
+
+  await logAudit(req.user!.id, "delete_message_template", "message_template", id, { name: deleted.name }, req.ip);
+  res.json({ success: true });
 });
 
 export default router;

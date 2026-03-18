@@ -60,6 +60,10 @@ The project is structured as a pnpm monorepo with separate packages for the API 
   - API: `/api/notifications`, `/api/notifications/unread-count`, `/api/notification-rules`
   - Frontend: `artifacts/edcons/src/components/NotificationCenter.tsx` (header bell icon), `artifacts/edcons/src/components/NotificationRulesManager.tsx` (admin settings)
   - Notification rules configurable per event with channel selection (in_app, email, whatsapp, telegram, sms), recipient targeting (role, assigned, owner, specific, all)
+- **Message Templates:** Reusable message templates for quick communication. Templates have name, category (general/welcome/follow_up/application/visa/payment/offer/rejection/reminder/agent), channel, language, subject, content with `{{variable}}` placeholders, and active/inactive status.
+  - DB table: `message_templates` (id, name, category, subject, content, channel, language, variables jsonb, isActive, createdById, timestamps)
+  - API: `GET/POST /api/message-templates`, `PATCH/DELETE /api/message-templates/:id`
+  - Frontend: "Templates" tab in Communication Center Messages page with search, category filter, create/edit dialog, preview, copy, activate/deactivate, delete
 - **Quick Contact:** Reusable `QuickContactButtons` component for contacting leads/students/agents from detail pages. Supports internal, email, and WhatsApp channels. Creates conversation + message records for all channels.
   - API: `POST /api/quick-contact` with server-side channel validation (requires recipientEmail for email, recipientPhone for WhatsApp)
   - Frontend: `artifacts/edcons/src/components/QuickContact.tsx` — integrated into LeadDetail, StudentDetail, ApplicationDetail, and Agents pages

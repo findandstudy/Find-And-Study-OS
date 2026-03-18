@@ -50,6 +50,22 @@ export const broadcastsTable = pgTable("broadcasts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const messageTemplatesTable = pgTable("message_templates", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull().default("general"),
+  subject: text("subject"),
+  content: text("content").notNull(),
+  channel: text("channel").notNull().default("all"),
+  language: text("language").notNull().default("en"),
+  variables: jsonb("variables").default([]),
+  isActive: boolean("is_active").notNull().default(true),
+  createdById: integer("created_by_id").references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
 export type Conversation = typeof conversationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type Broadcast = typeof broadcastsTable.$inferSelect;
+export type MessageTemplate = typeof messageTemplatesTable.$inferSelect;
