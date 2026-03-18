@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, invoicesTable, commissionsTable, serviceFeesTable } from "@workspace/db";
-import { eq, sql, and, ilike } from "drizzle-orm";
+import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable } from "@workspace/db";
+import { eq, sql, and, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES } from "../lib/roles";
 
@@ -282,6 +282,227 @@ router.delete("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), a
   res.sendStatus(204);
 });
 
+/* ─── FINANCIAL TRANSACTIONS (collections & agent payments) ── */
+
+router.get("/financial-transactions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const { commissionId, type, page = "1", limit = "100" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const conditions = [];
+  if (commissionId) conditions.push(eq(financialTransactionsTable.commissionId, parseInt(commissionId, 10)));
+  if (type) conditions.push(eq(financialTransactionsTable.type, type));
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(financialTransactionsTable).where(whereClause);
+  const data = await db.select().from(financialTransactionsTable).where(whereClause)
+    .limit(limitNum).offset(offset).orderBy(desc(financialTransactionsTable.createdAt));
+
+  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+});
+
+router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const {
+    commissionId, type, amount, currency = "USD", transactionDate,
+    reference, universityName, agentId, agentName, studentName,
+    fileUrl, fileName, notes,
+  } = req.body;
+
+  if (!type || amount === undefined || amount === null || !transactionDate) {
+    res.status(400).json({ error: "type, amount, and transactionDate are required" });
+    return;
+  }
+
+  if (!["collection", "agent_payment"].includes(type)) {
+    res.status(400).json({ error: "type must be 'collection' or 'agent_payment'" });
+    return;
+  }
+
+  const parsedAmount = toNum(amount);
+  if (parsedAmount <= 0) {
+    res.status(400).json({ error: "amount must be a positive number" });
+    return;
+  }
+
+  const [tx] = await db.insert(financialTransactionsTable).values({
+    commissionId: commissionId || null,
+    type,
+    amount: String(parsedAmount),
+    currency,
+    transactionDate,
+    reference: reference || null,
+    universityName: universityName || null,
+    agentId: agentId || null,
+    agentName: agentName || null,
+    studentName: studentName || null,
+    fileUrl: fileUrl || null,
+    fileName: fileName || null,
+    notes: notes || null,
+  }).returning();
+
+  if (commissionId && parsedAmount > 0) {
+    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, parseInt(commissionId, 10)));
+    if (comm) {
+      const allTxForComm = await db.select().from(financialTransactionsTable)
+        .where(eq(financialTransactionsTable.commissionId, parseInt(commissionId, 10)));
+
+      const totalCollected = allTxForComm
+        .filter(t => t.type === "collection")
+        .reduce((s, t) => s + toNum(t.amount), 0);
+      const totalPaid = allTxForComm
+        .filter(t => t.type === "agent_payment")
+        .reduce((s, t) => s + toNum(t.amount), 0);
+      const uTotal = toNum(comm.universityCommissionAmount);
+      const aTotal = toNum(comm.agentCommissionAmount);
+
+      let newStatus = comm.status;
+      if (totalCollected >= uTotal && totalPaid >= aTotal && uTotal > 0) {
+        newStatus = "settled";
+      } else if (totalCollected >= uTotal && uTotal > 0) {
+        newStatus = "collected_full";
+      } else if (totalCollected > 0) {
+        newStatus = "collected_partial";
+      } else if (comm.status !== "potential") {
+        newStatus = "confirmed";
+      }
+
+      await db.update(commissionsTable).set({
+        universityCollected: String(totalCollected),
+        agentPaid: String(totalPaid),
+        status: newStatus,
+      }).where(eq(commissionsTable.id, parseInt(commissionId, 10)));
+    }
+  }
+
+  await logAudit(req.user!.id, "create_financial_transaction", "financial_transaction", tx.id, { type, amount }, req.ip);
+  res.status(201).json(tx);
+});
+
+router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [tx] = await db.select().from(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
+  if (!tx) { res.status(404).json({ error: "Transaction not found" }); return; }
+
+  await db.delete(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
+
+  if (tx.commissionId) {
+    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, tx.commissionId));
+    const remaining = await db.select().from(financialTransactionsTable)
+      .where(eq(financialTransactionsTable.commissionId, tx.commissionId));
+    const totalCollected = remaining.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
+    const totalPaid = remaining.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
+
+    let newStatus = comm?.status || "confirmed";
+    if (comm) {
+      const uTotal = toNum(comm.universityCommissionAmount);
+      const aTotal = toNum(comm.agentCommissionAmount);
+      if (totalCollected >= uTotal && totalPaid >= aTotal && uTotal > 0) {
+        newStatus = "settled";
+      } else if (totalCollected >= uTotal && uTotal > 0) {
+        newStatus = "collected_full";
+      } else if (totalCollected > 0) {
+        newStatus = "collected_partial";
+      } else if (comm.status !== "potential") {
+        newStatus = "confirmed";
+      }
+    }
+
+    await db.update(commissionsTable).set({
+      universityCollected: String(totalCollected),
+      agentPaid: String(totalPaid),
+      status: newStatus,
+    }).where(eq(commissionsTable.id, tx.commissionId));
+  }
+
+  await logAudit(req.user!.id, "delete_financial_transaction", "financial_transaction", id, {}, req.ip);
+  res.sendStatus(204);
+});
+
+/* ─── UNIVERSITY BREAKDOWN ──────────────────────────────────── */
+
+router.get("/finance/university-breakdown", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const { season } = req.query as Record<string, string>;
+  const conditions = [];
+  if (season) conditions.push(eq(commissionsTable.season, season));
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const allComm = await db.select().from(commissionsTable).where(whereClause);
+
+  const uniMap: Record<string, {
+    universityName: string;
+    totalCommission: number;
+    totalCollected: number;
+    totalRemaining: number;
+    totalAgentCommission: number;
+    totalAgentPaid: number;
+    totalAgentRemaining: number;
+    netIncome: number;
+    studentCount: number;
+    commissionCount: number;
+    statuses: Record<string, number>;
+    oldestUnpaid: string | null;
+  }> = {};
+
+  for (const c of allComm) {
+    const name = c.universityName || "Unknown";
+    if (!uniMap[name]) {
+      uniMap[name] = {
+        universityName: name,
+        totalCommission: 0, totalCollected: 0, totalRemaining: 0,
+        totalAgentCommission: 0, totalAgentPaid: 0, totalAgentRemaining: 0,
+        netIncome: 0, studentCount: 0, commissionCount: 0,
+        statuses: {}, oldestUnpaid: null,
+      };
+    }
+    const u = uniMap[name];
+    const uAmt = toNum(c.universityCommissionAmount);
+    const uColl = toNum(c.universityCollected);
+    const aAmt = toNum(c.agentCommissionAmount);
+    const aPaid = toNum(c.agentPaid);
+
+    u.totalCommission += uAmt;
+    u.totalCollected += uColl;
+    u.totalRemaining += uAmt - uColl;
+    u.totalAgentCommission += aAmt;
+    u.totalAgentPaid += aPaid;
+    u.totalAgentRemaining += aAmt - aPaid;
+    u.netIncome += uColl - aPaid;
+    u.commissionCount++;
+    u.statuses[c.status] = (u.statuses[c.status] || 0) + 1;
+
+    if (uAmt > uColl && c.confirmedAt) {
+      if (!u.oldestUnpaid || c.confirmedAt < u.oldestUnpaid) {
+        u.oldestUnpaid = c.confirmedAt;
+      }
+    }
+  }
+
+  const students = new Set<string>();
+  for (const c of allComm) {
+    if (c.studentName) students.add(`${c.universityName}::${c.studentName}`);
+  }
+  for (const key of Object.keys(uniMap)) {
+    uniMap[key].studentCount = [...students].filter(s => s.startsWith(key + "::")).length;
+  }
+
+  const breakdown = Object.values(uniMap).sort((a, b) => b.totalCommission - a.totalCommission);
+
+  const totals = {
+    totalCommission: breakdown.reduce((s, u) => s + u.totalCommission, 0),
+    totalCollected: breakdown.reduce((s, u) => s + u.totalCollected, 0),
+    totalRemaining: breakdown.reduce((s, u) => s + u.totalRemaining, 0),
+    totalAgentCommission: breakdown.reduce((s, u) => s + u.totalAgentCommission, 0),
+    totalAgentPaid: breakdown.reduce((s, u) => s + u.totalAgentPaid, 0),
+    totalNetIncome: breakdown.reduce((s, u) => s + u.netIncome, 0),
+    universityCount: breakdown.length,
+  };
+
+  res.json({ breakdown, totals });
+});
+
 /* ─── FINANCE SUMMARY ────────────────────────────────────────── */
 
 router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -303,6 +524,17 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
   const totalOffsetUsed = commissions.reduce((s, c) => s + toNum(c.offsetAmount), 0);
   const availableOffset = Math.min(totalConfirmedCommission * 0.7, totalConfirmedCommission - totalOffsetUsed);
 
+  const overdueItems = commissions.filter(c => {
+    if (c.status === "potential") return false;
+    const uAmt = toNum(c.universityCommissionAmount);
+    const uColl = toNum(c.universityCollected);
+    if (uColl >= uAmt) return false;
+    if (!c.confirmedAt) return false;
+    const confirmedDate = new Date(c.confirmedAt);
+    const daysSince = (Date.now() - confirmedDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSince > 90;
+  });
+
   res.json({
     season: season || "all",
     commissions: {
@@ -315,6 +547,8 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
       totalAgentPaid: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
       totalAgentPending: commissions.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
       totalNetAgency: commissions.reduce((s, c) => s + (toNum(c.universityCollected) - toNum(c.agentPaid)), 0),
+      overdueCount: overdueItems.length,
+      overdueAmount: overdueItems.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
     },
     serviceFees: {
       total: fees.reduce((s, f) => s + toNum(f.totalAmount), 0),

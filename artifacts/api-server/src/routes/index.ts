@@ -17,10 +17,12 @@ import catalogRouter from "./catalog";
 import aiExtractRouter from "./ai-extract";
 import pipelineRouter from "./pipeline";
 import courseFinderRouter from "./course-finder";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(storageRouter);
 router.use(authRouter);
 router.use(usersRouter);
 router.use(leadsRouter);

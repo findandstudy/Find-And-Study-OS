@@ -79,6 +79,24 @@ export const serviceFeesTable = pgTable("service_fees", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
+export const financialTransactionsTable = pgTable("financial_transactions", {
+  id: serial("id").primaryKey(),
+  commissionId: integer("commission_id"),
+  type: text("type").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  transactionDate: text("transaction_date").notNull(),
+  reference: text("reference"),
+  universityName: text("university_name"),
+  agentId: integer("agent_id"),
+  agentName: text("agent_name"),
+  studentName: text("student_name"),
+  fileUrl: text("file_url"),
+  fileName: text("file_name"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoicesTable.$inferSelect;
@@ -90,3 +108,7 @@ export type Commission = typeof commissionsTable.$inferSelect;
 export const insertServiceFeeSchema = createInsertSchema(serviceFeesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertServiceFee = z.infer<typeof insertServiceFeeSchema>;
 export type ServiceFee = typeof serviceFeesTable.$inferSelect;
+
+export const insertFinancialTransactionSchema = createInsertSchema(financialTransactionsTable).omit({ id: true, createdAt: true });
+export type InsertFinancialTransaction = z.infer<typeof insertFinancialTransactionSchema>;
+export type FinancialTransaction = typeof financialTransactionsTable.$inferSelect;

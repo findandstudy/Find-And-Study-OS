@@ -93,7 +93,7 @@ artifacts-monorepo/
 - **Students page**: Pipeline view (status columns: active/inactive/graduated/suspended) + list view with sortable columns, bulk select/delete, inline edit dialog; AI-powered student creation (multi-step: upload docs → Claude reads & fills form → user reviews/completes); bulk CSV import with AI column mapping; filter by status; view toggle stored in localStorage (`edcons_students_view`)
 - **Applications page**: Pipeline view (8 stage columns with revenue totals per column) + list view with sortable columns, bulk select/delete, edit dialog; tuition fee displayed on cards and column headers; filter by stage/country; "New Application" modal with student search, cascading country→university→program dropdowns; view toggle stored in localStorage (`edcons_applications_view`)
 - **Leads page**: Pipeline view (Kanban columns) + list view with sortable columns, bulk select/delete, edit dialog; estimatedValue revenue display (role-gated); view toggle stored in localStorage (`edcons_leads_view`)
-- Finance page — full redesign with commission tracking, service fees, Article 6 offsets
+- Finance page — full redesign with commission tracking, service fees, Article 6 offsets, university breakdown, financial transaction recording with file uploads, analytics dashboard
 - Settings page (profile/language/notifications/security tabs)
 
 ### Agent Portal
@@ -137,12 +137,23 @@ Added to `studentsTable`: `motherName`, `fatherName`, `passportIssueDate`, `addr
 - Auto-status derived from installment paid dates
 - `isStateUniversity` (for offset eligibility)
 
+**financialTransactionsTable** (new):
+- `commissionId`, `type` (collection/agent_payment), `amount`, `currency`, `transactionDate`
+- `reference`, `universityName`, `agentId`, `agentName`, `studentName`
+- `fileUrl`, `fileName` (for attached invoices/receipts via object storage)
+- Auto-updates commission `universityCollected`/`agentPaid` and status on create/delete
+
 **Finance API endpoints**:
 - `GET/POST /api/commissions` — with summary totals
 - `GET/PATCH/DELETE /api/commissions/:id`
 - `GET/POST /api/service-fees` — with summary totals
 - `PATCH/DELETE /api/service-fees/:id`
-- `GET /api/finance/summary?season=` — overall dashboard numbers
+- `GET /api/finance/summary?season=` — overall dashboard numbers (includes overdue count/amount)
+- `GET /api/finance/university-breakdown?season=` — per-university: commission, collected, remaining, agent payouts, net income, aging
+- `GET/POST /api/financial-transactions` — collection & agent payment records with file attachments
+- `DELETE /api/financial-transactions/:id` — auto-recomputes commission totals and status
+- `POST /api/storage/uploads/request-url` — presigned URL for file upload (auth required)
+- `GET /api/storage/objects/*` — serve uploaded files (auth required)
 
 ## Application Cascading Selects & Auto-fill
 
