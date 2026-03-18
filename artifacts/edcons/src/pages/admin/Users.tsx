@@ -98,6 +98,10 @@ function UsersTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phone: "", language: "en" });
   const [creating, setCreating] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phone: "", language: "en", isActive: true });
+  const [saving, setSaving] = useState(false);
   const [passwordDialog, setPasswordDialog] = useState<{ userId: number; userName: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -219,6 +223,44 @@ function UsersTab() {
     }
   }
 
+  function openEditDialog(user: any) {
+    setEditUser(user);
+    setEditForm({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+      role: user.role || "staff",
+      phone: user.phone || "",
+      language: user.language || "en",
+      isActive: user.isActive ?? true,
+    });
+    setEditOpen(true);
+  }
+
+  async function handleEditSave() {
+    if (!editUser) return;
+    if (!editForm.email || !editForm.firstName || !editForm.lastName) {
+      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await customFetch(`/api/users/${editUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      toast({ title: "User updated successfully" });
+      setEditOpen(false);
+      setEditUser(null);
+      refetch();
+    } catch (err: any) {
+      toast({ title: "Failed to update user", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const availableRoles = roles.length > 0
     ? roles.map(r => ({ value: r.name, label: r.displayName }))
     : Object.entries(roleBadge).map(([k, v]) => ({ value: k, label: v.label }));
@@ -336,7 +378,8 @@ function UsersTab() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
-                        <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-primary/10 hover:text-primary">
+                        <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-primary/10 hover:text-primary"
+                          onClick={() => openEditDialog(user)}>
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
                         <DropdownMenu>
@@ -445,6 +488,90 @@ function UsersTab() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button onClick={handleCreate} disabled={creating}>
               {creating ? "Creating..." : "Create User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={o => { if (!o) { setEditOpen(false); setEditUser(null); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit2 className="w-5 h-5" /> Edit User
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>First Name *</Label>
+                <Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
+                  placeholder="John" />
+              </div>
+              <div className="space-y-2">
+                <Label>Last Name *</Label>
+                <Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
+                  placeholder="Doe" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Email *</Label>
+              <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="john@example.com" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableRoles.map(r => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Language</Label>
+                <Select value={editForm.language} onValueChange={v => setEditForm(f => ({ ...f, language: v }))}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="tr">Turkish</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="+1 234 567 890" />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Status</Label>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm ${editForm.isActive ? "text-green-600" : "text-muted-foreground"}`}>
+                  {editForm.isActive ? "Active" : "Inactive"}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={editForm.isActive}
+                  onClick={() => setEditForm(f => ({ ...f, isActive: !f.isActive }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editForm.isActive ? "bg-green-500" : "bg-gray-300"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editForm.isActive ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditOpen(false); setEditUser(null); }}>Cancel</Button>
+            <Button onClick={handleEditSave} disabled={saving}>
+              {saving ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
