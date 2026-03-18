@@ -5,6 +5,8 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useSeason, SEASON_YEARS } from "@/contexts/SeasonContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   SidebarProvider, 
@@ -212,10 +214,20 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { season, setSeason } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isOperationalRole = ["super_admin","admin","manager","staff","consultant","accountant","editor","agent","sub_agent"].includes(user.role);
+  const isAgentRole = user.role === "agent" || user.role === "sub_agent";
 
-  const sidebarLogo = resolvedTheme === "dark" && themeSettings.logoDarkUrl
+  const { data: agentProfile } = useQuery({
+    queryKey: ["agent-me"],
+    enabled: isAgentRole,
+    queryFn: () => customFetch<any>("/api/agents/me"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const systemLogo = resolvedTheme === "dark" && themeSettings.logoDarkUrl
     ? themeSettings.logoDarkUrl
     : themeSettings.logoUrl || null;
+
+  const sidebarLogo = (isAgentRole && agentProfile?.logoUrl) ? agentProfile.logoUrl : systemLogo;
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
