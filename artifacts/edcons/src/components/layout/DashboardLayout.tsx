@@ -147,23 +147,22 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
   }
 
   if (role === 'agent' || role === 'sub_agent') {
+    const agentItems: MenuItem[] = [
+      { title: "Dashboard",    icon: LayoutDashboard, url: '/agent' },
+      { title: "My Referrals", icon: Link2,           url: '/agent/referrals' },
+      { title: "Course Finder", icon: Search,         url: '/staff/course-finder' },
+      { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
+    ];
+    const accountItems: MenuItem[] = [
+      { title: "My Account", icon: UserCircle, url: '/agent/account' },
+    ];
+    if (role === 'agent') {
+      accountItems.push({ title: "Sub Agents", icon: Users, url: '/agent/sub-agents' });
+    }
     return {
       groups: [
-        {
-          label: "Agent Portal",
-          items: [
-            { title: "Dashboard",    icon: LayoutDashboard, url: '/agent' },
-            { title: "My Referrals", icon: Link2,           url: '/agent/referrals' },
-            { title: "Course Finder", icon: Search,         url: '/staff/course-finder' },
-            { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
-          ]
-        },
-        {
-          label: "Account",
-          items: [
-            { title: "My Account", icon: UserCircle, url: '/agent/account' },
-          ]
-        }
+        { label: "Agent Portal", items: agentItems },
+        { label: "Account", items: accountItems },
       ]
     };
   }

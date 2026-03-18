@@ -128,6 +128,21 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **DB:** `agents` table includes `contract_url` column for admin-uploaded contracts.
 - **Files:** `artifacts/edcons/src/pages/agent/Account.tsx`, `artifacts/api-server/src/routes/agents.ts`
 
+## Agent Sub-Agent Management
+
+- **Route:** `/agent/sub-agents` (agent role only, not visible to sub_agents)
+- **Sidebar:** "Sub Agents" menu item under "Account" section, shown only to users with `agent` role
+- **Features:** Full CRUD for sub-agents owned by the logged-in agent. Table view with search, pagination, create/edit/delete dialogs, set password, activate/deactivate toggle.
+- **API Endpoints (all require `requireAuth` + `requireRole("agent")`):**
+  - `GET /api/agents/me/sub-agents` — paginated list with search/status filters
+  - `POST /api/agents/me/sub-agents` — create sub-agent (auto-creates user account with `sub_agent` role if email provided)
+  - `PATCH /api/agents/me/sub-agents/:id` — update sub-agent details (syncs to users table)
+  - `DELETE /api/agents/me/sub-agents/:id` — delete sub-agent and linked user account
+  - `POST /api/agents/me/sub-agents/:id/set-password` — set login password for sub-agent
+  - `PATCH /api/agents/me/sub-agents/:id/status` — toggle active/inactive (also syncs `users.isActive`)
+- **Security:** All endpoints verify the sub-agent's `parentAgentId` matches the logged-in agent's ID. Status toggle syncs `users.isActive` to actually prevent login.
+- **Files:** `artifacts/edcons/src/pages/agent/SubAgents.tsx`, `artifacts/api-server/src/routes/agents.ts`
+
 ## Object Storage & Logo Upload
 
 - **Upload URL pattern:** `objectPath` from `/api/storage/uploads/request-url` returns paths like `/objects/uploads/<uuid>`. When constructing display URLs, **always strip** the `/objects` prefix: `objectPath.replace(/^\/objects/, "")` then build `${BASE_URL}/api/storage/objects${strippedPath}`. The serving route `/storage/objects/*path` internally re-adds the `/objects/` prefix.

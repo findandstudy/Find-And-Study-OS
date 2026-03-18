@@ -60,6 +60,190 @@ router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
   res.json(updated);
 });
 
+router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const { search, status, page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const conditions: any[] = [eq(agentsTable.parentAgentId, agent.id)];
+
+  if (status && status !== "all") {
+    conditions.push(eq(agentsTable.status, status));
+  }
+  if (search) {
+    conditions.push(
+      or(
+        ilike(agentsTable.firstName, `%${search}%`),
+        ilike(agentsTable.lastName, `%${search}%`),
+        ilike(agentsTable.email, `%${search}%`),
+        ilike(agentsTable.phone, `%${search}%`),
+      )
+    );
+  }
+
+  const whereClause = and(...conditions);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(agentsTable).where(whereClause);
+
+  const data = await db
+    .select()
+    .from(agentsTable)
+    .where(whereClause)
+    .limit(limitNum)
+    .offset(offset)
+    .orderBy(agentsTable.createdAt);
+
+  res.json({
+    data,
+    meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) },
+  });
+});
+
+router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const { firstName, lastName, email, phone, commissionRate, password } = req.body;
+  if (!firstName || !lastName) {
+    res.status(400).json({ error: "First name and last name are required" });
+    return;
+  }
+
+  let newUserId: number | null = null;
+  if (email) {
+    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (existingUser) {
+      res.status(400).json({ error: "A user with this email already exists" });
+      return;
+    }
+    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null };
+    if (password && password.length >= 6) {
+      userValues.passwordHash = await bcrypt.hash(password, 10);
+    }
+    const [newUser] = await db.insert(usersTable).values(userValues).returning();
+    newUserId = newUser.id;
+  }
+
+  const [subAgent] = await db.insert(agentsTable).values({
+    userId: newUserId,
+    parentAgentId: parentAgent.id,
+    firstName,
+    lastName,
+    email: email || null,
+    phone: phone || null,
+    commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
+    status: "active",
+    agencyCode: parentAgent.agencyCode || null,
+    country: parentAgent.country || null,
+    companyName: parentAgent.companyName || null,
+    businessName: parentAgent.businessName || null,
+  }).returning();
+
+  res.status(201).json(subAgent);
+});
+
+router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const subAgentId = parseInt(req.params.id, 10);
+  const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
+  if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
+
+  const allowed = ["firstName", "lastName", "email", "phone", "commissionRate", "status"];
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) {
+      if (key === "commissionRate") {
+        updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
+      } else {
+        updates[key] = req.body[key] || null;
+      }
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.json(subAgent);
+    return;
+  }
+
+  const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, subAgentId)).returning();
+  if (subAgent.userId && (updates.firstName !== undefined || updates.lastName !== undefined || updates.email !== undefined || updates.phone !== undefined)) {
+    const userUpdates: Record<string, unknown> = {};
+    if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
+    if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
+    if (updates.email !== undefined) userUpdates.email = updates.email;
+    if (updates.phone !== undefined) userUpdates.phone = updates.phone;
+    if (Object.keys(userUpdates).length > 0) {
+      await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
+    }
+  }
+  res.json(updated);
+});
+
+router.delete("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const subAgentId = parseInt(req.params.id, 10);
+  const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
+  if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
+
+  if (subAgent.userId) {
+    await db.delete(usersTable).where(eq(usersTable.id, subAgent.userId));
+  }
+  await db.delete(agentsTable).where(eq(agentsTable.id, subAgentId));
+  res.json({ success: true });
+});
+
+router.post("/agents/me/sub-agents/:id/set-password", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const subAgentId = parseInt(req.params.id, 10);
+  const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
+  if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
+  if (!subAgent.userId) { res.status(400).json({ error: "Sub-agent has no login account" }); return; }
+
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+  const hash = await bcrypt.hash(password, 10);
+  await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, subAgent.userId));
+  res.json({ success: true });
+});
+
+router.patch("/agents/me/sub-agents/:id/status", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const subAgentId = parseInt(req.params.id, 10);
+  const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
+  if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
+
+  const { status } = req.body;
+  if (!["active", "inactive"].includes(status)) {
+    res.status(400).json({ error: "Status must be 'active' or 'inactive'" });
+    return;
+  }
+  const [updated] = await db.update(agentsTable).set({ status }).where(eq(agentsTable.id, subAgentId)).returning();
+  if (subAgent.userId) {
+    await db.update(usersTable).set({ isActive: status === "active" }).where(eq(usersTable.id, subAgent.userId));
+  }
+  res.json(updated);
+});
+
 router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { search, status, page = "1", limit = "50", type } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));

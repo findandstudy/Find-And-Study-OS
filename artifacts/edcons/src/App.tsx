@@ -50,6 +50,7 @@ import AgentDashboard from "@/pages/agent/Dashboard";
 import AgentApplications from "@/pages/agent/Applications";
 import AgentCommissions from "@/pages/agent/Commissions";
 import AgentAccount from "@/pages/agent/Account";
+import AgentSubAgents from "@/pages/agent/SubAgents";
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -165,6 +166,9 @@ function Router() {
       </Route>
       <Route path="/agent/account">
         <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentAccount /></ProtectedRoute>
+      </Route>
+      <Route path="/agent/sub-agents">
+        <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
       </Route>
 
       <Route component={NotFound} />
