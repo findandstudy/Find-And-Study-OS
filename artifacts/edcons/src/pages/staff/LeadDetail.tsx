@@ -8,13 +8,14 @@ import {
   useGetLeadNotes,
   useAddLeadNote,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const STATUS_OPTIONS = ["new", "contacted", "interested", "qualified", "converted", "lost"];
@@ -28,6 +29,8 @@ const STATUS_COLORS: Record<string, string> = {
   lost: "bg-red-100 text-red-700",
 };
 
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
 interface Props {
   id: number;
 }
@@ -37,6 +40,11 @@ export default function LeadDetail({ id }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [fuTitle, setFuTitle] = useState("");
+  const [fuDate, setFuDate] = useState("");
+  const [fuTime, setFuTime] = useState("10:00");
+  const [fuNotes, setFuNotes] = useState("");
 
   const { data: lead, isLoading } = useGetLead(id);
   const { data: notes = [] } = useGetLeadNotes(id);
@@ -44,12 +52,51 @@ export default function LeadDetail({ id }: Props) {
   const convertLead = useConvertLead();
   const addNote = useAddLeadNote();
 
+  const { data: followUps = [] } = useQuery<any[]>({
+    queryKey: [`/api/leads/${id}/follow-ups`],
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/follow-ups`, { credentials: "include" }).then(r => r.json()),
+  });
+
+  const createFollowUp = useMutation({
+    mutationFn: (body: any) =>
+      fetch(`${BASE}/api/leads/${id}/follow-ups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/follow-ups`] });
+      setShowFollowUpForm(false);
+      setFuTitle("");
+      setFuDate("");
+      setFuTime("10:00");
+      setFuNotes("");
+      toast({ title: "Follow-up scheduled" });
+    },
+  });
+
+  const toggleFollowUp = useMutation({
+    mutationFn: ({ fuId, completed }: { fuId: number; completed: boolean }) =>
+      fetch(`${BASE}/api/follow-ups/${fuId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ completed }),
+      }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/follow-ups`] });
+      toast({ title: "Follow-up updated" });
+    },
+  });
+
   function handleStatusChange(status: string) {
     updateLead.mutate(
       { id, data: { status } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
+          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           toast({ title: "Status updated" });
         },
       }
@@ -85,10 +132,22 @@ export default function LeadDetail({ id }: Props) {
     );
   }
 
+  function handleCreateFollowUp() {
+    if (!fuTitle.trim() || !fuDate) return;
+    createFollowUp.mutate({
+      title: fuTitle,
+      scheduledAt: new Date(`${fuDate}T${fuTime}`).toISOString(),
+      notes: fuNotes || undefined,
+    });
+  }
+
+  function isOverdue(scheduledAt: string) {
+    return new Date(scheduledAt) < new Date();
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-4xl">
-        {/* Back + header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation("/staff/leads")}>
             <ArrowLeft className="w-4 h-4" />
@@ -116,7 +175,6 @@ export default function LeadDetail({ id }: Props) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Left: lead info */}
           <div className="md:col-span-2 space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -156,6 +214,7 @@ export default function LeadDetail({ id }: Props) {
                   <InfoRow icon={<BookOpen className="w-4 h-4" />} label="Interested Program" value={lead?.interestedProgram} />
                   <InfoRow icon={<Globe className="w-4 h-4" />} label="Interested Country" value={lead?.interestedCountry} />
                   <InfoRow icon={<User className="w-4 h-4" />} label="Source" value={lead?.source} />
+                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Estimated Budget" value={lead?.estimatedValue ? `$${Number(lead.estimatedValue).toLocaleString()}` : undefined} />
                 </div>
               )}
 
@@ -165,6 +224,114 @@ export default function LeadDetail({ id }: Props) {
                   <p className="text-sm text-foreground">{lead.notes}</p>
                 </div>
               )}
+            </div>
+
+            {/* Follow-ups */}
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="w-4 h-4 text-muted-foreground" />
+                  <h2 className="font-semibold text-foreground">Follow-ups</h2>
+                  <span className="text-xs text-muted-foreground">({(followUps as any[]).length})</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setShowFollowUpForm(!showFollowUpForm)}
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add
+                </Button>
+              </div>
+
+              {showFollowUpForm && (
+                <div className="bg-secondary/30 rounded-xl p-4 space-y-3 border">
+                  <Input
+                    placeholder="Follow-up title (e.g. Call about admission)"
+                    value={fuTitle}
+                    onChange={e => setFuTitle(e.target.value)}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      type="date"
+                      value={fuDate}
+                      onChange={e => setFuDate(e.target.value)}
+                    />
+                    <Input
+                      type="time"
+                      value={fuTime}
+                      onChange={e => setFuTime(e.target.value)}
+                    />
+                  </div>
+                  <Textarea
+                    placeholder="Notes (optional)"
+                    value={fuNotes}
+                    onChange={e => setFuNotes(e.target.value)}
+                    className="resize-none min-h-[60px]"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setShowFollowUpForm(false)}>Cancel</Button>
+                    <Button
+                      size="sm"
+                      onClick={handleCreateFollowUp}
+                      disabled={createFollowUp.isPending || !fuTitle.trim() || !fuDate}
+                    >
+                      Schedule
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {(followUps as any[]).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No follow-ups scheduled.</p>
+                ) : (
+                  (followUps as any[]).map((fu: any) => (
+                    <div
+                      key={fu.id}
+                      className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                        fu.completed
+                          ? "bg-green-50/50 border-green-200"
+                          : isOverdue(fu.scheduledAt)
+                          ? "bg-red-50/50 border-red-200"
+                          : "bg-secondary/30 border-border"
+                      }`}
+                    >
+                      <button
+                        onClick={() => toggleFollowUp.mutate({ fuId: fu.id, completed: !fu.completed })}
+                        className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          fu.completed
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-muted-foreground/40 hover:border-primary"
+                        }`}
+                      >
+                        {fu.completed && <CheckCircle2 className="w-3 h-3" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${fu.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                          {fu.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Clock className="w-3 h-3 text-muted-foreground" />
+                          <span className={`text-xs ${
+                            fu.completed ? "text-muted-foreground" : isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"
+                          }`}>
+                            {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            {" "}
+                            {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                            {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
+                          </span>
+                        </div>
+                        {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
+                        {fu.createdByName && (
+                          <p className="text-xs text-muted-foreground/60 mt-1">by {fu.createdByName}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Notes */}
@@ -225,6 +392,30 @@ export default function LeadDetail({ id }: Props) {
                 <p>Created: {lead ? new Date(lead.createdAt).toLocaleDateString() : "—"}</p>
                 <p>Updated: {lead ? new Date(lead.updatedAt).toLocaleDateString() : "—"}</p>
               </div>
+            </div>
+
+            {/* Upcoming Follow-ups summary in sidebar */}
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                <CalendarClock className="w-4 h-4" />
+                Next Follow-up
+              </h2>
+              {(() => {
+                const upcoming = (followUps as any[]).filter((f: any) => !f.completed).sort((a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+                if (upcoming.length === 0) return <p className="text-sm text-muted-foreground">None scheduled</p>;
+                const next = upcoming[0];
+                return (
+                  <div>
+                    <p className="text-sm font-medium">{next.title}</p>
+                    <p className={`text-xs mt-1 ${isOverdue(next.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                      {new Date(next.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      {" "}
+                      {new Date(next.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                      {isOverdue(next.scheduledAt) && " — Overdue!"}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

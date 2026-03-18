@@ -1,8 +1,13 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useGetOverviewStats } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
-import { Users, FileText, GraduationCap, DollarSign, ArrowUpRight, Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { Link } from "wouter";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const mockChartData = [
   { name: 'Jan', leads: 400, students: 240 },
@@ -14,8 +19,15 @@ const mockChartData = [
   { name: 'Jul', leads: 349, students: 430 },
 ];
 
+function isOverdue(d: string) { return new Date(d) < new Date(); }
+
 export default function StaffDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
+
+  const { data: upcomingFollowUps = [] } = useQuery<any[]>({
+    queryKey: ["/api/follow-ups/upcoming"],
+    queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()),
+  });
 
   return (
     <DashboardLayout>
@@ -25,7 +37,6 @@ export default function StaffDashboard() {
           <p className="text-muted-foreground mt-1">Here's what's happening with your consultancy today.</p>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
             { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, trend: "+12%", color: "text-blue-500", bg: "bg-blue-500/10" },
@@ -54,7 +65,6 @@ export default function StaffDashboard() {
           ))}
         </div>
 
-        {/* Charts & Activity */}
         <div className="grid lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
             <h3 className="font-display font-bold text-lg mb-6">Growth Overview</h3>
@@ -70,7 +80,7 @@ export default function StaffDashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     itemStyle={{ color: 'hsl(var(--foreground))' }}
                   />
@@ -81,26 +91,36 @@ export default function StaffDashboard() {
           </Card>
 
           <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <h3 className="font-display font-bold text-lg mb-6">Recent Activity</h3>
-            <div className="space-y-6">
-              {[
-                { title: "New application submitted", desc: "Sarah Jenkins applied to Uni of Toronto", time: "2 hours ago" },
-                { title: "Document verified", desc: "Passport copy approved for M. Ali", time: "5 hours ago" },
-                { title: "Lead converted", desc: "James Smith is now a student", time: "1 day ago" },
-                { title: "Invoice paid", desc: "Inv-2024-089 marked as paid", time: "2 days ago" },
-              ].map((activity, i) => (
-                <div key={i} className="flex gap-4 relative">
-                  {i !== 3 && <div className="absolute top-8 left-2.5 w-0.5 h-8 bg-border" />}
-                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5 z-10 shrink-0">
-                    <div className="w-2 h-2 rounded-full bg-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-foreground">{activity.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{activity.desc}</p>
-                    <p className="text-xs font-medium text-primary mt-1">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center gap-2 mb-6">
+              <CalendarClock className="w-5 h-5 text-primary" />
+              <h3 className="font-display font-bold text-lg">Upcoming Follow-ups</h3>
+            </div>
+            <div className="space-y-3">
+              {(upcomingFollowUps as any[]).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
+              ) : (
+                (upcomingFollowUps as any[]).slice(0, 6).map((fu: any) => (
+                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : "#"}>
+                    <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
+                      isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-foreground line-clamp-1">{fu.title}</p>
+                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                      </div>
+                      {fu.leadName && (
+                        <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>
+                      )}
+                      <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                        {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {" "}
+                        {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                        {isOverdue(fu.scheduledAt) && " — Overdue"}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           </Card>
         </div>

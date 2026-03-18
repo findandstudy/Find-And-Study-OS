@@ -104,6 +104,14 @@ artifacts-monorepo/
 - API routes: `POST /api/ai/extract-document` (base64 images/PDFs → student field extraction), `POST /api/ai/extract-bulk-csv` (CSV text → student array)
 - Bulk student import: `POST /api/students/bulk` (array of students, returns `{ inserted, errors, success }`)
 
+## DB Schema — Follow-ups
+
+**followUpsTable** — tracks scheduled follow-up actions on leads/students:
+- `leadId`, `studentId`, `resourceType` (lead/student), `title`, `scheduledAt`
+- `completed`, `completedAt`, `assignedToId`, `createdById`, `notes`
+- API: `GET /api/leads/:id/follow-ups`, `POST /api/leads/:id/follow-ups`, `PATCH /api/follow-ups/:id`
+- Dashboard widget: `GET /api/follow-ups/upcoming` (next 7 days, incomplete only)
+
 ## DB Schema — Students Extra Fields
 
 Added to `studentsTable`: `motherName`, `fatherName`, `passportIssueDate`, `address`

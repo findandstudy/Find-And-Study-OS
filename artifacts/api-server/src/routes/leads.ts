@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable } from "@workspace/db";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, lte, gte, asc, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES } from "../lib/roles";
@@ -191,6 +191,93 @@ router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async 
     resourceId: id,
   }).returning();
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
+});
+
+router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const data = await db
+    .select({
+      id: followUpsTable.id,
+      leadId: followUpsTable.leadId,
+      title: followUpsTable.title,
+      scheduledAt: followUpsTable.scheduledAt,
+      completed: followUpsTable.completed,
+      completedAt: followUpsTable.completedAt,
+      notes: followUpsTable.notes,
+      createdById: followUpsTable.createdById,
+      createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      createdAt: followUpsTable.createdAt,
+    })
+    .from(followUpsTable)
+    .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
+    .where(eq(followUpsTable.leadId, id))
+    .orderBy(asc(followUpsTable.scheduledAt));
+  res.json(data);
+});
+
+router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { title, scheduledAt, notes } = req.body;
+  if (!title?.trim() || !scheduledAt) {
+    res.status(400).json({ error: "title and scheduledAt are required" });
+    return;
+  }
+  const [followUp] = await db.insert(followUpsTable).values({
+    leadId: id,
+    resourceType: "lead",
+    title: String(title).slice(0, 500),
+    scheduledAt: new Date(scheduledAt),
+    notes: notes ? String(notes).slice(0, 2000) : null,
+    createdById: req.user!.id,
+    assignedToId: req.user!.id,
+  }).returning();
+  res.status(201).json(followUp);
+});
+
+router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { completed, title, scheduledAt, notes } = req.body;
+  const updates: Record<string, unknown> = {};
+  if (completed !== undefined) {
+    updates.completed = completed;
+    updates.completedAt = completed ? new Date() : null;
+  }
+  if (title !== undefined) updates.title = title;
+  if (scheduledAt !== undefined) updates.scheduledAt = new Date(scheduledAt);
+  if (notes !== undefined) updates.notes = notes;
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields" });
+    return;
+  }
+  const [followUp] = await db.update(followUpsTable).set(updates).where(eq(followUpsTable.id, id)).returning();
+  if (!followUp) { res.status(404).json({ error: "Follow-up not found" }); return; }
+  res.json(followUp);
+});
+
+router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const now = new Date();
+  const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const data = await db
+    .select({
+      id: followUpsTable.id,
+      leadId: followUpsTable.leadId,
+      title: followUpsTable.title,
+      scheduledAt: followUpsTable.scheduledAt,
+      completed: followUpsTable.completed,
+      notes: followUpsTable.notes,
+      leadName: sql<string | null>`(SELECT concat(first_name, ' ', last_name) FROM leads WHERE leads.id = ${followUpsTable.leadId})`,
+    })
+    .from(followUpsTable)
+    .where(and(
+      eq(followUpsTable.completed, false),
+      lte(followUpsTable.scheduledAt, nextWeek)
+    ))
+    .orderBy(asc(followUpsTable.scheduledAt))
+    .limit(20);
+  res.json(data);
 });
 
 export default router;

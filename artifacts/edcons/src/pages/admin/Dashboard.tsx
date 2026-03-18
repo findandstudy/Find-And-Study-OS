@@ -1,10 +1,14 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useGetOverviewStats } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield } from "lucide-react";
+import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+function isOverdue(d: string) { return new Date(d) < new Date(); }
 
 const chartData = [
   { name: 'Jan', leads: 65, apps: 28, revenue: 45000 },
@@ -20,6 +24,10 @@ const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#22c55e', '#f59e0b
 
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
+  const { data: upcomingFollowUps = [] } = useQuery<any[]>({
+    queryKey: ["/api/follow-ups/upcoming"],
+    queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()),
+  });
 
   const statCards = [
     { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10", trend: "+12%" },
@@ -94,26 +102,34 @@ export default function AdminDashboard() {
           </Card>
 
           <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <h3 className="font-display font-bold text-lg mb-6">System Alerts</h3>
-            <div className="space-y-4">
-              {[
-                { type: "warning", msg: "3 documents pending review", link: "/staff/applications" },
-                { type: "info", msg: "2 invoices overdue", link: "/staff/finance" },
-                { type: "success", msg: "12 new leads this week", link: "/staff/leads" },
-                { type: "warning", msg: "Agent commissions to approve", link: "/staff/finance" },
-              ].map((alert, i) => (
-                <Link key={i} href={alert.link}>
-                  <div className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:scale-[1.02] transition-transform
-                    ${alert.type === 'warning' ? 'bg-amber-50 border border-amber-200' :
-                      alert.type === 'success' ? 'bg-green-50 border border-green-200' :
-                      'bg-blue-50 border border-blue-200'}`}>
-                    <AlertTriangle className={`w-4 h-4 shrink-0 ${
-                      alert.type === 'warning' ? 'text-amber-500' :
-                      alert.type === 'success' ? 'text-green-500' : 'text-blue-500'}`} />
-                    <p className="text-sm font-medium text-foreground">{alert.msg}</p>
-                  </div>
-                </Link>
-              ))}
+            <div className="flex items-center gap-2 mb-6">
+              <CalendarClock className="w-5 h-5 text-primary" />
+              <h3 className="font-display font-bold text-lg">Upcoming Follow-ups</h3>
+            </div>
+            <div className="space-y-3">
+              {(upcomingFollowUps as any[]).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
+              ) : (
+                (upcomingFollowUps as any[]).slice(0, 5).map((fu: any) => (
+                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : "#"}>
+                    <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
+                      isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-foreground line-clamp-1">{fu.title}</p>
+                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                      </div>
+                      {fu.leadName && <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>}
+                      <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                        {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {" "}
+                        {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                        {isOverdue(fu.scheduledAt) && " — Overdue"}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           </Card>
         </div>
