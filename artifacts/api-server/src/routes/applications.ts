@@ -195,16 +195,29 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
   const [app] = await db.update(applicationsTable).set(updates).where(eq(applicationsTable.id, id)).returning();
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
 
-  if (updates.stage === "enrolled") {
-    await db
-      .update(commissionsTable)
-      .set({ status: "confirmed", confirmedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(commissionsTable.applicationId, id),
-          eq(commissionsTable.status, "potential")
-        )
-      );
+  if (updates.stage !== undefined) {
+    if (updates.stage === "enrolled") {
+      await db
+        .update(commissionsTable)
+        .set({ status: "confirmed", confirmedAt: new Date().toISOString() })
+        .where(
+          and(
+            eq(commissionsTable.applicationId, id),
+            eq(commissionsTable.status, "potential")
+          )
+        );
+    } else {
+      await db
+        .update(commissionsTable)
+        .set({ status: "potential", confirmedAt: null })
+        .where(
+          and(
+            eq(commissionsTable.applicationId, id),
+            eq(commissionsTable.status, "confirmed"),
+            eq(commissionsTable.universityCollected, "0")
+          )
+        );
+    }
   }
 
   await logAudit(req.user!.id, "update_application", "application", id, updates, req.ip);
