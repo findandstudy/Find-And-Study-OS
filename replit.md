@@ -112,6 +112,22 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **`photoUrl` field:** Added to `students` table schema (`photo_url` column) for future external URL photo support, included in PATCH fields whitelist.
 - **Download Naming Convention:** All document downloads follow `doctype-firstname-lastname.ext` format (lowercase, sanitized). Implemented via `buildDownloadFilename()` in `StudentDetail.tsx`. MIME-to-extension map handles common types (pdf, jpg, png, gif, webp, svg).
 
+## Agent Account (Agent Portal)
+
+- **Route:** `/agent/account` with tabs: Profile, Agency, Referral, Language, Security
+- **Agency Tab Features:**
+  - **Agency Code:** Read-only display, set by super_admin/admin via `PATCH /api/agents/:id`
+  - **Business Name:** Editable by agent, saved via `PATCH /api/agents/me`
+  - **Info Fields:** Country, Commission Rate, Status (read-only display)
+  - **Documents Section:**
+    - Logo for Agent Panel: Agent can upload/remove via self-service
+    - Contract: Read-only for agents (view/download only), uploaded by admin via `PATCH /api/agents/:id` with `contractUrl`
+    - Business Certificate: Agent can upload/remove via self-service
+- **Self-Service API:** `PATCH /api/agents/me` — limited to `businessName`, `logoUrl`, `businessCertUrl` fields only. URL validation rejects non-storage URLs (must start with `/api/storage/objects/` or `https://`). Business name max 200 chars.
+- **Admin API:** `PATCH /api/agents/:id` — full access to all agent fields including `agencyCode`, `contractUrl`, `status`, `commissionRate`, etc. Requires MANAGER_ROLES.
+- **DB:** `agents` table includes `contract_url` column for admin-uploaded contracts.
+- **Files:** `artifacts/edcons/src/pages/agent/Account.tsx`, `artifacts/api-server/src/routes/agents.ts`
+
 ## Object Storage & Logo Upload
 
 - **Upload URL pattern:** `objectPath` from `/api/storage/uploads/request-url` returns paths like `/objects/uploads/<uuid>`. When constructing display URLs, **always strip** the `/objects` prefix: `objectPath.replace(/^\/objects/, "")` then build `${BASE_URL}/api/storage/objects${strippedPath}`. The serving route `/storage/objects/*path` internally re-adds the `/objects/` prefix.

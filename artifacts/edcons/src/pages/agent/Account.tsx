@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -14,8 +14,11 @@ import { useI18n } from "@/hooks/use-i18n";
 import {
   User, Globe, Shield, Save, Check, Briefcase,
   Loader2, Phone, Mail, TrendingUp, Link2, Copy, MapPin,
+  Upload, X, FileText, Download, Image as ImageIcon, Eye,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
+
+const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 const LANGUAGES = [
   { code: "en", label: "English",   country: "GB" },
@@ -47,18 +50,14 @@ export default function AgentAccount() {
   const { data: agentProfile, isLoading: agentLoading } = useQuery({
     queryKey: ["agent-me"],
     enabled: !!user,
-    queryFn: async () => {
-      const res = await customFetch("/api/agents/me");
-      if (!res.ok) return null;
-      return res.json();
-    },
+    queryFn: () => customFetch<any>("/api/agents/me"),
   });
 
   async function handleSaveProfile() {
     if (!user) return;
     setSaving(true);
     try {
-      const res = await customFetch(`/api/users/${user.id}`, {
+      await customFetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -67,7 +66,6 @@ export default function AgentAccount() {
           phone:     form.phone || undefined,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update profile");
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated", description: "Your information has been saved." });
     } catch (err: any) {
@@ -114,7 +112,6 @@ export default function AgentAccount() {
             <TabsTrigger value="security" className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
           </TabsList>
 
-          {/* ── Profile ── */}
           <TabsContent value="profile" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Personal Information</h2>
@@ -156,47 +153,10 @@ export default function AgentAccount() {
             </Card>
           </TabsContent>
 
-          {/* ── Agency ── */}
           <TabsContent value="agency" className="mt-6">
-            <Card className="border-none shadow-lg shadow-black/5 p-6">
-              <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
-              {agentLoading ? (
-                <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-xl" />)}</div>
-              ) : !agentProfile ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  <Briefcase className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-                  <p className="font-medium">No agency profile yet</p>
-                  <p className="text-sm mt-1">Your agency details will appear here once set up by an admin</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {[
-                    { label: "Agency Name",       icon: Briefcase,   value: agentProfile.agencyName },
-                    { label: "Country",           icon: MapPin,      value: agentProfile.country },
-                    { label: "Commission Rate",   icon: TrendingUp,  value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null },
-                    { label: "Status",            icon: Check,       value: agentProfile.status },
-                  ].map((f, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <f.icon className="w-4 h-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground font-medium">{f.label}</p>
-                          <p className="text-sm font-semibold text-foreground capitalize">{f.value || <span className="text-muted-foreground italic font-normal">Not set</span>}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground mt-2 p-3 rounded-xl bg-secondary/40">
-                    Agency details are managed by your account administrator. Contact your manager to update this information.
-                  </p>
-                </div>
-              )}
-            </Card>
+            <AgencyTab agentProfile={agentProfile} agentLoading={agentLoading} />
           </TabsContent>
 
-          {/* ── Referral ── */}
           <TabsContent value="referral" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Your Referral Link</h2>
@@ -223,7 +183,6 @@ export default function AgentAccount() {
             </Card>
           </TabsContent>
 
-          {/* ── Language ── */}
           <TabsContent value="language" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Language Preference</h2>
@@ -244,7 +203,6 @@ export default function AgentAccount() {
             </Card>
           </TabsContent>
 
-          {/* ── Security ── */}
           <TabsContent value="security" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Security & Access</h2>
@@ -279,5 +237,284 @@ export default function AgentAccount() {
         </Tabs>
       </div>
     </DashboardLayout>
+  );
+}
+
+function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoading: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [businessName, setBusinessName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (agentProfile) {
+      setBusinessName(agentProfile.businessName || "");
+    }
+  }, [agentProfile]);
+
+  async function uploadFile(file: File): Promise<string> {
+    const urlRes = await customFetch<any>(`/api/storage/uploads/request-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+    });
+    if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
+    const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+    if (!putRes.ok) throw new Error("Upload failed");
+    const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
+    return `${BASE_URL}/api/storage/objects${strippedPath}`;
+  }
+
+  async function handleSaveAgency() {
+    setSaving(true);
+    try {
+      await customFetch("/api/agents/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessName }),
+      });
+      await qc.invalidateQueries({ queryKey: ["agent-me"] });
+      toast({ title: "Agency updated", description: "Your business name has been saved." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDocUpload(field: "logoUrl" | "businessCertUrl", file: File) {
+    try {
+      const url = await uploadFile(file);
+      await customFetch("/api/agents/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: url }),
+      });
+      await qc.invalidateQueries({ queryKey: ["agent-me"] });
+      toast({ title: "Document uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleDocRemove(field: "logoUrl" | "businessCertUrl") {
+    try {
+      await customFetch("/api/agents/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: "" }),
+      });
+      await qc.invalidateQueries({ queryKey: ["agent-me"] });
+      toast({ title: "Document removed" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  if (agentLoading) {
+    return (
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-xl" />)}
+        </div>
+      </Card>
+    );
+  }
+
+  if (!agentProfile) {
+    return (
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
+        <div className="text-center py-10 text-muted-foreground">
+          <Briefcase className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
+          <p className="font-medium">No agency profile yet</p>
+          <p className="text-sm mt-1">Your agency details will appear here once set up by an admin</p>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <h2 className="font-display font-bold text-lg mb-6">Agency Information</h2>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-secondary/20">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Briefcase className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium">Agency Code</p>
+                <p className="text-sm font-bold text-foreground font-mono">
+                  {agentProfile.agencyCode || <span className="text-muted-foreground italic font-normal">Not assigned yet</span>}
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[10px]">Set by Admin</Badge>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">Business Name</Label>
+            <p className="text-xs text-muted-foreground">Enter your legal company / business name</p>
+            <Input
+              value={businessName}
+              onChange={e => setBusinessName(e.target.value)}
+              placeholder="e.g. Global Education Consulting Ltd."
+              className="rounded-xl"
+            />
+          </div>
+
+          <div className="space-y-4">
+            {[
+              { label: "Country",         icon: MapPin,      value: agentProfile.country },
+              { label: "Commission Rate", icon: TrendingUp,  value: agentProfile.commissionRate ? `${agentProfile.commissionRate}%` : null },
+              { label: "Status",          icon: Check,        value: agentProfile.status },
+            ].map((f, i) => (
+              <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <f.icon className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">{f.label}</p>
+                    <p className="text-sm font-semibold text-foreground capitalize">
+                      {f.value || <span className="text-muted-foreground italic font-normal">Not set</span>}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Button onClick={handleSaveAgency} disabled={saving} className="rounded-xl gap-2 px-8">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Changes
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <h2 className="font-display font-bold text-lg mb-6">Documents</h2>
+        <div className="grid sm:grid-cols-3 gap-5">
+          <DocumentUploader
+            label="Logo for Agent Panel"
+            accept="image/*"
+            value={agentProfile.logoUrl}
+            onUpload={file => handleDocUpload("logoUrl", file)}
+            onRemove={() => handleDocRemove("logoUrl")}
+            icon={<ImageIcon className="w-6 h-6" />}
+          />
+          <DocumentViewer
+            label="Contract"
+            value={agentProfile.contractUrl}
+          />
+          <DocumentUploader
+            label="Business Certificate"
+            accept="image/*,.pdf"
+            value={agentProfile.businessCertUrl}
+            onUpload={file => handleDocUpload("businessCertUrl", file)}
+            onRemove={() => handleDocRemove("businessCertUrl")}
+            icon={<FileText className="w-6 h-6" />}
+          />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function DocumentUploader({
+  label, accept, value, onUpload, onRemove, icon,
+}: {
+  label: string; accept: string; value?: string | null;
+  onUpload: (file: File) => void; onRemove: () => void;
+  icon: React.ReactNode;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    try {
+      await onUpload(file);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs font-semibold">{label}</Label>
+      <div className="relative w-full h-36 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/10">
+        {value ? (
+          <>
+            {accept.includes("image") && value.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+              <img src={value} alt={label} className="max-h-28 max-w-full object-contain" />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-primary">
+                <FileText className="w-8 h-8" />
+                <span className="text-[10px] font-medium">Uploaded</span>
+              </div>
+            )}
+            <div className="absolute top-2 right-2 flex gap-1">
+              <a href={value} target="_blank" rel="noopener noreferrer"
+                className="w-6 h-6 rounded-full bg-primary/90 text-white flex items-center justify-center hover:bg-primary">
+                <Eye className="w-3 h-3" />
+              </a>
+              <button onClick={onRemove}
+                className="w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <button onClick={() => inputRef.current?.click()} disabled={uploading}
+            className="flex flex-col items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
+            {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : icon || <Upload className="w-6 h-6" />}
+            <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload"}</span>
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept={accept} className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+    </div>
+  );
+}
+
+function DocumentViewer({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Label className="text-xs font-semibold">{label}</Label>
+        <Badge variant="outline" className="text-[9px] px-1.5 py-0">Admin Only</Badge>
+      </div>
+      <div className="relative w-full h-36 rounded-xl border-2 border-dashed border-border bg-secondary/10 flex items-center justify-center overflow-hidden">
+        {value ? (
+          <>
+            {value.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+              <img src={value} alt={label} className="max-h-28 max-w-full object-contain" />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-green-600">
+                <FileText className="w-8 h-8" />
+                <span className="text-[10px] font-medium">Contract uploaded</span>
+              </div>
+            )}
+            <div className="absolute top-2 right-2">
+              <a href={value} target="_blank" rel="noopener noreferrer"
+                className="w-7 h-7 rounded-full bg-primary/90 text-white flex items-center justify-center hover:bg-primary shadow-sm">
+                <Download className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground/50">
+            <FileText className="w-8 h-8" />
+            <span className="text-[10px] font-medium">No contract uploaded</span>
+            <span className="text-[9px]">Uploaded by admin</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

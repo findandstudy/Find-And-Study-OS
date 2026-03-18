@@ -13,15 +13,51 @@ const AGENT_PATCH_FIELDS = [
   "status", "commissionRate", "notes", "companyName", "country",
   "agencyCode", "state", "city", "address", "businessName",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
-  "branch", "pointOfContact", "parentAgentId",
+  "contractUrl", "branch", "pointOfContact", "parentAgentId",
   "subAgentCommissionRate", "hideServiceFees",
 ];
+
+const AGENT_SELF_PATCH_FIELDS = [
+  "businessName", "logoUrl", "businessCertUrl",
+];
+
+function isValidStorageUrl(url: string): boolean {
+  if (!url) return true;
+  return url.startsWith("/api/storage/objects/") || url.startsWith("https://");
+}
 
 router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   res.json(agent);
+});
+
+router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  const updates: Record<string, unknown> = {};
+  for (const key of AGENT_SELF_PATCH_FIELDS) {
+    if (req.body[key] !== undefined) {
+      const val = req.body[key] || null;
+      if ((key === "logoUrl" || key === "businessCertUrl") && val && !isValidStorageUrl(val)) {
+        res.status(400).json({ error: `Invalid URL for ${key}` });
+        return;
+      }
+      if (key === "businessName" && val && typeof val === "string" && val.length > 200) {
+        res.status(400).json({ error: "Business name too long (max 200 characters)" });
+        return;
+      }
+      updates[key] = val;
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    res.json(agent);
+    return;
+  }
+  const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, agent.id)).returning();
+  res.json(updated);
 });
 
 router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -89,7 +125,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     firstName, lastName, status = "active", email, phone,
     companyName, country, commissionRate, agencyCode,
     state, city, address, businessName, category,
-    logoUrl, agentIdProofUrl, businessCertUrl, branch,
+    logoUrl, agentIdProofUrl, businessCertUrl, contractUrl, branch,
     pointOfContact, parentAgentId, subAgentCommissionRate, hideServiceFees,
   } = req.body;
 
@@ -129,6 +165,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     logoUrl: logoUrl || null,
     agentIdProofUrl: agentIdProofUrl || null,
     businessCertUrl: businessCertUrl || null,
+    contractUrl: contractUrl || null,
     branch: branch || null,
     pointOfContact: pointOfContact || null,
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,

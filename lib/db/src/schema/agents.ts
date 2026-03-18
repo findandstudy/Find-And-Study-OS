@@ -25,6 +25,7 @@ export const agentsTable = pgTable("agents", {
   logoUrl: text("logo_url"),
   agentIdProofUrl: text("agent_id_proof_url"),
   businessCertUrl: text("business_cert_url"),
+  contractUrl: text("contract_url"),
   branch: text("branch"),
   pointOfContact: text("point_of_contact"),
   notes: text("notes"),
