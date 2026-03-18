@@ -63,6 +63,16 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       universityCity: universitiesTable.city,
       universityStatus: universitiesTable.status,
       universityType: universitiesTable.universityType,
+      universityWebsite: universitiesTable.website,
+      universityDescription: universitiesTable.description,
+      universityRanking: universitiesTable.ranking,
+      universityQsRanking: universitiesTable.qsRanking,
+      universityTimesRanking: universitiesTable.timesRanking,
+      universityAddress: universitiesTable.address,
+      universityTaxType: universitiesTable.taxType,
+      universityContactName: universitiesTable.contactPersonName,
+      universityContactPhone: universitiesTable.contactPersonPhone,
+      universityContactEmail: universitiesTable.contactPersonEmail,
     })
     .from(programsTable)
     .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))

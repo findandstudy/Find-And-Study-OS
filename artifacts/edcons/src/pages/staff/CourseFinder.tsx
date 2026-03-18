@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Heart, Send, Info, GraduationCap, Globe, Clock,
-  Languages, DollarSign, BookOpen, Building2,
-  ChevronLeft, ChevronRight, X, FileText,
+  Languages, DollarSign, BookOpen, Building2, MapPin,
+  ChevronLeft, ChevronRight, X, FileText, ExternalLink,
+  Mail, Phone, User, Award, Calendar,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -51,6 +52,16 @@ type Program = {
   universityCity?: string | null;
   universityStatus?: string | null;
   universityType?: string | null;
+  universityWebsite?: string | null;
+  universityDescription?: string | null;
+  universityRanking?: number | null;
+  universityQsRanking?: number | null;
+  universityTimesRanking?: number | null;
+  universityAddress?: string | null;
+  universityTaxType?: string | null;
+  universityContactName?: string | null;
+  universityContactPhone?: string | null;
+  universityContactEmail?: string | null;
 };
 
 type FilterOptions = {
@@ -89,6 +100,12 @@ function calcCommissionAmount(program: Program): number | null {
   return Math.round((effectiveFee * program.commissionRate) / 100);
 }
 
+function ensureUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `https://${url}`;
+}
+
 export default function CourseFinder() {
   const { user } = useAuth(true);
   const { toast } = useToast();
@@ -99,6 +116,7 @@ export default function CourseFinder() {
   });
   const [page, setPage] = useState(1);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
+  const [selectedUniversity, setSelectedUniversity] = useState<Program | null>(null);
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
 
   const { data: filterOptions } = useQuery<FilterOptions>({
@@ -164,16 +182,6 @@ export default function CourseFinder() {
 
   const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.search || filters.feeMin || filters.feeMax;
 
-  const filteredCities = useMemo(() => {
-    if (!filterOptions?.cities) return [];
-    return filterOptions.cities;
-  }, [filterOptions?.cities]);
-
-  const filteredUniversities = useMemo(() => {
-    if (!filterOptions?.universities) return [];
-    return filterOptions.universities;
-  }, [filterOptions?.universities]);
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -200,7 +208,7 @@ export default function CourseFinder() {
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Countries" /></SelectTrigger>
                 <SelectContent className="max-h-60">
                   <SelectItem value="_all">All Countries</SelectItem>
-                  {filterOptions?.countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {filterOptions?.countries?.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -211,7 +219,7 @@ export default function CourseFinder() {
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Cities" /></SelectTrigger>
                 <SelectContent className="max-h-60">
                   <SelectItem value="_all">All Cities</SelectItem>
-                  {filteredCities?.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {filterOptions?.cities?.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -233,7 +241,7 @@ export default function CourseFinder() {
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Universities" /></SelectTrigger>
                 <SelectContent className="max-h-60">
                   <SelectItem value="_all">All Universities</SelectItem>
-                  {filteredUniversities?.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+                  {filterOptions?.universities?.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -244,7 +252,7 @@ export default function CourseFinder() {
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Levels" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_all">All Levels</SelectItem>
-                  {filterOptions?.degrees.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  {filterOptions?.degrees?.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -255,7 +263,7 @@ export default function CourseFinder() {
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Languages" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_all">All Languages</SelectItem>
-                  {filterOptions?.languages.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  {filterOptions?.languages?.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -305,11 +313,11 @@ export default function CourseFinder() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="bg-card border rounded-2xl p-5 animate-pulse space-y-4">
                 <div className="flex gap-3 items-center">
-                  <div className="w-12 h-12 bg-muted rounded-xl" />
+                  <div className="w-14 h-14 bg-muted rounded-xl" />
                   <div className="space-y-2 flex-1">
                     <div className="h-4 bg-muted rounded w-3/4" />
                     <div className="h-3 bg-muted rounded w-1/2" />
@@ -327,7 +335,7 @@ export default function CourseFinder() {
             <p className="text-sm">Try adjusting your filters or search terms</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {programs.map(prog => (
               <ProgramCard
                 key={prog.id}
@@ -335,6 +343,7 @@ export default function CourseFinder() {
                 isWishlisted={wishlistIds.includes(prog.id)}
                 onToggleWishlist={() => toggleWishlist(prog.id)}
                 onInfo={() => setSelectedProgram(prog)}
+                onUniversityClick={() => setSelectedUniversity(prog)}
                 showCommission={!!showCommission}
               />
             ))}
@@ -361,103 +370,313 @@ export default function CourseFinder() {
         onClose={() => setSelectedProgram(null)}
         showCommission={!!showCommission}
       />
+
+      <UniversityInfoDialog
+        program={selectedUniversity}
+        onClose={() => setSelectedUniversity(null)}
+      />
     </DashboardLayout>
   );
 }
 
-function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, showCommission }: {
+function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onUniversityClick, showCommission }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
   onInfo: () => void;
+  onUniversityClick: () => void;
   showCommission: boolean;
 }) {
-  const effectiveFee = p.discountedFee ?? p.tuitionFee;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const commissionAmount = calcCommissionAmount(p);
   const cur = p.currency ?? "USD";
+  const websiteUrl = ensureUrl(p.universityWebsite);
 
   return (
-    <div className="bg-card border rounded-2xl overflow-hidden hover:shadow-md transition-shadow group">
-      <div className="p-4 space-y-3">
+    <div className="bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-200 group flex flex-col">
+      <div className="p-5 space-y-4 flex-1">
         <div className="flex items-start gap-3">
-          <div className="w-12 h-12 rounded-xl border bg-muted flex items-center justify-center overflow-hidden shrink-0">
-            {p.universityLogoUrl ? (
-              <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain" />
-            ) : (
-              <Building2 className="w-6 h-6 text-muted-foreground" />
-            )}
-          </div>
+          {websiteUrl ? (
+            <a
+              href={websiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0 hover:border-primary/40 hover:shadow-md transition-all cursor-pointer"
+              title={`Visit ${p.universityName} website`}
+            >
+              {p.universityLogoUrl ? (
+                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+              ) : (
+                <Building2 className="w-7 h-7 text-muted-foreground" />
+              )}
+            </a>
+          ) : (
+            <div className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
+              {p.universityLogoUrl ? (
+                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+              ) : (
+                <Building2 className="w-7 h-7 text-muted-foreground" />
+              )}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground truncate">{p.universityName}</p>
+            <button
+              onClick={onUniversityClick}
+              className="text-xs text-muted-foreground hover:text-primary transition-colors truncate block max-w-full text-left hover:underline"
+              title="View university details"
+            >
+              {p.universityName}
+            </button>
             <h3 className="font-semibold text-sm leading-tight line-clamp-2 mt-0.5">{p.name}</h3>
           </div>
-          <button onClick={onToggleWishlist} className="shrink-0 p-1.5 rounded-lg hover:bg-muted transition-colors" title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}>
-            <Heart className={`w-4 h-4 transition-colors ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+          <button onClick={onToggleWishlist} className="shrink-0 p-2 rounded-full hover:bg-muted/80 transition-colors" title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}>
+            <Heart className={`w-5 h-5 transition-all ${isWishlisted ? "fill-red-500 text-red-500 scale-110" : "text-muted-foreground hover:text-red-400"}`} />
           </button>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          {p.degree && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 rounded-md"><GraduationCap className="w-3 h-3 mr-0.5" />{p.degree}</Badge>}
-          {p.language && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-md"><Languages className="w-3 h-3 mr-0.5" />{p.language}</Badge>}
-          {p.duration && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-md"><Clock className="w-3 h-3 mr-0.5" />{p.duration}</Badge>}
-          {p.universityCountry && <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-md"><Globe className="w-3 h-3 mr-0.5" />{p.universityCountry}</Badge>}
+          {p.degree && (
+            <Badge className="text-[10px] px-2 py-0.5 h-auto rounded-full bg-primary/10 text-primary border-0 font-medium">
+              <GraduationCap className="w-3 h-3 mr-1" />{p.degree}
+            </Badge>
+          )}
+          {p.language && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
+              <Languages className="w-3 h-3 mr-1" />{p.language}
+            </Badge>
+          )}
+          {p.duration && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
+              <Clock className="w-3 h-3 mr-1" />{p.duration}
+            </Badge>
+          )}
+          {p.universityCountry && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
+              <Globe className="w-3 h-3 mr-1" />{p.universityCountry}
+            </Badge>
+          )}
+          {p.universityCity && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
+              <MapPin className="w-3 h-3 mr-1" />{p.universityCity}
+            </Badge>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Tuition:</span>
-            <span className="font-medium">{formatCurrency(p.tuitionFee, cur)}</span>
+        <div className="bg-muted/40 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Tuition</span>
+            <div className="flex items-center gap-2">
+              {hasDiscount && (
+                <span className="text-xs text-muted-foreground line-through">{formatCurrency(p.tuitionFee, cur)}</span>
+              )}
+              <span className={`text-sm font-bold ${hasDiscount ? "text-emerald-600" : ""}`}>
+                {formatCurrency(hasDiscount ? p.discountedFee : p.tuitionFee, cur)}
+              </span>
+              {hasDiscount && (
+                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-100 text-emerald-700 border-0 rounded-full">
+                  SAVE {formatCurrency((p.tuitionFee ?? 0) - (p.discountedFee ?? 0), cur)}
+                </Badge>
+              )}
+            </div>
           </div>
-          {hasDiscount && (
-            <div className="flex justify-between">
-              <span className="text-amber-600">Discounted:</span>
-              <span className="font-medium text-amber-600">{formatCurrency(p.discountedFee, cur)}</span>
+
+          {p.applicationFee != null && p.applicationFee > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">App Fee</span>
+              <span className="text-xs font-medium">{formatCurrency(p.applicationFee, cur)}</span>
             </div>
           )}
-          {p.applicationFee != null && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">App Fee:</span>
-              <span className="font-medium">{formatCurrency(p.applicationFee, cur)}</span>
-            </div>
-          )}
+
           {p.intakes && (
-            <div className="flex justify-between col-span-2">
-              <span className="text-muted-foreground">Intakes:</span>
-              <span className="font-medium truncate ml-2">{p.intakes}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Intakes</span>
+              <div className="flex gap-1">
+                {p.intakes.split(",").map(intake => (
+                  <Badge key={intake.trim()} variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full">
+                    <Calendar className="w-2.5 h-2.5 mr-0.5" />{intake.trim()}
+                  </Badge>
+                ))}
+              </div>
             </div>
           )}
+
           {showCommission && commissionAmount != null && (
-            <div className="flex justify-between col-span-2">
-              <span className="text-indigo-600">Commission:</span>
-              <span className="font-semibold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
+            <div className="flex items-center justify-between pt-1 border-t border-dashed border-muted-foreground/20">
+              <span className="text-xs font-medium text-indigo-600">Commission</span>
+              <span className="text-sm font-bold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
             </div>
           )}
         </div>
 
-        {p.universityStatus && (
-          <div className="flex items-center gap-1">
-            <div className={`w-1.5 h-1.5 rounded-full ${p.universityStatus === "open" ? "bg-emerald-500" : "bg-amber-500"}`} />
-            <span className="text-[10px] text-muted-foreground capitalize">{p.universityStatus} for applications</span>
-          </div>
-        )}
+        <div className="flex items-center justify-between">
+          {p.universityStatus && (
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${p.universityStatus === "open" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+              <span className="text-[11px] text-muted-foreground capitalize font-medium">
+                {p.universityStatus === "open" ? "Open for Applications" : "Closed"}
+              </span>
+            </div>
+          )}
+          {p.universityType && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 rounded-full">{p.universityType}</Badge>
+          )}
+        </div>
       </div>
 
-      <div className="border-t flex">
+      <div className="border-t grid grid-cols-2 divide-x">
         <button
           onClick={onInfo}
-          className="flex-1 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-1"
+          className="py-3 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
         >
           <Info className="w-3.5 h-3.5" /> Details
         </button>
-        <div className="w-px bg-border" />
         <button
-          className="flex-1 py-2.5 text-xs font-medium text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-1"
+          className="py-3 text-xs font-semibold text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
         >
           <Send className="w-3.5 h-3.5" /> Apply
         </button>
       </div>
     </div>
+  );
+}
+
+function UniversityInfoDialog({ program: p, onClose }: {
+  program: Program | null;
+  onClose: () => void;
+}) {
+  if (!p) return null;
+  const websiteUrl = ensureUrl(p.universityWebsite);
+
+  return (
+    <Dialog open={!!p} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
+              {p.universityLogoUrl ? (
+                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+              ) : (
+                <Building2 className="w-8 h-8 text-muted-foreground" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-lg">{p.universityName}</DialogTitle>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {p.universityType && <Badge variant="secondary" className="text-xs">{p.universityType}</Badge>}
+                {p.universityStatus && (
+                  <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
+                    {p.universityStatus === "open" ? "Open" : "Closed"}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-3">
+          {p.universityDescription && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{p.universityDescription}</p>
+          )}
+
+          <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+            <h4 className="text-sm font-semibold flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Location</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {p.universityCountry && (
+                <div>
+                  <span className="text-muted-foreground text-xs">Country</span>
+                  <p className="font-medium">{p.universityCountry}</p>
+                </div>
+              )}
+              {p.universityCity && (
+                <div>
+                  <span className="text-muted-foreground text-xs">City</span>
+                  <p className="font-medium">{p.universityCity}</p>
+                </div>
+              )}
+            </div>
+            {p.universityAddress && (
+              <div>
+                <span className="text-muted-foreground text-xs">Address</span>
+                <p className="text-sm font-medium">{p.universityAddress}</p>
+              </div>
+            )}
+          </div>
+
+          {(p.universityQsRanking || p.universityTimesRanking || p.universityRanking) && (
+            <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+              <h4 className="text-sm font-semibold flex items-center gap-2"><Award className="w-4 h-4 text-primary" /> Rankings</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {p.universityQsRanking && (
+                  <div className="text-center bg-white rounded-lg p-2 border">
+                    <p className="text-lg font-bold text-primary">#{p.universityQsRanking}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">QS World</p>
+                  </div>
+                )}
+                {p.universityTimesRanking && (
+                  <div className="text-center bg-white rounded-lg p-2 border">
+                    <p className="text-lg font-bold text-primary">#{p.universityTimesRanking}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">Times HE</p>
+                  </div>
+                )}
+                {p.universityRanking && (
+                  <div className="text-center bg-white rounded-lg p-2 border">
+                    <p className="text-lg font-bold text-primary">#{p.universityRanking}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">National</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {p.universityTaxType && (
+            <div className="bg-muted/30 rounded-xl p-4 space-y-2">
+              <h4 className="text-sm font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> Financial</h4>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Tax Type</span>
+                <span className="font-medium capitalize">{p.universityTaxType}</span>
+              </div>
+            </div>
+          )}
+
+          {(p.universityContactName || p.universityContactEmail || p.universityContactPhone) && (
+            <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+              <h4 className="text-sm font-semibold flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Contact Person</h4>
+              <div className="space-y-2">
+                {p.universityContactName && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="font-medium">{p.universityContactName}</span>
+                  </div>
+                )}
+                {p.universityContactEmail && (
+                  <a href={`mailto:${p.universityContactEmail}`} className="flex items-center gap-2 text-sm text-primary hover:underline">
+                    <Mail className="w-3.5 h-3.5" />
+                    {p.universityContactEmail}
+                  </a>
+                )}
+                {p.universityContactPhone && (
+                  <a href={`tel:${p.universityContactPhone}`} className="flex items-center gap-2 text-sm text-primary hover:underline">
+                    <Phone className="w-3.5 h-3.5" />
+                    {p.universityContactPhone}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {websiteUrl && (
+            <a
+              href={websiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" /> Visit University Website
+            </a>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -517,9 +736,9 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
       <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start gap-3">
-            <div className="w-14 h-14 rounded-xl border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+            <div className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
               {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain" />
+                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
               ) : (
                 <Building2 className="w-7 h-7 text-muted-foreground" />
               )}
@@ -529,7 +748,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
               <DialogTitle className="text-lg">{p.name}</DialogTitle>
               <div className="flex gap-1.5 mt-1.5">
                 {p.degree && <Badge variant="secondary" className="text-xs">{p.degree}</Badge>}
-                {hasDiscount && <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200">Discounted</Badge>}
+                {hasDiscount && <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200">Discounted</Badge>}
                 {p.universityStatus && (
                   <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}`}>
                     {p.universityStatus}
