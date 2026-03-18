@@ -535,18 +535,11 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
     return daysSince > 90;
   });
 
-  const potentialComms = commissions.filter(c => c.status === "potential");
-  const nonPotentialComms = commissions.filter(c => c.status !== "potential");
-
   res.json({
     season: season || "all",
     commissions: {
-      potential: potentialComms.length,
-      confirmed: nonPotentialComms.length,
-      potentialUniversityCommission: potentialComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
-      confirmedUniversityCommission: nonPotentialComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
-      potentialAgentCommission: potentialComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
-      confirmedAgentCommission: nonPotentialComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+      potential: commissions.filter(c => c.status === "potential").length,
+      confirmed: commissions.filter(c => c.status !== "potential").length,
       totalUniversityCommission: commissions.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
       totalUniversityCollected: commissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
       totalUniversityPending: commissions.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
