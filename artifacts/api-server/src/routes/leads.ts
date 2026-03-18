@@ -13,6 +13,20 @@ const LEAD_PATCH_FIELDS = [
   "status", "assignedTo", "notes", "estimatedValue", "season",
 ];
 
+router.get("/nationalities", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
+  const leadNats = db
+    .selectDistinct({ nationality: leadsTable.nationality })
+    .from(leadsTable)
+    .where(sql`${leadsTable.nationality} IS NOT NULL AND ${leadsTable.nationality} != ''`);
+  const studentNats = db
+    .selectDistinct({ nationality: studentsTable.nationality })
+    .from(studentsTable)
+    .where(sql`${studentsTable.nationality} IS NOT NULL AND ${studentsTable.nationality} != ''`);
+  const [lr, sr] = await Promise.all([leadNats, studentNats]);
+  const all = new Set([...lr.map(r => r.nationality!), ...sr.map(r => r.nationality!)]);
+  res.json([...all].sort());
+});
+
 router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> => {
   const { firstName, lastName, email, phone, nationality, interestedProgram, interestedCountry, message } = req.body;
   if (!firstName || !lastName || !email) {

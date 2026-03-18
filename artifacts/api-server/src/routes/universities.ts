@@ -33,6 +33,14 @@ function maskContacts(uni: Record<string, any>, userRole?: string): Record<strin
   return masked;
 }
 
+router.get("/universities/countries", async (_req, res): Promise<void> => {
+  const rows = await db
+    .selectDistinct({ country: universitiesTable.country })
+    .from(universitiesTable)
+    .orderBy(universitiesTable.country);
+  res.json(rows.map(r => r.country).filter(Boolean));
+});
+
 router.get("/universities", async (req, res): Promise<void> => {
   const { country, search, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));

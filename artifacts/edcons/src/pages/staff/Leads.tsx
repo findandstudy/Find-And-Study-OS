@@ -38,8 +38,32 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+async function apiFetch(url: string) {
+  const r = await fetch(url, { credentials: "include" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function useNationalities() {
+  return useQuery<string[]>({
+    queryKey: ["nationalities"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/nationalities`),
+    staleTime: 5 * 60_000,
+  });
+}
+
+function useUniversityCountries() {
+  return useQuery<string[]>({
+    queryKey: ["university-countries"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities/countries`),
+    staleTime: 5 * 60_000,
+  });
+}
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
 
@@ -350,6 +374,62 @@ function FilterPopover({ filters, onChange }: {
   );
 }
 
+/* ── NationalityCombobox ──────────────────────────────────── */
+function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: nationalities = [] } = useNationalities();
+  const [inputVal, setInputVal] = useState(value);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setInputVal(value); }, [value]);
+
+  const filtered = inputVal
+    ? nationalities.filter(n => n.toLowerCase().includes(inputVal.toLowerCase()))
+    : nationalities;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative cursor-text" onClick={() => setOpen(true)}>
+          <Input
+            value={inputVal}
+            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Select or type..."
+            autoComplete="off"
+          />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No nationalities yet"}</div>}
+        {filtered.map(n => (
+          <button key={n} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors ${n === value ? "bg-primary/10 font-medium" : ""}`}
+            onMouseDown={e => { e.preventDefault(); onChange(n); setInputVal(n); setOpen(false); }}>
+            {n}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* ── CountrySelect ───────────────────────────────────────── */
+function CountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: countries = [] } = useUniversityCountries();
+
+  return (
+    <Select value={value || "__clear"} onValueChange={v => onChange(v === "__clear" ? "" : v)}>
+      <SelectTrigger><SelectValue placeholder="Select destination..." /></SelectTrigger>
+      <SelectContent className="max-h-60">
+        <SelectItem value="__clear" className="text-muted-foreground">— None —</SelectItem>
+        {countries.length === 0 && <SelectItem value="__empty" disabled>No destinations loaded</SelectItem>}
+        {countries.map(c => (
+          <SelectItem key={c} value={c}>{c}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 /* ── EditLeadDialog ───────────────────────────────────────── */
 function EditLeadDialog({ open, onClose, lead, canSeeRevenue }: {
   open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean;
@@ -421,7 +501,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue }: {
           </div>
           <div className="space-y-1.5">
             <Label>Nationality</Label>
-            <Input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} />
+            <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
           </div>
           <div className="space-y-1.5">
             <Label>Source</Label>
@@ -451,7 +531,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue }: {
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label>Interested Country</Label>
-            <Input value={form.interestedCountry} onChange={e => setForm({ ...form, interestedCountry: e.target.value })} />
+            <CountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
           </div>
           {canSeeRevenue && (
             <div className="space-y-1.5 col-span-2">
@@ -1058,7 +1138,7 @@ export default function LeadsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Nationality</Label>
-              <Input value={form.nationality} onChange={(e) => setForm({ ...form, nationality: e.target.value })} placeholder="e.g. Turkish" />
+              <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
             </div>
             <div className="space-y-1.5">
               <Label>Source</Label>
@@ -1077,7 +1157,7 @@ export default function LeadsPage() {
             </div>
             <div className="space-y-1.5 col-span-2">
               <Label>Interested Country</Label>
-              <Input value={form.interestedCountry} onChange={(e) => setForm({ ...form, interestedCountry: e.target.value })} placeholder="e.g. Canada" />
+              <CountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
             </div>
             {canSeeRevenue && (
               <div className="space-y-1.5 col-span-2">
