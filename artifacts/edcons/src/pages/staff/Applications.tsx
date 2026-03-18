@@ -23,11 +23,29 @@ import {
   Search, Plus, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown,
   Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
   User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
-  Eye, Stamp, CheckCircle, XCircle,
+  Eye, Stamp, CheckCircle, XCircle, Trophy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { EditStagesDialog } from "@/components/EditStagesDialog";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
@@ -174,11 +192,62 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
   );
 }
 
-/* ── PipelineColumn ──────────────────────────────────────── */
-function PipelineColumn({ stage, label, variant, apps, onView }: {
+type ColVariant = "won" | "lost" | undefined;
+
+/* ── DraggableAppCard ─────────────────────────────────────── */
+function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: number) => void; variant?: ColVariant }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  const cardBg =
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    "bg-card border-border hover:shadow-md";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-xl border ${isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg} mb-3 transition-shadow duration-200`}
+    >
+      <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
+        <div className="flex justify-between items-start mb-1.5">
+          <h4 className="font-bold text-sm text-foreground line-clamp-1">
+            {app.studentFirstName} {app.studentLastName}
+          </h4>
+        </div>
+        {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
+        {app.programName && (
+          <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">{app.programName}</p>
+        )}
+        <div className="mt-2 flex items-center justify-between">
+          {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
+          {app.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
+            <div className="flex items-center gap-1">
+              <TrendingUp className="w-3 h-3 text-emerald-500" />
+              <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(app.commissionAmount))}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="px-4 pb-3 flex justify-end">
+        <button
+          onClick={() => onView(app.id)}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Eye className="w-3 h-3" /> View
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── DroppableAppColumn ──────────────────────────────────── */
+function DroppableAppColumn({ stage, label, variant, apps, onView }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
 }) {
-  const v = variant as "won" | "lost" | undefined;
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const v = variant as ColVariant;
   const totalRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
 
   const colBg =
@@ -196,11 +265,27 @@ function PipelineColumn({ stage, label, variant, apps, onView }: {
     v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" :
     "bg-background text-muted-foreground border shadow-sm";
 
+  const dropBg =
+    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    (isOver ? "bg-primary/5" : "");
+
+  const emptyBorder =
+    v === "won" ? "border-emerald-300/50 text-emerald-500" :
+    v === "lost" ? "border-rose-300/50 text-rose-400" :
+    "border-border/50 text-muted-foreground";
+
+  const icon =
+    v === "won" ? <Trophy className="w-4 h-4 text-emerald-500 shrink-0" /> :
+    v === "lost" ? <XCircle className="w-4 h-4 text-rose-400 shrink-0" /> :
+    null;
+
   return (
     <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5">
+            {icon}
             <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
           </div>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{apps.length}</span>
@@ -212,37 +297,17 @@ function PipelineColumn({ stage, label, variant, apps, onView }: {
           </div>
         )}
       </div>
-      <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
-        {apps.map((app: any) => {
-          const cardBg = v === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" : v === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" : "bg-card border-border hover:shadow-md";
-          return (
-            <div key={app.id} onClick={() => onView(app.id)} className={`rounded-xl border ${cardBg} mb-3 p-4 cursor-pointer transition-shadow duration-200`}>
-              <div className="flex justify-between items-start mb-1.5">
-                <h4 className="font-bold text-sm text-foreground line-clamp-1">
-                  {app.studentFirstName} {app.studentLastName}
-                </h4>
-              </div>
-              {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
-              {app.programName && (
-                <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">{app.programName}</p>
-              )}
-              <div className="mt-2 flex items-center justify-between">
-                {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
-                {app.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-emerald-500" />
-                    <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(app.commissionAmount))}</span>
-                  </div>
-                )}
-              </div>
+      <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
+        <SortableContext items={apps.map(a => a.id)} strategy={verticalListSortingStrategy}>
+          {apps.map((app: any) => (
+            <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} />
+          ))}
+          {apps.length === 0 && (
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
+              Drop here
             </div>
-          );
-        })}
-        {apps.length === 0 && (
-          <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${v === "won" ? "border-emerald-300/50 text-emerald-500" : v === "lost" ? "border-rose-300/50 text-rose-400" : "border-border/50 text-muted-foreground"}`}>
-            No applications
-          </div>
-        )}
+          )}
+        </SortableContext>
       </div>
     </div>
   );
@@ -711,7 +776,13 @@ export default function ApplicationsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [listPage, setListPage] = useState(1);
   const [editStagesOpen, setEditStagesOpen] = useState(false);
+  const [activeId, setActiveId] = useState<number | null>(null);
   const LIST_PAGE_SIZE = 50;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("application");
   const stageOrder = pipelineStages.map(s => s.key);
@@ -774,6 +845,45 @@ export default function ApplicationsPage() {
     else { setSelectedIds(prev => { const next = new Set(prev); pagedIds.forEach(id => next.add(id)); return next; }); }
   }
 
+  const allColumnIds = new Set(pipelineStages.map(s => s.key));
+  const activeCard = activeId ? allApps.find((a: any) => a.id === activeId) : null;
+
+  const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over) return;
+
+    const appId = active.id as number;
+    const overId = over.id;
+
+    let targetStage: string;
+    if (allColumnIds.has(overId as string)) {
+      targetStage = overId as string;
+    } else {
+      const overApp = allApps.find((a: any) => a.id === overId);
+      if (!overApp) return;
+      targetStage = overApp.stage;
+    }
+
+    const app = allApps.find((a: any) => a.id === appId);
+    if (!app || app.stage === targetStage) return;
+
+    apiFetch(`${BASE_URL}/api/applications/${appId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: targetStage }),
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
+      toast({ title: `Application moved → ${colLabel}` });
+    }).catch(() => {
+      toast({ title: "Error", description: "Could not move application", variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+    });
+  };
+
   const deleteApp = useMutation({ mutationFn: (id: number) => apiFetch(`${BASE_URL}/api/applications/${id}`, { method: "DELETE" }) });
 
   async function handleBulkDelete() {
@@ -822,10 +932,44 @@ export default function ApplicationsPage() {
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
             <div className="flex gap-5 h-full min-w-max px-1">
-              {pipelineStages.map(s => {
-                const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
-                return <PipelineColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setEditApp(allApps.find((a: any) => a.id === id))} />;
-              })}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                {pipelineStages.map(s => {
+                  const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
+                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setEditApp(allApps.find((a: any) => a.id === id))} />;
+                })}
+
+                <DragOverlay>
+                  {activeCard ? (
+                    <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
+                      <div className="flex justify-between items-start mb-1.5">
+                        <h4 className="font-bold text-sm text-foreground">
+                          {activeCard.studentFirstName} {activeCard.studentLastName}
+                        </h4>
+                      </div>
+                      {activeCard.universityName && <p className="text-xs text-muted-foreground truncate">{activeCard.universityName}</p>}
+                      {activeCard.programName && (
+                        <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">
+                          {activeCard.programName}
+                        </p>
+                      )}
+                      <div className="mt-2 flex items-center justify-between">
+                        {activeCard.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{activeCard.country}</span>}
+                        {activeCard.commissionAmount && parseFloat(activeCard.commissionAmount) > 0 && (
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3 text-emerald-500" />
+                            <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(activeCard.commissionAmount))}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             </div>
           </div>
         )}

@@ -20,13 +20,39 @@ import {
   Users, Download, Eye, Loader2, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   ChevronRight, Filter, UserCheck, UserX, UserMinus, UserPlus,
+  Trophy, XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { EditStagesDialog } from "@/components/EditStagesDialog";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+async function apiFetch(url: string, opts?: RequestInit) {
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (r.status === 204) return undefined;
+  return r.json();
+}
 
 const STATUS_COLORS_DEFAULT: Record<string, string> = {
   active: "bg-green-100 text-green-700 border-green-200",
@@ -1023,42 +1049,90 @@ function StuSortHeader({ label, sortKey, currentSort, onSort }: {
   );
 }
 
-function StuPipelineColumn({ status, label, variant, students, onView }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void }) {
-  const v = variant as "won" | "lost" | undefined;
+type StuColVariant = "won" | "lost" | undefined;
+
+function DraggableStudentCard({ student, onView, variant }: { student: any; onView: (id: number) => void; variant?: StuColVariant }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  const cardBg =
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    "bg-card border-border hover:shadow-md";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-xl border ${isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg} mb-3 transition-shadow duration-200`}
+    >
+      <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-primary">{student.firstName?.[0]}{student.lastName?.[0]}</span>
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-bold text-sm text-foreground line-clamp-1">{student.firstName} {student.lastName}</h4>
+            <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || "No contact"}</p>
+          </div>
+        </div>
+        {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
+      </div>
+      <div className="px-4 pb-3 flex justify-end">
+        <button
+          onClick={() => onView(student.id)}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Eye className="w-3 h-3" /> View
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DroppableStuColumn({ status, label, variant, students, onView }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void }) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const v = variant as StuColVariant;
 
   const colBg = v === "won" ? "bg-emerald-50/60 border-emerald-200/50" : v === "lost" ? "bg-rose-50/60 border-rose-200/50" : "bg-secondary/50 border-border/50";
   const headerBg = v === "won" ? "bg-emerald-100/80 border-emerald-200/70" : v === "lost" ? "bg-rose-100/80 border-rose-200/70" : "bg-card/50 border-border/50";
   const badgeBg = v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50" : v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" : "bg-background text-muted-foreground border shadow-sm";
-  const cardBg = v === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" : v === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" : "bg-card border-border hover:shadow-md";
+
+  const dropBg =
+    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    (isOver ? "bg-primary/5" : "");
+
+  const emptyBorder =
+    v === "won" ? "border-emerald-300/50 text-emerald-500" :
+    v === "lost" ? "border-rose-300/50 text-rose-400" :
+    "border-border/50 text-muted-foreground";
+
+  const icon =
+    v === "won" ? <Trophy className="w-4 h-4 text-emerald-500 shrink-0" /> :
+    v === "lost" ? <XCircle className="w-4 h-4 text-rose-400 shrink-0" /> :
+    null;
 
   return (
     <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5">
+            {icon}
             <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
           </div>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{students.length}</span>
         </div>
       </div>
-      <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
-        {students.map((s: any) => (
-          <div key={s.id} onClick={() => onView(s.id)} className={`rounded-xl border ${cardBg} mb-3 p-4 cursor-pointer transition-shadow duration-200`}>
-            <div className="flex items-center gap-2.5 mb-1.5">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
-                <span className="text-xs font-bold text-primary">{s.firstName?.[0]}{s.lastName?.[0]}</span>
-              </div>
-              <div className="min-w-0">
-                <h4 className="font-bold text-sm text-foreground line-clamp-1">{s.firstName} {s.lastName}</h4>
-                <p className="text-xs text-muted-foreground truncate">{s.email || s.phone || "No contact"}</p>
-              </div>
-            </div>
-            {s.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{s.nationality}</span>}
-          </div>
-        ))}
-        {students.length === 0 && (
-          <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${v === "won" ? "border-emerald-300/50 text-emerald-500" : v === "lost" ? "border-rose-300/50 text-rose-400" : "border-border/50 text-muted-foreground"}`}>No students</div>
-        )}
+      <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
+        <SortableContext items={students.map(s => s.id)} strategy={verticalListSortingStrategy}>
+          {students.map((s: any) => (
+            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} />
+          ))}
+          {students.length === 0 && (
+            <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
+          )}
+        </SortableContext>
       </div>
     </div>
   );
@@ -1195,7 +1269,13 @@ export default function StudentsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [listPage, setListPage] = useState(1);
   const [editStagesOpen, setEditStagesOpen] = useState(false);
+  const [activeId, setActiveId] = useState<number | null>(null);
   const LIST_PAGE_SIZE = 50;
+
+  const stuSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("student");
   const studentStatuses = pipelineStages.map(s => s.key);
@@ -1265,6 +1345,45 @@ export default function StudentsPage() {
     else toast({ title: "Some could not be deleted", variant: "destructive" });
   }
 
+  const allStuColumnIds = new Set(pipelineStages.map(s => s.key));
+  const activeStuCard = activeId ? allStudents.find((s: any) => s.id === activeId) : null;
+
+  const handleStuDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
+
+  const handleStuDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over) return;
+
+    const studentId = active.id as number;
+    const overId = over.id;
+
+    let targetStatus: string;
+    if (allStuColumnIds.has(overId as string)) {
+      targetStatus = overId as string;
+    } else {
+      const overStu = allStudents.find((s: any) => s.id === overId);
+      if (!overStu) return;
+      targetStatus = overStu.status;
+    }
+
+    const student = allStudents.find((s: any) => s.id === studentId);
+    if (!student || student.status === targetStatus) return;
+
+    apiFetch(`${BASE_URL}/api/students/${studentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: targetStatus }),
+    }).then(() => {
+      invalidate();
+      const colLabel = pipelineStages.find(s => s.key === targetStatus)?.label ?? targetStatus;
+      toast({ title: `Student moved → ${colLabel}` });
+    }).catch(() => {
+      toast({ title: "Error", description: "Could not move student", variant: "destructive" });
+      invalidate();
+    });
+  };
+
   function formatDate(d: string | null | undefined) {
     if (!d) return "-";
     return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -1308,10 +1427,34 @@ export default function StudentsPage() {
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
             <div className="flex gap-5 h-full min-w-max px-1">
-              {pipelineStages.map((ps, idx) => {
-                const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
-                return <StuPipelineColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} />;
-              })}
+              <DndContext
+                sensors={stuSensors}
+                collisionDetection={closestCorners}
+                onDragStart={handleStuDragStart}
+                onDragEnd={handleStuDragEnd}
+              >
+                {pipelineStages.map((ps, idx) => {
+                  const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} />;
+                })}
+
+                <DragOverlay>
+                  {activeStuCard ? (
+                    <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
+                      <div className="flex items-center gap-2.5 mb-1.5">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-bold text-primary">{activeStuCard.firstName?.[0]}{activeStuCard.lastName?.[0]}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-sm text-foreground line-clamp-1">{activeStuCard.firstName} {activeStuCard.lastName}</h4>
+                          <p className="text-xs text-muted-foreground truncate">{activeStuCard.email || activeStuCard.phone || "No contact"}</p>
+                        </div>
+                      </div>
+                      {activeStuCard.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{activeStuCard.nationality}</span>}
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             </div>
           </div>
         )}
