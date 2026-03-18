@@ -161,7 +161,9 @@ const EMPTY_FORM = {
   nationality: "", dateOfBirth: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
-  highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4", languageScore: "",
+  highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
+  universityBachelor: "", universityMaster: "",
+  languageScore: "",
   notes: "",
 };
 
@@ -609,6 +611,8 @@ function AddStudentModal({
           fatherName: form.fatherName || null,
           address: form.address || null,
           highSchool: form.highSchool || null,
+          universityBachelor: form.universityBachelor || null,
+          universityMaster: form.universityMaster || null,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null,
           gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null,
           languageScore: form.languageScore || null,
@@ -869,6 +873,16 @@ function AddStudentModal({
                   <div className="col-span-2">
                     <FormField label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" aiExtracted={ef.has("highSchool")} />
                   </div>
+                  {(applicationLevel === "graduate" || applicationLevel === "doctorate") && (
+                    <div className="col-span-2">
+                      <FormField label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" aiExtracted={ef.has("universityBachelor")} />
+                    </div>
+                  )}
+                  {applicationLevel === "doctorate" && (
+                    <div className="col-span-2">
+                      <FormField label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" aiExtracted={ef.has("universityMaster")} />
+                    </div>
+                  )}
                   <FormField label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" aiExtracted={ef.has("graduationYear")} />
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">
