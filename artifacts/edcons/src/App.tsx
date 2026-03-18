@@ -29,6 +29,7 @@ import StudentDetail from "@/pages/staff/StudentDetail";
 import ApplicationDetail from "@/pages/staff/ApplicationDetail";
 import StaffDocuments from "@/pages/staff/Documents";
 import StaffCourseFinder from "@/pages/staff/CourseFinder";
+import StaffAgents from "@/pages/staff/Agents";
 
 // Admin
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -118,6 +119,9 @@ function Router() {
       </Route>
       <Route path="/staff/course-finder">
         <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]}><StaffCourseFinder /></ProtectedRoute>
+      </Route>
+      <Route path="/staff/agents">
+        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffAgents /></ProtectedRoute>
       </Route>
       <Route path="/staff/finance">
         <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffFinance /></ProtectedRoute>

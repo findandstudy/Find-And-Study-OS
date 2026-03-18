@@ -38,6 +38,7 @@ import {
   Search,
   Sun,
   Moon,
+  Handshake,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Students", icon: GraduationCap, url: '/staff/students' },
             { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
             { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
+            { title: "Agents", icon: Handshake, url: '/staff/agents' },
             { title: "Finance", icon: DollarSign, url: '/staff/finance' },
           ]
         },
@@ -95,6 +97,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Applications", icon: FileText, url: '/staff/applications' },
             { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
             { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
+            { title: "Agents", icon: Handshake, url: '/staff/agents' },
             { title: "Finance", icon: Briefcase, url: '/staff/finance' },
           ]
         },
