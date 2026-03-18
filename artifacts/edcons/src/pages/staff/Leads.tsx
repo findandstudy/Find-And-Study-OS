@@ -6,7 +6,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
-  Plus, Search, Filter, ExternalLink, TrendingUp, Settings2, X,
+  Plus, Search, Filter, Eye, TrendingUp, Settings2, X,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil, ChevronLeft, ChevronRight,
 } from "lucide-react";
@@ -159,7 +159,7 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
           onClick={() => onView(lead.id)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
         >
-          <ExternalLink className="w-3 h-3" /> View
+          <Eye className="w-3 h-3" /> View
         </button>
       </div>
     </div>
