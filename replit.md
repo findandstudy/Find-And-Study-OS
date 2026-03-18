@@ -60,6 +60,10 @@ The project is structured as a pnpm monorepo with separate packages for the API 
   - API: `/api/notifications`, `/api/notifications/unread-count`, `/api/notification-rules`
   - Frontend: `artifacts/edcons/src/components/NotificationCenter.tsx` (header bell icon), `artifacts/edcons/src/components/NotificationRulesManager.tsx` (admin settings)
   - Notification rules configurable per event with channel selection (in_app, email, whatsapp, telegram, sms), recipient targeting (role, assigned, owner, specific, all)
+- **Quick Contact:** Reusable `QuickContactButtons` component for contacting leads/students/agents from detail pages. Supports internal, email, and WhatsApp channels. Creates conversation + message records for all channels.
+  - API: `POST /api/quick-contact` with server-side channel validation (requires recipientEmail for email, recipientPhone for WhatsApp)
+  - Frontend: `artifacts/edcons/src/components/QuickContact.tsx` — integrated into LeadDetail, StudentDetail, ApplicationDetail, and Agents pages
+- **Message Notifications:** Sending a message to a conversation automatically creates in-app notifications for all other participants.
 - **Security:** Conversation participants endpoint has membership authorization check. Broadcast tab gated to admin/manager roles on frontend.
 - **ADMIN_ROLES:** `["super_admin", "admin", "manager"]` — used for notification rules, broadcast access, and other admin-level operations.
 

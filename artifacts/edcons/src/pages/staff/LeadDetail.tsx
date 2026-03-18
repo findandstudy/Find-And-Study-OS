@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus } from "lucide-react";
+import { QuickContactButtons } from "@/components/QuickContact";
 import { useToast } from "@/hooks/use-toast";
 
 const STATUS_OPTIONS = ["new", "contacted", "interested", "qualified", "converted", "lost"];
@@ -162,15 +163,26 @@ export default function LeadDetail({ id }: Props) {
             )}
             <p className="text-sm text-muted-foreground mt-0.5">Lead Detail</p>
           </div>
-          {!isLoading && lead?.status !== "converted" && (
-            <Button
-              onClick={handleConvert}
-              disabled={convertLead.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-md"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Convert to Student
-            </Button>
+          {!isLoading && lead && (
+            <div className="flex items-center gap-2">
+              <QuickContactButtons
+                name={`${lead.firstName} ${lead.lastName}`}
+                email={lead.email}
+                phone={lead.phone}
+                entityType="lead"
+                entityId={id}
+              />
+              {lead.status !== "converted" && (
+                <Button
+                  onClick={handleConvert}
+                  disabled={convertLead.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-md"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Convert to Student
+                </Button>
+              )}
+            </div>
           )}
         </div>
 

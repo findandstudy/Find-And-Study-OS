@@ -19,6 +19,7 @@ import {
   MoreHorizontal, KeyRound, LogIn, Power, ShieldCheck, ShieldOff,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
+import { QuickContactButtons } from "@/components/QuickContact";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -520,6 +521,15 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   <p className="text-foreground text-xs">{a.email || "-"}</p>
                   <p className="text-muted-foreground text-xs">{a.phone || "-"}</p>
+                  <div className="mt-1">
+                    <QuickContactButtons
+                      name={`${a.firstName} ${a.lastName}`}
+                      email={a.email}
+                      phone={a.phone}
+                      entityType="agent"
+                      entityId={a.id}
+                    />
+                  </div>
                 </td>
                 {showParent && <td className="py-3 px-3 text-xs text-foreground">{getParentName(a.parentAgentId)}</td>}
                 <td className="py-3 px-3">

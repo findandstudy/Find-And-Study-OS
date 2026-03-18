@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2 } from "lucide-react";
+import { QuickContactButtons } from "@/components/QuickContact";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -257,12 +258,21 @@ export default function StudentDetail({ id }: Props) {
             )}
             <p className="text-sm text-muted-foreground mt-0.5">Student Profile</p>
           </div>
-          {!isLoading && (
-            <Badge
-              className={`capitalize px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[student?.status ?? "active"]}`}
-            >
-              {student?.status}
-            </Badge>
+          {!isLoading && student && (
+            <div className="flex items-center gap-2">
+              <QuickContactButtons
+                name={`${student.firstName} ${student.lastName}`}
+                email={student.email}
+                phone={student.phone}
+                entityType="student"
+                entityId={id}
+              />
+              <Badge
+                className={`capitalize px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[student.status ?? "active"]}`}
+              >
+                {student.status}
+              </Badge>
+            </div>
           )}
         </div>
 

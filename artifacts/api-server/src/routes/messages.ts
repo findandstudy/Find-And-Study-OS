@@ -282,6 +282,30 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
       )
     );
 
+  const otherParticipants = await db
+    .select({ userId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable)
+    .where(
+      and(
+        eq(conversationParticipantsTable.conversationId, conversationId),
+        sql`${conversationParticipantsTable.userId} != ${userId}`
+      )
+    );
+
+  const senderName = req.user!.firstName + " " + req.user!.lastName;
+  for (const p of otherParticipants) {
+    await db.insert(notificationsTable).values({
+      userId: p.userId,
+      type: "message.new",
+      title: `New message from ${senderName}`,
+      body: content.trim().substring(0, 150),
+      icon: "message-circle",
+      actionUrl: `/staff/messages`,
+      channel: "in_app",
+      data: { conversationId, messageId: message.id },
+    });
+  }
+
   res.status(201).json(message);
 });
 
@@ -421,6 +445,82 @@ router.get("/broadcasts", requireAuth, requireRole(...ADMIN_ROLES), async (_req,
     .limit(50);
 
   res.json({ data: broadcasts });
+});
+
+/* ─── QUICK CONTACT ────────────────────────────────────────── */
+
+async function createQuickContactConversation(
+  userId: number, title: string, channel: string, status: string,
+  content: string, metadata: Record<string, any>
+) {
+  const [conv] = await db
+    .insert(conversationsTable)
+    .values({ type: "direct", title, createdById: userId })
+    .returning();
+  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId });
+  await db.insert(messagesTable).values({
+    conversationId: conv.id, senderId: userId, content,
+    channel, status, metadata,
+  });
+  await db.update(conversationsTable)
+    .set({ lastMessageAt: new Date(), lastMessagePreview: content.substring(0, 200) })
+    .where(eq(conversationsTable.id, conv.id));
+  return conv;
+}
+
+router.post("/quick-contact", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const { channel, recipientName, recipientEmail, recipientPhone, subject, message, entityType, entityId } = req.body;
+
+  if (!channel || !message) {
+    res.status(400).json({ error: "channel and message are required" });
+    return;
+  }
+  if (channel === "email" && !recipientEmail) {
+    res.status(400).json({ error: "recipientEmail is required for email channel" });
+    return;
+  }
+  if (channel === "whatsapp" && !recipientPhone) {
+    res.status(400).json({ error: "recipientPhone is required for WhatsApp channel" });
+    return;
+  }
+
+  try {
+    const entityLabel = entityType ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : "Contact";
+    let conv;
+    let note: string | undefined;
+
+    if (channel === "internal") {
+      const title = `${entityLabel}: ${recipientName}`;
+      conv = await createQuickContactConversation(
+        userId, title, "internal", "sent", message,
+        { entityType, entityId, recipientName, recipientEmail, recipientPhone }
+      );
+    } else if (channel === "email") {
+      const title = `Email to ${recipientName}: ${subject || "(no subject)"}`;
+      conv = await createQuickContactConversation(
+        userId, title, "email", "queued", message,
+        { entityType, entityId, recipientName, recipientEmail, subject }
+      );
+      note = "Email queued for delivery";
+    } else if (channel === "whatsapp") {
+      const title = `WhatsApp to ${recipientName}`;
+      conv = await createQuickContactConversation(
+        userId, title, "whatsapp", "queued", message,
+        { entityType, entityId, recipientName, recipientPhone }
+      );
+      note = "WhatsApp message queued";
+    } else {
+      res.status(400).json({ error: "Unsupported channel" });
+      return;
+    }
+
+    await logAudit(userId, "quick_contact", entityType, entityId, { channel, recipientName }, req.ip);
+    res.json({ success: true, conversationId: conv.id, ...(note ? { note } : {}) });
+  } catch (err: any) {
+    console.error("Quick contact error:", err);
+    res.status(500).json({ error: "Failed to send message" });
+  }
 });
 
 export default router;

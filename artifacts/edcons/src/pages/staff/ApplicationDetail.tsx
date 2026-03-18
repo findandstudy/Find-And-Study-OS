@@ -22,6 +22,7 @@ import {
   MapPin, GraduationCap, Globe, Calendar, Pencil, TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { QuickContactButtons } from "@/components/QuickContact";
 
 const STUDY_LEVELS = [
   { value: "associate", label: "Associate" },
@@ -258,6 +259,13 @@ export default function ApplicationDetail({ id }: Props) {
                   <p className="text-muted-foreground text-xs">{app.studentEmail}</p>
                   {app.studentPhone && <p className="text-muted-foreground text-xs">{app.studentPhone}</p>}
                 </div>
+                <QuickContactButtons
+                  name={`${app.studentFirstName} ${app.studentLastName}`}
+                  email={app.studentEmail}
+                  phone={app.studentPhone}
+                  entityType="application"
+                  entityId={id}
+                />
               </div>
             )}
 
