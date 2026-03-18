@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, documentsTable, studentsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 
@@ -116,6 +116,27 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
   await logAudit(req.user!.id, "update_document", "document", id, updates, req.ip);
   res.json(doc);
+});
+
+router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids array is required" });
+    return;
+  }
+  const numericIds = ids.map((id: any) => parseInt(id, 10)).filter((id: number) => !isNaN(id));
+  if (numericIds.length === 0) {
+    res.status(400).json({ error: "No valid ids provided" });
+    return;
+  }
+  const docs = await db.select().from(documentsTable).where(inArray(documentsTable.id, numericIds));
+  if (docs.length === 0) {
+    res.status(404).json({ error: "No documents found" });
+    return;
+  }
+  await db.delete(documentsTable).where(inArray(documentsTable.id, numericIds));
+  await logAudit(req.user!.id, "bulk_delete_documents", "document", null as any, { count: docs.length, ids: numericIds }, req.ip);
+  res.json({ deleted: docs.length });
 });
 
 router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {

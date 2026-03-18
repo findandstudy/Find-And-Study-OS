@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, Plus, Search, Trash2, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -50,6 +51,8 @@ const STATUS_COLORS: Record<string, string> = {
   extracted: "bg-blue-100 text-blue-700",
 };
 
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
 export default function DocumentsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -57,6 +60,8 @@ export default function DocumentsPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", type: "passport", studentId: "" });
   const [sort, setSort] = useState<{ key: DocSortKey; dir: SortDir }>({ key: "uploaded", dir: "desc" });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: docs, isLoading } = useListDocuments();
   const createDoc = useCreateDocument();
@@ -80,6 +85,27 @@ export default function DocumentsPage() {
       default: return 0;
     }
   });
+
+  const filteredIds = filtered.map((d: any) => d.id as number);
+  const allSelected = filteredIds.length > 0 && filteredIds.every(id => selected.has(id));
+  const someSelected = filteredIds.some(id => selected.has(id));
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filteredIds));
+    }
+  }
+
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function handleCreate() {
     if (!form.name || !form.type) return;
@@ -110,16 +136,38 @@ export default function DocumentsPage() {
       {
         onSuccess: () => {
           toast({ title: "Document deleted" });
+          setSelected(prev => { const next = new Set(prev); next.delete(id); return next; });
           queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         },
       }
     );
   }
 
+  async function handleBulkDelete() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} selected document${ids.length > 1 ? "s" : ""}?`)) return;
+    setBulkDeleting(true);
+    try {
+      await fetch(`${BASE_URL}/api/documents/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids }),
+      });
+      toast({ title: `${ids.length} document${ids.length > 1 ? "s" : ""} deleted` });
+      setSelected(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+    } catch {
+      toast({ title: "Failed to delete documents", variant: "destructive" });
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Documents</h1>
@@ -141,12 +189,43 @@ export default function DocumentsPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+            <span className="text-sm font-medium text-foreground">
+              {selected.size} document{selected.size > 1 ? "s" : ""} selected
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="ml-auto"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              {bulkDeleting ? "Deleting..." : `Delete Selected (${selected.size})`}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelected(new Set())}
+            >
+              Clear Selection
+            </Button>
+          </div>
+        )}
+
         <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <DocSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
                   <DocSortHeader label="Type" sortKey="type" currentSort={sort} onSort={handleSort} />
                   <DocSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
@@ -159,7 +238,7 @@ export default function DocumentsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={j}>
                           <div className="h-5 w-24 bg-secondary rounded animate-pulse" />
                         </TableCell>
@@ -168,7 +247,7 @@ export default function DocumentsPage() {
                   ))
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center">
+                    <TableCell colSpan={7} className="h-32 text-center">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <FileText className="w-8 h-8 opacity-30" />
                         <span>No documents found.</span>
@@ -177,7 +256,17 @@ export default function DocumentsPage() {
                   </TableRow>
                 ) : (
                   filtered.map((doc: any) => (
-                    <TableRow key={doc.id} className="hover:bg-primary/5 transition-colors">
+                    <TableRow
+                      key={doc.id}
+                      className={`hover:bg-primary/5 transition-colors ${selected.has(doc.id) ? "bg-primary/5" : ""}`}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(doc.id)}
+                          onCheckedChange={() => toggleSelect(doc.id)}
+                          aria-label={`Select ${doc.name}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -226,7 +315,6 @@ export default function DocumentsPage() {
         </div>
       </div>
 
-      {/* Create Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -272,7 +360,7 @@ export default function DocumentsPage() {
               onClick={handleCreate}
               disabled={createDoc.isPending || !form.name}
             >
-              {createDoc.isPending ? "Creating…" : "Create"}
+              {createDoc.isPending ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>
