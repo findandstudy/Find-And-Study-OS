@@ -875,12 +875,15 @@ export default function FinancePage() {
               { label: "Pending (To get)", value: fmt(cs?.pendingToCollect || 0) },
             ]}
           />
-          <StatCard
+          <FinanceStatCard
             icon={DollarSign}
             label="Service Fees"
-            value={fmt(feeSummary.totalServiceFees || 0)}
-            sub={`${fmt(feeSummary.totalCollected || 0)} collected`}
+            borderColor="border-t-indigo-500"
             color="text-indigo-600"
+            rows={[
+              { label: "Confirmed", value: fmt(feeSummary.totalServiceFees || 0) },
+              { label: "Collected", value: fmt(feeSummary.totalCollected || 0) },
+            ]}
           />
         </div>
 
