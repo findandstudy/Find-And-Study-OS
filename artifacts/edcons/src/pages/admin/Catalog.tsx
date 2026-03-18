@@ -38,6 +38,14 @@ function downloadCsv(content: string, filename: string) {
   document.body.removeChild(link);
 }
 
+async function exportToExcel(rows: Record<string, any>[], sheetName: string, filename: string) {
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
 function parseCsv(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
@@ -682,6 +690,20 @@ function UniversitiesTab() {
           </Button>
         )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button variant="outline" onClick={async () => {
+          try {
+            const all = await api("/api/universities?limit=5000");
+            const rows = (all?.data ?? []).map((u: University) => ({
+              Name: u.name, Country: u.country, City: u.city ?? "", Website: u.website ?? "",
+              Type: u.universityType ?? "", Status: u.status,
+              "QS Ranking": u.qsRanking ?? "", "Times Ranking": u.timesRanking ?? "",
+              Address: u.address ?? "", "Contact Person": u.contactPersonName ?? "",
+              "Contact Phone": u.contactPersonPhone ?? "", "Contact Email": u.contactPersonEmail ?? "",
+              Description: u.description ?? "",
+            }));
+            await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
+          } catch {}
+        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
         <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />Add University</Button>
       </div>
 
@@ -1125,6 +1147,23 @@ function ProgramsTab() {
           </Button>
         )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button variant="outline" onClick={async () => {
+          try {
+            const all = await api(`/api/programs?limit=5000${filterUni !== "all" ? `&universityId=${filterUni}` : ""}`);
+            const rows = (all?.data ?? []).map((p: Program) => ({
+              Program: p.name, University: uniMap[p.universityId]?.name ?? "",
+              Degree: p.degree ?? "", Field: p.field ?? "", Language: p.language ?? "",
+              Duration: p.duration ?? "", "Tuition Fee": p.tuitionFee ?? "",
+              Currency: p.currency ?? "", "Commission %": p.commissionRate ?? "",
+              "Scholarship %": p.scholarship ?? "", Intakes: p.intakes ?? "",
+              "Application Fee": p.applicationFee ?? "", "Advance Fee": p.advancedFee ?? "",
+              "Deposit Fee": p.depositFee ?? "", "Service Fee": p.serviceFeeAmount ?? "",
+              "Discounted Fee": p.discountedFee ?? "", "Language Fee": p.languageFee ?? "",
+              Requirements: p.requirements ?? "",
+            }));
+            await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
+          } catch {}
+        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
         <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />Add Program</Button>
       </div>
 
