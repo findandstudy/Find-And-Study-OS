@@ -158,6 +158,18 @@ Both the **Add Application** modal and **Edit Application** dialog use cascading
 - Commission calculations should use the effective tuition fee (discountedFee takes priority)
 - Filter popover country dropdown also uses the dynamic countries list
 
+## Course Finder
+
+- Page: `artifacts/edcons/src/pages/staff/CourseFinder.tsx`, route `/staff/course-finder`
+- Allowed roles: STAFF_ROLES + AGENT_ROLES
+- Sidebar: Operations (admin/manager/super_admin), Work (staff), Agent Portal (agent/sub_agent)
+- API: `GET /api/course-finder` (programs joined with universities, paginated), `GET /api/course-finder/filters` (distinct filter options)
+- Filters: Country, City, University Type, University, Study Level, Language, Tuition Fee Range (min/max), free-text search
+- Wishlists: `GET/POST/DELETE /api/wishlists` (authenticated, per-user)
+- Commission display: shows calculated commission **amount** (commissionRate × effectiveFee / 100), not percentage — visible to super_admin, agent, sub_agent roles
+- Program cards show: university logo, degree/language/duration/country badges, tuition & discounted fee, app fee, intakes, commission amount, open/closed status
+- Details dialog: full program info, university details, all fees breakdown, requirements
+
 ## Frontend Notes
 
 - Vite config has `dedupe: ["react", "react-dom"]` to prevent duplicate React issues

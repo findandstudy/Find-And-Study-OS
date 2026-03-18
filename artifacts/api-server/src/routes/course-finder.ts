@@ -6,16 +6,21 @@ import { requireAuth } from "../lib/auth";
 const router: IRouter = Router();
 
 router.get("/course-finder", async (req, res): Promise<void> => {
-  const { country, level, language, search, intake, page = "1", limit = "24" } = req.query as Record<string, string>;
+  const { country, city, universityType, universityId, level, language, search, intake, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [eq(programsTable.isActive, true)];
   if (country) conditions.push(eq(universitiesTable.country, country));
+  if (city) conditions.push(eq(universitiesTable.city, city));
+  if (universityType) conditions.push(eq(universitiesTable.universityType, universityType));
+  if (universityId) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
   if (level) conditions.push(ilike(programsTable.degree, `%${level}%`));
   if (language) conditions.push(ilike(programsTable.language, language));
   if (intake) conditions.push(ilike(programsTable.intakes, `%${intake}%`));
+  if (feeMin) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${parseInt(feeMin, 10)}`);
+  if (feeMax) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${parseInt(feeMax, 10)}`);
   if (search) {
     conditions.push(
       sql`(${ilike(programsTable.name, `%${search}%`)} OR ${ilike(universitiesTable.name, `%${search}%`)})`
@@ -78,12 +83,33 @@ router.get("/course-finder", async (req, res): Promise<void> => {
 });
 
 router.get("/course-finder/filters", async (_req, res): Promise<void> => {
+  const activeJoin = and(eq(programsTable.universityId, universitiesTable.id), eq(programsTable.isActive, true));
+
   const countries = await db
     .selectDistinct({ country: universitiesTable.country })
     .from(universitiesTable)
-    .innerJoin(programsTable, eq(programsTable.universityId, universitiesTable.id))
-    .where(eq(programsTable.isActive, true))
+    .innerJoin(programsTable, activeJoin)
     .orderBy(universitiesTable.country);
+
+  const cities = await db
+    .selectDistinct({ city: universitiesTable.city })
+    .from(universitiesTable)
+    .innerJoin(programsTable, activeJoin)
+    .where(sql`${universitiesTable.city} IS NOT NULL`)
+    .orderBy(universitiesTable.city);
+
+  const universityTypes = await db
+    .selectDistinct({ type: universitiesTable.universityType })
+    .from(universitiesTable)
+    .innerJoin(programsTable, activeJoin)
+    .where(sql`${universitiesTable.universityType} IS NOT NULL`)
+    .orderBy(universitiesTable.universityType);
+
+  const universities = await db
+    .selectDistinct({ id: universitiesTable.id, name: universitiesTable.name })
+    .from(universitiesTable)
+    .innerJoin(programsTable, activeJoin)
+    .orderBy(universitiesTable.name);
 
   const degrees = await db
     .selectDistinct({ degree: programsTable.degree })
@@ -97,10 +123,22 @@ router.get("/course-finder/filters", async (_req, res): Promise<void> => {
     .where(and(eq(programsTable.isActive, true), sql`${programsTable.language} IS NOT NULL`))
     .orderBy(programsTable.language);
 
+  const feeRange = await db
+    .select({
+      min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
+      max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
+    })
+    .from(programsTable)
+    .where(and(eq(programsTable.isActive, true), sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`));
+
   res.json({
     countries: countries.map(r => r.country).filter(Boolean),
+    cities: cities.map(r => r.city).filter(Boolean),
+    universityTypes: universityTypes.map(r => r.type).filter(Boolean),
+    universities: universities.map(r => ({ id: r.id, name: r.name })),
     degrees: degrees.map(r => r.degree).filter(Boolean),
     languages: languages.map(r => r.language).filter(Boolean),
+    feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
   });
 });
 

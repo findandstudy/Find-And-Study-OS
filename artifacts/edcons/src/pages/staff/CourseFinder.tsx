@@ -11,8 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Heart, Send, Info, GraduationCap, Globe, Clock,
-  Languages, DollarSign, BookOpen, Building2, MapPin,
-  ChevronLeft, ChevronRight, X, Percent, FileText, Tag,
+  Languages, DollarSign, BookOpen, Building2,
+  ChevronLeft, ChevronRight, X, FileText,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -53,11 +53,26 @@ type Program = {
   universityType?: string | null;
 };
 
+type FilterOptions = {
+  countries: string[];
+  cities: string[];
+  universityTypes: string[];
+  universities: { id: number; name: string }[];
+  degrees: string[];
+  languages: string[];
+  feeRange: { min: number; max: number };
+};
+
 type Filters = {
   country: string;
+  city: string;
+  universityType: string;
+  universityId: string;
   level: string;
   language: string;
   search: string;
+  feeMin: string;
+  feeMax: string;
 };
 
 const SHOW_COMMISSION_ROLES = ["super_admin", "agent", "sub_agent"];
@@ -67,16 +82,26 @@ function formatCurrency(amount: number | null | undefined, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
+function calcCommissionAmount(program: Program): number | null {
+  if (program.commissionRate == null) return null;
+  const effectiveFee = program.discountedFee ?? program.tuitionFee;
+  if (effectiveFee == null) return null;
+  return Math.round((effectiveFee * program.commissionRate) / 100);
+}
+
 export default function CourseFinder() {
   const { user } = useAuth(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<Filters>({ country: "", level: "", language: "", search: "" });
+  const [filters, setFilters] = useState<Filters>({
+    country: "", city: "", universityType: "", universityId: "",
+    level: "", language: "", search: "", feeMin: "", feeMax: "",
+  });
   const [page, setPage] = useState(1);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
 
-  const { data: filterOptions } = useQuery<{ countries: string[]; degrees: string[]; languages: string[] }>({
+  const { data: filterOptions } = useQuery<FilterOptions>({
     queryKey: ["course-finder-filters"],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/filters`),
     staleTime: 5 * 60_000,
@@ -87,9 +112,14 @@ export default function CourseFinder() {
     p.set("page", String(page));
     p.set("limit", "24");
     if (filters.country) p.set("country", filters.country);
+    if (filters.city) p.set("city", filters.city);
+    if (filters.universityType) p.set("universityType", filters.universityType);
+    if (filters.universityId) p.set("universityId", filters.universityId);
     if (filters.level) p.set("level", filters.level);
     if (filters.language) p.set("language", filters.language);
     if (filters.search) p.set("search", filters.search);
+    if (filters.feeMin) p.set("feeMin", filters.feeMin);
+    if (filters.feeMax) p.set("feeMax", filters.feeMax);
     return p.toString();
   }, [filters, page]);
 
@@ -123,16 +153,26 @@ export default function CourseFinder() {
   }
 
   function handleFilterChange(key: keyof Filters, value: string) {
-    setFilters({ ...filters, [key]: value });
+    setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1);
   }
 
   function clearFilters() {
-    setFilters({ country: "", level: "", language: "", search: "" });
+    setFilters({ country: "", city: "", universityType: "", universityId: "", level: "", language: "", search: "", feeMin: "", feeMax: "" });
     setPage(1);
   }
 
-  const hasActiveFilters = filters.country || filters.level || filters.language || filters.search;
+  const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.search || filters.feeMin || filters.feeMax;
+
+  const filteredCities = useMemo(() => {
+    if (!filterOptions?.cities) return [];
+    return filterOptions.cities;
+  }, [filterOptions?.cities]);
+
+  const filteredUniversities = useMemo(() => {
+    if (!filterOptions?.universities) return [];
+    return filterOptions.universities;
+  }, [filterOptions?.universities]);
 
   return (
     <DashboardLayout>
@@ -153,8 +193,8 @@ export default function CourseFinder() {
             />
           </div>
 
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="min-w-[160px] space-y-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Country</Label>
               <Select value={filters.country} onValueChange={v => handleFilterChange("country", v === "_all" ? "" : v)}>
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Countries" /></SelectTrigger>
@@ -164,8 +204,42 @@ export default function CourseFinder() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-[140px] space-y-1">
-              <Label className="text-xs text-muted-foreground">Level</Label>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">City</Label>
+              <Select value={filters.city} onValueChange={v => handleFilterChange("city", v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Cities" /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="_all">All Cities</SelectItem>
+                  {filteredCities?.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">University Type</Label>
+              <Select value={filters.universityType} onValueChange={v => handleFilterChange("universityType", v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Types" /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="_all">All Types</SelectItem>
+                  {filterOptions?.universityTypes?.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">University</Label>
+              <Select value={filters.universityId} onValueChange={v => handleFilterChange("universityId", v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Universities" /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="_all">All Universities</SelectItem>
+                  {filteredUniversities?.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Study Level</Label>
               <Select value={filters.level} onValueChange={v => handleFilterChange("level", v === "_all" ? "" : v)}>
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Levels" /></SelectTrigger>
                 <SelectContent>
@@ -174,7 +248,8 @@ export default function CourseFinder() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-[140px] space-y-1">
+
+            <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Language</Label>
               <Select value={filters.language} onValueChange={v => handleFilterChange("language", v === "_all" ? "" : v)}>
                 <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Languages" /></SelectTrigger>
@@ -184,13 +259,45 @@ export default function CourseFinder() {
                 </SelectContent>
               </Select>
             </div>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-xs text-muted-foreground">
-                <X className="w-3 h-3 mr-1" /> Clear
-              </Button>
-            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                Tuition Fee {filters.feeMin || filters.feeMax ? (
+                  <span className="text-primary">
+                    ({filters.feeMin ? `$${Number(filters.feeMin).toLocaleString()}` : "$0"} – {filters.feeMax ? `$${Number(filters.feeMax).toLocaleString()}` : "Max"})
+                  </span>
+                ) : null}
+              </Label>
+              <div className="flex gap-1.5 items-center">
+                <Input
+                  type="number"
+                  placeholder="Min"
+                  value={filters.feeMin}
+                  onChange={e => handleFilterChange("feeMin", e.target.value)}
+                  className="h-9 rounded-lg text-sm w-full"
+                />
+                <span className="text-muted-foreground text-xs shrink-0">–</span>
+                <Input
+                  type="number"
+                  placeholder="Max"
+                  value={filters.feeMax}
+                  onChange={e => handleFilterChange("feeMax", e.target.value)}
+                  className="h-9 rounded-lg text-sm w-full"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-muted-foreground">
+                  <X className="w-3 h-3 mr-1" /> Clear Filters
+                </Button>
+              )}
+            </div>
             {meta && (
-              <div className="ml-auto text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground">
                 {meta.total} program{meta.total !== 1 ? "s" : ""} found
               </div>
             )}
@@ -267,6 +374,8 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, showC
 }) {
   const effectiveFee = p.discountedFee ?? p.tuitionFee;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
+  const commissionAmount = calcCommissionAmount(p);
+  const cur = p.currency ?? "USD";
 
   return (
     <div className="bg-card border rounded-2xl overflow-hidden hover:shadow-md transition-shadow group">
@@ -298,18 +407,18 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, showC
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Tuition:</span>
-            <span className="font-medium">{formatCurrency(p.tuitionFee, p.currency ?? "USD")}</span>
+            <span className="font-medium">{formatCurrency(p.tuitionFee, cur)}</span>
           </div>
           {hasDiscount && (
             <div className="flex justify-between">
               <span className="text-amber-600">Discounted:</span>
-              <span className="font-medium text-amber-600">{formatCurrency(p.discountedFee, p.currency ?? "USD")}</span>
+              <span className="font-medium text-amber-600">{formatCurrency(p.discountedFee, cur)}</span>
             </div>
           )}
           {p.applicationFee != null && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">App Fee:</span>
-              <span className="font-medium">{formatCurrency(p.applicationFee, p.currency ?? "USD")}</span>
+              <span className="font-medium">{formatCurrency(p.applicationFee, cur)}</span>
             </div>
           )}
           {p.intakes && (
@@ -318,10 +427,10 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, showC
               <span className="font-medium truncate ml-2">{p.intakes}</span>
             </div>
           )}
-          {showCommission && p.commissionRate != null && (
-            <div className="flex justify-between">
+          {showCommission && commissionAmount != null && (
+            <div className="flex justify-between col-span-2">
               <span className="text-indigo-600">Commission:</span>
-              <span className="font-semibold text-indigo-600">{p.commissionRate}%</span>
+              <span className="font-semibold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
             </div>
           )}
         </div>
@@ -360,8 +469,9 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
   if (!p) return null;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const cur = p.currency ?? "USD";
+  const commissionAmount = calcCommissionAmount(p);
 
-  const sections: { title: string; icon: typeof GraduationCap; items: { label: string; value: string | null | undefined }[] }[] = [
+  const sections: { title: string; icon: typeof GraduationCap; items: { label: string; value: string | null | undefined; highlight?: string }[] }[] = [
     {
       title: "Program Details",
       icon: GraduationCap,
@@ -390,14 +500,14 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
       icon: DollarSign,
       items: [
         { label: "Tuition Fee", value: formatCurrency(p.tuitionFee, cur) },
-        ...(hasDiscount ? [{ label: "Discounted Fee", value: formatCurrency(p.discountedFee, cur) }] : []),
+        ...(hasDiscount ? [{ label: "Discounted Fee", value: formatCurrency(p.discountedFee, cur), highlight: "amber" }] : []),
         { label: "Application Fee", value: formatCurrency(p.applicationFee, cur) },
         { label: "Deposit Fee", value: formatCurrency(p.depositFee, cur) },
         { label: "Advanced Fee", value: formatCurrency(p.advancedFee, cur) },
         { label: "Language Fee", value: formatCurrency(p.languageFee, cur) },
         { label: "Service Fee", value: formatCurrency(p.serviceFeeAmount, cur) },
         { label: "Scholarship", value: p.scholarship != null ? formatCurrency(p.scholarship, cur) : null },
-        ...(showCommission ? [{ label: "Commission Rate", value: p.commissionRate != null ? `${p.commissionRate}%` : null }] : []),
+        ...(showCommission && commissionAmount != null ? [{ label: "Commission", value: formatCurrency(commissionAmount, cur), highlight: "indigo" }] : []),
       ],
     },
   ];
@@ -419,7 +529,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
               <DialogTitle className="text-lg">{p.name}</DialogTitle>
               <div className="flex gap-1.5 mt-1.5">
                 {p.degree && <Badge variant="secondary" className="text-xs">{p.degree}</Badge>}
-                {hasDiscount && <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200">İndirimli</Badge>}
+                {hasDiscount && <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-200">Discounted</Badge>}
                 {p.universityStatus && (
                   <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}`}>
                     {p.universityStatus}
@@ -440,8 +550,8 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
               <div className="bg-muted/30 rounded-xl p-3 space-y-1.5">
                 {section.items.filter(item => item.value && item.value !== "—").map((item, i) => (
                   <div key={i} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{item.label}</span>
-                    <span className="font-medium text-right max-w-[60%]">{item.value}</span>
+                    <span className={item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600" : "text-muted-foreground"}>{item.label}</span>
+                    <span className={`font-medium text-right max-w-[60%] ${item.highlight === "amber" ? "text-amber-600" : item.highlight === "indigo" ? "text-indigo-600 font-semibold" : ""}`}>{item.value}</span>
                   </div>
                 ))}
               </div>
