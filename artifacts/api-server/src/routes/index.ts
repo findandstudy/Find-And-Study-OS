@@ -22,6 +22,7 @@ import rolesRouter from "./roles";
 import messagesRouter from "./messages";
 import notificationsRouter from "./notifications";
 import integrationsRouter from "./integrations";
+import activityRouter from "./activity";
 
 const router: IRouter = Router();
 
