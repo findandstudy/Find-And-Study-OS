@@ -74,14 +74,13 @@ const INSTRUCTION_LANGUAGES = [
   "Dutch", "Spanish", "Italian", "Chinese", "Japanese", "Portuguese",
 ];
 
-const STUDY_COUNTRIES = [
-  "United Kingdom", "United States", "Canada", "Australia", "Germany",
-  "France", "Netherlands", "Turkey", "Ireland", "New Zealand",
-  "Sweden", "Norway", "Denmark", "Switzerland", "Austria",
-  "Italy", "Spain", "Poland", "Czech Republic", "Hungary",
-  "Japan", "South Korea", "Singapore", "Malaysia", "UAE",
-  "Qatar", "Saudi Arabia", "South Africa", "Brazil", "Argentina",
-];
+function useUniversityCountries() {
+  return useQuery<string[]>({
+    queryKey: ["university-countries"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities/countries`),
+    staleTime: 5 * 60_000,
+  });
+}
 
 function generateIntakes(): string[] {
   const intakes: string[] = [];
@@ -270,9 +269,41 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 
 /* ── EditApplicationDialog ───────────────────────────────── */
 function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
-  const [form, setForm] = useState({ stage: "", level: "", country: "", universityName: "", programName: "", intake: "", instructionLanguage: "", tuitionFee: "", notes: "" });
+  const [form, setForm] = useState({
+    stage: "", level: "", country: "", universityId: "", universityName: "",
+    programId: "", programName: "", intake: "", instructionLanguage: "",
+    tuitionFee: "", notes: "",
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const { data: countries = [] } = useUniversityCountries();
+
+  const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
+    queryKey: ["universities-by-country", form.country],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities?country=${encodeURIComponent(form.country)}&limit=100`),
+    enabled: !!form.country,
+  });
+  const universities = uniData?.data ?? [];
+
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null }> }>({
+    queryKey: ["programs-by-university", form.universityId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
+    enabled: !!form.universityId,
+  });
+  const programs = progData?.data ?? [];
+
+  function degreeToLevel(degree?: string | null): string {
+    if (!degree) return "";
+    const d = degree.toLowerCase();
+    if (d.includes("phd") || d.includes("doctorate")) return "doctorate";
+    if (d.includes("mba")) return "mba";
+    if (d.includes("msc") || d.includes("ma") || d.includes("master")) return "masters";
+    if (d.includes("bsc") || d.includes("ba") || d.includes("undergrad")) return "undergraduate";
+    if (d.includes("diploma")) return "diploma";
+    if (d.includes("foundation")) return "foundation";
+    return "";
+  }
 
   const updateApp = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications/${app?.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
@@ -286,7 +317,9 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         stage: app.stage || "inquiry",
         level: app.level || "",
         country: app.country || "",
+        universityId: app.universityId ? String(app.universityId) : "",
         universityName: app.universityName || "",
+        programId: app.programId ? String(app.programId) : "",
         programName: app.programName || "",
         intake: app.intake || "",
         instructionLanguage: app.instructionLanguage || "",
@@ -296,17 +329,45 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     }
   }, [open, app]);
 
+  function handleCountryChange(country: string) {
+    if (country === form.country) return;
+    setForm({ ...form, country, universityId: "", universityName: "", programId: "", programName: "" });
+  }
+
+  function handleUniversityChange(uniId: string) {
+    const uni = universities.find(u => String(u.id) === uniId);
+    setForm({ ...form, universityId: uniId, universityName: uni?.name ?? "", programId: "", programName: "" });
+  }
+
+  function handleProgramChange(progId: string) {
+    const prog = programs.find(p => String(p.id) === progId);
+    if (!prog) return;
+    const autoLevel = degreeToLevel(prog.degree);
+    const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
+    setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang });
+  }
+
   function handleSave() {
-    const payload: any = { ...form };
     const fee = parseFloat(form.tuitionFee);
-    if (form.tuitionFee && !isNaN(fee)) payload.tuitionFee = fee;
-    else delete payload.tuitionFee;
+    const payload: any = {
+      stage: form.stage,
+      level: form.level || null,
+      country: form.country || null,
+      universityId: form.universityId ? parseInt(form.universityId, 10) : null,
+      universityName: form.universityName || null,
+      programId: form.programId ? parseInt(form.programId, 10) : null,
+      programName: form.programName || null,
+      intake: form.intake || null,
+      instructionLanguage: form.instructionLanguage || null,
+      tuitionFee: form.tuitionFee && !isNaN(fee) ? fee : null,
+      notes: form.notes || null,
+    };
     updateApp.mutate(payload);
   }
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Edit Application</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
@@ -317,6 +378,27 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             </Select>
           </div>
           <div className="space-y-1.5">
+            <Label>Country</Label>
+            <Select value={form.country} onValueChange={handleCountryChange}>
+              <SelectTrigger><SelectValue placeholder="Select country..." /></SelectTrigger>
+              <SelectContent className="max-h-60">{countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>University</Label>
+            <Select value={form.universityId} onValueChange={handleUniversityChange} disabled={!form.country}>
+              <SelectTrigger>
+                <SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities found" : "Select university..."} />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {form.universityName && !form.universityId && (
+              <p className="text-xs text-muted-foreground mt-1">Current: {form.universityName}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
             <Label>Level</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
@@ -324,10 +406,28 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Country</Label>
-            <Select value={form.country} onValueChange={v => setForm({ ...form, country: v })}>
+            <Label>Program</Label>
+            <Select value={form.programId} onValueChange={handleProgramChange} disabled={!form.universityId}>
+              <SelectTrigger>
+                <SelectValue placeholder={!form.universityId ? "Select university first..." : programs.length === 0 ? "No programs found" : "Select program..."} />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {programs.map(p => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}{p.degree && <span className="text-muted-foreground ml-1 text-xs">({p.degree})</span>}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {form.programName && !form.programId && (
+              <p className="text-xs text-muted-foreground mt-1">Current: {form.programName}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Language</Label>
+            <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent className="max-h-60">{STUDY_COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -338,21 +438,6 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>University</Label>
-            <Input value={form.universityName} onChange={e => setForm({ ...form, universityName: e.target.value })} />
-          </div>
-          <div className="space-y-1.5 col-span-2">
-            <Label>Program</Label>
-            <Input value={form.programName} onChange={e => setForm({ ...form, programName: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Language</Label>
-            <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> Tuition Fee (USD)</Label>
             <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
           </div>
@@ -396,6 +481,7 @@ function FilterPopover({ filters, onChange, stages }: {
 }) {
   const [open, setOpen] = useState(false);
   const hasActive = filters.stage !== "all" || filters.country !== "all";
+  const { data: countries = [] } = useUniversityCountries();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -426,7 +512,7 @@ function FilterPopover({ filters, onChange, stages }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
               <SelectItem value="all">All</SelectItem>
-              {STUDY_COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -442,6 +528,8 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   const { season } = useSeason();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" });
+
+  const { data: countries = [] } = useUniversityCountries();
 
   const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
     queryKey: ["universities-by-country", form.country],
@@ -513,7 +601,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold">Country <span className="text-destructive">*</span></Label>
               <Select value={form.country} onValueChange={v => setForm({ ...form, country: v, universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" })}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent className="max-h-60">{STUDY_COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent className="max-h-60">{countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">

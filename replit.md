@@ -144,6 +144,17 @@ Added to `studentsTable`: `motherName`, `fatherName`, `passportIssueDate`, `addr
 - `PATCH/DELETE /api/service-fees/:id`
 - `GET /api/finance/summary?season=` — overall dashboard numbers
 
+## Application Cascading Selects
+
+Both the **Add Application** modal and **Edit Application** dialog use cascading selects for university/program selection:
+- **Country** → fetched dynamically from `GET /api/universities/countries` (only countries with universities in DB)
+- **University** → filtered by country via `GET /api/universities?country=X&limit=100`
+- **Program** → filtered by university via `GET /api/programs?universityId=X&limit=100`
+- Changing a parent field resets all child fields (country change → clears university + program)
+- Program selection auto-fills Level (from degree) and Language (if available)
+- Edit dialog saves `universityId`, `universityName`, `programId`, `programName` to maintain referential integrity
+- Filter popover country dropdown also uses the dynamic countries list
+
 ## Frontend Notes
 
 - Vite config has `dedupe: ["react", "react-dom"]` to prevent duplicate React issues
