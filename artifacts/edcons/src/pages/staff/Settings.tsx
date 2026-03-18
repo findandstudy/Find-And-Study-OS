@@ -167,10 +167,12 @@ export default function SettingsPage() {
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", avatarUrl: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", avatarUrl: "", email: "" });
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwSaving, setPwSaving] = useState(false);
   const [notifications, setNotifications] = useState({ newLeads: true, applicationUpdates: true, documentAlerts: true, financeAlerts: false });
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -180,7 +182,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phone: (user as any).phone || "", avatarUrl: user.avatarUrl || "" });
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phone: (user as any).phone || "", avatarUrl: user.avatarUrl || "", email: user.email || "" });
     }
   }, [user]);
 
@@ -256,13 +258,39 @@ export default function SettingsPage() {
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone || undefined, avatarUrl: form.avatarUrl || null }),
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone || undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined }),
       });
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally { setSaving(false); }
+  }
+
+  async function handleChangePassword() {
+    if (!pwForm.currentPassword || !pwForm.newPassword) {
+      toast({ title: "Please fill in all password fields", variant: "destructive" });
+      return;
+    }
+    if (pwForm.newPassword.length < 6) {
+      toast({ title: "New password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      toast({ title: "New passwords do not match", variant: "destructive" });
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await customFetch(`/api/users/me/change-password`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword }),
+      });
+      setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast({ title: "Password changed successfully" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to change password", variant: "destructive" });
+    } finally { setPwSaving(false); }
   }
 
   async function handleSaveLang(code: string) {
@@ -298,7 +326,7 @@ export default function SettingsPage() {
   }
 
   function ProfileTab() {
-    return (
+    return (<>
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <SectionHeader title="Personal Information" description="Update your profile details and contact information." />
         <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
@@ -332,8 +360,8 @@ export default function SettingsPage() {
         <div className="grid sm:grid-cols-2 gap-5">
           <FieldGroup label="First Name"><Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" /></FieldGroup>
           <FieldGroup label="Last Name"><Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" /></FieldGroup>
-          <FieldGroup label="Email" description="Managed by your login provider" className="sm:col-span-2">
-            <Input type="email" value={user?.email || ""} disabled className="rounded-xl bg-secondary/40 text-muted-foreground" />
+          <FieldGroup label="Email" className="sm:col-span-2">
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Phone" className="sm:col-span-2">
             <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 234 567 8900" className="rounded-xl" />
@@ -341,7 +369,27 @@ export default function SettingsPage() {
         </div>
         <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
       </Card>
-    );
+      <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
+        <SectionHeader title="Change Password" description="Update your account password. You'll need your current password to make changes." />
+        <div className="space-y-4 max-w-md">
+          <FieldGroup label="Current Password">
+            <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="Enter current password" className="rounded-xl" />
+          </FieldGroup>
+          <FieldGroup label="New Password">
+            <Input type="password" value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Enter new password" className="rounded-xl" />
+          </FieldGroup>
+          <FieldGroup label="Confirm New Password">
+            <Input type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Confirm new password" className="rounded-xl" />
+          </FieldGroup>
+        </div>
+        <div className="mt-6">
+          <Button onClick={handleChangePassword} disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword || !pwForm.confirmPassword} className="rounded-xl gap-2">
+            {pwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+            Change Password
+          </Button>
+        </div>
+      </Card>
+    </>);
   }
 
   function LanguageTab() {

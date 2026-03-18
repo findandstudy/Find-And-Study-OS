@@ -184,6 +184,32 @@ router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES),
   res.json({ success: true });
 });
 
+router.post("/users/me/change-password", requireAuth, async (req, res): Promise<void> => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "Current and new password are required" });
+    return;
+  }
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: "New password must be at least 6 characters" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  if (!user || !user.passwordHash) {
+    res.status(400).json({ error: "Cannot change password" });
+    return;
+  }
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) {
+    res.status(400).json({ error: "Current password is incorrect" });
+    return;
+  }
+  const hash = await bcrypt.hash(newPassword, 10);
+  await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, req.user!.id));
+  await logAudit(req.user!.id, "change_password", "user", req.user!.id, {}, req.ip);
+  res.json({ success: true });
+});
+
 router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (req.user!.id === id) {
