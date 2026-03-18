@@ -30,9 +30,9 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES), async (r
     .where(eq(invoicesTable.status, "paid"));
 
   const [{ pending }] = await db
-    .select({ pending: sql<number>`coalesce(sum(amount), 0)` })
+    .select({ pending: sql<number>`coalesce(sum(university_commission_amount), 0)` })
     .from(commissionsTable)
-    .where(eq(commissionsTable.status, "pending"));
+    .where(sql`status NOT IN ('collected','paid')`);
 
   res.json({
     totalLeads: Number(leads),

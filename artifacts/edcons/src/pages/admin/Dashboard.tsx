@@ -25,7 +25,7 @@ export default function AdminDashboard() {
     { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10", trend: "+12%" },
     { label: "Active Applications", value: stats?.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10", trend: "+8%" },
     { label: "Students Enrolled", value: stats?.totalStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10", trend: "+22%" },
-    { label: "Revenue (Month)", value: "$84,200", icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10", trend: "+15%" },
+    { label: "Revenue (Month)", value: `$${(stats?.totalRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10", trend: "+15%" },
   ];
 
   return (
