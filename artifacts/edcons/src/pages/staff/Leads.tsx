@@ -440,11 +440,11 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
             <Label>Email</Label>
             <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </div>
-          <div className="space-y-1.5 col-span-2">
+          <div className="space-y-1.5">
             <Label>Phone</Label>
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
-                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PHONE_CODES.map(pc => (
                     <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
@@ -453,7 +453,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
                   ))}
                 </SelectContent>
               </Select>
-              <Input className="flex-1" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+              <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -1141,11 +1141,11 @@ export default function LeadsPage() {
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5">
               <Label>Phone</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-1">
                 <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
-                  <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PHONE_CODES.map(pc => (
                       <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
@@ -1154,7 +1154,7 @@ export default function LeadsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input className="flex-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+                <Input className="flex-1 min-w-0" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
               </div>
             </div>
             <div className="space-y-1.5">
