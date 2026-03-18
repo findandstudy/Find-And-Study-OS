@@ -218,7 +218,7 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
         </div>
         {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
         {app.programName && (
-          <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">{app.programName}</p>
+          <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">{app.programName}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
           {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
@@ -953,7 +953,7 @@ export default function ApplicationsPage() {
                       </div>
                       {activeCard.universityName && <p className="text-xs text-muted-foreground truncate">{activeCard.universityName}</p>}
                       {activeCard.programName && (
-                        <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">
+                        <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
                           {activeCard.programName}
                         </p>
                       )}

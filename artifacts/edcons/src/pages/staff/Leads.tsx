@@ -141,7 +141,7 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
         </div>
         <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || "No contact info"}</p>
         {lead.interestedProgram && (
-          <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">
+          <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
             {lead.interestedProgram}
           </p>
         )}
@@ -871,7 +871,7 @@ export default function LeadsPage() {
                         {activeCard.email || activeCard.phone || "No contact info"}
                       </p>
                       {activeCard.interestedProgram && (
-                        <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 inline-block px-2 py-1 rounded-md">
+                        <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
                           {activeCard.interestedProgram}
                         </p>
                       )}
