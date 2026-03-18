@@ -1,23 +1,46 @@
 import { ReactNode } from "react";
 import { Link } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, Globe, Menu } from "lucide-react";
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useI18n();
+  const { settings, resolvedTheme } = useTheme();
+
+  const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+  const hasLogo = resolvedTheme === "dark" && settings.logoDarkUrl
+    ? settings.logoDarkUrl
+    : settings.logoUrl;
+  const logoUrl = hasLogo
+    ? `${BASE_URL}/api/settings/branding/logo${resolvedTheme === "dark" && settings.logoDarkUrl ? "?variant=dark" : ""}`
+    : null;
+  const companyName = settings.companyName || "EduCons";
 
   return (
     <div className="min-h-screen flex flex-col font-sans">
       <header className="sticky top-0 z-50 w-full glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300">
-              <GraduationCap className="w-6 h-6" />
-            </div>
-            <span className="font-display font-bold text-2xl tracking-tight text-foreground">
-              Edu<span className="text-primary">Cons</span>
-            </span>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={companyName}
+                className="h-10 max-w-[180px] object-contain group-hover:scale-105 transition-transform duration-300"
+              />
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <span className="font-display font-bold text-2xl tracking-tight text-foreground">
+                  {companyName.includes("Cons") ? (
+                    <>{companyName.replace("Cons", "")}<span className="text-primary">Cons</span></>
+                  ) : companyName}
+                </span>
+              </>
+            )}
           </Link>
 
           <nav className="hidden md:flex items-center gap-8 font-medium text-sm text-muted-foreground">
@@ -60,10 +83,16 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-12">
           <div className="col-span-1 md:col-span-2">
              <div className="flex items-center gap-2 mb-6">
-                <GraduationCap className="w-8 h-8 text-primary" />
-                <span className="font-display font-bold text-2xl text-white">
-                  EduCons
-                </span>
+                {logoUrl ? (
+                  <img src={logoUrl} alt={companyName} className="h-8 max-w-[160px] object-contain brightness-0 invert" />
+                ) : (
+                  <>
+                    <GraduationCap className="w-8 h-8 text-primary" />
+                    <span className="font-display font-bold text-2xl text-white">
+                      {companyName}
+                    </span>
+                  </>
+                )}
               </div>
               <p className="max-w-md">Empowering students to achieve their global education dreams through expert guidance, seamless applications, and dedicated support.</p>
           </div>

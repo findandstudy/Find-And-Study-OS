@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
+import { Readable } from "stream";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
+import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 
 const router: IRouter = Router();
 
@@ -69,6 +71,45 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
   }
   const { smtpPassword, whatsappToken, ...safe } = updated;
   res.json(safe);
+});
+
+const objectStorageService = new ObjectStorageService();
+
+router.get("/settings/branding/logo", async (req, res): Promise<void> => {
+  try {
+    const variant = req.query.variant === "dark" ? "logoDarkUrl" : "logoUrl";
+    const [settings] = await db.select({
+      logoUrl: settingsTable.logoUrl,
+      logoDarkUrl: settingsTable.logoDarkUrl,
+    }).from(settingsTable);
+    const url = settings?.[variant] || settings?.logoUrl;
+    if (!url) { res.status(404).json({ error: "No logo configured" }); return; }
+
+    const match = url.match(/\/api\/storage\/objects\/(.+)$/);
+    if (!match) { res.status(404).json({ error: "Invalid logo path" }); return; }
+
+    const objectPath = `/objects/${match[1]}`;
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    const response = await objectStorageService.downloadObject(objectFile);
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.setHeader("Cache-Control", "public, max-age=3600");
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "Logo not found" });
+      return;
+    }
+    console.error("Error serving branding logo:", error);
+    res.status(500).json({ error: "Failed to serve logo" });
+  }
 });
 
 export default router;

@@ -68,3 +68,9 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Photo System:** Student photos stored as documents with `type = "photo"` in the `documents` table. Profile page displays latest photo (sorted by `createdAt` desc) as circular avatar in header. Hover reveals camera (upload) and download buttons. Photo upload creates a new document record with auto-naming `photo-firstname-lastname`.
 - **`photoUrl` field:** Added to `students` table schema (`photo_url` column) for future external URL photo support, included in PATCH fields whitelist.
 - **Download Naming Convention:** All document downloads follow `doctype-firstname-lastname.ext` format (lowercase, sanitized). Implemented via `buildDownloadFilename()` in `StudentDetail.tsx`. MIME-to-extension map handles common types (pdf, jpg, png, gif, webp, svg).
+
+## Object Storage & Logo Upload
+
+- **Upload URL pattern:** `objectPath` from `/api/storage/uploads/request-url` returns paths like `/objects/uploads/<uuid>`. When constructing display URLs, **always strip** the `/objects` prefix: `objectPath.replace(/^\/objects/, "")` then build `${BASE_URL}/api/storage/objects${strippedPath}`. The serving route `/storage/objects/*path` internally re-adds the `/objects/` prefix.
+- **Branding logo on public site:** Public homepage uses `GET /api/settings/branding/logo` (no auth required) to serve the logo. Supports `?variant=dark` for dark mode logo. `PublicLayout` uses `ThemeContext` to detect if a logo is configured and renders an `<img>` tag pointing to this public endpoint.
+- **Agent logos:** Agent document uploads (logo, ID proof, business cert) in `Agents.tsx` use `fixStorageUrl()` to sanitize any legacy double-prefix URLs (`/objects/objects/`).

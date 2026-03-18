@@ -21,6 +21,11 @@ import {
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+function fixStorageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return url.replace(/\/api\/storage\/objects\/objects\//, "/api/storage/objects/");
+}
+
 const MANAGER_ROLES = ["super_admin", "admin", "manager"];
 const CATEGORIES = ["Big", "Medium", "Small"];
 
@@ -257,7 +262,8 @@ export default function AgentsPage() {
       if (!urlRes.uploadURL) throw new Error("No upload URL");
       const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error("Upload failed");
-      const publicUrl = `${BASE_URL}/api/storage/objects${urlRes.objectPath}`;
+      const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
+      const publicUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
       setForm(f => ({ ...f, [field]: publicUrl }));
       toast({ title: "File uploaded" });
     } catch (err: any) {
@@ -498,7 +504,7 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-3">
                     {a.logoUrl ? (
-                      <img src={a.logoUrl} alt="" className="w-9 h-9 rounded-lg object-cover border border-border" />
+                      <img src={fixStorageUrl(a.logoUrl)!} alt="" className="w-9 h-9 rounded-lg object-cover border border-border" />
                     ) : (
                       <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-primary/20 to-accent/20 flex items-center justify-center font-bold text-xs text-primary">
                         {a.firstName[0]}{a.lastName[0]}
@@ -866,7 +872,7 @@ export default function AgentsPage() {
                     <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                       {form.logoUrl ? (
                         <>
-                          <img src={form.logoUrl} alt="Logo" className="max-h-20 max-w-full object-contain" />
+                          <img src={fixStorageUrl(form.logoUrl)!} alt="Logo" className="max-h-20 max-w-full object-contain" />
                           <button onClick={() => setForm(f => ({ ...f, logoUrl: "" }))} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive/90 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
                         </>
                       ) : (
