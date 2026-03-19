@@ -13,6 +13,7 @@ const STUDENT_PATCH_FIELDS = [
   "motherName", "fatherName", "address",
   "status", "agentId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
+  "universityBachelor", "universityMaster",
   "photoUrl",
 ];
 
@@ -225,10 +226,26 @@ router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(student);
 });
 
-router.patch("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  const role = req.user!.role;
+  const isStaff = (STAFF_ROLES as readonly string[]).includes(role);
+  const isAgent = role === "agent" || role === "sub_agent";
+  if (!isStaff && !isAgent) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  if (isAgent) {
+    const visibleAgentIds = await getAgentVisibleIds(req.user!.id, role);
+    if (visibleAgentIds.length === 0) { res.status(403).json({ error: "Agent profile not found" }); return; }
+    const [visibleStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.id, id), inArray(studentsTable.agentId, visibleAgentIds)));
+    if (!visibleStudent) { res.status(403).json({ error: "You can only edit your own students" }); return; }
+  }
+
+  const allowedFields = isAgent
+    ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId")
+    : STUDENT_PATCH_FIELDS;
   const updates: Record<string, unknown> = {};
-  for (const key of STUDENT_PATCH_FIELDS) {
+  for (const key of allowedFields) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
   if (Object.keys(updates).length === 0) {

@@ -1342,29 +1342,96 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
 }
 
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", nationality: "", status: "active", dateOfBirth: "", passportNumber: "", notes: "" });
+  const [form, setForm] = useState({
+    firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
+    nationality: "", status: "active", dateOfBirth: "",
+    passportNumber: "", passportIssueDate: "", passportExpiry: "",
+    motherName: "", fatherName: "", address: "",
+    highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
+    universityBachelor: "", universityMaster: "",
+    languageScore: "", notes: "",
+  });
+  const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const { data: countriesResp } = useQuery({
+    queryKey: ["all-countries-nationality"],
+    queryFn: () => fetch(`${BASE_URL}/api/countries?limit=500`, { credentials: "include" }).then(r => r.json()),
+    staleTime: 5 * 60_000,
+  });
+  const allCountries: Array<{ id: number; name: string; code?: string; flagEmoji?: string | null }> = countriesResp?.data ?? [];
+
   useEffect(() => {
     if (open && student) {
+      let phoneCode = "+90";
+      let phoneNum = student.phone || "";
+      if (phoneNum.startsWith("+")) {
+        const sortedCodes = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+        const matched = sortedCodes.find(pc => phoneNum.startsWith(pc.code));
+        if (matched) {
+          phoneCode = matched.code;
+          phoneNum = phoneNum.slice(matched.code.length).trim();
+        }
+      }
+      const gpaRaw = student.gpa || "";
+      let gpaVal = gpaRaw;
+      let gradingSys = "4";
+      const gpaMatch = gpaRaw.match(/^([\d.]+)\s*\/\s*(\d+)$/);
+      if (gpaMatch) {
+        gpaVal = gpaMatch[1];
+        const ms = GRADING_SYSTEMS.find(g => g.value === gpaMatch[2]);
+        if (ms) gradingSys = ms.value;
+      }
       setForm({
         firstName: student.firstName || "", lastName: student.lastName || "",
-        email: student.email || "", phone: student.phone || "",
+        email: student.email || "", phone: phoneNum, phoneCode,
         nationality: student.nationality || "", status: student.status || "active",
-        dateOfBirth: student.dateOfBirth || "", passportNumber: student.passportNumber || "",
+        dateOfBirth: student.dateOfBirth || "",
+        passportNumber: student.passportNumber || "",
+        passportIssueDate: student.passportIssueDate || "",
+        passportExpiry: student.passportExpiry || "",
+        motherName: student.motherName || "", fatherName: student.fatherName || "",
+        address: student.address || "",
+        highSchool: student.highSchool || "",
+        graduationYear: student.graduationYear?.toString() || "",
+        gpa: gpaVal, gradingSystem: gradingSys,
+        universityBachelor: student.universityBachelor || "",
+        universityMaster: student.universityMaster || "",
+        languageScore: student.languageScore || "",
         notes: student.notes || "",
       });
     }
   }, [open, student]);
 
+  function field(name: string) {
+    return (val: string) => setForm(f => ({ ...f, [name]: val }));
+  }
+
   async function handleSave() {
     if (!student || !form.firstName || !form.lastName) return;
+    setSaving(true);
     try {
+      const phone = form.phone ? `${form.phoneCode}${form.phone.replace(/^\s+/, "")}` : "";
+      const gpa = form.gpa ? (form.gradingSystem !== "4" ? `${form.gpa}/${form.gradingSystem}` : form.gpa) : "";
       const res = await fetch(`${BASE_URL}/api/students/${student.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          firstName: form.firstName, lastName: form.lastName,
+          email: form.email, phone,
+          nationality: form.nationality, status: form.status,
+          dateOfBirth: form.dateOfBirth,
+          passportNumber: form.passportNumber,
+          passportIssueDate: form.passportIssueDate,
+          passportExpiry: form.passportExpiry,
+          motherName: form.motherName, fatherName: form.fatherName,
+          address: form.address, highSchool: form.highSchool,
+          graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
+          gpa, universityBachelor: form.universityBachelor,
+          universityMaster: form.universityMaster,
+          languageScore: form.languageScore, notes: form.notes,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast({ title: "Student updated" });
@@ -1372,32 +1439,144 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
       onClose();
     } catch {
       toast({ title: "Error", description: "Failed to update", variant: "destructive" });
-    }
+    } finally { setSaving(false); }
   }
+
+  const F = ({ label, value, onChange, type = "text", placeholder = "", required = false, className = "" }: {
+    label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean; className?: string;
+  }) => (
+    <div className={cn("space-y-1.5", className)}>
+      <Label className="font-semibold text-sm">{label}{required && <span className="text-destructive ml-0.5">*</span>}</Label>
+      <Input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="rounded-xl h-9" />
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-4 py-2">
-          <div className="space-y-1.5"><Label>First Name *</Label><Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>Nationality</Label><Input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} /></div>
+        <div className="overflow-y-auto flex-1 space-y-6 pr-1 py-2">
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+              <User className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" />
+              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" />
+              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Phone</Label>
+                <div className="flex gap-1.5">
+                  <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
+                    <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PHONE_CODES.map(pc => (
+                        <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                          <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
+                </div>
+              </div>
+              <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Nationality</Label>
+                <Select value={form.nationality} onValueChange={field("nationality")}>
+                  <SelectTrigger className="h-9 text-sm rounded-xl">
+                    <SelectValue placeholder="Select country..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allCountries.map(c => (
+                      <SelectItem key={c.id} value={c.name}>
+                        <span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" />
+              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" />
+              <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Status</Label>
+                <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+                  <SelectTrigger className="h-9 text-sm rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+              <span className="text-base leading-none">{"\u{1F6C2}"}</span>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" className="col-span-2" />
+              <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
+              <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+              <GraduationCap className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
+              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
+              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+              <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">GPA</Label>
+                <div className="flex gap-1.5">
+                  <Input
+                    type="number" step="0.01" min="0"
+                    max={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.max ?? 4}
+                    value={form.gpa}
+                    onChange={e => setForm(f => ({ ...f, gpa: e.target.value }))}
+                    placeholder={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.placeholder ?? "e.g. 3.8"}
+                    className="rounded-xl flex-1 h-9"
+                  />
+                  <Select value={form.gradingSystem} onValueChange={v => setForm(f => ({ ...f, gradingSystem: v, gpa: "" }))}>
+                    <SelectTrigger className="w-[110px] h-9 text-sm rounded-xl shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GRADING_SYSTEMS.map(gs => (
+                        <SelectItem key={gs.value} value={gs.value}>/ {gs.value}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" className="col-span-2" />
+            </div>
+          </section>
+
           <div className="space-y-1.5">
-            <Label>Status</Label>
-            <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
-            </Select>
+            <Label className="font-semibold text-sm">Notes</Label>
+            <textarea
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Any additional notes about this student..."
+              rows={2}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+            />
           </div>
-          <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.dateOfBirth} onChange={e => setForm({ ...form, dateOfBirth: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>Passport Number</Label><Input value={form.passportNumber} onChange={e => setForm({ ...form, passportNumber: e.target.value })} /></div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!form.firstName || !form.lastName}>Save Changes</Button>
+        <DialogFooter className="pt-3 border-t border-border/50">
+          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Save Changes"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
