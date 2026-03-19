@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -17,6 +18,15 @@ async function fetchStages(entityType: string): Promise<PipelineStage[]> {
   const r = await fetch(`${BASE_URL}/api/pipeline-stages/${entityType}`, { credentials: "include" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+function deduplicateStages(stages: PipelineStage[]): PipelineStage[] {
+  const seen = new Set<string>();
+  return stages.filter(s => {
+    if (seen.has(s.key)) return false;
+    seen.add(s.key);
+    return true;
+  });
 }
 
 async function saveStages(entityType: string, stages: PipelineStage[]): Promise<PipelineStage[]> {
@@ -39,6 +49,11 @@ export function usePipelineStages(entityType: string) {
     staleTime: 5 * 60_000,
   });
 
+  const uniqueStages = useMemo(
+    () => deduplicateStages(query.data ?? []),
+    [query.data]
+  );
+
   const mutation = useMutation({
     mutationFn: (stages: PipelineStage[]) => saveStages(entityType, stages),
     onSuccess: (data) => {
@@ -47,7 +62,7 @@ export function usePipelineStages(entityType: string) {
   });
 
   return {
-    stages: query.data ?? [],
+    stages: uniqueStages,
     isLoading: query.isLoading,
     saveStages: mutation.mutateAsync,
     isSaving: mutation.isPending,
