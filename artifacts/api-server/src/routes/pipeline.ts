@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, pipelineStagesTable } from "@workspace/db";
 import { eq, and, asc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
@@ -38,7 +38,7 @@ const DEFAULT_STAGES: Record<string, Array<{ key: string; label: string; sortOrd
   ],
 };
 
-router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const { entityType } = req.params;
   if (!ENTITY_TYPES.includes(entityType)) {
     res.status(400).json({ error: "Invalid entity type" });
@@ -54,10 +54,19 @@ router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROL
   if (stages.length === 0) {
     const defaults = DEFAULT_STAGES[entityType];
     if (defaults) {
-      const inserted = await db.insert(pipelineStagesTable)
-        .values(defaults.map(d => ({ ...d, entityType })))
-        .returning();
-      stages = inserted.sort((a, b) => a.sortOrder - b.sortOrder);
+      const recheck = await db
+        .select()
+        .from(pipelineStagesTable)
+        .where(eq(pipelineStagesTable.entityType, entityType))
+        .orderBy(asc(pipelineStagesTable.sortOrder));
+      if (recheck.length === 0) {
+        const inserted = await db.insert(pipelineStagesTable)
+          .values(defaults.map(d => ({ ...d, entityType })))
+          .returning();
+        stages = inserted.sort((a, b) => a.sortOrder - b.sortOrder);
+      } else {
+        stages = recheck;
+      }
     }
   }
 
