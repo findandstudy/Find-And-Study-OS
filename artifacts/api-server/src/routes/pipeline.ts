@@ -1,10 +1,25 @@
 import { Router, type IRouter } from "express";
 import { db, pipelineStagesTable } from "@workspace/db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
+
+(async () => {
+  try {
+    await db.execute(sql`
+      DELETE FROM pipeline_stages
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM pipeline_stages GROUP BY entity_type, key
+      )
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS pipeline_stages_entity_key_uniq
+      ON pipeline_stages(entity_type, key)
+    `);
+  } catch {}
+})();
 
 const MANAGER_ROLES = ["super_admin", "admin", "manager"] as const;
 
@@ -54,19 +69,14 @@ router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROL
   if (stages.length === 0) {
     const defaults = DEFAULT_STAGES[entityType];
     if (defaults) {
-      const recheck = await db
+      await db.insert(pipelineStagesTable)
+        .values(defaults.map(d => ({ ...d, entityType })))
+        .onConflictDoNothing();
+      stages = await db
         .select()
         .from(pipelineStagesTable)
         .where(eq(pipelineStagesTable.entityType, entityType))
         .orderBy(asc(pipelineStagesTable.sortOrder));
-      if (recheck.length === 0) {
-        const inserted = await db.insert(pipelineStagesTable)
-          .values(defaults.map(d => ({ ...d, entityType })))
-          .returning();
-        stages = inserted.sort((a, b) => a.sortOrder - b.sortOrder);
-      } else {
-        stages = recheck;
-      }
     }
   }
 

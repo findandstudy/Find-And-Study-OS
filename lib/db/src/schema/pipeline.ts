@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const pipelineStagesTable = pgTable("pipeline_stages", {
   id: serial("id").primaryKey(),
@@ -11,7 +11,9 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   color: text("color"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  uniqueIndex("pipeline_stages_entity_key_uniq").on(table.entityType, table.key),
+]);
 
 export type PipelineStage = typeof pipelineStagesTable.$inferSelect;
 export type InsertPipelineStage = typeof pipelineStagesTable.$inferInsert;
