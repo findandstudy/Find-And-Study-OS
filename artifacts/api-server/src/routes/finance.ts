@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable } from "@workspace/db";
+import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable } from "@workspace/db";
 import { eq, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { FINANCE_ROLES, STAFF_ROLES } from "../lib/roles";
+import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
@@ -632,6 +632,71 @@ router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async 
   const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, id)).returning();
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
   res.json(invoice);
+});
+
+router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  const agentId = agent.id;
+
+  const commissions = await db.select().from(commissionsTable).where(eq(commissionsTable.agentId, agentId));
+  const fees = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.agentId, agentId));
+
+  const commSummary = {
+    potential: commissions.filter(c => c.status === "potential").reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+    confirmed: commissions.filter(c => ["confirmed", "collected_partial", "collected_full"].includes(c.status)).reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+    paid: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
+    pending: commissions.filter(c => !["potential"].includes(c.status)).reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
+  };
+
+  const feeSummary = {
+    potential: fees.filter(f => f.status === "pending").reduce((s, f) => s + toNum(f.totalAmount), 0),
+    confirmed: fees.filter(f => ["partial", "paid"].includes(f.status)).reduce((s, f) => s + toNum(f.totalAmount), 0),
+    paid: fees.reduce((s, f) => s + toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0), 0),
+    pending: fees.filter(f => f.status !== "paid").reduce((s, f) => {
+      const collected = toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0);
+      return s + (toNum(f.totalAmount) - collected);
+    }, 0),
+  };
+
+  res.json({ commissions: commSummary, serviceFees: feeSummary });
+});
+
+router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const whereClause = eq(commissionsTable.agentId, agent.id);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(commissionsTable).where(whereClause);
+  const data = await db.select().from(commissionsTable).where(whereClause)
+    .orderBy(desc(commissionsTable.createdAt)).limit(limitNum).offset(offset);
+
+  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+});
+
+router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const whereClause = eq(serviceFeesTable.agentId, agent.id);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(serviceFeesTable).where(whereClause);
+  const data = await db.select().from(serviceFeesTable).where(whereClause)
+    .orderBy(desc(serviceFeesTable.createdAt)).limit(limitNum).offset(offset);
+
+  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 export default router;
