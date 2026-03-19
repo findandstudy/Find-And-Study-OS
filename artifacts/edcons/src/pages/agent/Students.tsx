@@ -13,11 +13,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import {
-  Search, Plus,
+  Search, Plus, FileText, FileUp, Sparkles, ChevronLeft,
   User, GraduationCap, X, CheckCircle2, AlertCircle,
-  Users, Loader2, LayoutGrid, List,
+  Users, Loader2, LayoutGrid, List, Eye,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   Filter, UserCheck, UserX, UserMinus, UserPlus,
   Trophy, XCircle,
@@ -97,6 +98,82 @@ const GRADING_SYSTEMS = [
   { value: "20", label: "Out of 20", placeholder: "e.g. 16.5", max: 20 },
   { value: "100", label: "Out of 100", placeholder: "e.g. 85", max: 100 },
 ];
+
+type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
+type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
+
+const LEVELS: { key: AppLevel; label: string; badge: string; color: string }[] = [
+  { key: "pathway", label: "Language / Prep", badge: "Pathway", color: "bg-teal-100 text-teal-700 border-teal-200" },
+  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  { key: "graduate", label: "Master's Degree", badge: "Graduate", color: "bg-violet-100 text-violet-700 border-violet-200" },
+  { key: "doctorate", label: "Doctorate (PhD)", badge: "Doctorate", color: "bg-amber-100 text-amber-700 border-amber-200" },
+];
+
+const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
+  pathway: [
+    { key: "passport",        label: "Passport",         icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
+    { key: "hs_diploma",      label: "HS Diploma",       icon: "\u{1F393}", accept: "image/*,.pdf", required: false },
+    { key: "hs_transcript",   label: "HS Transcript",    icon: "\u{1F4CB}", accept: "image/*,.pdf", required: false },
+    { key: "photo",           label: "Photograph",       icon: "\u{1F4F7}", accept: "image/*",      required: false },
+  ],
+  undergraduate: [
+    { key: "hs_diploma",      label: "HS Diploma",       icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
+    { key: "hs_transcript",   label: "HS Transcript",    icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
+    { key: "passport",        label: "Passport",         icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
+    { key: "photo",           label: "Photograph",       icon: "\u{1F4F7}", accept: "image/*",      required: true  },
+    { key: "language_proof",  label: "Language Proof",   icon: "\u{1F310}", accept: "image/*,.pdf", required: false, note: "If available" },
+  ],
+  graduate: [
+    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
+    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
+    { key: "passport",            label: "Passport",             icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
+    { key: "photo",               label: "Photograph",           icon: "\u{1F4F7}", accept: "image/*",      required: true  },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "\u{1F4DC}", accept: "image/*,.pdf", required: true,  note: "Recognition" },
+    { key: "cv",                  label: "CV",                   icon: "\u{1F4C4}", accept: "image/*,.pdf", required: false, note: "If required" },
+    { key: "sop",                 label: "SOP",                  icon: "\u270D\uFE0F", accept: "image/*,.pdf", required: false, note: "If required" },
+  ],
+  doctorate: [
+    { key: "master_diploma",      label: "Master Diploma",       icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
+    { key: "master_transcript",   label: "Master Transcript",    icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
+    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
+    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
+    { key: "passport",            label: "Passport",             icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
+    { key: "photo",               label: "Photograph",           icon: "\u{1F4F7}", accept: "image/*",      required: true  },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "\u{1F4DC}", accept: "image/*,.pdf", required: true,  note: "Recognition" },
+    { key: "research_proposal",   label: "Research Proposal",    icon: "\u{1F52C}", accept: "image/*,.pdf", required: false, note: "If required" },
+    { key: "cv",                  label: "CV",                   icon: "\u{1F4C4}", accept: "image/*,.pdf", required: false, note: "If required" },
+  ],
+};
+
+type UploadedDoc = {
+  key: string;
+  label: string;
+  file: File;
+  base64: string;
+  mediaType: string;
+  isImage: boolean;
+};
+
+type ExtractedData = {
+  firstName?: string | null;
+  lastName?: string | null;
+  dateOfBirth?: string | null;
+  nationality?: string | null;
+  passportNumber?: string | null;
+  passportIssueDate?: string | null;
+  passportExpiry?: string | null;
+  motherName?: string | null;
+  fatherName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  highSchool?: string | null;
+  graduationYear?: number | null;
+  gpa?: string | null;
+  languageScore?: string | null;
+  confidence?: string;
+  extractedNotes?: string | null;
+};
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" },
@@ -279,6 +356,38 @@ function DropZone({
   );
 }
 
+function AiBadge() {
+  return <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>;
+}
+
+function FormField({
+  label, value, onChange, placeholder, type = "text", aiExtracted, required,
+}: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; aiExtracted?: boolean; required?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="font-semibold text-sm flex items-center">
+        {label}
+        {required && <span className="text-destructive ml-0.5">*</span>}
+        {aiExtracted && <AiBadge />}
+      </Label>
+      <Input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={cn(
+          "rounded-xl",
+          aiExtracted && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400"
+        )}
+      />
+    </div>
+  );
+}
+
+type Step = "upload" | "analyzing" | "review";
+
 function AddStudentModal({
   open,
   onClose,
@@ -300,10 +409,22 @@ function AddStudentModal({
   });
   const allCountries: Array<{ id: number; name: string; code?: string; flagEmoji?: string | null }> = countriesResp?.data ?? [];
 
+  const [step, setStep] = useState<Step>("upload");
+  const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
+  const [extractedFields, setExtractedFields] = useState<Set<string>>(new Set());
   const [form, setForm] = useState(EMPTY_FORM);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [applicationLevel, setApplicationLevel] = useState<AppLevel>("undergraduate");
+
+  const currentDocs = LEVEL_DOCS[applicationLevel];
 
   function handleClose() {
+    setStep("upload");
+    setDocs({});
+    setExtractedFields(new Set());
     setForm(EMPTY_FORM);
+    setAnalysisError(null);
+    setApplicationLevel("undergraduate");
     onClose();
   }
 
@@ -311,7 +432,137 @@ function AddStudentModal({
     return (value: string) => setForm((f) => ({ ...f, [name]: value }));
   }
 
-  const gradingSys = GRADING_SYSTEMS.find(g => g.value === form.gradingSystem) || GRADING_SYSTEMS[0];
+  async function analyzeDocuments() {
+    const uploadedDocs = Object.values(docs);
+    if (uploadedDocs.length === 0) {
+      toast({ title: "Upload at least one document", variant: "destructive" });
+      return;
+    }
+
+    setStep("analyzing");
+    setAnalysisError(null);
+
+    try {
+      const docPayload = uploadedDocs.map((d) => ({
+        type: d.isImage ? "image" : "pdf",
+        data: d.base64,
+        mediaType: d.mediaType,
+        label: d.label,
+      }));
+
+      const res = await fetch(`${BASE_URL}/api/ai/extract-document`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ documents: docPayload }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 413) {
+          throw new Error("Documents are too large even after compression. Please use smaller files (max ~10MB total).");
+        }
+        const err = await res.json().catch(() => ({ error: "AI extraction failed" }));
+        throw new Error(err.error || "AI extraction failed");
+      }
+
+      const { extracted }: { extracted: ExtractedData } = await res.json();
+
+      const newForm = { ...EMPTY_FORM };
+      const newExtracted = new Set<string>();
+
+      const mapping: [keyof typeof EMPTY_FORM, keyof ExtractedData][] = [
+        ["firstName", "firstName"], ["lastName", "lastName"],
+        ["email", "email"], ["phone", "phone"],
+        ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
+        ["passportNumber", "passportNumber"], ["passportIssueDate", "passportIssueDate"],
+        ["passportExpiry", "passportExpiry"],
+        ["motherName", "motherName"], ["fatherName", "fatherName"],
+        ["address", "address"], ["highSchool", "highSchool"],
+        ["gpa", "gpa"], ["languageScore", "languageScore"],
+      ];
+
+      for (const [fk, ek] of mapping) {
+        const val = extracted[ek];
+        if (val !== null && val !== undefined && val !== "") {
+          if (fk === "phone") {
+            const phoneStr = String(val).replace(/\s+/g, " ").trim();
+            if (phoneStr.startsWith("+")) {
+              const sortedCodes = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+              const matched = sortedCodes.find(pc => phoneStr.startsWith(pc.code));
+              if (matched) {
+                newForm.phoneCode = matched.code;
+                newForm.phone = phoneStr.slice(matched.code.length).trim();
+              } else {
+                newForm.phone = phoneStr;
+              }
+            } else {
+              newForm.phone = phoneStr;
+            }
+            newExtracted.add("phone");
+          } else if (fk === "gpa") {
+            const gpaStr = String(val).trim();
+            const gpaMatch = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
+            if (gpaMatch) {
+              newForm.gpa = gpaMatch[1];
+              const matchedSystem = GRADING_SYSTEMS.find(g => g.value === gpaMatch[2]);
+              if (matchedSystem) newForm.gradingSystem = matchedSystem.value;
+            } else {
+              newForm.gpa = gpaStr;
+            }
+            newExtracted.add("gpa");
+          } else {
+            (newForm as any)[fk] = String(val);
+            newExtracted.add(fk);
+          }
+        }
+      }
+      if (extracted.graduationYear != null) {
+        newForm.graduationYear = String(extracted.graduationYear);
+        newExtracted.add("graduationYear");
+      }
+
+      setForm(newForm);
+      setExtractedFields(newExtracted);
+      setStep("review");
+    } catch (err: any) {
+      setAnalysisError(err.message || "AI extraction failed");
+      setStep("review");
+    }
+  }
+
+  async function saveDocumentsForStudent(studentId: number, firstName: string, lastName: string) {
+    const uploadedDocs = Object.values(docs);
+    if (uploadedDocs.length === 0) return;
+
+    const docTypeLabel: Record<string, string> = {
+      passport: "Passport",
+      diploma: "Diploma",
+      transcript: "Transcript",
+      photo: "Photo",
+      other: "Other",
+    };
+
+    await Promise.allSettled(
+      uploadedDocs.map((d) => {
+        const label = docTypeLabel[d.label?.toLowerCase()] ?? d.label ?? "Document";
+        const docName = `${firstName}-${lastName}-${label}`;
+        return fetch(`${BASE_URL}/api/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: docName,
+            type: d.label?.toLowerCase() ?? "other",
+            status: "pending",
+            studentId,
+            fileData: d.base64,
+            mimeType: d.mediaType,
+            sizeBytes: d.file?.size ?? null,
+          }),
+        });
+      })
+    );
+  }
 
   function handleSubmit() {
     const missing: string[] = [];
@@ -328,7 +579,9 @@ function AddStudentModal({
       toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" });
       return;
     }
+
     const fullPhone = form.phone ? `${form.phoneCode} ${form.phone}` : null;
+
     createStudent.mutate(
       {
         data: {
@@ -356,70 +609,359 @@ function AddStudentModal({
         },
       },
       {
-        onSuccess: () => { toast({ title: "Student created successfully" }); handleClose(); onSuccess(); },
-        onError: (err: any) => { toast({ title: "Failed to create student", description: err?.message, variant: "destructive" }); },
+        onSuccess: async (createdStudent: any) => {
+          const docCount = Object.keys(docs).length;
+          if (docCount > 0) {
+            await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
+            toast({ title: "Student created", description: `${docCount} document${docCount !== 1 ? "s" : ""} added to profile.` });
+          } else {
+            toast({ title: "Student created successfully" });
+          }
+          handleClose();
+          onSuccess();
+        },
+        onError: (err: any) => {
+          toast({ title: "Failed to create student", description: err?.message, variant: "destructive" });
+        },
       }
     );
   }
 
+  const uploadedCount = Object.keys(docs).length;
+  const stepProgress = step === "upload" ? 33 : step === "analyzing" ? 66 : 100;
+  const ef = extractedFields;
+
   return (
-    <Dialog open={open} onOpenChange={o => !o && handleClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle className="text-xl font-display">Add Student</DialogTitle></DialogHeader>
-        <div className="space-y-5 py-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>First Name <span className="text-destructive">*</span></Label><Input value={form.firstName} onChange={e => field("firstName")(e.target.value)} placeholder="First name" /></div>
-            <div className="space-y-1.5"><Label>Last Name <span className="text-destructive">*</span></Label><Input value={form.lastName} onChange={e => field("lastName")(e.target.value)} placeholder="Last name" /></div>
-            <div className="space-y-1.5"><Label>Email <span className="text-destructive">*</span></Label><Input type="email" value={form.email} onChange={e => field("email")(e.target.value)} placeholder="email@example.com" /></div>
-            <div className="space-y-1.5">
-              <Label>Phone <span className="text-destructive">*</span></Label>
-              <div className="flex gap-2">
-                <Select value={form.phoneCode} onValueChange={v => field("phoneCode")(v)}>
-                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                  <SelectContent className="max-h-60">{PHONE_CODES.map(pc => <SelectItem key={pc.code} value={pc.code}>{pc.code} {pc.country}</SelectItem>)}</SelectContent>
-                </Select>
-                <Input value={form.phone} onChange={e => field("phone")(e.target.value)} placeholder="555 123 4567" className="flex-1" />
-              </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && step !== "analyzing") handleClose(); }}>
+      <DialogContent
+        className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
+        onInteractOutside={(e) => { if (step === "analyzing") e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (step === "analyzing") e.preventDefault(); }}
+      >
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
+          <DialogTitle className="text-xl font-display">Add New Student</DialogTitle>
+          <div className="mt-3 space-y-2">
+            <Progress value={stepProgress} className="h-1.5" />
+            <div className="flex items-center gap-6 text-xs font-medium">
+              {[
+                { id: "upload", label: "1. Upload Documents" },
+                { id: "analyzing", label: "2. AI Analysis" },
+                { id: "review", label: "3. Review & Save" },
+              ].map((s) => (
+                <span
+                  key={s.id}
+                  className={cn(step === s.id ? "text-primary" : "text-muted-foreground")}
+                >
+                  {s.label}
+                </span>
+              ))}
             </div>
-            <div className="space-y-1.5"><Label>Date of Birth <span className="text-destructive">*</span></Label><Input type="date" value={form.dateOfBirth} onChange={e => field("dateOfBirth")(e.target.value)} /></div>
-            <div className="space-y-1.5">
-              <Label>Nationality <span className="text-destructive">*</span></Label>
-              <Select value={form.nationality} onValueChange={v => field("nationality")(v)}>
-                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent className="max-h-60">{allCountries.map(c => <SelectItem key={c.id} value={c.name}>{c.flagEmoji || ""} {c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5"><Label>Mother's Name <span className="text-destructive">*</span></Label><Input value={form.motherName} onChange={e => field("motherName")(e.target.value)} placeholder="Mother's name" /></div>
-            <div className="space-y-1.5"><Label>Father's Name <span className="text-destructive">*</span></Label><Input value={form.fatherName} onChange={e => field("fatherName")(e.target.value)} placeholder="Father's name" /></div>
-            <div className="space-y-1.5 col-span-2"><Label>Address</Label><Input value={form.address} onChange={e => field("address")(e.target.value)} placeholder="Full home address" /></div>
-            <div className="space-y-1.5"><Label>Passport Number <span className="text-destructive">*</span></Label><Input value={form.passportNumber} onChange={e => field("passportNumber")(e.target.value)} placeholder="e.g. AB1234567" /></div>
-            <div className="space-y-1.5"><Label>Passport Issue Date</Label><Input type="date" value={form.passportIssueDate} onChange={e => field("passportIssueDate")(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Passport Expiry</Label><Input type="date" value={form.passportExpiry} onChange={e => field("passportExpiry")(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>High School</Label><Input value={form.highSchool} onChange={e => field("highSchool")(e.target.value)} placeholder="High school name" /></div>
-            <div className="space-y-1.5"><Label>Graduation Year</Label><Input value={form.graduationYear} onChange={e => field("graduationYear")(e.target.value)} placeholder="e.g. 2023" /></div>
-            <div className="space-y-1.5">
-              <Label>GPA</Label>
-              <div className="flex gap-2">
-                <Input value={form.gpa} onChange={e => field("gpa")(e.target.value)} placeholder={gradingSys.placeholder} className="flex-1" />
-                <Select value={form.gradingSystem} onValueChange={v => field("gradingSystem")(v)}>
-                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent>{GRADING_SYSTEMS.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5"><Label>Language Score</Label><Input value={form.languageScore} onChange={e => field("languageScore")(e.target.value)} placeholder="e.g. IELTS 7.0" /></div>
-            <div className="space-y-1.5"><Label>Bachelor University</Label><Input value={form.universityBachelor} onChange={e => field("universityBachelor")(e.target.value)} placeholder="University name" /></div>
-            <div className="space-y-1.5"><Label>Master University</Label><Input value={form.universityMaster} onChange={e => field("universityMaster")(e.target.value)} placeholder="University name" /></div>
-            <div className="space-y-1.5 col-span-2"><Label>Notes</Label><textarea value={form.notes} onChange={e => field("notes")(e.target.value)} rows={2} placeholder="Additional notes..." className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" /></div>
           </div>
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5">
+          {step === "upload" && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Application Level</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {LEVELS.map(lv => (
+                    <button
+                      key={lv.key}
+                      type="button"
+                      onClick={() => setApplicationLevel(lv.key)}
+                      className={cn(
+                        "rounded-xl border-2 px-3 py-2.5 text-center transition-all",
+                        applicationLevel === lv.key
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border hover:border-primary/40 hover:bg-secondary/40"
+                      )}
+                    >
+                      <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md border", lv.color)}>{lv.badge}</span>
+                      <p className="text-xs text-foreground font-medium mt-1.5 leading-tight">{lv.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-2xl p-3 flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">AI Auto-Fill</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Upload documents — AI will read and fill the form. <span className="font-medium text-rose-600">Required</span> documents take priority.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold text-foreground">Required Documents</p>
+                  <p className="text-xs text-muted-foreground">
+                    {uploadedCount}/{currentDocs.length} uploaded
+                  </p>
+                </div>
+                <div className={cn(
+                  "grid gap-2",
+                  currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
+                )}>
+                  {currentDocs.map((dt) => (
+                    <DropZone
+                      key={dt.key}
+                      docType={dt}
+                      uploaded={docs[dt.key]}
+                      onUpload={(doc) => setDocs((d) => ({ ...d, [dt.key]: doc }))}
+                      onRemove={() => setDocs((d) => { const n = { ...d }; delete n[dt.key]; return n; })}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                <p className="text-xs text-amber-700">
+                  No documents? Use <strong>"Skip to Form"</strong> to fill the form manually.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {step === "analyzing" && (
+            <div className="flex flex-col items-center justify-center py-16 gap-6">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-blue-100 flex items-center justify-center">
+                  <Sparkles className="w-10 h-10 text-violet-500" />
+                </div>
+                <div className="absolute inset-0 rounded-full border-4 border-violet-200 animate-ping opacity-40" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-lg font-display font-semibold">AI is reading your documents…</p>
+                <p className="text-sm text-muted-foreground">
+                  Extracting information from {uploadedCount} document{uploadedCount !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                {Object.values(docs).map((d) => (
+                  <div key={d.key} className="flex items-center gap-2 text-sm bg-secondary/50 rounded-lg px-3 py-2">
+                    <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+                    <span className="text-sm text-muted-foreground">Analyzing {d.label}…</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === "review" && (
+            <div className="space-y-6">
+              {ef.size > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-emerald-700">
+                    <strong>AI extracted {ef.size} field{ef.size !== 1 ? "s" : ""} automatically.</strong>{" "}
+                    Fields marked <span className="bg-emerald-100 text-emerald-700 px-1 rounded font-semibold text-[10px]">AI ✓</span> were filled from documents. Review and complete any missing fields below.
+                  </p>
+                </div>
+              )}
+
+              {analysisError && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <p className="text-xs text-rose-700">
+                    AI could not read the documents: {analysisError}. Please fill the form manually.
+                  </p>
+                </div>
+              )}
+
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+                  <User className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" aiExtracted={ef.has("firstName")} />
+                  <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" aiExtracted={ef.has("lastName")} />
+                  <FormField required label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
+                  <div className="space-y-1.5">
+                    <Label className="font-semibold text-sm flex items-center">
+                      Phone<span className="text-destructive ml-0.5">*</span>
+                      {ef.has("phone") && <AiBadge />}
+                    </Label>
+                    <div className="flex gap-1.5">
+                      <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
+                        <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PHONE_CODES.map(pc => (
+                            <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                              <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={form.phone}
+                        onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                        placeholder="555 000 0000"
+                        className={cn(
+                          "rounded-xl flex-1",
+                          ef.has("phone") && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400"
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
+                    <Select value={form.nationality} onValueChange={field("nationality")}>
+                      <SelectTrigger className="mt-1 h-9 text-sm">
+                        <SelectValue placeholder="Select country..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allCountries.map(c => (
+                          <SelectItem key={c.id} value={c.name}>
+                            <span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" aiExtracted={ef.has("motherName")} />
+                  <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" aiExtracted={ef.has("fatherName")} />
+                  <div className="col-span-2">
+                    <FormField label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" aiExtracted={ef.has("address")} />
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+                  <span className="text-base leading-none">{"\u{1F6C2}"}</span>
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <FormField required label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" aiExtracted={ef.has("passportNumber")} />
+                  </div>
+                  <FormField label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
+                  <FormField label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" aiExtracted={ef.has("passportExpiry")} />
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+                  <GraduationCap className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <FormField label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" aiExtracted={ef.has("highSchool")} />
+                  </div>
+                  {(applicationLevel === "graduate" || applicationLevel === "doctorate") && (
+                    <div className="col-span-2">
+                      <FormField label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" aiExtracted={ef.has("universityBachelor")} />
+                    </div>
+                  )}
+                  {applicationLevel === "doctorate" && (
+                    <div className="col-span-2">
+                      <FormField label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" aiExtracted={ef.has("universityMaster")} />
+                    </div>
+                  )}
+                  <FormField label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" aiExtracted={ef.has("graduationYear")} />
+                  <div className="space-y-1.5">
+                    <Label className="font-semibold text-sm flex items-center">
+                      GPA{ef.has("gpa") && <AiBadge />}
+                    </Label>
+                    <div className="flex gap-1.5">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.max ?? 4}
+                        value={form.gpa}
+                        onChange={(e) => setForm(f => ({ ...f, gpa: e.target.value }))}
+                        placeholder={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.placeholder ?? "e.g. 3.8"}
+                        className={cn(
+                          "rounded-xl flex-1",
+                          ef.has("gpa") && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400"
+                        )}
+                      />
+                      <Select value={form.gradingSystem} onValueChange={(v) => setForm(f => ({ ...f, gradingSystem: v, gpa: "" }))}>
+                        <SelectTrigger className="w-[110px] h-9 text-sm rounded-xl shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GRADING_SYSTEMS.map(gs => (
+                            <SelectItem key={gs.value} value={gs.value}>
+                              / {gs.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <FormField label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" aiExtracted={ef.has("languageScore")} />
+                  </div>
+                </div>
+              </section>
+
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Notes</Label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Any additional notes about this student…"
+                  rows={2}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                />
+              </div>
+            </div>
+          )}
         </div>
-        <DialogFooter className="gap-2 pt-2">
-          <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim()}>
-            {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            Create Student
-          </Button>
-        </DialogFooter>
+
+        <div className="px-6 pb-5 pt-3 border-t border-border/50 flex items-center justify-between shrink-0 gap-3">
+          {step === "upload" && (
+            <>
+              <Button variant="ghost" onClick={handleClose} className="rounded-xl">Cancel</Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep("review")} className="rounded-xl text-muted-foreground">
+                  Skip to Form
+                </Button>
+                <Button
+                  onClick={analyzeDocuments}
+                  disabled={uploadedCount === 0}
+                  className="rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Analyze {uploadedCount > 0 ? `${uploadedCount} Doc${uploadedCount !== 1 ? "s" : ""}` : "Documents"}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === "analyzing" && (
+            <div className="w-full flex justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            </div>
+          )}
+
+          {step === "review" && (
+            <>
+              <Button variant="outline" onClick={() => setStep("upload")} className="rounded-xl gap-2">
+                <ChevronLeft className="w-4 h-4" /> Back
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim()}
+                className="rounded-xl gap-2"
+              >
+                {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Create Student
+              </Button>
+            </>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
