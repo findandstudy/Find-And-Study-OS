@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { CountryFlag } from "@/components/CountryFlag";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -90,10 +91,15 @@ const INSTRUCTION_LANGUAGES = [
   "Dutch", "Spanish", "Italian", "Chinese", "Japanese", "Portuguese",
 ];
 
-function useUniversityCountries() {
-  return useQuery<string[]>({
-    queryKey: ["university-countries"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/universities/countries`),
+type CountryRecord = { id: number; name: string; code: string; flagEmoji?: string; isActive: boolean };
+
+function useCountries() {
+  return useQuery<CountryRecord[]>({
+    queryKey: ["countries-all"],
+    queryFn: async () => {
+      const res = await apiFetch(`${BASE_URL}/api/countries?limit=500`);
+      return res.data ?? res;
+    },
     staleTime: 5 * 60_000,
   });
 }
@@ -340,7 +346,8 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: countries = [] } = useUniversityCountries();
+  const { data: allCountries = [] } = useCountries();
+  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
 
   const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
     queryKey: ["universities-by-country", form.country],
@@ -449,7 +456,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             <Label>Country</Label>
             <Select value={form.country} onValueChange={handleCountryChange}>
               <SelectTrigger><SelectValue placeholder="Select country..." /></SelectTrigger>
-              <SelectContent className="max-h-60">{countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              <SelectContent className="max-h-60">{activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
@@ -560,7 +567,8 @@ function FilterPopover({ filters, onChange, stages }: {
 }) {
   const [open, setOpen] = useState(false);
   const hasActive = filters.stage !== "all" || filters.country !== "all";
-  const { data: countries = [] } = useUniversityCountries();
+  const { data: allCountries = [] } = useCountries();
+  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -591,7 +599,7 @@ function FilterPopover({ filters, onChange, stages }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
               <SelectItem value="all">All</SelectItem>
-              {countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -608,7 +616,8 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" });
 
-  const { data: countries = [] } = useUniversityCountries();
+  const { data: allCountries = [] } = useCountries();
+  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
 
   const { data: uniData } = useQuery<{ data: Array<{ id: number; name: string }> }>({
     queryKey: ["universities-by-country", form.country],
@@ -688,7 +697,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold">Country <span className="text-destructive">*</span></Label>
               <Select value={form.country} onValueChange={v => setForm({ ...form, country: v, universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "" })}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent className="max-h-60">{countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent className="max-h-60">{activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">

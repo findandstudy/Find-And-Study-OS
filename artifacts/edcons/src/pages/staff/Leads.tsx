@@ -53,18 +53,15 @@ async function apiFetch(url: string) {
   return r.json();
 }
 
-function useNationalities() {
-  return useQuery<string[]>({
-    queryKey: ["nationalities"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/nationalities`),
-    staleTime: 5 * 60_000,
-  });
-}
+type CountryRecord = { id: number; name: string; code: string; flagEmoji?: string; isActive: boolean };
 
-function useUniversityCountries() {
-  return useQuery<string[]>({
-    queryKey: ["university-countries"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/universities/countries`),
+function useCountries() {
+  return useQuery<CountryRecord[]>({
+    queryKey: ["countries-all"],
+    queryFn: async () => {
+      const res = await apiFetch(`${BASE_URL}/api/countries?limit=500`);
+      return res.data ?? res;
+    },
     staleTime: 5 * 60_000,
   });
 }
@@ -318,15 +315,15 @@ function FilterPopover({ filters, onChange, columns }: {
 
 /* ── NationalityCombobox ──────────────────────────────────── */
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: nationalities = [] } = useNationalities();
+  const { data: allCountries = [] } = useCountries();
   const [inputVal, setInputVal] = useState(value);
   const [open, setOpen] = useState(false);
 
   useEffect(() => { setInputVal(value); }, [value]);
 
   const filtered = inputVal
-    ? nationalities.filter(n => n.toLowerCase().includes(inputVal.toLowerCase()))
-    : nationalities;
+    ? allCountries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
+    : allCountries;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -342,11 +339,12 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
         </div>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
-        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No nationalities yet"}</div>}
-        {filtered.map(n => (
-          <button key={n} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors ${n === value ? "bg-primary/10 font-medium" : ""}`}
-            onMouseDown={e => { e.preventDefault(); onChange(n); setInputVal(n); setOpen(false); }}>
-            {n}
+        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+        {filtered.map(c => (
+          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
+            <CountryFlag code={c.code} size="sm" />
+            {c.name}
           </button>
         ))}
       </PopoverContent>
@@ -354,18 +352,21 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   );
 }
 
-/* ── CountrySelect ───────────────────────────────────────── */
+/* ── CountrySelect (active destinations only) ────────────── */
 function CountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: countries = [] } = useUniversityCountries();
+  const { data: allCountries = [] } = useCountries();
+  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
 
   return (
     <Select value={value || "__clear"} onValueChange={v => onChange(v === "__clear" ? "" : v)}>
       <SelectTrigger><SelectValue placeholder="Select destination..." /></SelectTrigger>
       <SelectContent className="max-h-60">
         <SelectItem value="__clear" className="text-muted-foreground">— None —</SelectItem>
-        {countries.length === 0 && <SelectItem value="__empty" disabled>No destinations loaded</SelectItem>}
-        {countries.map(c => (
-          <SelectItem key={c} value={c}>{c}</SelectItem>
+        {activeDestinations.length === 0 && <SelectItem value="__empty" disabled>No active destinations</SelectItem>}
+        {activeDestinations.map(c => (
+          <SelectItem key={c.id} value={c.name}>
+            <span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span>
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
