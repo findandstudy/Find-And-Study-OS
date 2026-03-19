@@ -372,13 +372,12 @@ export default function AgentSubAgents() {
                 </table>
               </div>
 
-              {meta && meta.totalPages > 1 && (
+              {meta && meta.total > 0 && (
                 <div className="p-4 border-t border-border/50">
                   <TablePagination
-                    page={meta.page}
-                    totalPages={meta.totalPages}
-                    total={meta.total}
-                    limit={meta.limit}
+                    currentPage={meta.page}
+                    totalItems={meta.total}
+                    pageSize={meta.limit}
                     onPageChange={setPage}
                   />
                 </div>
