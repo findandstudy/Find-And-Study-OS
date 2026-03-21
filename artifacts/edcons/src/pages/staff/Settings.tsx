@@ -18,8 +18,14 @@ import {
   Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon, Plug,
   Building2, Search as SearchIcon, FileText, Code, ChevronRight,
   ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
-  Youtube, Facebook, Twitter, Camera, Kanban, Pencil,
+  Youtube, Facebook, Twitter, Camera, Kanban, Pencil, ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 import { CountryFlag } from "@/components/CountryFlag";
 import { IntegrationsManager } from "@/components/IntegrationsManager";
@@ -35,6 +41,35 @@ const LANGUAGES = [
   { code: "fr", label: "Français", country: "FR" },
   { code: "ru", label: "Русский", country: "RU" },
 ];
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" }, { code: "+254", country: "KE" }, { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" }, { code: "+61", country: "AU" }, { code: "+64", country: "NZ" },
+  { code: "+60", country: "MY" }, { code: "+65", country: "SG" }, { code: "+66", country: "TH" },
+  { code: "+84", country: "VN" }, { code: "+62", country: "ID" }, { code: "+63", country: "PH" },
+  { code: "+880", country: "BD" }, { code: "+94", country: "LK" }, { code: "+977", country: "NP" },
+  { code: "+251", country: "ET" }, { code: "+255", country: "TZ" }, { code: "+233", country: "GH" },
+];
+
+function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
+  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
+  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length) };
+  const intlMatch = fullPhone.match(/^(\+\d{1,4})(.*)/);
+  if (intlMatch) return { phoneCode: intlMatch[1], phone: intlMatch[2] };
+  return { phoneCode: "+90", phone: fullPhone };
+}
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin", admin: "Admin", manager: "Manager",
@@ -170,7 +205,7 @@ export default function SettingsPage() {
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", avatarUrl: "", email: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "" });
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -185,7 +220,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phone: (user as any).phone || "", avatarUrl: user.avatarUrl || "", email: user.email || "" });
+      const parsed = parsePhoneCode((user as any).phone || "");
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "" });
     }
   }, [user]);
 
@@ -261,7 +297,7 @@ export default function SettingsPage() {
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone || undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined }),
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined }),
       });
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated" });
@@ -368,7 +404,25 @@ export default function SettingsPage() {
             <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Phone" className="sm:col-span-2">
-            <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 234 567 8900" className="rounded-xl" />
+            <div className="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0 rounded-xl">
+                    <CountryFlag code={PHONE_CODES.find(p => p.code === form.phoneCode)?.country || "TR"} size="sm" />
+                    <span className="text-xs">{form.phoneCode}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
+                  {PHONE_CODES.map(pc => (
+                    <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
+                      <CountryFlag code={pc.country} size="sm" /> {pc.code}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
+            </div>
           </FieldGroup>
         </div>
         <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
