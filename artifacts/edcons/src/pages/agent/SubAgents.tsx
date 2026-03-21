@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -49,7 +49,15 @@ import {
   Phone,
   TrendingUp,
   Calendar,
+  Upload,
+  X,
+  Building2,
+  ChevronDown,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { CountryFlag } from "@/components/CountryFlag";
 
 type SubAgent = {
   id: number;
@@ -58,9 +66,75 @@ type SubAgent = {
   email: string | null;
   phone: string | null;
   commissionRate: number | null;
+  companyName: string | null;
+  logoUrl: string | null;
+  hideServiceFees: boolean;
   status: string;
   createdAt: string;
 };
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR" },
+  { code: "+1", country: "US" },
+  { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" },
+  { code: "+33", country: "FR" },
+  { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" },
+  { code: "+31", country: "NL" },
+  { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" },
+  { code: "+45", country: "DK" },
+  { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" },
+  { code: "+48", country: "PL" },
+  { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" },
+  { code: "+86", country: "CN" },
+  { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" },
+  { code: "+91", country: "IN" },
+  { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" },
+  { code: "+966", country: "SA" },
+  { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" },
+  { code: "+98", country: "IR" },
+  { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" },
+  { code: "+20", country: "EG" },
+  { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" },
+  { code: "+254", country: "KE" },
+  { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" },
+  { code: "+61", country: "AU" },
+  { code: "+64", country: "NZ" },
+  { code: "+60", country: "MY" },
+  { code: "+65", country: "SG" },
+  { code: "+66", country: "TH" },
+  { code: "+84", country: "VN" },
+  { code: "+62", country: "ID" },
+  { code: "+63", country: "PH" },
+  { code: "+880", country: "BD" },
+  { code: "+94", country: "LK" },
+  { code: "+977", country: "NP" },
+  { code: "+251", country: "ET" },
+  { code: "+255", country: "TZ" },
+  { code: "+233", country: "GH" },
+];
+
+function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
+  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
+  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length) };
+  const intlMatch = fullPhone.match(/^(\+\d{1,4})(.*)/);
+  if (intlMatch) return { phoneCode: intlMatch[1], phone: intlMatch[2] };
+  return { phoneCode: "+90", phone: fullPhone };
+}
 
 export default function AgentSubAgents() {
   const { user } = useAuth(true);
@@ -80,7 +154,7 @@ export default function AgentSubAgents() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "", commissionRate: "", password: "",
+    firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", commissionRate: "", password: "", companyName: "", logoUrl: "", hideServiceFees: false,
   });
   const [pwForm, setPwForm] = useState({ password: "" });
 
@@ -98,19 +172,24 @@ export default function AgentSubAgents() {
   const meta = data?.meta;
 
   function openCreate() {
-    setForm({ firstName: "", lastName: "", email: "", phone: "", commissionRate: "", password: "" });
+    setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", commissionRate: "", password: "", companyName: "", logoUrl: "", hideServiceFees: false });
     setShowCreate(true);
   }
 
   function openEdit(sa: SubAgent) {
     setSelected(sa);
+    const parsed = parsePhoneCode(sa.phone || "");
     setForm({
       firstName: sa.firstName,
       lastName: sa.lastName,
       email: sa.email || "",
-      phone: sa.phone || "",
+      phoneCode: parsed.phoneCode,
+      phone: parsed.phone,
       commissionRate: sa.commissionRate?.toString() || "",
       password: "",
+      companyName: sa.companyName || "",
+      logoUrl: sa.logoUrl || "",
+      hideServiceFees: sa.hideServiceFees || false,
     });
     setShowEdit(true);
   }
@@ -140,9 +219,12 @@ export default function AgentSubAgents() {
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email || undefined,
-          phone: form.phone || undefined,
+          phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined,
           commissionRate: form.commissionRate || undefined,
           password: form.password || undefined,
+          companyName: form.companyName || undefined,
+          logoUrl: form.logoUrl || undefined,
+          hideServiceFees: form.hideServiceFees,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
@@ -164,8 +246,11 @@ export default function AgentSubAgents() {
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email || null,
-          phone: form.phone || null,
+          phone: form.phone ? `${form.phoneCode}${form.phone}` : null,
           commissionRate: form.commissionRate || null,
+          companyName: form.companyName || null,
+          logoUrl: form.logoUrl || null,
+          hideServiceFees: form.hideServiceFees,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
@@ -228,6 +313,27 @@ export default function AgentSubAgents() {
     e.preventDefault();
     setSearch(searchInput);
     setPage(1);
+  }
+
+  const [uploading, setUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleLogoUpload(file: File) {
+    setUploading(true);
+    try {
+      const urlRes = await customFetch<{ uploadURL: string; objectPath: string }>(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      setForm(f => ({ ...f, logoUrl: `${BASE_URL}/api/storage/objects${strippedPath}` }));
+      toast({ title: "Logo uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally { setUploading(false); }
   }
 
   return (
@@ -395,7 +501,7 @@ export default function AgentSubAgents() {
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Sub Agent</DialogTitle>
             <DialogDescription>Create a new sub-agent under your agency. They can log in with their email and password.</DialogDescription>
@@ -412,6 +518,13 @@ export default function AgentSubAgents() {
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Company Name</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="Sub-agent company name" className="h-9 pl-9" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs font-medium">Email</Label>
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="sub.agent@example.com" className="h-9" />
               <p className="text-[11px] text-muted-foreground">Required for login access</p>
@@ -421,15 +534,63 @@ export default function AgentSubAgents() {
               <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 6 characters" className="h-9" />
               <p className="text-[11px] text-muted-foreground">Set an initial password for login (can be changed later)</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Phone</Label>
-                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+90 555 123 4567" className="h-9" />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Phone</Label>
+              <div className="flex gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-9 gap-1.5 px-2.5 min-w-[90px] shrink-0">
+                      <CountryFlag code={PHONE_CODES.find(p => p.code === form.phoneCode)?.country || "TR"} size="sm" />
+                      <span className="text-xs">{form.phoneCode}</span>
+                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
+                    {PHONE_CODES.map(pc => (
+                      <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
+                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="h-9 flex-1" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Commission Rate (%)</Label>
-                <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="e.g. 5" className="h-9" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Commission Share (%)</Label>
+              <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="e.g. 50" className="h-9" />
+              <p className="text-[11px] text-muted-foreground">Percentage of your commission to share with this sub-agent. E.g. if you receive 70% from the company and enter 50 here, the sub-agent gets 50% of your 70%.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Sub Agent Logo</Label>
+              <div className="relative w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
+                {form.logoUrl ? (
+                  <>
+                    <img src={form.logoUrl} alt="Sub Agent Logo" className="max-h-16 max-w-full object-contain" />
+                    <button onClick={() => setForm(f => ({ ...f, logoUrl: "" }))} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => logoInputRef.current?.click()} disabled={uploading} className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                    {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                    <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload Logo"}</span>
+                  </button>
+                )}
               </div>
+              <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ""; }} />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/20">
+              <div className="flex-1">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  {form.hideServiceFees ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Eye className="w-3.5 h-3.5 text-green-500" />}
+                  Service Fee Visibility
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {form.hideServiceFees ? "Sub-agent cannot see service fees" : "Sub-agent can see service fees"}
+                </p>
+              </div>
+              <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setShowCreate(false)} size="sm">Cancel</Button>
@@ -444,7 +605,7 @@ export default function AgentSubAgents() {
 
       {/* Edit Dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Sub Agent</DialogTitle>
             <DialogDescription>Update the details for {selected?.firstName} {selected?.lastName}</DialogDescription>
@@ -461,18 +622,73 @@ export default function AgentSubAgents() {
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Company Name</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="Sub-agent company name" className="h-9 pl-9" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs font-medium">Email</Label>
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-9" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Phone</Label>
-                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="h-9" />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Phone</Label>
+              <div className="flex gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-9 gap-1.5 px-2.5 min-w-[90px] shrink-0">
+                      <CountryFlag code={PHONE_CODES.find(p => p.code === form.phoneCode)?.country || "TR"} size="sm" />
+                      <span className="text-xs">{form.phoneCode}</span>
+                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
+                    {PHONE_CODES.map(pc => (
+                      <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
+                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="h-9 flex-1" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Commission Rate (%)</Label>
-                <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} className="h-9" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Commission Share (%)</Label>
+              <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="e.g. 50" className="h-9" />
+              <p className="text-[11px] text-muted-foreground">Percentage of your commission to share with this sub-agent. E.g. if you receive 70% from the company and enter 50 here, the sub-agent gets 50% of your 70%.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Sub Agent Logo</Label>
+              <div className="relative w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
+                {form.logoUrl ? (
+                  <>
+                    <img src={form.logoUrl} alt="Sub Agent Logo" className="max-h-16 max-w-full object-contain" />
+                    <button onClick={() => setForm(f => ({ ...f, logoUrl: "" }))} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => logoInputRef.current?.click()} disabled={uploading} className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                    {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                    <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload Logo"}</span>
+                  </button>
+                )}
               </div>
+              <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ""; }} />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/20">
+              <div className="flex-1">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  {form.hideServiceFees ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Eye className="w-3.5 h-3.5 text-green-500" />}
+                  Service Fee Visibility
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {form.hideServiceFees ? "Sub-agent cannot see service fees" : "Sub-agent can see service fees"}
+                </p>
+              </div>
+              <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setShowEdit(false)} size="sm">Cancel</Button>

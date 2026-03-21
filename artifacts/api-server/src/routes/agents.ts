@@ -108,7 +108,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
   const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
-  const { firstName, lastName, email, phone, commissionRate, password } = req.body;
+  const { firstName, lastName, email, phone, commissionRate, password, companyName, logoUrl, hideServiceFees } = req.body;
   if (!firstName || !lastName) {
     res.status(400).json({ error: "First name and last name are required" });
     return;
@@ -140,8 +140,10 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     status: "active",
     agencyCode: parentAgent.agencyCode || null,
     country: parentAgent.country || null,
-    companyName: parentAgent.companyName || null,
+    companyName: companyName || parentAgent.companyName || null,
     businessName: parentAgent.businessName || null,
+    logoUrl: logoUrl || null,
+    hideServiceFees: hideServiceFees === true,
   }).returning();
 
   res.status(201).json(subAgent);
@@ -156,12 +158,14 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
   const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
   if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
 
-  const allowed = ["firstName", "lastName", "email", "phone", "commissionRate", "status"];
+  const allowed = ["firstName", "lastName", "email", "phone", "commissionRate", "status", "companyName", "logoUrl", "hideServiceFees"];
   const updates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) {
       if (key === "commissionRate") {
         updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
+      } else if (key === "hideServiceFees") {
+        updates[key] = req.body[key] === true;
       } else {
         updates[key] = req.body[key] || null;
       }
