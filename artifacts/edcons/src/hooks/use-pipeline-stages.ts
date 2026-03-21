@@ -46,7 +46,8 @@ export function usePipelineStages(entityType: string) {
   const query = useQuery<PipelineStage[]>({
     queryKey: ["pipeline-stages", entityType],
     queryFn: () => fetchStages(entityType),
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const uniqueStages = useMemo(

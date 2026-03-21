@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
-import { EditStagesDialog } from "@/components/EditStagesDialog";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import {
@@ -1650,7 +1649,6 @@ export default function StudentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
-  const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
 
   const stuSensors = useSensors(
@@ -1658,7 +1656,7 @@ export default function StudentsPage() {
     useSensor(KeyboardSensor)
   );
 
-  const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("student");
+  const { stages: pipelineStages } = usePipelineStages("student");
   const studentStatuses = pipelineStages.map(s => s.key);
   const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
@@ -1794,9 +1792,6 @@ export default function StudentsPage() {
             <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
               <FileUp className="w-4 h-4" /> Bulk Import
             </Button>
-            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditStagesOpen(true)}>
-              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Stages
-            </Button>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Student
             </Button>
@@ -1898,14 +1893,6 @@ export default function StudentsPage() {
         )}
       </div>
 
-      <EditStagesDialog
-        open={editStagesOpen}
-        onClose={() => setEditStagesOpen(false)}
-        stages={pipelineStages}
-        onSave={async (s) => { await saveStages(s); }}
-        isSaving={isSavingStages}
-        entityLabel="Student"
-      />
       <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} stages={pipelineStages} />
       <StuDeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} defaultStatus={pipelineStages[0]?.key} />

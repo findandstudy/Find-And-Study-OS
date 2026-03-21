@@ -29,7 +29,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
-import { EditStagesDialog } from "@/components/EditStagesDialog";
 import {
   DndContext,
   DragOverlay,
@@ -785,7 +784,6 @@ export default function ApplicationsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
-  const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
 
   const sensors = useSensors(
@@ -793,7 +791,7 @@ export default function ApplicationsPage() {
     useSensor(KeyboardSensor)
   );
 
-  const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("application");
+  const { stages: pipelineStages } = usePipelineStages("application");
   const stageOrder = pipelineStages.map(s => s.key);
   const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
@@ -927,9 +925,6 @@ export default function ApplicationsPage() {
                 <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
               </Button>
             )}
-            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditStagesOpen(true)}>
-              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Stages
-            </Button>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> New Application
             </Button>
@@ -1045,14 +1040,6 @@ export default function ApplicationsPage() {
         )}
       </div>
 
-      <EditStagesDialog
-        open={editStagesOpen}
-        onClose={() => setEditStagesOpen(false)}
-        stages={pipelineStages}
-        onSave={async (s) => { await saveStages(s); }}
-        isSaving={isSavingStages}
-        entityLabel="Application"
-      />
       <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
       <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />

@@ -6,7 +6,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
-  Plus, Search, Filter, Eye, TrendingUp, Settings2, X,
+  Plus, Search, Filter, Eye, TrendingUp, X,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
 } from "lucide-react";
@@ -43,7 +43,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
-import { EditStagesDialog } from "@/components/EditStagesDialog";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -644,11 +643,10 @@ export default function LeadsPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [filters, setFilters] = useState({ source: "all", status: "all" });
-  const { stages: pipelineStages, saveStages, isSaving: isSavingStages } = usePipelineStages("lead");
+  const { stages: pipelineStages } = usePipelineStages("lead");
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
   });
@@ -820,10 +818,6 @@ export default function LeadsPage() {
     );
   };
 
-  async function handleSaveStages(newStages: PipelineStage[]) {
-    await saveStages(newStages);
-  }
-
   function handleCreate() {
     if (!form.firstName || !form.lastName) return;
     const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
@@ -856,17 +850,6 @@ export default function LeadsPage() {
               <h1 className="text-3xl font-display font-bold text-foreground">Lead Pipeline</h1>
               <p className="text-muted-foreground text-sm mt-1">Manage and convert prospective students.</p>
             </div>
-            {viewMode === "pipeline" && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground mt-0.5"
-                title="Edit pipeline stages"
-                onClick={() => setEditStagesOpen(true)}
-              >
-                <Settings2 className="w-4 h-4" />
-              </Button>
-            )}
           </div>
           <div className="flex items-center gap-3">
             <div className="relative w-64">
@@ -1097,15 +1080,6 @@ export default function LeadsPage() {
         )}
       </div>
 
-      {/* ── Edit Stages Dialog ─────────────────────────────── */}
-      <EditStagesDialog
-        open={editStagesOpen}
-        onClose={() => setEditStagesOpen(false)}
-        stages={pipelineStages}
-        onSave={handleSaveStages}
-        isSaving={isSavingStages}
-        entityLabel="Lead"
-      />
 
       {/* ── Edit Lead Dialog ───────────────────────────────── */}
       <EditLeadDialog
