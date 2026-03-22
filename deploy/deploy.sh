@@ -36,6 +36,14 @@ echo "[4/4] Starting/restarting PM2..."
 if command -v pm2 &> /dev/null; then
   pm2 startOrRestart deploy/ecosystem.config.cjs --env production
   pm2 save
+
+  if ! pm2 describe pm2-logrotate > /dev/null 2>&1; then
+    echo "  Installing pm2-logrotate..."
+    pm2 install pm2-logrotate
+    pm2 set pm2-logrotate:max_size 10M
+    pm2 set pm2-logrotate:retain 7
+    pm2 set pm2-logrotate:compress true
+  fi
   echo ""
   echo " PM2 process started. Useful commands:"
   echo "   pm2 status           — View process status"

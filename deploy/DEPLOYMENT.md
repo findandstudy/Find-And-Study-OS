@@ -143,7 +143,7 @@ This will:
 **Verify it's running:**
 ```bash
 pm2 status
-curl http://localhost:3000/api/health
+curl http://localhost:3000/api/healthz
 ```
 
 ---
@@ -162,6 +162,10 @@ sudo ln -s /etc/nginx/sites-available/findandstudy /etc/nginx/sites-enabled/
 
 # Remove default site (optional)
 sudo rm -f /etc/nginx/sites-enabled/default
+
+# Optional: Enable Brotli compression (better than gzip)
+sudo apt install -y libnginx-mod-brotli
+# Then uncomment the brotli directives in the nginx config
 
 # Test and reload
 sudo nginx -t
@@ -186,7 +190,7 @@ sudo certbot renew --dry-run
 
 ---
 
-## PM2 Auto-Start
+## PM2 Auto-Start & Log Rotation
 
 ```bash
 # Generate startup script (run as your deploy user)
@@ -195,9 +199,15 @@ pm2 startup
 
 # Save current process list
 pm2 save
+
+# Install log rotation (auto-installed by deploy.sh)
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
 ```
 
-This ensures the app restarts automatically after server reboots.
+This ensures the app restarts automatically after server reboots and logs are rotated to prevent disk filling.
 
 ---
 
