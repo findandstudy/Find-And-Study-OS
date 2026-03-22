@@ -567,7 +567,7 @@ export default function Login() {
                     </div>
                     <h2 className="text-2xl font-display font-bold text-foreground mb-2">Password Set!</h2>
                     <p className="text-muted-foreground text-sm mb-6">
-                      Your password has been set successfully. You can now sign in to your account.
+                      Your password has been set successfully. Please also verify your email (check your inbox) to activate your account, then sign in.
                     </p>
                     <Button size="lg" onClick={() => { setTab("login"); setError(""); setSuccessMessage(""); window.history.replaceState({}, "", "/login"); }}
                       className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">

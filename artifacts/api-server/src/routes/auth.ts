@@ -106,7 +106,11 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   }
 
   if (!user.isActive) {
-    res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
+    if (!user.emailVerified) {
+      res.status(403).json({ error: "Please verify your email address to activate your account. Check your inbox for the verification link." });
+    } else {
+      res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
+    }
     return;
   }
 
@@ -313,17 +317,20 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
   }
 
   const hash = await bcrypt.hash(password, 10);
+  const updates: Record<string, any> = {
+    passwordHash: hash,
+    passwordResetToken: null,
+    passwordResetExpires: null,
+  };
+  if (user.emailVerified) {
+    updates.isActive = true;
+  }
   await db
     .update(usersTable)
-    .set({
-      passwordHash: hash,
-      passwordResetToken: null,
-      passwordResetExpires: null,
-      isActive: true,
-    })
+    .set(updates)
     .where(eq(usersTable.id, user.id));
 
-  res.json({ success: true, message: "Password has been set. You can now log in." });
+  res.json({ success: true, message: user.emailVerified ? "Password has been set. You can now log in." : "Password has been set. Please verify your email to activate your account." });
 });
 
 router.get("/auth/verify-email-token/:token", async (req: Request, res: Response) => {
@@ -343,38 +350,41 @@ router.get("/auth/verify-email-token/:token", async (req: Request, res: Response
     return;
   }
 
+  const verifyUpdates: Record<string, any> = {
+    emailVerified: true,
+    emailVerificationToken: null,
+  };
+  if (user.passwordHash) {
+    verifyUpdates.isActive = true;
+  }
   await db
     .update(usersTable)
-    .set({
-      emailVerified: true,
-      emailVerificationToken: null,
-      isActive: true,
-    })
+    .set(verifyUpdates)
     .where(eq(usersTable.id, user.id));
 
   res.redirect("/login?verified=true");
 });
 
 router.post("/auth/resend-verification-email", async (req: Request, res: Response) => {
-  if (!req.user) {
+  const emailParam = req.body?.email?.toLowerCase?.()?.trim?.();
+
+  if (!req.user && !emailParam) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
 
   const ip = req.ip || "unknown";
-  if (!checkRateLimit(`resend-verify:${ip}`, MAX_RESEND_ATTEMPTS) || !checkRateLimit(`resend-verify:${req.user.id}`, MAX_RESEND_ATTEMPTS)) {
+  const rateLimitKey = req.user ? `resend-verify:${req.user.id}` : `resend-verify:${emailParam}`;
+  if (!checkRateLimit(`resend-verify:${ip}`, MAX_RESEND_ATTEMPTS) || !checkRateLimit(rateLimitKey, MAX_RESEND_ATTEMPTS)) {
     res.status(429).json({ error: "Too many attempts. Please wait before requesting again." });
     return;
   }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-
-  if (user.emailVerified) {
-    res.status(400).json({ error: "Email is already verified" });
+  const [user] = req.user
+    ? await db.select().from(usersTable).where(eq(usersTable.id, req.user.id))
+    : await db.select().from(usersTable).where(eq(usersTable.email, emailParam));
+  if (!user || user.emailVerified) {
+    res.json({ message: "If the email is registered and unverified, a verification link has been sent." });
     return;
   }
 

@@ -21,3 +21,4 @@ export * from "./activity";
 export * from "./applicationStageDocuments";
 export * from "./embeds";
 export * from "./destinations";
+export * from "./emailQueue";

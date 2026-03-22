@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { db, emailQueueTable } from "@workspace/db";
 
 export function generateSecureToken(): string {
   return crypto.randomBytes(32).toString("hex");
@@ -175,4 +176,16 @@ export async function sendEmail(to: string, email: { subject: string; html: stri
   console.log(`[EMAIL] Subject: ${email.subject}`);
   console.log(`[EMAIL] Text Preview:\n${email.text}`);
   console.log(`${"=".repeat(60)}\n`);
+
+  try {
+    await db.insert(emailQueueTable).values({
+      toEmail: to,
+      subject: email.subject,
+      htmlBody: email.html,
+      textBody: email.text,
+      status: "pending",
+    });
+  } catch (err) {
+    console.error("[EMAIL] Failed to persist email to queue:", err);
+  }
 }

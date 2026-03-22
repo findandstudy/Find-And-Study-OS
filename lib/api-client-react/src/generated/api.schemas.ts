@@ -42,6 +42,7 @@ export interface UserProfile {
   phone?: string | null;
   language: string;
   isActive: boolean;
+  emailVerified: boolean;
   createdAt: string;
 }
 

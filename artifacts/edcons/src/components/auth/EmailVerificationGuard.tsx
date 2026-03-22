@@ -16,7 +16,7 @@ export function EmailVerificationGuard({ children }: Props) {
   const [error, setError] = useState("");
 
   if (!user || user.role !== "student") return <>{children}</>;
-  if ((user as any).emailVerified) return <>{children}</>;
+  if (user.emailVerified) return <>{children}</>;
 
   async function handleResend() {
     setSending(true);
