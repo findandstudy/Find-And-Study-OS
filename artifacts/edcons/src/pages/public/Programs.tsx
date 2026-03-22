@@ -497,9 +497,7 @@ export default function Programs() {
   }, []);
 
   useEffect(() => {
-    if (country) {
-      setCity("");
-    }
+    setCity("");
   }, [country]);
 
   const debouncedFeeMin = useDebounce(feeMin, 500);
@@ -536,11 +534,7 @@ export default function Programs() {
   useEffect(() => { fetchPrograms(); }, [fetchPrograms]);
   useEffect(() => { setPage(1); }, [debouncedSearch, country, city, universityType, universityId, level, language, debouncedFeeMin, debouncedFeeMax]);
 
-  const filteredCities = country
-    ? filters.cities.filter(c => {
-        return true;
-      })
-    : filters.cities;
+  const filteredCities = filters.cities;
 
   const hasActiveFilters = country || city || universityType || universityId || level || language || feeMin || feeMax;
 
