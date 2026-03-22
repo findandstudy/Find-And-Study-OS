@@ -14,6 +14,7 @@ type ProgramData = {
   applicationFee?: number | null;
   discountedFee?: number | null;
   feeType?: string | null;
+  serviceFeeAmount?: number | null;
   universityName: string;
   universityLogoUrl?: string | null;
   universityCountry?: string | null;
@@ -28,6 +29,7 @@ type ProposalOptions = {
   companyEmail?: string;
   companyPhone?: string;
   showCommission?: boolean;
+  serviceFeeMarkup?: number;
 };
 
 function fmt(amount: number | null | undefined, currency = "USD"): string {
@@ -88,7 +90,7 @@ function drawLine(doc: jsPDF, x1: number, y1: number, x2: number, y2: number, co
 }
 
 export async function generateProposalPdf(options: ProposalOptions) {
-  const { programs, logoDataUrl, companyName = "EduCons", companyEmail, companyPhone, showCommission = false } = options;
+  const { programs, logoDataUrl, companyName = "EduCons", companyEmail, companyPhone, showCommission = false, serviceFeeMarkup = 0 } = options;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
@@ -147,6 +149,11 @@ export async function generateProposalPdf(options: ProposalOptions) {
     doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
+    if (serviceFeeMarkup > 0) {
+      doc.setFont("helvetica", "italic");
+      doc.text("Fees in this PDF may include agency-added service adjustments.", margin, footerY - 7);
+      doc.setFont("helvetica", "normal");
+    }
     doc.text(`${companyName} | Confidential`, margin, footerY);
     doc.text(`Page ${pageNum} of ${totalPages}`, pageW - margin, footerY, { align: "right" });
   }
@@ -181,9 +188,11 @@ export async function generateProposalPdf(options: ProposalOptions) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     const preCalcLines = Math.min(doc.splitTextToSize(p.name, contentW - 40).length, 2);
+    const preCalcServiceFee = (p.serviceFeeAmount ?? 0) + serviceFeeMarkup;
     let cardH = 62 + (preCalcLines - 1) * 4.5;
     if (p.scholarship && p.scholarship > 0) cardH += 6;
     if (p.applicationFee && p.applicationFee > 0) cardH += 6;
+    if (preCalcServiceFee > 0) cardH += 6;
     if (showCommission && commAmt != null) cardH += 8;
 
     if (currentY + cardH > pageH - 20) {
@@ -306,6 +315,19 @@ export async function generateProposalPdf(options: ProposalOptions) {
       doc.setFont("helvetica", "bold");
       doc.setTextColor(DARK[0], DARK[1], DARK[2]);
       doc.text(fmt(p.applicationFee, cur), col2, innerY, { align: "right" });
+      innerY += 6;
+    }
+
+    const rawServiceFee = p.serviceFeeAmount ?? 0;
+    const adjustedServiceFee = rawServiceFee + serviceFeeMarkup;
+    if (adjustedServiceFee > 0) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+      doc.text("Service Fee", col1, innerY);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+      doc.text(fmt(adjustedServiceFee, cur), col2, innerY, { align: "right" });
       innerY += 6;
     }
 

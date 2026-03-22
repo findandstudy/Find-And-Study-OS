@@ -19,6 +19,7 @@ import {
   ArrowUp, ArrowDown,
 } from "lucide-react";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
+import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -126,6 +127,8 @@ export default function CourseFinder() {
   const [applyProgram, setApplyProgram] = useState<Program | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfMarkup, setPdfMarkup] = useState(0);
+  const [markupModalOpen, setMarkupModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<string>("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -246,6 +249,7 @@ export default function CourseFinder() {
         companyEmail: settings?.companyEmail || undefined,
         companyPhone: settings?.companyPhone || undefined,
         showCommission: !!showCommission,
+        serviceFeeMarkup: pdfMarkup > 0 ? pdfMarkup : undefined,
       });
       toast({ title: "PDF generated", description: `Proposal with ${selected.length} program${selected.length !== 1 ? "s" : ""} downloaded.` });
     } catch (err: any) {
@@ -259,12 +263,14 @@ export default function CourseFinder() {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1);
     setSelectedIds(new Set());
+    setPdfMarkup(0);
   }
 
   function clearFilters() {
     setFilters({ country: "", city: "", universityType: "", universityId: "", level: "", language: "", search: "", feeMin: "", feeMax: "" });
     setPage(1);
     setSelectedIds(new Set());
+    setPdfMarkup(0);
   }
 
   const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.search || filters.feeMin || filters.feeMax;
@@ -467,19 +473,41 @@ export default function CourseFinder() {
                     {selectedIds.size === programs.length ? "Deselect All" : "Select All"}
                   </Button>
                   {selectedIds.size > 0 && (
-                    <Button
-                      size="sm"
-                      onClick={handleGeneratePdf}
-                      disabled={generatingPdf}
-                      className="h-8 text-xs gap-1.5 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white border-0 rounded-lg"
-                    >
-                      {generatingPdf ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <FileDown className="w-3.5 h-3.5" />
-                      )}
-                      Download Proposal ({selectedIds.size})
-                    </Button>
+                    <>
+                      {isAgent && (() => {
+                        const selCurs = [...new Set(programs.filter(p => selectedIds.has(p.id)).map(p => p.currency || "USD"))];
+                        const badgeCur = selCurs.length === 1 ? selCurs[0] : "USD";
+                        return (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMarkupModalOpen(true)}
+                            className="h-8 text-xs gap-1.5 rounded-lg"
+                          >
+                            <DollarSign className="w-3.5 h-3.5" />
+                            PDF Fee Adjustment
+                            {pdfMarkup > 0 && (
+                              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                +{formatCurrency(pdfMarkup, badgeCur)}
+                              </Badge>
+                            )}
+                          </Button>
+                        );
+                      })()}
+                      <Button
+                        size="sm"
+                        onClick={handleGeneratePdf}
+                        disabled={generatingPdf}
+                        className="h-8 text-xs gap-1.5 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white border-0 rounded-lg"
+                      >
+                        {generatingPdf ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <FileDown className="w-3.5 h-3.5" />
+                        )}
+                        Download Proposal ({selectedIds.size})
+                      </Button>
+                    </>
                   )}
                 </div>
               )}
@@ -617,6 +645,24 @@ export default function CourseFinder() {
         program={applyProgram}
         onClose={() => setApplyProgram(null)}
       />
+
+      {isAgent && (() => {
+        const selectedPrograms = programs.filter(p => selectedIds.has(p.id));
+        const currencies = [...new Set(selectedPrograms.map(p => p.currency || "USD"))];
+        const selCurrency = currencies.length === 1 ? currencies[0] : "USD";
+        const selSampleFee = selectedPrograms[0]?.serviceFeeAmount;
+        return (
+          <PdfMarkupModal
+            open={markupModalOpen}
+            onOpenChange={setMarkupModalOpen}
+            currentMarkup={pdfMarkup}
+            onApply={setPdfMarkup}
+            currency={selCurrency}
+            sampleFee={selSampleFee}
+            hasMultipleCurrencies={currencies.length > 1}
+          />
+        );
+      })()}
     </DashboardLayout>
   );
 }
