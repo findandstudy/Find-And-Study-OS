@@ -8,12 +8,51 @@ import {
   usersTable,
   notificationsTable,
   messageTemplatesTable,
+  studentsTable,
+  leadsTable,
+  agentsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, inArray, ilike, or } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
+
+const STAFF_ROLE_LIST = ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"];
+
+async function getVisibleUserIdsForStaff(staffUserId: number): Promise<number[]> {
+  const visibleStudents = await db
+    .select({ userId: studentsTable.userId, agentId: studentsTable.agentId })
+    .from(studentsTable)
+    .where(or(eq(studentsTable.assignedToId, staffUserId), isNull(studentsTable.assignedToId)));
+
+  const visibleLeads = await db
+    .select({ agentId: leadsTable.agentId })
+    .from(leadsTable)
+    .where(or(eq(leadsTable.assignedToId, staffUserId), isNull(leadsTable.assignedToId)));
+
+  const studentUserIds = visibleStudents.map(s => s.userId).filter(Boolean) as number[];
+  const agentIds = new Set<number>();
+  for (const s of visibleStudents) { if (s.agentId) agentIds.add(s.agentId); }
+  for (const l of visibleLeads) { if (l.agentId) agentIds.add(l.agentId); }
+
+  let agentUserIds: number[] = [];
+  if (agentIds.size > 0) {
+    const agents = await db
+      .select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(inArray(agentsTable.id, Array.from(agentIds)));
+    agentUserIds = agents.map(a => a.userId).filter(Boolean) as number[];
+  }
+
+  const staffUsers = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.isActive, true), inArray(usersTable.role, STAFF_ROLE_LIST)));
+  const staffUserIds = staffUsers.map(u => u.id);
+
+  return [...new Set([...staffUserIds, ...studentUserIds, ...agentUserIds, staffUserId])];
+}
 
 router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
@@ -124,6 +163,16 @@ router.post("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
   if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
     res.status(400).json({ error: "At least one participant is required" });
     return;
+  }
+
+  const isAdminUser = (ADMIN_ROLES as readonly string[]).includes(req.user!.role);
+  if (!isAdminUser) {
+    const visibleIds = await getVisibleUserIdsForStaff(userId);
+    const unauthorized = participantIds.filter((pid: number) => !visibleIds.includes(pid));
+    if (unauthorized.length > 0) {
+      res.status(403).json({ error: "You cannot start a conversation with one or more of these users" });
+      return;
+    }
   }
 
   if (type === "direct" && participantIds.length === 1) {
@@ -348,6 +397,9 @@ router.get("/conversations/:id/participants", requireAuth, requireRole(...STAFF_
 
 router.get("/users-search", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { search, limit = "20" } = req.query as Record<string, string>;
+  const user = req.user!;
+  const isAdminUser = (ADMIN_ROLES as readonly string[]).includes(user.role);
+
   const conditions = [eq(usersTable.isActive, true)];
   if (search) {
     conditions.push(
@@ -358,6 +410,18 @@ router.get("/users-search", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_RO
       )!
     );
   }
+
+  if (!isAdminUser) {
+    const visibleIds = await getVisibleUserIdsForStaff(user.id);
+    if (visibleIds.length > 0) {
+      conditions.push(inArray(usersTable.id, visibleIds));
+    } else {
+      conditions.push(eq(usersTable.id, user.id));
+    }
+  }
+
+  conditions.push(ne(usersTable.id, user.id));
+
   const users = await db
     .select({
       id: usersTable.id,
