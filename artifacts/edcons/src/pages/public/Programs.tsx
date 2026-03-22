@@ -624,12 +624,14 @@ export default function Programs() {
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterTuitionFee")}</label>
                   <div className="flex items-center gap-2">
                     <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
-                      placeholder={t("programs.feeMin")}
-                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0" />
+                      placeholder={filters.feeRange ? `${t("programs.feeMin")} (${filters.feeRange.min})` : t("programs.feeMin")}
+                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0"
+                      max={filters.feeRange?.max} />
                     <span className="text-muted-foreground text-sm">–</span>
                     <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
-                      placeholder={t("programs.feeMax")}
-                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0" />
+                      placeholder={filters.feeRange ? `${t("programs.feeMax")} (${filters.feeRange.max})` : t("programs.feeMax")}
+                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0"
+                      max={filters.feeRange?.max} />
                   </div>
                 </div>
               </div>
