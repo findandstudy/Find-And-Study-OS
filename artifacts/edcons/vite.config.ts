@@ -74,14 +74,19 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
 
-          if (id.includes("react-dom") || (id.includes("/react/") && !id.includes("lucide-react"))) {
+          if (
+            id.includes("react-dom") ||
+            (id.includes("/react/") && !id.includes("lucide-react")) ||
+            id.includes("@radix-ui") ||
+            id.includes("class-variance-authority") ||
+            id.includes("clsx") ||
+            id.includes("tailwind-merge") ||
+            id.includes("cmdk")
+          ) {
             return "vendor-react";
           }
           if (id.includes("@tanstack")) {
             return "vendor-tanstack";
-          }
-          if (id.includes("@radix-ui") || id.includes("class-variance-authority") || id.includes("clsx") || id.includes("tailwind-merge") || id.includes("cmdk")) {
-            return "vendor-ui";
           }
           if (id.includes("lucide-react")) {
             return "vendor-icons";
