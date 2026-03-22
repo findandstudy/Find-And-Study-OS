@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -192,14 +193,26 @@ router.get("/course-finder/students", requireAuth, async (req, res): Promise<voi
   res.json(rows);
 });
 
-router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES, "student"), async (req, res): Promise<void> => {
   const { studentId, programId, notes } = req.body;
-  if (!studentId || !programId) {
+  const isStudentRole = req.user!.role === "student";
+
+  let resolvedStudentId = studentId;
+  if (isStudentRole) {
+    const [myStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, req.user!.id));
+    if (!myStudent) {
+      res.status(404).json({ error: "No student record linked to your account" });
+      return;
+    }
+    resolvedStudentId = myStudent.id;
+  }
+
+  if (!resolvedStudentId || !programId) {
     res.status(400).json({ error: "studentId and programId are required" });
     return;
   }
 
-  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, Number(studentId)));
+  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, Number(resolvedStudentId)));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
   const [program] = await db
