@@ -46,6 +46,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8 font-medium text-sm text-muted-foreground">
             <Link href="/" className="hover:text-primary transition-colors">{t('nav.home')}</Link>
             <Link href="/about" className="hover:text-primary transition-colors">{t('nav.about')}</Link>
+            <Link href="/countries" className="hover:text-primary transition-colors">{t('nav.countries')}</Link>
             <Link href="/programs" className="hover:text-primary transition-colors">{t('nav.programs')}</Link>
             <Link href="/blog" className="hover:text-primary transition-colors">{t('nav.blog')}</Link>
             <Link href="/contact" className="hover:text-primary transition-colors">{t('nav.contact')}</Link>
@@ -100,6 +101,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             <h4 className="text-white font-bold mb-6 font-display">Quick Links</h4>
             <ul className="space-y-3">
               <li><Link href="/programs" className="hover:text-primary transition-colors">Find Programs</Link></li>
+              <li><Link href="/countries" className="hover:text-primary transition-colors">Study Destinations</Link></li>
               <li><Link href="/about" className="hover:text-primary transition-colors">Our Services</Link></li>
               <li><Link href="/blog" className="hover:text-primary transition-colors">Student Blog</Link></li>
             </ul>

@@ -4,6 +4,7 @@ export const translations: Translations = {
   en: {
     "nav.home": "Home",
     "nav.about": "About Us",
+    "nav.countries": "Countries",
     "nav.programs": "Programs",
     "nav.blog": "Blog",
     "nav.contact": "Contact",
@@ -28,6 +29,7 @@ export const translations: Translations = {
   tr: {
     "nav.home": "Ana Sayfa",
     "nav.about": "Hakkımızda",
+    "nav.countries": "Ülkeler",
     "nav.programs": "Programlar",
     "nav.blog": "Blog",
     "nav.contact": "İletişim",
@@ -52,6 +54,7 @@ export const translations: Translations = {
   ar: {
     "nav.home": "الرئيسية",
     "nav.about": "من نحن",
+    "nav.countries": "الوجهات",
     "nav.programs": "البرامج",
     "nav.blog": "المدونة",
     "nav.contact": "اتصل بنا",
@@ -76,6 +79,7 @@ export const translations: Translations = {
   fr: {
     "nav.home": "Accueil",
     "nav.about": "À propos",
+    "nav.countries": "Destinations",
     "nav.programs": "Programmes",
     "nav.blog": "Blog",
     "nav.contact": "Contact",
@@ -100,6 +104,7 @@ export const translations: Translations = {
   ru: {
     "nav.home": "Главная",
     "nav.about": "О нас",
+    "nav.countries": "Страны",
     "nav.programs": "Программы",
     "nav.blog": "Блог",
     "nav.contact": "Контакты",

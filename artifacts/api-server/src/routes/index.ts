@@ -26,6 +26,7 @@ import activityRouter from "./activity";
 import applicationStageDocumentsRouter from "./applicationStageDocuments";
 import embedRouter from "./embed";
 import publicApplyRouter from "./public-apply";
+import destinationsRouter from "./destinations";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(activityRouter);
 router.use(applicationStageDocumentsRouter);
 router.use(embedRouter);
 router.use(publicApplyRouter);
+router.use(destinationsRouter);
 
 export default router;

@@ -14,6 +14,8 @@ import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
 
 const About = lazy(() => import("@/pages/public/About"));
+const Countries = lazy(() => import("@/pages/public/Countries"));
+const CountryDetail = lazy(() => import("@/pages/public/CountryDetail"));
 const Programs = lazy(() => import("@/pages/public/Programs"));
 const Blog = lazy(() => import("@/pages/public/Blog"));
 const Contact = lazy(() => import("@/pages/public/Contact"));
@@ -76,6 +78,10 @@ function Router() {
         {/* Public Pages */}
         <Route path="/" component={Home} />
         <Route path="/about" component={About} />
+        <Route path="/countries" component={Countries} />
+        <Route path="/countries/:slug">
+          {(params) => <CountryDetail slug={params.slug} />}
+        </Route>
         <Route path="/programs" component={Programs} />
         <Route path="/blog" component={Blog} />
         <Route path="/contact" component={Contact} />
