@@ -1,0 +1,123 @@
+Web sitemizde çok dilli yapı kurmak istiyorum.
+
+MEVCUT DURUM:
+- Web sitemiz şu anda İngilizce ve Türkçe dillerinde yayında.
+- Bundan sonra sitenin ana dili / default dili İngilizce olsun.
+
+İSTENEN YAPI:
+Sitede aşağıdaki diller desteklensin:
+1. English (default / primary language)
+2. Turkish
+3. Arabic
+4. French
+5. Russian
+6. Persian (Farsi)
+7. Chinese (Mandarin)
+8. Hindi
+9. Spanish
+10. Indonesian
+
+TEMEL KURALLAR:
+1. Sitenin ana dili İngilizce olacak
+   - Domain açıldığında varsayılan dil İngilizce gelsin
+   - Tüm ana sayfa ve temel sayfalar İngilizce baz alınarak çalışsın
+
+2. Diğer diller için ayrı sayfa versiyonları oluşturulsun
+   - Her dilin kendi içerik versiyonu olsun
+   - Tüm önemli sayfalar çevrilebilir yapıda olsun
+   - En azından şu sayfalar çok dilli desteklesin:
+     - Home
+     - About Us
+     - Services
+     - Universities / Programs / Course Finder ile ilgili tanıtım sayfaları
+     - Contact
+     - Apply Now / Application ile ilgili sayfalar
+     - FAQ
+     - Blog / Guides / Static content pages varsa onlar da
+
+3. URL yapısı SEO uyumlu olsun
+   Örnek yapı:
+   - /en/...
+   - /tr/...
+   - /ar/...
+   - /fr/...
+   - /ru/...
+   - /fa/...
+   - /zh/...
+   - /hi/...
+   - /es/...
+   - /id/...
+
+   Ana dil İngilizce için ister:
+   - /en/...
+   kullan
+   veya
+   - root domain / İngilizce
+   ama sistemin tamamında tutarlı ol.
+   Tercihen SEO ve yönetim kolaylığı için tüm diller aynı mantıkta prefix ile çalışsın.
+
+4. Language switcher ekle
+   - Header’da görünür bir dil seçici olsun
+   - Kullanıcı bulunduğu sayfanın diğer dil versiyonuna geçebilsin
+   - Dil değiştirince mümkünse aynı sayfanın ilgili çevirisine gitsin
+   - Dil seçimi kullanıcı deneyimi açısından temiz ve kolay olsun
+
+5. SEO ve teknik gereksinimler:
+   - hreflang yapısı doğru kurulsun
+   - canonical etiketler doğru olsun
+   - her dil sayfasının title ve meta description alanı ayrı yönetilebilsin
+   - sitemap çok dilli yapıya göre güncellensin
+   - duplicate content problemi oluşmasın
+   - Open Graph alanları dil bazlı yönetilebilsin
+
+6. İçerik yönetimi kolay olsun
+   - Metinler hardcoded olmasın
+   - Merkezi bir translation / i18n yapısı kur
+   - Örnek: JSON, locale files veya database tabanlı translation system
+   - Gelecekte yeni dil eklemek kolay olsun
+   - Admin isterse ileride çeviri içeriklerini yönetebilsin
+
+7. RTL desteği
+   - Arabic ve Persian için RTL (right-to-left) desteği düzgün çalışsın
+   - Layout, text alignment, form alanları, icon yönleri gerekiyorsa RTL uyumlu olsun
+   - İngilizce, Türkçe, Fransızca, Rusça, İspanyolca, Hintçe, Endonezce, Çince için normal LTR çalışsın
+
+8. Font ve karakter desteği
+   - Tüm dillerde karakterler düzgün görüntülensin
+   - Özellikle Arabic, Persian, Russian, Hindi, Chinese için font ve encoding sorunu olmasın
+   - Unicode uyumluluğu tam olsun
+
+9. Performans:
+   - Çok dilli yapı siteyi yavaşlatmasın
+   - Translation yapısı optimize olsun
+   - Sayfalar SSR/SSG mantığına uygunsa SEO ve hız açısından en iyi yöntem kullanılsın
+
+10. Kullanıcı deneyimi:
+   - Tarayıcı dili algılanabilir, ama site zorla yönlendirme yapmasın
+   - Kullanıcı manuel dil seçebilsin
+   - Tercih edilen dil local storage / cookie ile hatırlanabilir
+
+11. Formlar ve sistem mesajları:
+   - Form label’ları
+   - validation mesajları
+   - button metinleri
+   - notification / success / error mesajları
+   - email signup alanları
+   çok dilli yapıya dahil olsun
+
+12. Öncelik:
+   - Sitenin ana dili İngilizce olarak kalsın
+   - Türkçe mevcut yapı bozulmasın
+   - Yeni diller eklenirken sistem ölçeklenebilir olsun
+
+İSTEDİĞİM ÇIKTILAR:
+1. Çok dilli site altyapısı
+2. Tüm dil route yapısı
+3. Language switcher
+4. RTL desteği
+5. SEO uyumlu hreflang + canonical yapı
+6. Translation dosya yapısı
+7. Gelecekte yeni dil eklemeyi kolaylaştıracak temiz mimari
+
+Bu yapıyı production-ready şekilde kur.
+Kod temiz, modüler, SEO dostu ve maintainable olsun.
