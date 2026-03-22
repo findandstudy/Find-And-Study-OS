@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, leadsTable, usersTable } from "@workspace/db";
+import { db, leadsTable, usersTable, studentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
@@ -67,6 +67,17 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
     if (existingUser) {
+      let [existingStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, existingUser.id));
+      if (!existingStudent) {
+        [existingStudent] = await db.insert(studentsTable).values({
+          userId: existingUser.id,
+          firstName: existingUser.firstName || firstName,
+          lastName: existingUser.lastName || lastName,
+          email: normalizedEmail,
+          phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+        }).returning();
+      }
+      await db.update(leadsTable).set({ convertedStudentId: existingStudent.id }).where(eq(leadsTable.id, lead.id));
 
       const emailContent = buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
@@ -94,6 +105,16 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         createdFromSource: "public_apply",
       }).returning();
 
+      const [newStudent] = await db.insert(studentsTable).values({
+        userId: newUser.id,
+        firstName: s(firstName, 100)!,
+        lastName: s(lastName, 100)!,
+        email: normalizedEmail,
+        phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+        nationality: nationality || null,
+      }).returning();
+
+      await db.update(leadsTable).set({ convertedStudentId: newStudent.id }).where(eq(leadsTable.id, lead.id));
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
@@ -109,7 +130,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       });
       await sendEmail(normalizedEmail, emailContent);
 
-      console.log(`[AUTO-ACCOUNT] Created student account for ${normalizedEmail} (user #${newUser.id}) from public apply`);
+      console.log(`[AUTO-ACCOUNT] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id}) from public apply`);
     }
     res.status(201).json({ success: true, leadId: lead.id });
   } catch (err) {
