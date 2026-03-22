@@ -8,7 +8,7 @@ import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
-import { DashboardSkeleton } from "@/components/ui/page-skeleton";
+import { PageLoader } from "@/components/ui/page-loader";
 import NotFound from "@/pages/not-found";
 
 import Home from "@/pages/public/Home";
@@ -68,13 +68,9 @@ const queryClient = new QueryClient({
   },
 });
 
-function PageFallback() {
-  return <DashboardSkeleton />;
-}
-
 function Router() {
   return (
-    <Suspense fallback={<PageFallback />}>
+    <Suspense fallback={<PageLoader />}>
       <Switch>
         {/* Public Pages */}
         <Route path="/" component={Home} />
