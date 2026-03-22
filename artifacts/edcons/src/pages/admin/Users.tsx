@@ -20,8 +20,36 @@ import {
   Search, Users, UserPlus, Shield, MoreHorizontal, Mail, Edit2,
   Plus, Trash2, ChevronDown, ChevronRight, Check, X, Eye, Lock,
   Settings2, ShieldCheck, KeyRound, LogIn, ShieldOff, Loader2,
-  ArrowUpDown, ArrowUp, ArrowDown
+  ArrowUpDown, ArrowUp, ArrowDown, Phone
 } from "lucide-react";
+import { CountryFlag } from "@/components/CountryFlag";
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" }, { code: "+254", country: "KE" }, { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" }, { code: "+61", country: "AU" }, { code: "+64", country: "NZ" },
+  { code: "+60", country: "MY" }, { code: "+65", country: "SG" }, { code: "+66", country: "TH" },
+  { code: "+84", country: "VN" }, { code: "+62", country: "ID" }, { code: "+63", country: "PH" },
+  { code: "+880", country: "BD" }, { code: "+94", country: "LK" }, { code: "+977", country: "NP" },
+  { code: "+251", country: "ET" }, { code: "+255", country: "TZ" }, { code: "+233", country: "GH" },
+];
+
+function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
+  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
+  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length) };
+  return { phoneCode: "+90", phone: fullPhone };
+}
 
 const roleBadge: Record<string, { color: string; label: string }> = {
   super_admin: { color: "bg-rose-500/10 text-rose-600 border-rose-200", label: "Super Admin" },
@@ -96,11 +124,11 @@ function UsersTab() {
   const users: any[] = (usersResp as any)?.data || usersResp || [];
   const [roles, setRoles] = useState<RoleData[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phone: "", language: "en" });
+  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en" });
   const [creating, setCreating] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phone: "", language: "en", isActive: true });
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", isActive: true });
   const [saving, setSaving] = useState(false);
   const [passwordDialog, setPasswordDialog] = useState<{ userId: number; userName: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -143,14 +171,15 @@ function UsersTab() {
     }
     setCreating(true);
     try {
+      const { phoneCode, phone, ...rest } = createForm;
       await customFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "" }),
       });
       toast({ title: "User created successfully" });
       setCreateOpen(false);
-      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phone: "", language: "en" });
+      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en" });
       refetch();
     } catch (err: any) {
       toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
@@ -225,12 +254,14 @@ function UsersTab() {
 
   function openEditDialog(user: any) {
     setEditUser(user);
+    const parsed = parsePhoneCode(user.phone || "");
     setEditForm({
       firstName: user.firstName || "",
       lastName: user.lastName || "",
       email: user.email || "",
       role: user.role || "staff",
-      phone: user.phone || "",
+      phoneCode: parsed.phoneCode,
+      phone: parsed.phone,
       language: user.language || "en",
       isActive: user.isActive ?? true,
     });
@@ -245,10 +276,11 @@ function UsersTab() {
     }
     setSaving(true);
     try {
+      const { phoneCode, phone, ...rest } = editForm;
       await customFetch(`/api/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "" }),
       });
       toast({ title: "User updated successfully" });
       setEditOpen(false);
@@ -480,8 +512,26 @@ function UsersTab() {
             </div>
             <div className="space-y-2">
               <Label>Phone</Label>
-              <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="+1 234 567 890" />
+              <div className="flex gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0">
+                      <CountryFlag code={PHONE_CODES.find(p => p.code === createForm.phoneCode)?.country || "TR"} size="sm" />
+                      <span className="text-xs">{createForm.phoneCode}</span>
+                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
+                    {PHONE_CODES.map(pc => (
+                      <DropdownMenuItem key={pc.code} onClick={() => setCreateForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
+                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="555 123 4567" className="flex-1" />
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -547,8 +597,26 @@ function UsersTab() {
             </div>
             <div className="space-y-2">
               <Label>Phone</Label>
-              <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="+1 234 567 890" />
+              <div className="flex gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0">
+                      <CountryFlag code={PHONE_CODES.find(p => p.code === editForm.phoneCode)?.country || "TR"} size="sm" />
+                      <span className="text-xs">{editForm.phoneCode}</span>
+                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
+                    {PHONE_CODES.map(pc => (
+                      <DropdownMenuItem key={pc.code} onClick={() => setEditForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
+                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="555 123 4567" className="flex-1" />
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <Label>Status</Label>
