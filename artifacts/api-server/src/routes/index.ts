@@ -25,6 +25,7 @@ import integrationsRouter from "./integrations";
 import activityRouter from "./activity";
 import applicationStageDocumentsRouter from "./applicationStageDocuments";
 import embedRouter from "./embed";
+import publicApplyRouter from "./public-apply";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(integrationsRouter);
 router.use(activityRouter);
 router.use(applicationStageDocumentsRouter);
 router.use(embedRouter);
+router.use(publicApplyRouter);
 
 export default router;
