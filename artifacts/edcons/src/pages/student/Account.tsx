@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   User, Globe, Shield, Save, Check, GraduationCap,
-  Loader2, FileText, MapPin, Phone, Mail, Calendar,
+  Loader2, FileText, MapPin, Phone, Mail, Calendar, Camera,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -34,6 +34,8 @@ export default function StudentAccount() {
 
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -49,9 +51,11 @@ export default function StudentAccount() {
     queryKey: ["student-me"],
     enabled: !!user,
     queryFn: async () => {
-      const res = await customFetch("/api/students/me");
-      if (!res.ok) return null;
-      return res.json();
+      try {
+        return await customFetch("/api/students/me");
+      } catch {
+        return null;
+      }
     },
   });
 
@@ -59,7 +63,7 @@ export default function StudentAccount() {
     if (!user) return;
     setSaving(true);
     try {
-      const res = await customFetch(`/api/users/${user.id}`, {
+      await customFetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -68,7 +72,6 @@ export default function StudentAccount() {
           phone:     form.phone || undefined,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update profile");
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated", description: "Your information has been saved." });
     } catch (err: any) {
@@ -88,6 +91,42 @@ export default function StudentAccount() {
         body: JSON.stringify({ language: code }),
       });
     } catch {}
+  }
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please select an image file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum file size is 5MB.", variant: "destructive" });
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const { uploadURL, objectPath } = await customFetch<{ uploadURL: string; objectPath: string }>("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `avatar-${user.id}-${Date.now()}.${file.name.split(".").pop()}`, size: file.size, contentType: file.type }),
+      });
+      const uploadRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!uploadRes.ok) throw new Error("Failed to upload image");
+      const avatarUrl = `/api/storage/objects/${objectPath.replace(/^\/objects\//, "")}`;
+      await customFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl }),
+      });
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      toast({ title: "Photo updated", description: "Your profile photo has been saved." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
@@ -112,10 +151,35 @@ export default function StudentAccount() {
           <TabsContent value="profile" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <h2 className="font-display font-bold text-lg mb-6">Personal Information</h2>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
               <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg shrink-0">
-                  {initials}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="relative w-20 h-20 rounded-2xl overflow-hidden shrink-0 group cursor-pointer"
+                >
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl shadow-lg">
+                      {initials}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                    {uploadingAvatar ? (
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    ) : (
+                      <Camera className="w-6 h-6 text-white" />
+                    )}
+                  </div>
+                </button>
                 <div>
                   <p className="font-display font-bold text-lg text-foreground">{user?.firstName} {user?.lastName}</p>
                   <p className="text-muted-foreground text-sm">{user?.email}</p>
