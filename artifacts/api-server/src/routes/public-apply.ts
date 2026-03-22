@@ -1,7 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, leadsTable } from "@workspace/db";
+import { db, leadsTable, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
+import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -37,10 +39,12 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
 
+  const normalizedEmail = email.toLowerCase().trim();
+
   const [lead] = await db.insert(leadsTable).values({
     firstName: s(firstName, 100)!,
     lastName: s(lastName, 100)!,
-    email: s(email, 255),
+    email: s(normalizedEmail, 255),
     phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
     nationality: s(nationality, 100),
     source: "website",
@@ -54,7 +58,66 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     ].filter(Boolean).join("\n") || null,
   }).returning();
 
-  res.status(201).json({ success: true, leadId: lead.id });
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "http://localhost:5000";
+  const loginUrl = `${baseUrl}/login`;
+
+  try {
+    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+
+    if (existingUser) {
+      await db.update(leadsTable).set({ convertedStudentId: existingUser.id }).where(eq(leadsTable.id, lead.id));
+
+      const emailContent = buildExistingAccountEmail({
+        firstName: existingUser.firstName || firstName,
+        loginUrl,
+        programName: programName || undefined,
+        universityName: universityName || undefined,
+      });
+      await sendEmail(normalizedEmail, emailContent);
+    } else {
+      const passwordToken = generateSecureToken();
+      const verificationToken = generateSecureToken();
+
+      const [newUser] = await db.insert(usersTable).values({
+        email: normalizedEmail,
+        firstName: s(firstName, 100)!,
+        lastName: s(lastName, 100)!,
+        phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+        role: "student",
+        isActive: true,
+        emailVerified: false,
+        language: "en",
+        passwordResetToken: passwordToken,
+        passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        emailVerificationToken: verificationToken,
+        createdFromSource: "public_apply",
+      }).returning();
+
+      await db.update(leadsTable).set({ convertedStudentId: newUser.id }).where(eq(leadsTable.id, lead.id));
+
+      const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
+      const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
+
+      const emailContent = buildWelcomeEmail({
+        firstName: s(firstName, 100) || "Student",
+        email: normalizedEmail,
+        setPasswordUrl,
+        verifyEmailUrl,
+        loginUrl,
+        programName: programName || undefined,
+        universityName: universityName || undefined,
+      });
+      await sendEmail(normalizedEmail, emailContent);
+
+      console.log(`[AUTO-ACCOUNT] Created student account for ${normalizedEmail} (user #${newUser.id}) from public apply`);
+    }
+  } catch (err) {
+    console.error("[AUTO-ACCOUNT] Error creating auto account:", err);
+  }
+
+  res.status(201).json({ success: true, leadId: lead.id, accountCreated: true });
 });
 
 const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 

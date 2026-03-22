@@ -37,6 +37,7 @@ async function rehydrateUser(sessionUser: SessionUser): Promise<SessionUser | nu
     avatarUrl: dbUser.avatarUrl,
     language: dbUser.language,
     isActive: dbUser.isActive,
+    emailVerified: dbUser.emailVerified,
   };
 }
 

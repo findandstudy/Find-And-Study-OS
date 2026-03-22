@@ -54,6 +54,7 @@ function buildSessionUser(user: any): SessionUser {
     avatarUrl: user.avatarUrl,
     language: user.language,
     isActive: user.isActive,
+    emailVerified: user.emailVerified,
     startDate: user.startDate,
     homeAddress: user.homeAddress,
     passportNumber: user.passportNumber,
@@ -276,6 +277,128 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
   console.log(`[EMAIL VERIFICATION] New code for ${normalizedEmail}: ${code}`);
 
   res.json({ message: "A new verification code has been sent to your email." });
+});
+
+router.post("/auth/set-password", async (req: Request, res: Response) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    res.status(400).json({ error: "Token and password are required" });
+    return;
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`set-password:${ip}`, 5)) {
+    res.status(429).json({ error: "Too many attempts. Please try again later." });
+    return;
+  }
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.passwordResetToken, token),
+        gt(usersTable.passwordResetExpires, new Date()),
+      )
+    );
+
+  if (!user) {
+    res.status(400).json({ error: "Invalid or expired link. Please request a new one." });
+    return;
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+  await db
+    .update(usersTable)
+    .set({
+      passwordHash: hash,
+      passwordResetToken: null,
+      passwordResetExpires: null,
+      isActive: true,
+    })
+    .where(eq(usersTable.id, user.id));
+
+  res.json({ success: true, message: "Password has been set. You can now log in." });
+});
+
+router.get("/auth/verify-email-token/:token", async (req: Request, res: Response) => {
+  const { token } = req.params;
+  if (!token) {
+    res.status(400).json({ error: "Token is required" });
+    return;
+  }
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.emailVerificationToken, token));
+
+  if (!user) {
+    res.redirect("/login?verifyError=invalid");
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({
+      emailVerified: true,
+      emailVerificationToken: null,
+      isActive: true,
+    })
+    .where(eq(usersTable.id, user.id));
+
+  res.redirect("/login?verified=true");
+});
+
+router.post("/auth/resend-verification-email", async (req: Request, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`resend-verify:${ip}`, MAX_RESEND_ATTEMPTS) || !checkRateLimit(`resend-verify:${req.user.id}`, MAX_RESEND_ATTEMPTS)) {
+    res.status(429).json({ error: "Too many attempts. Please wait before requesting again." });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  if (user.emailVerified) {
+    res.status(400).json({ error: "Email is already verified" });
+    return;
+  }
+
+  const { generateSecureToken } = await import("../lib/email");
+  const { buildVerificationEmail, sendEmail } = await import("../lib/email");
+
+  const verificationToken = generateSecureToken();
+  await db
+    .update(usersTable)
+    .set({ emailVerificationToken: verificationToken })
+    .where(eq(usersTable.id, user.id));
+
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "http://localhost:5000";
+  const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
+
+  const emailContent = buildVerificationEmail({
+    firstName: user.firstName || "Student",
+    verifyEmailUrl,
+  });
+  await sendEmail(user.email || "", emailContent);
+
+  res.json({ message: "A verification email has been sent." });
 });
 
 async function handleLogout(req: Request, res: Response) {

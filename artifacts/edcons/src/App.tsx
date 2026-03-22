@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
@@ -158,13 +159,13 @@ function Router() {
 
         {/* Student Portal */}
         <Route path="/student">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentDashboard /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentDashboard /></EmailVerificationGuard></ProtectedRoute>
         </Route>
         <Route path="/student/applications">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentApplications /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentApplications /></EmailVerificationGuard></ProtectedRoute>
         </Route>
         <Route path="/student/account">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentAccount /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentAccount /></EmailVerificationGuard></ProtectedRoute>
         </Route>
 
         {/* Agent Portal */}

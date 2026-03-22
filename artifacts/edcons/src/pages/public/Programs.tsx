@@ -154,7 +154,7 @@ function AiBadge() {
   return <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-medium">AI</span>;
 }
 
-type ApplyStep = "upload" | "analyzing" | "form";
+type ApplyStep = "upload" | "analyzing" | "form" | "success";
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
@@ -261,8 +261,7 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
         return;
       }
 
-      toast({ title: "Application submitted successfully!", description: "We will contact you soon." });
-      reset();
+      setStep("success");
     } catch {
       toast({ title: "Failed to submit application", variant: "destructive" });
     } finally {
@@ -328,6 +327,36 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
             </div>
             <h3 className="font-semibold text-foreground">AI is analyzing your documents...</h3>
             <p className="text-sm text-muted-foreground">This usually takes a few seconds</p>
+          </div>
+        )}
+
+        {step === "success" && (
+          <div className="flex flex-col items-center py-8 gap-5 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-xl text-foreground mb-2">Application Submitted!</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed max-w-sm mx-auto">
+                Your application has been received. We have sent your login details and email verification instructions to your email address.
+              </p>
+            </div>
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 w-full text-left">
+              <p className="text-sm font-semibold text-foreground mb-2">What happens next?</p>
+              <ul className="text-xs text-muted-foreground space-y-1.5">
+                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">1.</span> Check your email for account setup instructions</li>
+                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">2.</span> Set your password to activate your account</li>
+                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">3.</span> Log in to track your application progress</li>
+              </ul>
+            </div>
+            <div className="flex gap-3 w-full">
+              <Button variant="outline" onClick={reset} className="flex-1 rounded-xl">
+                Close
+              </Button>
+              <Button onClick={() => { reset(); window.location.href = "/login"; }} className="flex-1 rounded-xl gap-2">
+                Go to Login
+              </Button>
+            </div>
           </div>
         )}
 

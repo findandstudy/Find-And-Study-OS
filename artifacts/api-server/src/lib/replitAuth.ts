@@ -16,6 +16,7 @@ export interface SessionUser {
   avatarUrl: string | null;
   language: string;
   isActive: boolean;
+  emailVerified: boolean;
   startDate?: string | null;
   homeAddress?: string | null;
   passportNumber?: string | null;

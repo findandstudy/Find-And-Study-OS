@@ -10,25 +10,36 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-type Tab = "login" | "register" | "verify";
+type Tab = "login" | "register" | "verify" | "set-password";
 
 export default function Login() {
   const { user, isLoading } = useAuth(false);
   const { settings, resolvedTheme } = useTheme();
   const [, setLocation] = useLocation();
+
+  const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const returnTo = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    const raw = params.get("returnTo");
+    const raw = urlParams.get("returnTo");
     if (!raw) return null;
     const decoded = decodeURIComponent(raw);
     if (decoded.startsWith("/") && !decoded.startsWith("//")) return decoded;
     return null;
-  }, []);
+  }, [urlParams]);
 
-  const [tab, setTab] = useState<Tab>("login");
+  const passwordToken = urlParams.get("token");
+  const verifiedSuccess = urlParams.get("verified") === "true";
+  const verifyError = urlParams.get("verifyError");
+
+  const [tab, setTab] = useState<Tab>(passwordToken ? "set-password" : "login");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState(
+    verifiedSuccess ? "Your email has been verified! You can now sign in." :
+    verifyError === "invalid" ? "" : ""
+  );
+  const [setPasswordForm, setSetPasswordForm] = useState({ password: "", confirmPassword: "" });
+  const [passwordSet, setPasswordSet] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phoneCode: "+90", phone: "" });
@@ -163,6 +174,39 @@ export default function Login() {
     }
   }
 
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    if (setPasswordForm.password !== setPasswordForm.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (setPasswordForm.password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/set-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: passwordToken, password: setPasswordForm.password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to set password");
+        return;
+      }
+      setPasswordSet(true);
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-accent/5">
@@ -233,7 +277,20 @@ export default function Login() {
             )}
           </div>
 
-          {tab !== "verify" && (
+          {successMessage && tab === "login" && (
+            <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-sm mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              {successMessage}
+            </div>
+          )}
+
+          {verifyError === "invalid" && tab === "login" && (
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm mb-4">
+              The verification link is invalid or has already been used. Please request a new one.
+            </div>
+          )}
+
+          {tab !== "verify" && tab !== "set-password" && (
             <div className="flex rounded-xl bg-secondary/50 p-1 mb-8">
               <button
                 onClick={() => { setTab("login"); setError(""); }}
@@ -500,9 +557,92 @@ export default function Login() {
                 </form>
               </motion.div>
             )}
+
+            {tab === "set-password" && (
+              <motion.div key="set-password" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                {passwordSet ? (
+                  <div className="text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4">
+                      <ShieldCheck className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h2 className="text-2xl font-display font-bold text-foreground mb-2">Password Set!</h2>
+                    <p className="text-muted-foreground text-sm mb-6">
+                      Your password has been set successfully. You can now sign in to your account.
+                    </p>
+                    <Button size="lg" onClick={() => { setTab("login"); setError(""); setSuccessMessage(""); window.history.replaceState({}, "", "/login"); }}
+                      className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
+                      <ArrowRight className="w-5 h-5 mr-2" />
+                      Go to Sign In
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-center mb-8">
+                      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                        <Lock className="w-8 h-8 text-primary" />
+                      </div>
+                      <h2 className="text-2xl font-display font-bold text-foreground mb-2">Set Your Password</h2>
+                      <p className="text-muted-foreground text-sm">
+                        Create a password to access your student portal.
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleSetPassword} className="space-y-5">
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> New Password</Label>
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            value={setPasswordForm.password}
+                            onChange={e => setSetPasswordForm(f => ({ ...f, password: e.target.value }))}
+                            placeholder="Min. 8 characters"
+                            className="rounded-xl h-12 pr-12"
+                            required
+                            minLength={8}
+                            autoFocus
+                          />
+                          <button type="button" onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold">Confirm Password</Label>
+                        <Input
+                          type="password"
+                          value={setPasswordForm.confirmPassword}
+                          onChange={e => setSetPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                          placeholder="Re-enter password"
+                          className="rounded-xl h-12"
+                          required
+                        />
+                      </div>
+
+                      {error && (
+                        <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                          {error}
+                        </div>
+                      )}
+
+                      <Button type="submit" size="lg" disabled={loading}
+                        className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShieldCheck className="w-5 h-5 mr-2" />}
+                        Set Password
+                      </Button>
+
+                      <button type="button" onClick={() => { setTab("login"); setError(""); window.history.replaceState({}, "", "/login"); }}
+                        className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
+                        Back to Sign In
+                      </button>
+                    </form>
+                  </>
+                )}
+              </motion.div>
+            )}
           </AnimatePresence>
 
-          {tab !== "verify" && (
+          {tab !== "verify" && tab !== "set-password" && (
             <div className="mt-8 p-5 rounded-2xl bg-secondary/50 border border-border/40">
               <p className="text-sm text-muted-foreground text-center">
                 By signing in, you agree to our{" "}

@@ -19,6 +19,10 @@ export const usersTable = pgTable("users", {
   homeAddress: text("home_address"),
   passportNumber: text("passport_number"),
   contractUrl: text("contract_url"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires", { withTimezone: true }),
+  emailVerificationToken: text("email_verification_token"),
+  createdFromSource: text("created_from_source"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
