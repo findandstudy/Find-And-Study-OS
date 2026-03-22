@@ -485,7 +485,7 @@ export default function CourseFinder() {
                           PDF Fee Adjustment
                           {pdfMarkup > 0 && (
                             <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                              +{formatCurrency(pdfMarkup, programs[0]?.currency || "USD")}
+                              PDF Markup: +{pdfMarkup.toLocaleString()} {programs[0]?.currency || "USD"}
                             </Badge>
                           )}
                         </Button>
