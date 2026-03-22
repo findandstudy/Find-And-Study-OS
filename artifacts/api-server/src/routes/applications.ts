@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable } from "@workspace/db";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 
 const router: IRouter = Router();
 
@@ -127,6 +128,9 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
       return;
     }
   }
+  const [studentRec2] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+  const studentFullName = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : null;
+
   const [app] = await db.insert(applicationsTable).values({
     studentId, stage,
     season: season || currentYear,
@@ -144,6 +148,45 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
     scholarship: scholarship ? Number(scholarship) : null,
     notes: notes || null,
   }).returning();
+
+  const commFinStatus = getCommissionFinanceStatus(stage);
+  if (commFinStatus !== "excluded") {
+    const existingComm = await db.select({ id: commissionsTable.id }).from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
+    if (existingComm.length === 0) {
+      await db.insert(commissionsTable).values({
+        applicationId: app.id,
+        studentId: parseInt(studentId, 10),
+        agentId: resolvedAgentId,
+        studentName: studentFullName,
+        universityName: universityName || null,
+        programName: programName || null,
+        season: season || currentYear,
+        currency: "USD",
+        status: commFinStatus,
+        programFee: tuitionFee ? String(tuitionFee) : null,
+      });
+    }
+  }
+
+  const sfFinStatus = getServiceFeeFinanceStatus(stage);
+  if (sfFinStatus !== "excluded") {
+    const existingSF = await db.select({ id: serviceFeesTable.id }).from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
+    if (existingSF.length === 0) {
+      await db.insert(serviceFeesTable).values({
+        applicationId: app.id,
+        studentId: parseInt(studentId, 10),
+        agentId: resolvedAgentId,
+        studentName: studentFullName,
+        universityName: universityName || null,
+        season: season || currentYear,
+        currency: "USD",
+        totalAmount: "0",
+        financeStatus: sfFinStatus,
+        status: "pending",
+      });
+    }
+  }
+
   await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
   res.status(201).json(app);
 });
@@ -219,27 +262,68 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
 
   if (updates.stage !== undefined) {
-    if (updates.stage === "enrolled") {
-      await db
-        .update(commissionsTable)
-        .set({ status: "confirmed", confirmedAt: new Date().toISOString() })
-        .where(
-          and(
-            eq(commissionsTable.applicationId, id),
-            eq(commissionsTable.status, "potential")
-          )
-        );
-    } else {
-      await db
-        .update(commissionsTable)
-        .set({ status: "potential", confirmedAt: null })
-        .where(
-          and(
-            eq(commissionsTable.applicationId, id),
-            eq(commissionsTable.status, "confirmed"),
-            eq(commissionsTable.universityCollected, "0")
-          )
-        );
+    const newStage = updates.stage as string;
+    const commStatus = getCommissionFinanceStatus(newStage);
+    const sfStatus = getServiceFeeFinanceStatus(newStage);
+
+    const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
+
+    const existingComms = await db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, id));
+    if (existingComms.length === 0 && commStatus !== "excluded") {
+      const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+      const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
+      await db.insert(commissionsTable).values({
+        applicationId: id, studentId: app.studentId, agentId: app.agentId,
+        studentName: sName, universityName: app.universityName || null,
+        programName: app.programName || null, season: app.season || String(new Date().getFullYear()),
+        currency: "USD", status: commStatus,
+        programFee: app.tuitionFee ? String(app.tuitionFee) : null,
+        ...(commStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
+      });
+    }
+    for (const comm of existingComms) {
+      if (commStatus === "excluded") {
+        if (!["collected_partial", "collected_full", "settled"].includes(comm.status)) {
+          await db.update(commissionsTable).set({ status: "excluded" }).where(eq(commissionsTable.id, comm.id));
+        }
+      } else if (commStatus === "confirmed") {
+        if (comm.status === "potential" || comm.status === "excluded") {
+          await db.update(commissionsTable).set({ status: "confirmed", confirmedAt: new Date().toISOString() }).where(eq(commissionsTable.id, comm.id));
+        }
+      } else {
+        if (comm.status === "confirmed" && toNum(comm.universityCollected) <= 0) {
+          await db.update(commissionsTable).set({ status: "potential", confirmedAt: null }).where(eq(commissionsTable.id, comm.id));
+        }
+        if (comm.status === "excluded") {
+          await db.update(commissionsTable).set({ status: "potential" }).where(eq(commissionsTable.id, comm.id));
+        }
+      }
+    }
+
+    const existingSFs = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, id));
+    if (existingSFs.length === 0 && sfStatus !== "excluded") {
+      const [studentRec] = existingComms.length > 0 ? [null] : await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+      const sName2 = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : (existingComms[0]?.studentName || null);
+      await db.insert(serviceFeesTable).values({
+        applicationId: id, studentId: app.studentId, agentId: app.agentId,
+        studentName: sName2, universityName: app.universityName || null,
+        season: app.season || String(new Date().getFullYear()),
+        currency: "USD", totalAmount: "0", financeStatus: sfStatus, status: "pending",
+      });
+    }
+    for (const sf of existingSFs) {
+      const hasPaid = !!sf.firstInstallmentPaidAt || !!sf.secondInstallmentPaidAt;
+      if (sfStatus === "excluded") {
+        if (!hasPaid) {
+          await db.update(serviceFeesTable).set({ financeStatus: "excluded" }).where(eq(serviceFeesTable.id, sf.id));
+        }
+      } else if (sfStatus === "confirmed") {
+        await db.update(serviceFeesTable).set({ financeStatus: "confirmed" }).where(eq(serviceFeesTable.id, sf.id));
+      } else {
+        if ((sf.financeStatus === "excluded" || sf.financeStatus === "confirmed") && !hasPaid) {
+          await db.update(serviceFeesTable).set({ financeStatus: "potential" }).where(eq(serviceFeesTable.id, sf.id));
+        }
+      }
     }
   }
 

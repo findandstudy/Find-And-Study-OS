@@ -42,12 +42,19 @@ const COMM_STATUS: Record<string, { label: string; color: string }> = {
   collected_partial: { label: "Part. Collected", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
   collected_full:  { label: "Collected",   color: "bg-green-100 text-green-700 border-green-200" },
   settled:         { label: "Settled",     color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  excluded:        { label: "Excluded",    color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 const FEE_STATUS: Record<string, { label: string; color: string }> = {
   pending: { label: "Pending", color: "bg-rose-100 text-rose-700 border-rose-200" },
   partial: { label: "1st Paid", color: "bg-amber-100 text-amber-700 border-amber-200" },
   paid:    { label: "Paid",    color: "bg-green-100 text-green-700 border-green-200" },
+};
+
+const FEE_FINANCE_STATUS: Record<string, { label: string; color: string }> = {
+  potential:  { label: "Potential",  color: "bg-amber-100 text-amber-700 border-amber-200" },
+  confirmed:  { label: "Confirmed",  color: "bg-blue-100 text-blue-700 border-blue-200" },
+  excluded:   { label: "Excluded",   color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: {
@@ -1381,10 +1388,15 @@ export default function FinancePage() {
 
           {/* SERVICE FEES TAB */}
           <TabsContent value="fees" className="mt-4 space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="text-sm text-slate-500">
-                {feeSummary.pendingCount ?? 0} pending · {feeSummary.partialCount ?? 0} partial · {feeSummary.paidCount ?? 0} paid
+                {feeSummary.potentialCount ?? 0} potential · {feeSummary.confirmedCount ?? 0} confirmed · {feeSummary.pendingCount ?? 0} pending · {feeSummary.partialCount ?? 0} partial · {feeSummary.paidCount ?? 0} paid
               </div>
+              {(feeSummary.potentialTotal > 0 || feeSummary.confirmedTotal > 0) && (
+                <div className="text-sm text-slate-500">
+                  | Potential: {fmt(feeSummary.potentialTotal)} · Confirmed: {fmt(feeSummary.confirmedTotal)}
+                </div>
+              )}
               <div className="ml-auto">
                 <Button onClick={() => setFeeModal({ open: true })}>
                   <Plus className="w-4 h-4 mr-1" /> New Service Fee
@@ -1466,7 +1478,13 @@ export default function FinancePage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <Badge className={`text-xs border ${status.color}`}>{status.label}</Badge>
+                            <div className="flex flex-col items-center gap-1">
+                              {(() => {
+                                const fs = FEE_FINANCE_STATUS[f.financeStatus] || FEE_FINANCE_STATUS.potential;
+                                return <Badge className={`text-xs border ${fs.color}`}>{fs.label}</Badge>;
+                              })()}
+                              <Badge className={`text-xs border ${status.color}`}>{status.label}</Badge>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">

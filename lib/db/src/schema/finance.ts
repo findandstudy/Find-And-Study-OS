@@ -73,6 +73,7 @@ export const serviceFeesTable = pgTable("service_fees", {
   secondInstallmentAmount: numeric("second_installment_amount", { precision: 12, scale: 2 }),
   secondInstallmentPaidAt: text("second_installment_paid_at"),
 
+  financeStatus: text("finance_status").notNull().default("potential"),
   status: text("status").notNull().default("pending"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

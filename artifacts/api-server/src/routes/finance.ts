@@ -39,7 +39,7 @@ const COMMISSION_PATCH_FIELDS = [
 ];
 
 router.get("/commissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { agentId, status, season, search, page = "1", limit = "100" } = req.query as Record<string, string>;
+  const { agentId, status, season, search, page = "1", limit = "100", includeExcluded } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -53,22 +53,29 @@ router.get("/commissions", requireAuth, requireRole(...STAFF_ROLES), async (req,
       sql`(${commissionsTable.studentName} ilike ${"%" + search + "%"} OR ${commissionsTable.universityName} ilike ${"%" + search + "%"})`
     );
   }
+  if (includeExcluded !== "true" && includeExcluded !== "1") {
+    conditions.push(sql`${commissionsTable.status} != 'excluded'`);
+  }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(commissionsTable).where(whereClause);
   const data = await db.select().from(commissionsTable).where(whereClause).limit(limitNum).offset(offset)
     .orderBy(commissionsTable.createdAt);
 
-  const all = await db.select().from(commissionsTable).where(whereClause);
+  const summaryConditions = conditions.filter(c => c !== sql`${commissionsTable.status} != 'excluded'`);
+  summaryConditions.push(sql`${commissionsTable.status} != 'excluded'`);
+  const activeOnly = await db.select().from(commissionsTable).where(
+    summaryConditions.length > 0 ? and(...summaryConditions) : undefined
+  );
   const summary = {
-    potentialCount: all.filter(c => c.status === "potential").length,
-    confirmedCount: all.filter(c => c.status === "confirmed").length,
-    totalUniversityCommission: all.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
-    totalUniversityCollected: all.reduce((s, c) => s + toNum(c.universityCollected), 0),
-    totalAgentCommission: all.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
-    totalAgentPaid: all.reduce((s, c) => s + toNum(c.agentPaid), 0),
-    totalNetAgency: all.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)), 0),
-    totalOffsetAmount: all.reduce((s, c) => s + toNum(c.offsetAmount), 0),
+    potentialCount: activeOnly.filter(c => c.status === "potential").length,
+    confirmedCount: activeOnly.filter(c => c.status === "confirmed").length,
+    totalUniversityCommission: activeOnly.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
+    totalUniversityCollected: activeOnly.reduce((s, c) => s + toNum(c.universityCollected), 0),
+    totalAgentCommission: activeOnly.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+    totalAgentPaid: activeOnly.reduce((s, c) => s + toNum(c.agentPaid), 0),
+    totalNetAgency: activeOnly.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)), 0),
+    totalOffsetAmount: activeOnly.reduce((s, c) => s + toNum(c.offsetAmount), 0),
   };
 
   res.json({
@@ -182,7 +189,7 @@ router.delete("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), as
 /* ─── SERVICE FEES ───────────────────────────────────────────── */
 
 const SERVICE_FEE_PATCH_FIELDS = [
-  "status", "season", "currency", "totalAmount", "payerType",
+  "status", "financeStatus", "season", "currency", "totalAmount", "payerType",
   "studentName", "universityName", "isStateUniversity",
   "firstInstallmentAmount", "firstInstallmentPaidAt",
   "secondInstallmentAmount", "secondInstallmentPaidAt",
@@ -190,7 +197,7 @@ const SERVICE_FEE_PATCH_FIELDS = [
 ];
 
 router.get("/service-fees", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { studentId, agentId, status, season, page = "1", limit = "100" } = req.query as Record<string, string>;
+  const { studentId, agentId, status, financeStatus, season, page = "1", limit = "100", includeExcluded } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -199,20 +206,32 @@ router.get("/service-fees", requireAuth, requireRole(...STAFF_ROLES), async (req
   if (studentId) conditions.push(eq(serviceFeesTable.studentId, parseInt(studentId, 10)));
   if (agentId) conditions.push(eq(serviceFeesTable.agentId, parseInt(agentId, 10)));
   if (status) conditions.push(eq(serviceFeesTable.status, status));
+  if (financeStatus) conditions.push(eq(serviceFeesTable.financeStatus, financeStatus));
   if (season) conditions.push(eq(serviceFeesTable.season, season));
+  if (includeExcluded !== "true" && includeExcluded !== "1") {
+    conditions.push(sql`${serviceFeesTable.financeStatus} != 'excluded'`);
+  }
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(serviceFeesTable).where(whereClause);
   const data = await db.select().from(serviceFeesTable).where(whereClause).limit(limitNum).offset(offset)
     .orderBy(serviceFeesTable.createdAt);
 
-  const all = await db.select().from(serviceFeesTable).where(whereClause);
+  const sfSummaryConditions = conditions.filter(c => c !== sql`${serviceFeesTable.financeStatus} != 'excluded'`);
+  sfSummaryConditions.push(sql`${serviceFeesTable.financeStatus} != 'excluded'`);
+  const activeOnly = await db.select().from(serviceFeesTable).where(
+    sfSummaryConditions.length > 0 ? and(...sfSummaryConditions) : undefined
+  );
   const summary = {
-    totalServiceFees: all.reduce((s, f) => s + toNum(f.totalAmount), 0),
-    totalCollected: all.reduce((s, f) => s + toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0), 0),
-    pendingCount: all.filter(f => f.status === "pending").length,
-    partialCount: all.filter(f => f.status === "partial").length,
-    paidCount: all.filter(f => f.status === "paid").length,
+    totalServiceFees: activeOnly.reduce((s, f) => s + toNum(f.totalAmount), 0),
+    totalCollected: activeOnly.reduce((s, f) => s + toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0), 0),
+    pendingCount: activeOnly.filter(f => f.status === "pending").length,
+    partialCount: activeOnly.filter(f => f.status === "partial").length,
+    paidCount: activeOnly.filter(f => f.status === "paid").length,
+    potentialCount: activeOnly.filter(f => f.financeStatus === "potential").length,
+    confirmedCount: activeOnly.filter(f => f.financeStatus === "confirmed").length,
+    potentialTotal: activeOnly.filter(f => f.financeStatus === "potential").reduce((s, f) => s + toNum(f.totalAmount), 0),
+    confirmedTotal: activeOnly.filter(f => f.financeStatus === "confirmed").reduce((s, f) => s + toNum(f.totalAmount), 0),
   };
 
   res.json({ data, summary, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
@@ -438,9 +457,9 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
 
 router.get("/finance/university-breakdown", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { season } = req.query as Record<string, string>;
-  const conditions = [];
+  const conditions = [sql`${commissionsTable.status} != 'excluded'`];
   if (season) conditions.push(eq(commissionsTable.season, season));
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const whereClause = and(...conditions);
 
   const allComm = await db.select().from(commissionsTable).where(whereClause);
 
@@ -520,14 +539,14 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...STAFF_RO
 
 router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { season } = req.query as Record<string, string>;
-  const conditions = [];
-  const sfConditions = [];
+  const conditions = [sql`${commissionsTable.status} != 'excluded'`];
+  const sfConditions = [sql`${serviceFeesTable.financeStatus} != 'excluded'`];
   if (season) {
     conditions.push(eq(commissionsTable.season, season));
     sfConditions.push(eq(serviceFeesTable.season, season));
   }
-  const whereComm = conditions.length > 0 ? and(...conditions) : undefined;
-  const whereSF = sfConditions.length > 0 ? and(...sfConditions) : undefined;
+  const whereComm = and(...conditions);
+  const whereSF = and(...sfConditions);
 
   const commissions = await db.select().from(commissionsTable).where(whereComm);
   const fees = await db.select().from(serviceFeesTable).where(whereSF);
@@ -583,6 +602,10 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
       pending: fees.filter(f => f.status === "pending").length,
       partial: fees.filter(f => f.status === "partial").length,
       paid: fees.filter(f => f.status === "paid").length,
+      potentialCount: fees.filter(f => f.financeStatus === "potential").length,
+      confirmedCount: fees.filter(f => f.financeStatus === "confirmed").length,
+      potentialTotal: fees.filter(f => f.financeStatus === "potential").reduce((s, f) => s + toNum(f.totalAmount), 0),
+      confirmedTotal: fees.filter(f => f.financeStatus === "confirmed").reduce((s, f) => s + toNum(f.totalAmount), 0),
     },
     offset: {
       totalConfirmedCommission,
@@ -640,8 +663,12 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), a
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   const agentId = agent.id;
 
-  const commissions = await db.select().from(commissionsTable).where(eq(commissionsTable.agentId, agentId));
-  const fees = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.agentId, agentId));
+  const commissions = await db.select().from(commissionsTable).where(
+    and(eq(commissionsTable.agentId, agentId), sql`${commissionsTable.status} != 'excluded'`)
+  );
+  const fees = await db.select().from(serviceFeesTable).where(
+    and(eq(serviceFeesTable.agentId, agentId), sql`${serviceFeesTable.financeStatus} != 'excluded'`)
+  );
 
   const commSummary = {
     potential: commissions.filter(c => c.status === "potential").reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
@@ -651,8 +678,8 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), a
   };
 
   const feeSummary = {
-    potential: fees.filter(f => f.status === "pending").reduce((s, f) => s + toNum(f.totalAmount), 0),
-    confirmed: fees.filter(f => ["partial", "paid"].includes(f.status)).reduce((s, f) => s + toNum(f.totalAmount), 0),
+    potential: fees.filter(f => f.financeStatus === "potential").reduce((s, f) => s + toNum(f.totalAmount), 0),
+    confirmed: fees.filter(f => f.financeStatus === "confirmed").reduce((s, f) => s + toNum(f.totalAmount), 0),
     paid: fees.reduce((s, f) => s + toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0), 0),
     pending: fees.filter(f => f.status !== "paid").reduce((s, f) => {
       const collected = toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0);
@@ -673,7 +700,7 @@ router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), async
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const whereClause = eq(commissionsTable.agentId, agent.id);
+  const whereClause = and(eq(commissionsTable.agentId, agent.id), sql`${commissionsTable.status} != 'excluded'`);
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(commissionsTable).where(whereClause);
   const data = await db.select().from(commissionsTable).where(whereClause)
     .orderBy(desc(commissionsTable.createdAt)).limit(limitNum).offset(offset);
@@ -691,7 +718,7 @@ router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), asyn
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const whereClause = eq(serviceFeesTable.agentId, agent.id);
+  const whereClause = and(eq(serviceFeesTable.agentId, agent.id), sql`${serviceFeesTable.financeStatus} != 'excluded'`);
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(serviceFeesTable).where(whereClause);
   const data = await db.select().from(serviceFeesTable).where(whereClause)
     .orderBy(desc(serviceFeesTable.createdAt)).limit(limitNum).offset(offset);
