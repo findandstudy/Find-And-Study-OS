@@ -2,8 +2,9 @@ import { Router, type IRouter } from "express";
 import { db, studentsTable, documentsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -11,7 +12,7 @@ const STUDENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
   "motherName", "fatherName", "address",
-  "status", "agentId", "userId", "notes",
+  "status", "agentId", "assignedToId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
   "universityBachelor", "universityMaster",
   "photoUrl",
@@ -59,6 +60,15 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
       return;
     }
     conditions.push(inArray(studentsTable.agentId, visibleIds));
+  } else if (user.role === "student") {
+    conditions.push(eq(studentsTable.userId, user.id));
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    conditions.push(
+      or(
+        eq(studentsTable.assignedToId, user.id),
+        isNull(studentsTable.assignedToId)
+      )
+    );
   }
   if (search) {
     conditions.push(
@@ -216,9 +226,22 @@ router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const isOwnProfile = student.userId === user.id;
+  const isAgent = user.role === "agent" || user.role === "sub_agent";
 
-  if (!isStaff && !isOwnProfile) {
+  if (isAgent) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!student.agentId || !visibleIds.includes(student.agentId)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  } else if (isStaff && !isAdmin) {
+    if (student.assignedToId !== null && student.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  } else if (!isStaff && !isOwnProfile) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
@@ -233,17 +256,35 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const isAgent = role === "agent" || role === "sub_agent";
   if (!isStaff && !isAgent) { res.status(403).json({ error: "Forbidden" }); return; }
 
+  const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Student not found" }); return; }
+
   if (isAgent) {
     const visibleAgentIds = await getAgentVisibleIds(req.user!.id, role);
     if (visibleAgentIds.length === 0) { res.status(403).json({ error: "Agent profile not found" }); return; }
-    const [visibleStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
-      .where(and(eq(studentsTable.id, id), inArray(studentsTable.agentId, visibleAgentIds)));
-    if (!visibleStudent) { res.status(403).json({ error: "You can only edit your own students" }); return; }
+    if (!existing.agentId || !visibleAgentIds.includes(existing.agentId)) {
+      res.status(403).json({ error: "You can only edit your own students" }); return;
+    }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(role)) {
+    if (existing.assignedToId !== null && existing.assignedToId !== req.user!.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
   }
 
-  const allowedFields = isAgent
-    ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId")
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(role);
+  let allowedFields = isAgent
+    ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId")
     : STUDENT_PATCH_FIELDS;
+  if (!isAdmin && !isAgent) {
+    if (req.body.assignedToId !== undefined) {
+      if (existing.assignedToId !== null) {
+        allowedFields = allowedFields.filter(f => f !== "assignedToId");
+      } else if (req.body.assignedToId !== req.user!.id) {
+        allowedFields = allowedFields.filter(f => f !== "assignedToId");
+      }
+    }
+  }
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];

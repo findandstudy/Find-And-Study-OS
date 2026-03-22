@@ -19,6 +19,7 @@ export const studentsTable = pgTable("students", {
   address: text("address"),
   status: text("status").notNull().default("active"),
   agentId: integer("agent_id"),
+  assignedToId: integer("assigned_to_id"),
   highSchool: text("high_school"),
   universityBachelor: text("university_bachelor"),
   universityMaster: text("university_master"),

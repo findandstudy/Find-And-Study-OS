@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useListStudents, useCreateStudent } from "@workspace/api-client-react";
+import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -1255,7 +1256,7 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
   );
 }
 
-function DraggableStudentCard({ student, onView, variant }: { student: any; onView: (id: number) => void; variant?: StuColVariant }) {
+function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssignToMe, isAdmin }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssignToMe?: (id: number) => void; isAdmin?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
@@ -1280,7 +1281,14 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
         </div>
         {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
       </div>
-      <div className="px-4 pb-3 flex justify-end">
+      <div className="px-4 pb-3 flex items-center justify-between">
+        <div className="flex items-center gap-1 min-w-0">
+          {assignedUserName ? (
+            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate"><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
+          ) : !isAdmin && onAssignToMe ? (
+            <button onClick={(e) => { e.stopPropagation(); onAssignToMe(student.id); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"><UserPlus className="w-3 h-3" />Assign to Me</button>
+          ) : null}
+        </div>
         <button
           onClick={() => onView(student.id)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
@@ -1292,7 +1300,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
   );
 }
 
-function DroppableStuColumn({ status, label, variant, students, onView }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void }) {
+function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssignToMe, isAdmin }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssignToMe?: (id: number) => void; isAdmin?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -1329,7 +1337,7 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={students.map(s => s.id)} strategy={verticalListSortingStrategy}>
           {students.map((s: any) => (
-            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} />
+            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssignToMe={onAssignToMe} isAdmin={isAdmin} />
           ))}
           {students.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
@@ -1638,6 +1646,10 @@ export default function StudentsPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth(true, [
+    "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
+  ]);
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -1659,6 +1671,35 @@ export default function StudentsPage() {
   const { stages: pipelineStages } = usePipelineStages("student");
   const studentStatuses = pipelineStages.map(s => s.key);
   const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
+
+  const { data: staffUsersData } = useQuery({
+    queryKey: ["staff-users-list"],
+    queryFn: () => customFetch("/api/users") as Promise<any>,
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+  const staffUsers = (isAdmin && staffUsersData)
+    ? (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []).filter((u: any) => ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"].includes(u.role))
+    : [];
+  const staffUsersMap = useMemo(() => {
+    const m: Record<number, string> = {};
+    staffUsers.forEach((u: any) => { m[u.id] = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email; });
+    return m;
+  }, [staffUsers]);
+
+  async function handleAssignToMe(studentId: number) {
+    try {
+      await customFetch(`/api/students/${studentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedToId: user!.id }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Student assigned to you" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
 
   const { season } = useSeason();
   const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
@@ -1809,7 +1850,7 @@ export default function StudentsPage() {
               >
                 {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
-                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} />;
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssignToMe={!isAdmin ? handleAssignToMe : undefined} isAdmin={isAdmin} />;
                 })}
 
                 <DragOverlay>
@@ -1843,15 +1884,16 @@ export default function StudentsPage() {
                     <StuSortHeader label="Nationality" sortKey="nationality" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Passport" sortKey="passport" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                    <TableHead>Assigned</TableHead>
                     <StuSortHeader label="Joined" sortKey="date" currentSort={sort} onSort={handleSort} />
                     <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
                   ) : pagedStudents.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
                   ) : pagedStudents.map((student: any) => (
                     <TableRow key={student.id} className={`cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(student.id) ? "bg-primary/5" : ""}`}>
                       <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(student.id)} onCheckedChange={() => toggleSelect(student.id)} /></TableCell>
@@ -1869,6 +1911,15 @@ export default function StudentsPage() {
                       <TableCell className="font-mono text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{student.passportNumber || "-"}</TableCell>
                       <TableCell onClick={() => setLocation(`/staff/students/${student.id}`)}>
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
+                      </TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        {student.assignedToId ? (
+                          <span className="text-xs text-muted-foreground">{staffUsersMap[student.assignedToId] || "Assigned"}</span>
+                        ) : !isAdmin ? (
+                          <button onClick={() => handleAssignToMe(student.id)} className="text-xs text-primary hover:underline font-medium">Assign to Me</button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Unassigned</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>

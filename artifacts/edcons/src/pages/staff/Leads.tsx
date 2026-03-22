@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead } from "@workspace/api-client-react";
+import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
-  Plus, Search, Filter, Eye, TrendingUp, X,
+  Plus, Search, Filter, Eye, TrendingUp, X, UserCheck2,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
 } from "lucide-react";
@@ -107,8 +107,9 @@ function getLeadStageColor(stage: PipelineStage, index: number): string {
 }
 
 /* ── LeadCard ──────────────────────────────────────────────── */
-function LeadCard({ lead, onView, showRevenue, variant }: {
+function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssignToMe, isAdmin }: {
   lead: any; onView: (id: number) => void; showRevenue: boolean; variant?: ColVariant;
+  assignedUserName?: string; onAssignToMe?: (id: number) => void; isAdmin?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -152,7 +153,21 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
           </div>
         )}
       </div>
-      <div className="px-4 pb-3 flex justify-end">
+      <div className="px-4 pb-3 flex items-center justify-between">
+        <div className="flex items-center gap-1 min-w-0">
+          {lead.assignedToId ? (
+            <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}>
+              <UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName || "Assigned"}
+            </span>
+          ) : onAssignToMe ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAssignToMe(lead.id); }}
+              className="text-[10px] text-primary hover:underline font-medium"
+            >
+              Assign to Me
+            </button>
+          ) : null}
+        </div>
         <button
           onClick={() => onView(lead.id)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
@@ -165,8 +180,9 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
 }
 
 /* ── DroppableColumn ──────────────────────────────────────── */
-function DroppableColumn({ col, leads, showRevenue, onView }: {
+function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssignToMe, isAdmin }: {
   col: ColDef; leads: any[]; showRevenue: boolean; onView: (id: number) => void;
+  staffUsersMap?: Record<number, string>; onAssignToMe?: (id: number) => void; isAdmin?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   const totalRevenue = showRevenue ? leads.reduce((sum, l) => sum + (parseFloat(l.estimatedValue) || 0), 0) : 0;
@@ -226,7 +242,7 @@ function DroppableColumn({ col, leads, showRevenue, onView }: {
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} />
+            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssignToMe={onAssignToMe} isAdmin={isAdmin} />
           ))}
           {leads.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
@@ -663,13 +679,44 @@ export default function LeadsPage() {
     "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
   ]);
   const canSeeRevenue = user?.role === "super_admin" || user?.role === "admin" || user?.role === "agent";
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
 
   const { season } = useSeason();
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
+
+  const { data: staffUsersData } = useQuery({
+    queryKey: ["staff-users-list"],
+    queryFn: () => customFetch("/api/users") as Promise<any>,
+    enabled: isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+  const staffUsers = (isAdmin && staffUsersData)
+    ? (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []).filter((u: any) => ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"].includes(u.role))
+    : [];
+  const queryClient = useQueryClient();
   const updateLead = useUpdateLead();
   const createLead = useCreateLead();
   const deleteLead = useDeleteLead();
-  const queryClient = useQueryClient();
+
+  const staffUsersMap = useMemo(() => {
+    const m: Record<number, string> = {};
+    staffUsers.forEach((u: any) => { m[u.id] = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email; });
+    return m;
+  }, [staffUsers]);
+
+  async function handleAssignToMe(leadId: number) {
+    try {
+      await customFetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedTo: user!.id }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Lead assigned to you" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -912,6 +959,9 @@ export default function LeadsPage() {
                       leads={columnLeads}
                       showRevenue={canSeeRevenue}
                       onView={(id) => setLocation(`/staff/leads/${id}`)}
+                      staffUsersMap={staffUsersMap}
+                      onAssignToMe={!isAdmin ? handleAssignToMe : undefined}
+                      isAdmin={isAdmin}
                     />
                   );
                 })}
@@ -970,6 +1020,7 @@ export default function LeadsPage() {
                     {canSeeRevenue && (
                       <SortHeader label="Value" sortKey="value" currentSort={sort} onSort={handleSort} />
                     )}
+                    <TableHead>Assigned</TableHead>
                     <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
                     <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
@@ -977,13 +1028,13 @@ export default function LeadsPage() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={canSeeRevenue ? 11 : 10} className="text-center py-12 text-muted-foreground">
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : pagedLeads.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={canSeeRevenue ? 10 : 9} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={canSeeRevenue ? 11 : 10} className="text-center py-12 text-muted-foreground">
                         No leads found
                       </TableCell>
                     </TableRow>
@@ -1039,6 +1090,15 @@ export default function LeadsPage() {
                           ) : "-"}
                         </TableCell>
                       )}
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        {lead.assignedToId ? (
+                          <span className="text-xs text-muted-foreground">{staffUsersMap[lead.assignedToId] || "Assigned"}</span>
+                        ) : !isAdmin ? (
+                          <button onClick={() => handleAssignToMe(lead.id)} className="text-xs text-primary hover:underline font-medium">Assign to Me</button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Unassigned</span>
+                        )}
+                      </TableCell>
                       <TableCell
                         className="text-muted-foreground text-xs"
                         onClick={() => setLocation(`/staff/leads/${lead.id}`)}

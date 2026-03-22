@@ -3,8 +3,9 @@ import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, 
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
-import { STAFF_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -72,6 +73,13 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "s
       return;
     }
     conditions.push(inArray(leadsTable.agentId, visibleIds));
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    conditions.push(
+      or(
+        eq(leadsTable.assignedToId, user.id),
+        isNull(leadsTable.assignedToId)
+      )
+    );
   }
 
   if (search) {
@@ -131,6 +139,11 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
       res.status(403).json({ error: "Access denied" });
       return;
     }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
   }
   res.json(lead);
 });
@@ -148,20 +161,42 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as a
   const user = req.user!;
   const isAgent = user.role === "agent" || user.role === "sub_agent";
 
+  const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
+
   if (isAgent) {
-    const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
-    if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (!existing.agentId || !visibleIds.includes(existing.agentId)) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    if (existing.assignedToId !== null && existing.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
   }
 
-  const allowedFields = isAgent ? AGENT_LEAD_PATCH_FIELDS : LEAD_PATCH_FIELDS;
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
+  let allowedFields = isAgent ? AGENT_LEAD_PATCH_FIELDS : LEAD_PATCH_FIELDS;
+  if (!isAdmin && !isAgent) {
+    if (req.body.assignedTo !== undefined) {
+      if (existing.assignedToId !== null) {
+        allowedFields = allowedFields.filter(f => f !== "assignedTo");
+      } else if (req.body.assignedTo !== user.id) {
+        allowedFields = allowedFields.filter(f => f !== "assignedTo");
+      }
+    }
+  }
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+    if (req.body[key] !== undefined) {
+      if (key === "assignedTo") {
+        updates["assignedToId"] = req.body[key];
+      } else {
+        updates[key] = req.body[key];
+      }
+    }
   }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
