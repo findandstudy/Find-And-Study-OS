@@ -192,6 +192,11 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
       if (!studentRec || studentRec.id !== row.studentId) {
         res.status(403).json({ error: "Access denied" }); return;
       }
+    } else if (user.role === "agent" || user.role === "sub_agent") {
+      const visibleIds = await getAgentVisibleIds(user.id, user.role);
+      if (!row.agentId || !visibleIds.includes(row.agentId)) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
     } else {
       res.status(403).json({ error: "Access denied" }); return;
     }

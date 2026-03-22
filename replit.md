@@ -144,6 +144,23 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Security:** All endpoints verify the sub-agent's `parentAgentId` matches the logged-in agent's ID. Status toggle syncs `users.isActive` to actually prevent login.
 - **Files:** `artifacts/edcons/src/pages/agent/SubAgents.tsx`, `artifacts/api-server/src/routes/agents.ts`
 
+## Stage Documents (Application)
+
+- **Purpose:** Stage-specific document upload and viewing per application. Different pipeline stages have different upload permissions.
+- **DB table:** `application_stage_documents` (id serial, applicationId, stage, fileName, fileData text, fileUrl, mimeType, sizeBytes, uploadedBy, uploadedByRole, uploadedByName, isMissingDocNote bool, createdAt)
+- **Everyone-upload stages:** `app_fee_paid`, `missing_docs`, `upload_payment`, `visa_approved`, `student_card`, `visa_reject` — all authenticated users (staff, agents, sub-agents, students) can upload
+- **Admin-only upload stages:** `offer_received`, `acceptance_letter`, `final_acceptance` — only ADMIN_ROLES can upload; everyone else can view/download
+- **Missing Documents feature:** Admin can set a list of required documents (stored as `isMissingDocNote=true` rows). Agents, sub-agents, and students see these as a checklist. Admin can edit/clear the list.
+- **API routes:**
+  - `GET /api/applications/:id/stage-documents` — list docs (metadata only, no fileData blob)
+  - `POST /api/applications/:id/stage-documents` — upload (validates stage permissions, file size, URL scheme)
+  - `DELETE /api/applications/:id/stage-documents/:docId` — delete (admin or own uploads)
+  - `GET /api/applications/:id/stage-documents/:docId/download` — stream file download
+  - `GET /api/applications/:id/missing-doc-notes` — list missing doc requirements
+  - `POST /api/applications/:id/missing-doc-notes` — set/clear missing doc list (admin only)
+- **Frontend:** `StageDocumentsPanel` component (`artifacts/edcons/src/components/StageDocumentsPanel.tsx`) — collapsible stage sections with upload buttons, file list, download, delete. Used in staff ApplicationDetail, agent EditApplicationDialog, and student Applications page.
+- **Files:** `lib/db/src/schema/applicationStageDocuments.ts`, `artifacts/api-server/src/routes/applicationStageDocuments.ts`, `artifacts/edcons/src/components/StageDocumentsPanel.tsx`
+
 ## Object Storage & Logo Upload
 
 - **Upload URL pattern:** `objectPath` from `/api/storage/uploads/request-url` returns paths like `/objects/uploads/<uuid>`. When constructing display URLs, **always strip** the `/objects` prefix: `objectPath.replace(/^\/objects/, "")` then build `${BASE_URL}/api/storage/objects${strippedPath}`. The serving route `/storage/objects/*path` internally re-adds the `/objects/` prefix.

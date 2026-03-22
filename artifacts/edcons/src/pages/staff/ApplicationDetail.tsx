@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
+import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
+import { useAuth } from "@/hooks/use-auth";
 
 const STUDY_LEVELS = [
   { value: "associate", label: "Associate" },
@@ -64,6 +66,7 @@ export default function ApplicationDetail({ id }: Props) {
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
   const [editOpen, setEditOpen] = useState(false);
+  const { user: authUser } = useAuth();
 
   const { data: app, isLoading } = useGetApplication(id);
   const { data: notes = [] } = useGetApplicationNotes(id);
@@ -183,6 +186,15 @@ export default function ApplicationDetail({ id }: Props) {
                 </div>
               )}
             </div>
+
+            {app && authUser && (
+              <StageDocumentsPanel
+                applicationId={id}
+                currentStage={app.stage}
+                userRole={authUser.role}
+                userId={authUser.id}
+              />
+            )}
 
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center gap-2">

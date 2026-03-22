@@ -23,6 +23,7 @@ import messagesRouter from "./messages";
 import notificationsRouter from "./notifications";
 import integrationsRouter from "./integrations";
 import activityRouter from "./activity";
+import applicationStageDocumentsRouter from "./applicationStageDocuments";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use(messagesRouter);
 router.use(notificationsRouter);
 router.use(integrationsRouter);
 router.use(activityRouter);
+router.use(applicationStageDocumentsRouter);
 
 export default router;

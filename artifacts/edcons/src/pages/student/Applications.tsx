@@ -3,6 +3,7 @@ import { useListApplications } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FileText, GraduationCap, MapPin, Calendar, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle; step: number }> = {
   inquiry:              { label: "Inquiry Received",    color: "bg-slate-100 text-slate-700 border-slate-200",    icon: AlertCircle, step: 1 },
@@ -139,6 +140,14 @@ export default function StudentApplications() {
                       <p className="text-sm text-foreground">{app.notes}</p>
                     </div>
                   )}
+
+                  <div className="px-6 py-4 border-t border-border/50">
+                    <StageDocumentsPanel
+                      applicationId={app.id}
+                      currentStage={app.stage}
+                      userRole="student"
+                    />
+                  </div>
                 </Card>
               );
             })}
