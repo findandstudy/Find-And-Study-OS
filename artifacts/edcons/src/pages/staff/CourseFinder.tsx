@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -641,6 +641,7 @@ export default function CourseFinder() {
       <ApplyDialog
         program={applyProgram}
         onClose={() => setApplyProgram(null)}
+        currentUser={user}
       />
 
       {canUsePdfMarkup && (
@@ -1324,7 +1325,8 @@ type StudentOption = {
   createdAt: string;
 };
 
-function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose: () => void }) {
+function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | null; onClose: () => void; currentUser: any }) {
+  const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
@@ -1335,17 +1337,29 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
 
   const debouncedSearch = useMemo(() => searchTerm.trim(), [searchTerm]);
 
+  useEffect(() => {
+    if (isStudentUser && currentUser && p) {
+      setSelectedStudent({
+        id: currentUser.id,
+        firstName: currentUser.firstName || "",
+        lastName: currentUser.lastName || "",
+        email: currentUser.email || "",
+        nationality: null,
+      });
+    }
+  }, [isStudentUser, currentUser, p]);
+
   const { data: recentStudents = [], isLoading: loadingRecent } = useQuery<StudentOption[]>({
     queryKey: ["apply-recent-students"],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/students?limit=3`),
-    enabled: !!p,
+    enabled: !!p && !isStudentUser,
     staleTime: 30_000,
   });
 
   const { data: searchResults = [], isLoading: loadingSearch } = useQuery<StudentOption[]>({
     queryKey: ["apply-search-students", debouncedSearch],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/students?search=${encodeURIComponent(debouncedSearch)}&limit=10`),
-    enabled: !!p && debouncedSearch.length >= 2,
+    enabled: !!p && !isStudentUser && debouncedSearch.length >= 2,
     staleTime: 10_000,
   });
 
@@ -1423,15 +1437,27 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
                 {p.scholarship != null && p.scholarship > 0 && (
                   <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0">Scholarship: {formatCurrency(p.scholarship, cur)}</Badge>
                 )}
-                {commissionAmount != null && (
+                {!isStudentUser && commissionAmount != null && (
                   <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
                 )}
-                {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
+                {!isStudentUser && p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
                   <Badge className="text-xs bg-amber-100 text-amber-700 border-0">Service Fee: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
                 )}
               </div>
             </div>
 
+            {isStudentUser ? (
+              <div className="bg-muted/30 rounded-xl p-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white shrink-0">
+                  {(currentUser?.firstName?.[0] || "").toUpperCase()}{(currentUser?.lastName?.[0] || "").toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{currentUser?.firstName} {currentUser?.lastName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{currentUser?.email}</p>
+                </div>
+                <Check className="w-4 h-4 text-primary shrink-0" />
+              </div>
+            ) : (
             <div>
               <Label className="text-sm font-medium mb-2 block">Select Student</Label>
               <div className="relative mb-3">
@@ -1493,6 +1519,7 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
                 )}
               </div>
             </div>
+            )}
 
             <div>
               <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
@@ -1505,18 +1532,24 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
               />
             </div>
 
-            <div className="bg-blue-50 rounded-xl p-3 space-y-1">
-              <p className="text-xs font-semibold text-blue-700">The following will be created automatically:</p>
-              <ul className="text-xs text-blue-600 space-y-0.5">
-                <li>• Application record (Applications → inquiry stage)</li>
-                {commissionAmount != null && commissionAmount > 0 && (
-                  <li>• Commission record ({formatCurrency(commissionAmount, cur)} — potential)</li>
-                )}
-                {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                  <li>• Service fee ({formatCurrency(p.serviceFeeAmount, cur)} — 2 installments)</li>
-                )}
-              </ul>
-            </div>
+            {isStudentUser ? (
+              <div className="bg-blue-50 rounded-xl p-3">
+                <p className="text-xs text-blue-700">Your application will be submitted for review.</p>
+              </div>
+            ) : (
+              <div className="bg-blue-50 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-blue-700">The following will be created automatically:</p>
+                <ul className="text-xs text-blue-600 space-y-0.5">
+                  <li>• Application record (Applications → inquiry stage)</li>
+                  {commissionAmount != null && commissionAmount > 0 && (
+                    <li>• Commission record ({formatCurrency(commissionAmount, cur)} — potential)</li>
+                  )}
+                  {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
+                    <li>• Service fee ({formatCurrency(p.serviceFeeAmount, cur)} — 2 installments)</li>
+                  )}
+                </ul>
+              </div>
+            )}
 
             <Button
               onClick={handleSubmit}
@@ -1524,9 +1557,9 @@ function ApplyDialog({ program: p, onClose }: { program: Program | null; onClose
               className="w-full rounded-xl h-11"
             >
               {submitting ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStudentUser ? "Submitting..." : "Creating..."}</>
               ) : (
-                <><Send className="w-4 h-4 mr-2" /> Create Application</>
+                <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? "Submit Application" : "Create Application"}</>
               )}
             </Button>
           </div>
