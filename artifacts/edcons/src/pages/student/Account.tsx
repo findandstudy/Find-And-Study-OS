@@ -16,6 +16,7 @@ import {
   Loader2, FileText, MapPin, Phone, Mail, Calendar,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 const LANGUAGES = [
   { code: "en", label: "English",   country: "GB" },
@@ -137,7 +138,7 @@ export default function StudentAccount() {
                 </div>
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone</Label>
-                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 234 567 8900" className="rounded-xl" />
+                  <PhoneInput value={form.phone} onChange={phone => setForm(f => ({ ...f, phone }))} />
                 </div>
               </div>
               <Button onClick={handleSaveProfile} disabled={saving} className="mt-6 rounded-xl gap-2 px-8">
