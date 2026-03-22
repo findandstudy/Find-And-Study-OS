@@ -233,6 +233,14 @@ function Router() {
         </Route>
 
         {/* Language-prefixed public routes */}
+        <Route path="/:lang">
+          {(params) => {
+            if (isValidLanguage(params.lang)) {
+              return <PublicRoutes lang={params.lang} />;
+            }
+            return <NotFound />;
+          }}
+        </Route>
         <Route path="/:lang/:rest*">
           {(params) => {
             if (isValidLanguage(params.lang)) {
