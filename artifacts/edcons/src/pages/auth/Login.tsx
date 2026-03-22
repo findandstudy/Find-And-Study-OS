@@ -31,7 +31,7 @@ export default function Login() {
   const [error, setError] = useState("");
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
-  const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phone: "" });
+  const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phoneCode: "+90", phone: "" });
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [resending, setResending] = useState(false);
@@ -107,7 +107,7 @@ export default function Login() {
           password: registerForm.password,
           firstName: registerForm.firstName,
           lastName: registerForm.lastName,
-          phone: registerForm.phone || undefined,
+          phone: `${registerForm.phoneCode}${registerForm.phone}`,
         }),
       });
       const data = await res.json();
@@ -343,13 +343,60 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> Phone (optional)</Label>
-                    <Input
-                      value={registerForm.phone}
-                      onChange={e => setRegisterForm(f => ({ ...f, phone: e.target.value }))}
-                      placeholder="+90 555 123 4567"
-                      className="rounded-xl h-11"
-                    />
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> Phone</Label>
+                    <div className="flex gap-2">
+                      <select
+                        value={registerForm.phoneCode}
+                        onChange={e => setRegisterForm(f => ({ ...f, phoneCode: e.target.value }))}
+                        className="h-11 rounded-xl border border-input bg-background px-2 text-sm font-medium w-[100px] shrink-0 focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="+90">🇹🇷 +90</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+49">🇩🇪 +49</option>
+                        <option value="+33">🇫🇷 +33</option>
+                        <option value="+39">🇮🇹 +39</option>
+                        <option value="+34">🇪🇸 +34</option>
+                        <option value="+31">🇳🇱 +31</option>
+                        <option value="+46">🇸🇪 +46</option>
+                        <option value="+47">🇳🇴 +47</option>
+                        <option value="+7">🇷🇺 +7</option>
+                        <option value="+86">🇨🇳 +86</option>
+                        <option value="+81">🇯🇵 +81</option>
+                        <option value="+82">🇰🇷 +82</option>
+                        <option value="+91">🇮🇳 +91</option>
+                        <option value="+92">🇵🇰 +92</option>
+                        <option value="+880">🇧🇩 +880</option>
+                        <option value="+62">🇮🇩 +62</option>
+                        <option value="+60">🇲🇾 +60</option>
+                        <option value="+234">🇳🇬 +234</option>
+                        <option value="+20">🇪🇬 +20</option>
+                        <option value="+212">🇲🇦 +212</option>
+                        <option value="+213">🇩🇿 +213</option>
+                        <option value="+216">🇹🇳 +216</option>
+                        <option value="+964">🇮🇶 +964</option>
+                        <option value="+966">🇸🇦 +966</option>
+                        <option value="+971">🇦🇪 +971</option>
+                        <option value="+974">🇶🇦 +974</option>
+                        <option value="+973">🇧🇭 +973</option>
+                        <option value="+998">🇺🇿 +998</option>
+                        <option value="+993">🇹🇲 +993</option>
+                        <option value="+994">🇦🇿 +994</option>
+                        <option value="+995">🇬🇪 +995</option>
+                        <option value="+380">🇺🇦 +380</option>
+                        <option value="+55">🇧🇷 +55</option>
+                        <option value="+52">🇲🇽 +52</option>
+                        <option value="+61">🇦🇺 +61</option>
+                        <option value="+64">🇳🇿 +64</option>
+                      </select>
+                      <Input
+                        value={registerForm.phone}
+                        onChange={e => setRegisterForm(f => ({ ...f, phone: e.target.value.replace(/[^\d\s]/g, "") }))}
+                        placeholder="555 123 4567"
+                        className="rounded-xl h-11 flex-1"
+                        required
+                      />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> Password</Label>
