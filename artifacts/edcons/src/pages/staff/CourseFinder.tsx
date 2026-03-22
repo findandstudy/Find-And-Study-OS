@@ -474,26 +474,22 @@ export default function CourseFinder() {
                   </Button>
                   {selectedIds.size > 0 && (
                     <>
-                      {isAgent && (() => {
-                        const selCurs = [...new Set(programs.filter(p => selectedIds.has(p.id)).map(p => p.currency || "USD"))];
-                        const badgeCur = selCurs.length === 1 ? selCurs[0] : "USD";
-                        return (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setMarkupModalOpen(true)}
-                            className="h-8 text-xs gap-1.5 rounded-lg"
-                          >
-                            <DollarSign className="w-3.5 h-3.5" />
-                            PDF Fee Adjustment
-                            {pdfMarkup > 0 && (
-                              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                                +{formatCurrency(pdfMarkup, badgeCur)}
-                              </Badge>
-                            )}
-                          </Button>
-                        );
-                      })()}
+                      {isAgent && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMarkupModalOpen(true)}
+                          className="h-8 text-xs gap-1.5 rounded-lg"
+                        >
+                          <DollarSign className="w-3.5 h-3.5" />
+                          PDF Fee Adjustment
+                          {pdfMarkup > 0 && (
+                            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                              +{formatCurrency(pdfMarkup, programs[0]?.currency || "USD")}
+                            </Badge>
+                          )}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         onClick={handleGeneratePdf}
@@ -646,23 +642,16 @@ export default function CourseFinder() {
         onClose={() => setApplyProgram(null)}
       />
 
-      {isAgent && (() => {
-        const selectedPrograms = programs.filter(p => selectedIds.has(p.id));
-        const currencies = [...new Set(selectedPrograms.map(p => p.currency || "USD"))];
-        const selCurrency = currencies.length === 1 ? currencies[0] : "USD";
-        const selSampleFee = selectedPrograms[0]?.serviceFeeAmount;
-        return (
-          <PdfMarkupModal
-            open={markupModalOpen}
-            onOpenChange={setMarkupModalOpen}
-            currentMarkup={pdfMarkup}
-            onApply={setPdfMarkup}
-            currency={selCurrency}
-            sampleFee={selSampleFee}
-            hasMultipleCurrencies={currencies.length > 1}
-          />
-        );
-      })()}
+      {isAgent && (
+        <PdfMarkupModal
+          open={markupModalOpen}
+          onOpenChange={setMarkupModalOpen}
+          currentMarkup={pdfMarkup}
+          onApply={setPdfMarkup}
+          currency={programs[0]?.currency || "USD"}
+          sampleFee={programs[0]?.serviceFeeAmount}
+        />
+      )}
     </DashboardLayout>
   );
 }
