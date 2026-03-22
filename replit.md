@@ -20,6 +20,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Validation:** Zod
 - **API Codegen:** Orval (from OpenAPI spec)
 - **Frontend:** React, Vite, TailwindCSS, shadcn/ui, Framer Motion
+- **Performance:** Route-level code splitting with React.lazy + Suspense, Vite manual chunk splitting (vendor-export for jspdf/xlsx, vendor-charts for recharts/d3, vendor-motion for framer-motion), non-blocking Google Fonts loading, skeleton loading states, SEO meta tags (Open Graph, Twitter Card), accessibility improvements (aria-labels, noopener noreferrer, alt text)
 
 **Core Architectural Decisions:**
 - **Authentication:** Custom email/password authentication with session cookies. Staff/agent accounts created by admin with password; students self-register with email verification (6-digit code, 15min TTL, logged to console in dev). Rate limiting on login (10/15min), verify (5/15min), resend (3/15min), register (5/15min). Sessions stored in DB `sessions` table. Cookie: `sid` (httpOnly, secure, sameSite=lax). Open-redirect protection on returnTo param. Multi-role access control (`super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `pending`). User activation is admin-controlled for staff; auto-activated on email verification for students.

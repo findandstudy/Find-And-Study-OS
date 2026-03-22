@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,54 +7,49 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
+import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import NotFound from "@/pages/not-found";
 
-// Public
 import Home from "@/pages/public/Home";
-import About from "@/pages/public/About";
-import Programs from "@/pages/public/Programs";
-import Blog from "@/pages/public/Blog";
-import Contact from "@/pages/public/Contact";
-
-// Auth
 import Login from "@/pages/auth/Login";
 
-// Staff
-import StaffDashboard from "@/pages/staff/Dashboard";
-import StaffLeads from "@/pages/staff/Leads";
-import StaffStudents from "@/pages/staff/Students";
-import StaffApplications from "@/pages/staff/Applications";
-import StaffFinance from "@/pages/staff/Finance";
-import StaffSettings from "@/pages/staff/Settings";
-import LeadDetail from "@/pages/staff/LeadDetail";
-import StudentDetail from "@/pages/staff/StudentDetail";
-import ApplicationDetail from "@/pages/staff/ApplicationDetail";
-import StaffDocuments from "@/pages/staff/Documents";
-import StaffCourseFinder from "@/pages/staff/CourseFinder";
-import StaffAgents from "@/pages/staff/Agents";
-import StaffMessages from "@/pages/staff/Messages";
+const About = lazy(() => import("@/pages/public/About"));
+const Programs = lazy(() => import("@/pages/public/Programs"));
+const Blog = lazy(() => import("@/pages/public/Blog"));
+const Contact = lazy(() => import("@/pages/public/Contact"));
 
-// Admin
-import AdminDashboard from "@/pages/admin/Dashboard";
-import AdminUsers from "@/pages/admin/Users";
-import AdminCatalog from "@/pages/admin/Catalog";
-import AdminAuditLog from "@/pages/admin/AuditLog";
-import AdminActivity from "@/pages/admin/Activity";
-import AdminEmbeds from "@/pages/admin/Embeds";
+const StaffDashboard = lazy(() => import("@/pages/staff/Dashboard"));
+const StaffLeads = lazy(() => import("@/pages/staff/Leads"));
+const StaffStudents = lazy(() => import("@/pages/staff/Students"));
+const StaffApplications = lazy(() => import("@/pages/staff/Applications"));
+const StaffFinance = lazy(() => import("@/pages/staff/Finance"));
+const StaffSettings = lazy(() => import("@/pages/staff/Settings"));
+const LeadDetail = lazy(() => import("@/pages/staff/LeadDetail"));
+const StudentDetail = lazy(() => import("@/pages/staff/StudentDetail"));
+const ApplicationDetail = lazy(() => import("@/pages/staff/ApplicationDetail"));
+const StaffDocuments = lazy(() => import("@/pages/staff/Documents"));
+const StaffCourseFinder = lazy(() => import("@/pages/staff/CourseFinder"));
+const StaffAgents = lazy(() => import("@/pages/staff/Agents"));
+const StaffMessages = lazy(() => import("@/pages/staff/Messages"));
 
-// Student
-import StudentDashboard from "@/pages/student/Dashboard";
-import StudentApplications from "@/pages/student/Applications";
-import StudentAccount from "@/pages/student/Account";
+const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
+const AdminUsers = lazy(() => import("@/pages/admin/Users"));
+const AdminCatalog = lazy(() => import("@/pages/admin/Catalog"));
+const AdminAuditLog = lazy(() => import("@/pages/admin/AuditLog"));
+const AdminActivity = lazy(() => import("@/pages/admin/Activity"));
+const AdminEmbeds = lazy(() => import("@/pages/admin/Embeds"));
 
-// Agent
-import AgentDashboard from "@/pages/agent/Dashboard";
-import AgentApps from "@/pages/agent/AgentApps";
-import AgentLeads from "@/pages/agent/Leads";
-import AgentStudents from "@/pages/agent/Students";
-import AgentCommissions from "@/pages/agent/Commissions";
-import AgentAccount from "@/pages/agent/Account";
-import AgentSubAgents from "@/pages/agent/SubAgents";
+const StudentDashboard = lazy(() => import("@/pages/student/Dashboard"));
+const StudentApplications = lazy(() => import("@/pages/student/Applications"));
+const StudentAccount = lazy(() => import("@/pages/student/Account"));
+
+const AgentDashboard = lazy(() => import("@/pages/agent/Dashboard"));
+const AgentApps = lazy(() => import("@/pages/agent/AgentApps"));
+const AgentLeads = lazy(() => import("@/pages/agent/Leads"));
+const AgentStudents = lazy(() => import("@/pages/agent/Students"));
+const AgentCommissions = lazy(() => import("@/pages/agent/Commissions"));
+const AgentAccount = lazy(() => import("@/pages/agent/Account"));
+const AgentSubAgents = lazy(() => import("@/pages/agent/SubAgents"));
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -69,122 +65,128 @@ const queryClient = new QueryClient({
   },
 });
 
+function PageFallback() {
+  return <DashboardSkeleton />;
+}
+
 function Router() {
   return (
-    <Switch>
-      {/* Public Pages */}
-      <Route path="/" component={Home} />
-      <Route path="/about" component={About} />
-      <Route path="/programs" component={Programs} />
-      <Route path="/blog" component={Blog} />
-      <Route path="/contact" component={Contact} />
+    <Suspense fallback={<PageFallback />}>
+      <Switch>
+        {/* Public Pages */}
+        <Route path="/" component={Home} />
+        <Route path="/about" component={About} />
+        <Route path="/programs" component={Programs} />
+        <Route path="/blog" component={Blog} />
+        <Route path="/contact" component={Contact} />
 
-      {/* Auth */}
-      <Route path="/login" component={Login} />
+        {/* Auth */}
+        <Route path="/login" component={Login} />
 
-      {/* Admin Portal */}
-      <Route path="/admin">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminDashboard /></ProtectedRoute>
-      </Route>
-      <Route path="/admin/users">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
-      </Route>
-      <Route path="/admin/catalog">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
-      </Route>
-      <Route path="/admin/audit">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>
-      </Route>
-      <Route path="/admin/settings">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><StaffSettings /></ProtectedRoute>
-      </Route>
-      <Route path="/admin/activity">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity /></ProtectedRoute>
-      </Route>
-      <Route path="/admin/activity/:userId">
-        {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity userId={Number(params.userId)} /></ProtectedRoute>}
-      </Route>
-      <Route path="/admin/embeds">
-        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
-      </Route>
+        {/* Admin Portal */}
+        <Route path="/admin">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminDashboard /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/users">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/catalog">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/audit">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/settings">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><StaffSettings /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/activity">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/activity/:userId">
+          {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity userId={Number(params.userId)} /></ProtectedRoute>}
+        </Route>
+        <Route path="/admin/embeds">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
+        </Route>
 
-      {/* Staff / Consultant Portal */}
-      <Route path="/staff">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDashboard /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/leads">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffLeads /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/leads/:id">
-        {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><LeadDetail id={Number(params.id)} /></ProtectedRoute>}
-      </Route>
-      <Route path="/staff/students">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffStudents /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/students/:id">
-        {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><StudentDetail id={Number(params.id)} /></ProtectedRoute>}
-      </Route>
-      <Route path="/staff/applications">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffApplications /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/applications/:id">
-        {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><ApplicationDetail id={Number(params.id)} /></ProtectedRoute>}
-      </Route>
-      <Route path="/staff/documents">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDocuments /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/course-finder">
-        <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]}><StaffCourseFinder /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/agents">
-        <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/messages">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffMessages /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/finance">
-        <ProtectedRoute allowedRoles={["super_admin", "admin", "accountant"]}><StaffFinance /></ProtectedRoute>
-      </Route>
-      <Route path="/staff/settings">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffSettings /></ProtectedRoute>
-      </Route>
+        {/* Staff / Consultant Portal */}
+        <Route path="/staff">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDashboard /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/leads">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffLeads /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/leads/:id">
+          {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><LeadDetail id={Number(params.id)} /></ProtectedRoute>}
+        </Route>
+        <Route path="/staff/students">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffStudents /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/students/:id">
+          {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><StudentDetail id={Number(params.id)} /></ProtectedRoute>}
+        </Route>
+        <Route path="/staff/applications">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffApplications /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/applications/:id">
+          {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><ApplicationDetail id={Number(params.id)} /></ProtectedRoute>}
+        </Route>
+        <Route path="/staff/documents">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDocuments /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/course-finder">
+          <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]}><StaffCourseFinder /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/agents">
+          <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/messages">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffMessages /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/finance">
+          <ProtectedRoute allowedRoles={["super_admin", "admin", "accountant"]}><StaffFinance /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/settings">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffSettings /></ProtectedRoute>
+        </Route>
 
-      {/* Student Portal */}
-      <Route path="/student">
-        <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentDashboard /></ProtectedRoute>
-      </Route>
-      <Route path="/student/applications">
-        <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentApplications /></ProtectedRoute>
-      </Route>
-      <Route path="/student/account">
-        <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentAccount /></ProtectedRoute>
-      </Route>
+        {/* Student Portal */}
+        <Route path="/student">
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentDashboard /></ProtectedRoute>
+        </Route>
+        <Route path="/student/applications">
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentApplications /></ProtectedRoute>
+        </Route>
+        <Route path="/student/account">
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><StudentAccount /></ProtectedRoute>
+        </Route>
 
-      {/* Agent Portal */}
-      <Route path="/agent">
-        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentDashboard /></ProtectedRoute>
-      </Route>
-      <Route path="/agent/leads">
-        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentLeads /></ProtectedRoute>
-      </Route>
-      <Route path="/agent/students">
-        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentStudents /></ProtectedRoute>
-      </Route>
-      <Route path="/agent/applications">
-        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApps /></ProtectedRoute>
-      </Route>
-      <Route path="/agent/commissions">
-        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>
-      </Route>
-      <Route path="/agent/account">
-        <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentAccount /></ProtectedRoute>
-      </Route>
-      <Route path="/agent/sub-agents">
-        <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
-      </Route>
+        {/* Agent Portal */}
+        <Route path="/agent">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentDashboard /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/leads">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentLeads /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/students">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentStudents /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/applications">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApps /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/commissions">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/account">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentAccount /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/sub-agents">
+          <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
+        </Route>
 
-      <Route component={NotFound} />
-    </Switch>
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

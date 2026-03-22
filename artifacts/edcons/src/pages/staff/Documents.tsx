@@ -294,7 +294,7 @@ export default function DocumentsPage() {
                         <div className="flex items-center gap-1">
                           {doc.fileUrl && (
                             <Button variant="ghost" size="icon" asChild>
-                              <a href={doc.fileUrl} target="_blank" rel="noreferrer">
+                              <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
                                 <ExternalLink className="w-4 h-4" />
                               </a>
                             </Button>

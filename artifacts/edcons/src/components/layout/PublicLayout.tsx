@@ -43,7 +43,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             )}
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8 font-medium text-sm text-muted-foreground">
+          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8 font-medium text-sm text-muted-foreground">
             <Link href="/" className="hover:text-primary transition-colors">{t('nav.home')}</Link>
             <Link href="/about" className="hover:text-primary transition-colors">{t('nav.about')}</Link>
             <Link href="/programs" className="hover:text-primary transition-colors">{t('nav.programs')}</Link>
@@ -68,7 +68,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               <Link href="/login">{t('nav.login')}</Link>
             </Button>
             
-            <Button variant="ghost" size="icon" className="md:hidden">
+            <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
               <Menu className="w-6 h-6" />
             </Button>
           </div>

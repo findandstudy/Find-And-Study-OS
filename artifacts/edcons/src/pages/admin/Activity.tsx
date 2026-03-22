@@ -218,7 +218,7 @@ function OverviewPage() {
                   onClick={() => setLocation(`/admin/activity/${p.userId}`)}>
                   <div className="relative">
                     {p.avatarUrl ? (
-                      <img src={p.avatarUrl} className="w-8 h-8 rounded-full object-cover" />
+                      <img src={p.avatarUrl} alt={`${p.firstName || ''} ${p.lastName || ''}`.trim() || 'User avatar'} className="w-8 h-8 rounded-full object-cover" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center text-xs font-bold">
                         {(p.firstName?.[0] || "")}{(p.lastName?.[0] || "")}

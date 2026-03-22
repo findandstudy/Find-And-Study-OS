@@ -26,6 +26,8 @@ if (!basePath) {
   );
 }
 
+const isProd = process.env.NODE_ENV === "production";
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -64,6 +66,24 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    sourcemap: !isProd,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+
+          if (id.includes("jspdf") || id.includes("xlsx")) {
+            return "vendor-export";
+          }
+          if (id.includes("recharts") || id.includes("d3-")) {
+            return "vendor-charts";
+          }
+          if (id.includes("framer-motion")) {
+            return "vendor-motion";
+          }
+        },
+      },
+    },
   },
   server: {
     port,
