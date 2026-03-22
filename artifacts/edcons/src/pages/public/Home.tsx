@@ -46,7 +46,7 @@ export default function Home() {
             
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" className="rounded-full px-8 h-14 text-base shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" asChild>
-                <Link href="/contact">
+                <Link href="/programs">
                   {t('hero.cta')} <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
