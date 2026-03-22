@@ -137,7 +137,7 @@ function Router() {
         <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]}><StaffCourseFinder /></ProtectedRoute>
       </Route>
       <Route path="/staff/agents">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffAgents /></ProtectedRoute>
+        <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
       </Route>
       <Route path="/staff/messages">
         <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffMessages /></ProtectedRoute>

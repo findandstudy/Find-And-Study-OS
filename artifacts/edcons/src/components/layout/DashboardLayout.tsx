@@ -108,7 +108,6 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
       { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
       { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
       { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
-      { title: "Agents", icon: Handshake, url: '/staff/agents' },
     ];
     if (showFinance) workItems.push({ title: "Finance", icon: Briefcase, url: '/staff/finance' });
     return {
