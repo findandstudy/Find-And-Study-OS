@@ -1,5 +1,5 @@
 import { ReactNode, useState, useRef, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n/in
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang, localePath, isRTL } = useI18n();
   const { settings, resolvedTheme } = useTheme();
+  const [, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
@@ -49,7 +50,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     const currentPath = window.location.pathname;
     const stripped = currentPath.replace(/^\/[a-z]{2}(\/|$)/, "/") || "/";
     const newPath = `/${newLang}${stripped === "/" ? "" : stripped}`;
-    window.location.href = `${BASE_URL}${newPath}`;
+    setLocation(newPath, { replace: true });
   }
 
   return (
