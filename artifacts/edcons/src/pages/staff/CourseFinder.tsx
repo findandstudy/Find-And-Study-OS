@@ -134,6 +134,7 @@ export default function CourseFinder() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
+  const canUsePdfMarkup = user && ["super_admin", "admin", "manager", "agent", "sub_agent"].includes(user.role);
   const canExportExcel = user && ["super_admin", "admin"].includes(user.role);
 
   const { data: filterOptions } = useQuery<FilterOptions>({
@@ -474,7 +475,7 @@ export default function CourseFinder() {
                   </Button>
                   {selectedIds.size > 0 && (
                     <>
-                      {isAgent && (
+                      {canUsePdfMarkup && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -642,7 +643,7 @@ export default function CourseFinder() {
         onClose={() => setApplyProgram(null)}
       />
 
-      {isAgent && (
+      {canUsePdfMarkup && (
         <PdfMarkupModal
           open={markupModalOpen}
           onOpenChange={setMarkupModalOpen}
