@@ -199,10 +199,17 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
 
   let resolvedStudentId = studentId;
   if (isStudentRole) {
-    const [myStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, req.user!.id));
+    let [myStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, req.user!.id));
     if (!myStudent) {
-      res.status(404).json({ error: "No student record linked to your account" });
-      return;
+      const [me] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+      if (!me) { res.status(404).json({ error: "User not found" }); return; }
+      [myStudent] = await db.insert(studentsTable).values({
+        userId: me.id,
+        firstName: me.firstName || "",
+        lastName: me.lastName || "",
+        email: me.email || "",
+        phone: me.phone || null,
+      }).returning();
     }
     resolvedStudentId = myStudent.id;
   }
