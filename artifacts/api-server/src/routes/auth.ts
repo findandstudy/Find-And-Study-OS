@@ -105,12 +105,8 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
 
-  if (!user.isActive) {
-    if (!user.emailVerified) {
-      res.status(403).json({ error: "Please verify your email address to activate your account. Check your inbox for the verification link." });
-    } else {
-      res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
-    }
+  if (!user.isActive && user.emailVerified) {
+    res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
     return;
   }
 
@@ -317,23 +313,26 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
   }
 
   const hash = await bcrypt.hash(password, 10);
-  const updates: Record<string, any> = {
-    passwordHash: hash,
-    passwordResetToken: null,
-    passwordResetExpires: null,
-  };
-  if (user.emailVerified) {
-    updates.isActive = true;
-  }
   await db
     .update(usersTable)
-    .set(updates)
+    .set({
+      passwordHash: hash,
+      passwordResetToken: null,
+      passwordResetExpires: null,
+      ...(user.emailVerified ? { isActive: true } : {}),
+    })
     .where(eq(usersTable.id, user.id));
 
   res.json({ success: true, message: user.emailVerified ? "Password has been set. You can now log in." : "Password has been set. Please verify your email to activate your account." });
 });
 
 router.get("/auth/verify-email-token/:token", async (req: Request, res: Response) => {
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`verify-token:${ip}`, MAX_VERIFY_ATTEMPTS)) {
+    res.redirect("/login?verifyError=invalid");
+    return;
+  }
+
   const { token } = req.params;
   if (!token) {
     res.status(400).json({ error: "Token is required" });
@@ -350,16 +349,13 @@ router.get("/auth/verify-email-token/:token", async (req: Request, res: Response
     return;
   }
 
-  const verifyUpdates: Record<string, any> = {
-    emailVerified: true,
-    emailVerificationToken: null,
-  };
-  if (user.passwordHash) {
-    verifyUpdates.isActive = true;
-  }
   await db
     .update(usersTable)
-    .set(verifyUpdates)
+    .set({
+      emailVerified: true,
+      emailVerificationToken: null,
+      ...(user.passwordHash ? { isActive: true } : {}),
+    })
     .where(eq(usersTable.id, user.id));
 
   res.redirect("/login?verified=true");

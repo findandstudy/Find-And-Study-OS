@@ -63,15 +63,11 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     : "http://localhost:5000";
   const loginUrl = `${baseUrl}/login`;
 
-  let accountCreated = false;
-  let accountLinked = false;
-
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
     if (existingUser) {
       await db.update(leadsTable).set({ convertedStudentId: existingUser.id }).where(eq(leadsTable.id, lead.id));
-      accountLinked = true;
 
       const emailContent = buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
@@ -100,7 +96,6 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }).returning();
 
       await db.update(leadsTable).set({ convertedStudentId: newUser.id }).where(eq(leadsTable.id, lead.id));
-      accountCreated = true;
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
@@ -122,7 +117,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     console.error("[AUTO-ACCOUNT] Error during auto account creation:", err);
   }
 
-  res.status(201).json({ success: true, leadId: lead.id, accountCreated, accountLinked });
+  res.status(201).json({ success: true, leadId: lead.id });
 });
 
 const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 
