@@ -52,7 +52,7 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
       { key: "username", label: "Username", type: "text", placeholder: "your@email.com", required: true },
       { key: "password", label: "Password", type: "password", placeholder: "App password or SMTP password", required: true },
       { key: "fromEmail", label: "From Email", type: "email", placeholder: "noreply@yourcompany.com" },
-      { key: "fromName", label: "From Name", type: "text", placeholder: "EdCons OS" },
+      { key: "fromName", label: "From Name", type: "text", placeholder: "Find And Study" },
     ],
   },
   {

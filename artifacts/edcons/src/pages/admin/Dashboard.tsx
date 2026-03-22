@@ -43,7 +43,7 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Admin Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Full operational overview — EduCons OS</p>
+            <p className="text-muted-foreground mt-1">Full operational overview — Find And Study OS</p>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/20 px-4 py-2 text-sm font-semibold">
             <Shield className="w-4 h-4 mr-2" /> Admin Access
