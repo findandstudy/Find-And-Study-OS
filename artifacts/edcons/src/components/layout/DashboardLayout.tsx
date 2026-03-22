@@ -197,6 +197,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { t } = useI18n();
   useSeo({ title: "Portal", noindex: true });
+  const { season, setSeason } = useSeason();
+  const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
+  const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent");
+
+  const { data: agentProfile } = useQuery({
+    queryKey: ["agent-me"],
+    enabled: isAgentRole,
+    queryFn: () => customFetch<any>("/api/agents/me"),
+    staleTime: 5 * 60 * 1000,
+  });
 
   if (isLoading || !user) {
     return (
@@ -219,17 +229,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   });
   const roleBadgeColor = ROLE_COLORS[user.role] || "bg-secondary text-muted-foreground";
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
-  const { season, setSeason } = useSeason();
-  const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isOperationalRole = ["super_admin","admin","manager","staff","consultant","accountant","editor","agent","sub_agent"].includes(user.role);
-  const isAgentRole = user.role === "agent" || user.role === "sub_agent";
-
-  const { data: agentProfile } = useQuery({
-    queryKey: ["agent-me"],
-    enabled: isAgentRole,
-    queryFn: () => customFetch<any>("/api/agents/me"),
-    staleTime: 5 * 60 * 1000,
-  });
 
   const systemLogo = resolvedTheme === "dark" && themeSettings.logoDarkUrl
     ? themeSettings.logoDarkUrl
