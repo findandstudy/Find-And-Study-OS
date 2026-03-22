@@ -28,16 +28,6 @@ async function apiDelete(url: string) {
   await fetch(url, { method: "DELETE", credentials: "include" });
 }
 
-function downloadCsv(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
 async function exportToExcel(rows: Record<string, any>[], sheetName: string, filename: string) {
   const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -46,14 +36,22 @@ async function exportToExcel(rows: Record<string, any>[], sheetName: string, fil
   XLSX.writeFile(wb, filename);
 }
 
-function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const vals = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ""));
-    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? ""]));
-  });
+async function downloadExcelTemplate(templateRows: Record<string, any>[], sheetName: string, filename: string) {
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.json_to_sheet(templateRows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+async function parseExcel(file: File): Promise<Record<string, string>[]> {
+  const XLSX = await import("xlsx");
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+  return rows.map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim(), String(v).trim()])));
 }
 
 function useDebounce<T>(value: T, delay = 300): T {
@@ -86,9 +84,9 @@ type Program = { id: number; universityId: number; name: string; degree?: string
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
-function BulkImportModal({ open, onClose, title, template, headers, onImport }: {
+function BulkImportModal({ open, onClose, title, templateRows, headers, onImport }: {
   open: boolean; onClose: () => void; title: string;
-  template: string; headers: string; onImport: (rows: Record<string, string>[]) => Promise<{ inserted: number; skipped: number }>;
+  templateRows: Record<string, any>[]; headers: string; onImport: (rows: Record<string, string>[]) => Promise<{ inserted: number; skipped: number }>;
 }) {
   const [result, setResult] = useState<{ inserted: number; skipped: number } | null>(null);
   const [error, setError] = useState("");
@@ -98,15 +96,14 @@ function BulkImportModal({ open, onClose, title, template, headers, onImport }: 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    const rows = parseCsv(text);
-    if (rows.length === 0) { setError("CSV is empty or has invalid format"); return; }
-    setLoading(true);
-    setError("");
     try {
+      const rows = await parseExcel(file);
+      if (rows.length === 0) { setError("File is empty or has invalid format"); return; }
+      setLoading(true);
+      setError("");
       const res = await onImport(rows);
       setResult(res);
-    } catch { setError("Import failed. Please check the format template."); }
+    } catch { setError("Import failed. Please check the format and try again."); }
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
@@ -115,18 +112,18 @@ function BulkImportModal({ open, onClose, title, template, headers, onImport }: 
   return (
     <Dialog open={open} onOpenChange={reset}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Bulk Import via CSV — {title}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Bulk Import — {title}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-            <p className="font-medium mb-1">CSV Column Headers:</p>
+            <p className="font-medium mb-1">Excel Column Headers:</p>
             <code className="text-xs text-muted-foreground break-all">{headers}</code>
           </div>
-          <Button variant="outline" size="sm" onClick={() => downloadCsv(template, `${title.toLowerCase().replace(/\s/g, "_")}_template.csv`)}>
-            <Download className="h-4 w-4 mr-2" /> Download Template (.csv)
+          <Button variant="outline" size="sm" onClick={() => downloadExcelTemplate(templateRows, title, `${title.toLowerCase().replace(/\s/g, "_")}_template.xlsx`)}>
+            <Download className="h-4 w-4 mr-2" /> Download Template (.xlsx)
           </Button>
           <div>
-            <Label htmlFor="csvfile">Select CSV File</Label>
-            <Input id="csvfile" ref={fileRef} type="file" accept=".csv,text/csv" className="mt-1" onChange={handleFile} disabled={loading} />
+            <Label htmlFor="xlsxfile">Select Excel File (.xlsx, .xls)</Label>
+            <Input id="xlsxfile" ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="mt-1" onChange={handleFile} disabled={loading} />
           </div>
           {loading && <p className="text-sm text-muted-foreground animate-pulse">Processing…</p>}
           {error && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{error}</p>}
@@ -254,7 +251,12 @@ function CountriesTab() {
     return res;
   };
 
-  const template = "name,code,flagEmoji\nTürkiye,TR,🇹🇷\nUnited Kingdom,GB,🇬🇧\nGermany,DE,🇩🇪\nFrance,FR,🇫🇷";
+  const templateRows = [
+    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷" },
+    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧" },
+    { name: "Germany", code: "DE", flagEmoji: "🇩🇪" },
+    { name: "France", code: "FR", flagEmoji: "🇫🇷" },
+  ];
   const headers = "name, code, flagEmoji (optional)";
 
   return (
@@ -269,7 +271,17 @@ function CountriesTab() {
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
+        <Button variant="outline" onClick={async () => {
+          try {
+            const all = await api("/api/countries?limit=5000");
+            const rows = (all?.data ?? all ?? []).map((c: Country) => ({
+              Name: c.name, "ISO Code": c.code, "Flag Emoji": c.flagEmoji ?? "",
+              Status: c.isActive ? "Active" : "Inactive",
+            }));
+            await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
+          } catch {}
+        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Add Country</Button>
       </div>
 
@@ -359,7 +371,7 @@ function CountriesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -448,7 +460,12 @@ function CitiesTab() {
     return res;
   };
 
-  const template = "name,countryCode\nİstanbul,TR\nAnkara,TR\nLondon,GB\nBerlin,DE";
+  const templateRows = [
+    { name: "İstanbul", countryCode: "TR" },
+    { name: "Ankara", countryCode: "TR" },
+    { name: "London", countryCode: "GB" },
+    { name: "Berlin", countryCode: "DE" },
+  ];
   const headers = "name, countryCode (ISO 2-letter country code)";
 
   return (
@@ -470,7 +487,18 @@ function CitiesTab() {
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
+        <Button variant="outline" onClick={async () => {
+          try {
+            const allCities = await api("/api/cities?limit=5000");
+            const cMap = Object.fromEntries(countries.map(c => [c.id, c]));
+            const rows = (allCities?.data ?? allCities ?? []).map((c: City) => ({
+              Name: c.name, Country: cMap[c.countryId]?.name ?? "", "Country Code": cMap[c.countryId]?.code ?? "",
+              Status: c.isActive ? "Active" : "Inactive",
+            }));
+            await exportToExcel(rows, "Cities", `cities-${new Date().toISOString().slice(0, 10)}.xlsx`);
+          } catch {}
+        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Add City</Button>
       </div>
 
@@ -562,7 +590,7 @@ function CitiesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -677,7 +705,11 @@ function UniversitiesTab() {
 
   const setF = (updates: Partial<University>) => setForm(f => ({ ...f, ...updates } as Partial<University>));
 
-  const template = `name,country,city,website,description,ranking\nIstanbul University,Turkey,Istanbul,https://www.istanbul.edu.tr,Leading state university,351\nMiddle East Technical University,Turkey,Ankara,https://www.metu.edu.tr,Top technical university,601\nKing's College London,United Kingdom,London,https://www.kcl.ac.uk,Russell Group university,35`;
+  const templateRows = [
+    { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351 },
+    { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601 },
+    { name: "King's College London", country: "United Kingdom", city: "London", website: "https://www.kcl.ac.uk", description: "Russell Group university", ranking: 35 },
+  ];
   const headers = "name*, country*, city, website, description, ranking";
 
   return (
@@ -692,17 +724,22 @@ function UniversitiesTab() {
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
         <Button variant="outline" onClick={async () => {
           try {
             const all = await api("/api/universities?limit=5000");
             const rows = (all?.data ?? []).map((u: University) => ({
               Name: u.name, Country: u.country, City: u.city ?? "", Website: u.website ?? "",
-              Type: u.universityType ?? "", Status: u.status,
+              Type: u.universityType ?? "", "Tax Type": u.taxType ?? "", "Tax %": u.taxPercent ?? "",
+              Status: u.status, Active: u.isActive ? "Yes" : "No",
               "QS Ranking": u.qsRanking ?? "", "Times Ranking": u.timesRanking ?? "",
-              Address: u.address ?? "", "Contact Person": u.contactPersonName ?? "",
-              "Contact Phone": u.contactPersonPhone ?? "", "Contact Email": u.contactPersonEmail ?? "",
-              Description: u.description ?? "",
+              "Shanghai Ranking": u.shanghaiRanking ?? "", "CWTS Leiden Ranking": u.cwtsLeidenRanking ?? "",
+              Address: u.address ?? "", "Logo URL": u.logoUrl ?? "",
+              "Online Payment URL": u.onlinePaymentUrl ?? "", "CRICOS Link": u.cricosLink ?? "",
+              "Documents Link": u.documentsLink ?? "", "Current Fee List Link": u.currentFeeListLink ?? "",
+              "Initial Deposit Options": u.initialDepositOptions ?? "", "Admission Process": u.admissionProcess ?? "",
+              "Contact Person": u.contactPersonName ?? "", "Contact Phone": u.contactPersonPhone ?? "",
+              "Contact Email": u.contactPersonEmail ?? "", Description: u.description ?? "",
             }));
             await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
           } catch {}
@@ -1033,7 +1070,7 @@ function UniversitiesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
@@ -1128,7 +1165,10 @@ function ProgramsTab() {
     return res;
   };
 
-  const template = `universityName,name,degree,field,language,duration,tuitionFee,currency,scholarship,commissionRate,applicationFee,advancedFee,depositFee,serviceFeeAmount,discountedFee,languageFee\nIstanbul University,Computer Engineering,BSc,Engineering,English,4 years,5000,USD,0,10,200,0,500,300,4500,0\nIstanbul University,Business Administration,MBA,Business,English,2 years,8000,USD,2000,12,150,0,500,300,7000,0`;
+  const templateRows = [
+    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0 },
+    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0 },
+  ];
   const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee";
 
   return (
@@ -1150,19 +1190,20 @@ function ProgramsTab() {
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import CSV</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
         <Button variant="outline" onClick={async () => {
           try {
             const all = await api(`/api/programs?limit=5000${filterUni !== "all" ? `&universityId=${filterUni}` : ""}`);
             const rows = (all?.data ?? []).map((p: Program) => ({
               Program: p.name, University: uniMap[p.universityId]?.name ?? "",
               Degree: p.degree ?? "", Field: p.field ?? "", Language: p.language ?? "",
-              Duration: p.duration ?? "", "Tuition Fee": p.tuitionFee ?? "",
-              Currency: p.currency ?? "", "Commission %": p.commissionRate ?? "",
-              "Scholarship %": p.scholarship ?? "", Intakes: p.intakes ?? "",
-              "Application Fee": p.applicationFee ?? "", "Advance Fee": p.advancedFee ?? "",
-              "Deposit Fee": p.depositFee ?? "", "Service Fee": p.serviceFeeAmount ?? "",
-              "Discounted Fee": p.discountedFee ?? "", "Language Fee": p.languageFee ?? "",
+              Duration: p.duration ?? "", "Fee Type": p.feeType ?? "",
+              "Tuition Fee": p.tuitionFee ?? "", Currency: p.currency ?? "",
+              "Commission %": p.commissionRate ?? "", "Scholarship": p.scholarship ?? "",
+              Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "",
+              "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
+              "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
+              "Language Fee": p.languageFee ?? "", Active: p.isActive ? "Yes" : "No",
               Requirements: p.requirements ?? "",
             }));
             await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -1379,7 +1420,7 @@ function ProgramsTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" template={template} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
   );
 }
