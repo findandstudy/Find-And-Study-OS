@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
@@ -11,9 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { Textarea } from "@/components/ui/textarea";
 import {
   User, Globe, Shield, Save, Check, GraduationCap,
   Loader2, FileText, MapPin, Phone, Mail, Calendar, Camera,
+  BookOpen, Languages, Award,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -37,6 +39,16 @@ export default function StudentAccount() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const emptyStudentForm = {
+    nationality: "", dateOfBirth: "",
+    passportNumber: "", passportIssueDate: "", passportExpiry: "",
+    motherName: "", fatherName: "", address: "",
+    highSchool: "", universityBachelor: "", universityMaster: "",
+    graduationYear: "", gpa: "", languageScore: "",
+  };
+  const [studentForm, setStudentForm] = useState(emptyStudentForm);
+  const [savingStudent, setSavingStudent] = useState(false);
+
   useEffect(() => {
     if (user) {
       setForm({
@@ -58,6 +70,27 @@ export default function StudentAccount() {
       }
     },
   });
+
+  useEffect(() => {
+    if (studentProfile) {
+      setStudentForm({
+        nationality: studentProfile.nationality || "",
+        dateOfBirth: studentProfile.dateOfBirth || "",
+        passportNumber: studentProfile.passportNumber || "",
+        passportIssueDate: studentProfile.passportIssueDate || "",
+        passportExpiry: studentProfile.passportExpiry || "",
+        motherName: studentProfile.motherName || "",
+        fatherName: studentProfile.fatherName || "",
+        address: studentProfile.address || "",
+        highSchool: studentProfile.highSchool || "",
+        universityBachelor: studentProfile.universityBachelor || "",
+        universityMaster: studentProfile.universityMaster || "",
+        graduationYear: studentProfile.graduationYear ? String(studentProfile.graduationYear) : "",
+        gpa: studentProfile.gpa || "",
+        languageScore: studentProfile.languageScore || "",
+      });
+    }
+  }, [studentProfile]);
 
   async function handleSaveProfile() {
     if (!user) return;
@@ -91,6 +124,27 @@ export default function StudentAccount() {
         body: JSON.stringify({ language: code }),
       });
     } catch {}
+  }
+
+  async function handleSaveStudentInfo() {
+    if (!user) return;
+    setSavingStudent(true);
+    try {
+      await customFetch("/api/students/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...studentForm,
+          graduationYear: studentForm.graduationYear ? parseInt(studentForm.graduationYear, 10) : null,
+        }),
+      });
+      await qc.invalidateQueries({ queryKey: ["student-me"] });
+      toast({ title: "Student info updated", description: "Your student record has been saved." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingStudent(false);
+    }
   }
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -220,35 +274,98 @@ export default function StudentAccount() {
                 <div className="space-y-3">
                   {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-secondary animate-pulse rounded-xl" />)}
                 </div>
-              ) : !studentProfile ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  <GraduationCap className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-                  <p className="font-medium">No student record yet</p>
-                  <p className="text-sm mt-1">Your advisor will set up your student profile</p>
-                </div>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {[
-                    { label: "Nationality",        icon: MapPin,    value: studentProfile.nationality },
-                    { label: "Date of Birth",       icon: Calendar,  value: studentProfile.dateOfBirth ? new Date(studentProfile.dateOfBirth).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }) : null },
-                    { label: "Passport Number",     icon: FileText,  value: studentProfile.passportNumber },
-                    { label: "Emergency Contact",   icon: Phone,     value: studentProfile.emergencyContact },
-                    { label: "Address",             icon: MapPin,    value: studentProfile.address, fullWidth: true },
-                  ].map((f, i) => (
-                    <div key={i} className={`space-y-1.5 ${(f as any).fullWidth ? "sm:col-span-2" : ""}`}>
-                      <Label className="flex items-center gap-1.5 text-muted-foreground">
-                        <f.icon className="w-3.5 h-3.5" /> {f.label}
-                      </Label>
-                      <div className="px-4 py-3 rounded-xl bg-secondary/40 text-sm text-foreground border border-border/40">
-                        {f.value || <span className="text-muted-foreground italic">Not provided</span>}
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" /> Personal Details
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Nationality</Label>
+                        <Input value={studentForm.nationality} onChange={e => setStudentForm(f => ({ ...f, nationality: e.target.value }))} placeholder="e.g. Turkish" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Date of Birth</Label>
+                        <Input type="date" value={studentForm.dateOfBirth} onChange={e => setStudentForm(f => ({ ...f, dateOfBirth: e.target.value }))} className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Mother's Name</Label>
+                        <Input value={studentForm.motherName} onChange={e => setStudentForm(f => ({ ...f, motherName: e.target.value }))} placeholder="Mother's full name" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Father's Name</Label>
+                        <Input value={studentForm.fatherName} onChange={e => setStudentForm(f => ({ ...f, fatherName: e.target.value }))} placeholder="Father's full name" className="rounded-xl" />
+                      </div>
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Address</Label>
+                        <Textarea value={studentForm.address} onChange={e => setStudentForm(f => ({ ...f, address: e.target.value }))} placeholder="Your full address" className="rounded-xl resize-none" rows={2} />
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  <hr className="border-border/40" />
+
+                  <div>
+                    <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" /> Passport Information
+                    </p>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Passport Number</Label>
+                        <Input value={studentForm.passportNumber} onChange={e => setStudentForm(f => ({ ...f, passportNumber: e.target.value }))} placeholder="Passport number" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Issue Date</Label>
+                        <Input type="date" value={studentForm.passportIssueDate} onChange={e => setStudentForm(f => ({ ...f, passportIssueDate: e.target.value }))} className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Expiry Date</Label>
+                        <Input type="date" value={studentForm.passportExpiry} onChange={e => setStudentForm(f => ({ ...f, passportExpiry: e.target.value }))} className="rounded-xl" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="border-border/40" />
+
+                  <div>
+                    <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5" /> Education
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>High School</Label>
+                        <Input value={studentForm.highSchool} onChange={e => setStudentForm(f => ({ ...f, highSchool: e.target.value }))} placeholder="High school name" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Graduation Year</Label>
+                        <Input type="number" value={studentForm.graduationYear} onChange={e => setStudentForm(f => ({ ...f, graduationYear: e.target.value }))} placeholder="e.g. 2024" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>University (Bachelor)</Label>
+                        <Input value={studentForm.universityBachelor} onChange={e => setStudentForm(f => ({ ...f, universityBachelor: e.target.value }))} placeholder="Bachelor's university (if any)" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>University (Master)</Label>
+                        <Input value={studentForm.universityMaster} onChange={e => setStudentForm(f => ({ ...f, universityMaster: e.target.value }))} placeholder="Master's university (if any)" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> GPA</Label>
+                        <Input value={studentForm.gpa} onChange={e => setStudentForm(f => ({ ...f, gpa: e.target.value }))} placeholder="e.g. 3.5/4.0" className="rounded-xl" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1.5"><Languages className="w-3.5 h-3.5" /> Language Score</Label>
+                        <Input value={studentForm.languageScore} onChange={e => setStudentForm(f => ({ ...f, languageScore: e.target.value }))} placeholder="e.g. IELTS 7.0, TOEFL 100" className="rounded-xl" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button onClick={handleSaveStudentInfo} disabled={savingStudent} className="rounded-xl gap-2 px-8">
+                    {savingStudent ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Save Student Info
+                  </Button>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-6 p-3 rounded-xl bg-secondary/40">
-                To update your student record details (passport, nationality, address), please contact your advisor.
-              </p>
             </Card>
           </TabsContent>
 

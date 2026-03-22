@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
@@ -23,6 +23,39 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   const [student] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
   if (!student) { res.status(404).json({ error: "Student profile not found" }); return; }
   res.json(student);
+});
+
+router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
+  const userId = req.user!.id;
+  const SELF_FIELDS = [
+    "firstName", "lastName", "phone", "nationality",
+    "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
+    "motherName", "fatherName", "address",
+    "highSchool", "universityBachelor", "universityMaster",
+    "graduationYear", "gpa", "languageScore",
+  ];
+  const data: Record<string, unknown> = {};
+  for (const k of SELF_FIELDS) {
+    if (req.body[k] !== undefined) data[k] = req.body[k];
+  }
+
+  const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
+  if (existing) {
+    const [updated] = await db.update(studentsTable).set(data).where(eq(studentsTable.id, existing.id)).returning();
+    res.json(updated);
+  } else {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    const [created] = await db.insert(studentsTable).values({
+      userId,
+      firstName: (data.firstName as string) || user.firstName || "",
+      lastName: (data.lastName as string) || user.lastName || "",
+      email: user.email || "",
+      ...data,
+    }).returning();
+    res.json(created);
+  }
 });
 
 router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> => {
@@ -254,12 +287,17 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const role = req.user!.role;
   const isStaff = (STAFF_ROLES as readonly string[]).includes(role);
   const isAgent = role === "agent" || role === "sub_agent";
-  if (!isStaff && !isAgent) { res.status(403).json({ error: "Forbidden" }); return; }
+  const isStudent = role === "student";
+  if (!isStaff && !isAgent && !isStudent) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Student not found" }); return; }
 
-  if (isAgent) {
+  if (isStudent) {
+    if (existing.userId !== req.user!.id) {
+      res.status(403).json({ error: "You can only edit your own record" }); return;
+    }
+  } else if (isAgent) {
     const visibleAgentIds = await getAgentVisibleIds(req.user!.id, role);
     if (visibleAgentIds.length === 0) { res.status(403).json({ error: "Agent profile not found" }); return; }
     if (!existing.agentId || !visibleAgentIds.includes(existing.agentId)) {
@@ -272,8 +310,17 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  const STUDENT_SELF_FIELDS = [
+    "firstName", "lastName", "phone", "nationality",
+    "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
+    "motherName", "fatherName", "address",
+    "highSchool", "universityBachelor", "universityMaster",
+    "graduationYear", "gpa", "languageScore", "photoUrl",
+  ];
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(role);
-  let allowedFields = isAgent
+  let allowedFields = isStudent
+    ? STUDENT_SELF_FIELDS
+    : isAgent
     ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId")
     : STUDENT_PATCH_FIELDS;
   if (!isAdmin && !isAgent) {
