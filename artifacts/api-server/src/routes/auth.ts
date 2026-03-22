@@ -105,9 +105,12 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
 
-  if (!user.isActive && user.emailVerified) {
-    res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
-    return;
+  if (!user.isActive) {
+    const isPublicApplyPendingVerification = user.createdFromSource === "public_apply" && !user.emailVerified && user.passwordHash;
+    if (!isPublicApplyPendingVerification) {
+      res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
+      return;
+    }
   }
 
   const sessionUser = buildSessionUser(user);

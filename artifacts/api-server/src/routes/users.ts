@@ -230,6 +230,7 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
       avatarUrl: targetUser.avatarUrl,
       language: targetUser.language,
       isActive: targetUser.isActive,
+      emailVerified: targetUser.emailVerified,
     },
     access_token: `impersonation-${Date.now()}`,
   };
