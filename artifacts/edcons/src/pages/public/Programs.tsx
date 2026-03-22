@@ -575,13 +575,13 @@ export default function Programs() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <div className="text-center mb-10">
               <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6 border border-primary/20">
-                <GraduationCap className="w-4 h-4" /> {t("programs.title")}
+                <GraduationCap className="w-4 h-4" /> {t("programs.badge")}
               </span>
               <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
-                {t("programs.heroTitle")}
+                {t("programs.title")} <span className="text-primary">{t("programs.titleHighlight")}</span>
               </h1>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                {t("programs.heroSubtitle")}
+                {t("programs.subtitle")}
               </p>
             </div>
           </motion.div>
@@ -740,10 +740,10 @@ export default function Programs() {
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
                 <Globe2 className="w-10 h-10 text-primary/40" />
               </div>
-              <h3 className="text-xl font-bold font-display text-foreground mb-2">No programs found</h3>
-              <p className="text-muted-foreground mb-6">Try adjusting your filters or search terms</p>
+              <h3 className="text-xl font-bold font-display text-foreground mb-2">{t("programs.noResults")}</h3>
+              <p className="text-muted-foreground mb-6">{t("programs.noResultsDesc")}</p>
               <Button variant="outline" onClick={clearAllFilters} className="rounded-full px-6">
-                <X className="w-4 h-4 mr-2" /> Clear All Filters
+                <X className="w-4 h-4 mr-2" /> {t("programs.clearFilters")}
               </Button>
             </motion.div>
           ) : (
