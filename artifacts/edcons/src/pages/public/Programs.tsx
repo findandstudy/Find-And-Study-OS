@@ -12,7 +12,7 @@ import { customFetch } from "@workspace/api-client-react";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
-  SlidersHorizontal, Building2, Award, Filter,
+  SlidersHorizontal, Building2, Award,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -592,7 +592,7 @@ export default function Programs() {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
                 <Input value={search} onChange={e => setSearch(e.target.value)}
                   placeholder={t("programs.searchPlaceholder")}
-                  className="pl-12 pr-4 h-13 text-base rounded-xl border-border/50 focus:border-primary bg-background/80 backdrop-blur-sm shadow-sm" />
+                  className="pl-12 pr-4 h-12 text-base rounded-xl border-border/50 focus:border-primary bg-background/80 backdrop-blur-sm shadow-sm" />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
