@@ -139,7 +139,7 @@ function serveStaticFrontend() {
     },
   }));
 
-  app.get("*", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.get("/{*splat}", (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path.startsWith("/api")) return next();
     const indexPath = path.join(distPath, "index.html");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
