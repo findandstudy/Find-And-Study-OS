@@ -67,7 +67,6 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
     if (existingUser) {
-      await db.update(leadsTable).set({ convertedStudentId: existingUser.id }).where(eq(leadsTable.id, lead.id));
 
       const emailContent = buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
@@ -95,7 +94,6 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         createdFromSource: "public_apply",
       }).returning();
 
-      await db.update(leadsTable).set({ convertedStudentId: newUser.id }).where(eq(leadsTable.id, lead.id));
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
@@ -113,11 +111,11 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
       console.log(`[AUTO-ACCOUNT] Created student account for ${normalizedEmail} (user #${newUser.id}) from public apply`);
     }
+    res.status(201).json({ success: true, leadId: lead.id });
   } catch (err) {
     console.error("[AUTO-ACCOUNT] Error during auto account creation:", err);
+    res.status(201).json({ success: true, leadId: lead.id, accountSetupPending: true });
   }
-
-  res.status(201).json({ success: true, leadId: lead.id });
 });
 
 const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 

@@ -45,12 +45,16 @@ export function buildWelcomeEmail(params: {
       <div style="text-align:center;margin:0 0 16px;">
         <a href="${setPasswordUrl}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Set Your Password</a>
       </div>
-      <div style="text-align:center;margin:0 0 24px;">
+      <div style="text-align:center;margin:0 0 16px;">
         <a href="${verifyEmailUrl}" style="display:inline-block;background:#10b981;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Verify Your Email</a>
+      </div>
+      <div style="text-align:center;margin:0 0 24px;">
+        <a href="${loginUrl}" style="display:inline-block;background:#374151;color:#fff;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;">Go to Login Page</a>
       </div>
       <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or copy these links into your browser:</p>
       <p style="margin:0 0 4px;color:#6b7280;font-size:12px;word-break:break-all;">Set Password: ${setPasswordUrl}</p>
-      <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;">Verify Email: ${verifyEmailUrl}</p>
+      <p style="margin:0 0 4px;color:#6b7280;font-size:12px;word-break:break-all;">Verify Email: ${verifyEmailUrl}</p>
+      <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;">Login: ${loginUrl}</p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
       <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
         The password setup link expires in 48 hours.<br/>
