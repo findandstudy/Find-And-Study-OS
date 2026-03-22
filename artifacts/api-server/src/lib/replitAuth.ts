@@ -16,6 +16,10 @@ export interface SessionUser {
   avatarUrl: string | null;
   language: string;
   isActive: boolean;
+  startDate?: string | null;
+  homeAddress?: string | null;
+  passportNumber?: string | null;
+  contractUrl?: string | null;
 }
 
 export interface SessionData {

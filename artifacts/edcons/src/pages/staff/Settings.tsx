@@ -205,7 +205,7 @@ export default function SettingsPage() {
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "" });
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -221,7 +221,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (user) {
       const parsed = parsePhoneCode((user as any).phone || "");
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "" });
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "", startDate: (user as any).startDate || "", homeAddress: (user as any).homeAddress || "", passportNumber: (user as any).passportNumber || "", contractUrl: (user as any).contractUrl || "" });
     }
   }, [user]);
 
@@ -277,6 +277,28 @@ export default function SettingsPage() {
     } finally { setAvatarUploading(false); }
   }
 
+  const contractInputRef = useRef<HTMLInputElement>(null);
+  const [contractUploading, setContractUploading] = useState(false);
+
+  async function handleContractUpload(file: File) {
+    setContractUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      const contractUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
+      setForm(f => ({ ...f, contractUrl }));
+      toast({ title: "Contract uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally { setContractUploading(false); }
+  }
+
   async function handleRemoveAvatar() {
     try {
       setForm(f => ({ ...f, avatarUrl: "" }));
@@ -297,7 +319,7 @@ export default function SettingsPage() {
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined }),
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined, startDate: form.startDate || null, homeAddress: form.homeAddress || null, passportNumber: form.passportNumber || null, contractUrl: form.contractUrl || null }),
       });
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated" });
@@ -422,6 +444,39 @@ export default function SettingsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
+            </div>
+          </FieldGroup>
+        </div>
+      </Card>
+      <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
+        <SectionHeader title="Work & Identity" description="Employment details, address, and identity documents." />
+        <div className="grid sm:grid-cols-2 gap-5">
+          <FieldGroup label="Start Date">
+            <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="rounded-xl" />
+          </FieldGroup>
+          <FieldGroup label="Passport Number">
+            <Input value={form.passportNumber} onChange={e => setForm(f => ({ ...f, passportNumber: e.target.value }))} placeholder="Enter passport number" className="rounded-xl" />
+          </FieldGroup>
+          <FieldGroup label="Home Address" className="sm:col-span-2">
+            <Input value={form.homeAddress} onChange={e => setForm(f => ({ ...f, homeAddress: e.target.value }))} placeholder="Enter your home address" className="rounded-xl" />
+          </FieldGroup>
+          <FieldGroup label="Employment Contract" className="sm:col-span-2">
+            <div className="flex items-center gap-3">
+              {form.contractUrl ? (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <a href={form.contractUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">View Contract</a>
+                  <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, contractUrl: "" }))}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No contract uploaded</p>
+              )}
+              <Button variant="outline" size="sm" onClick={() => contractInputRef.current?.click()} disabled={contractUploading}>
+                {contractUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+                {form.contractUrl ? "Replace" : "Upload"}
+              </Button>
+              <input ref={contractInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleContractUpload(f); e.target.value = ""; }} />
             </div>
           </FieldGroup>
         </div>

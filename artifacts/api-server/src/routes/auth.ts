@@ -54,6 +54,10 @@ function buildSessionUser(user: any): SessionUser {
     avatarUrl: user.avatarUrl,
     language: user.language,
     isActive: user.isActive,
+    startDate: user.startDate,
+    homeAddress: user.homeAddress,
+    passportNumber: user.passportNumber,
+    contractUrl: user.contractUrl,
   };
 }
 

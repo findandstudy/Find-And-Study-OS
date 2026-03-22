@@ -143,7 +143,7 @@ function Router() {
         <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffMessages /></ProtectedRoute>
       </Route>
       <Route path="/staff/finance">
-        <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffFinance /></ProtectedRoute>
+        <ProtectedRoute allowedRoles={["super_admin", "admin", "accountant"]}><StaffFinance /></ProtectedRoute>
       </Route>
       <Route path="/staff/settings">
         <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffSettings /></ProtectedRoute>

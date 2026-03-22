@@ -59,7 +59,20 @@ import { LogOut, ChevronUp, User } from "lucide-react";
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string };
 
 function getMenuForRole(role: string): { groups: { label: string; items: MenuItem[] }[] } {
+  const FINANCE_ROLES = ['super_admin', 'admin', 'accountant'];
+  const showFinance = FINANCE_ROLES.includes(role);
+
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
+    const opsItems: MenuItem[] = [
+      { title: "Leads", icon: Users, url: '/staff/leads' },
+      { title: "Students", icon: GraduationCap, url: '/staff/students' },
+      { title: "Applications", icon: FileText, url: '/staff/applications' },
+      { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
+      { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
+      { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
+      { title: "Agents", icon: Handshake, url: '/staff/agents' },
+    ];
+    if (showFinance) opsItems.push({ title: "Finance", icon: DollarSign, url: '/staff/finance' });
     return {
       groups: [
         {
@@ -70,16 +83,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
         },
         {
           label: "Operations",
-          items: [
-            { title: "Leads", icon: Users, url: '/staff/leads' },
-            { title: "Students", icon: GraduationCap, url: '/staff/students' },
-            { title: "Applications", icon: FileText, url: '/staff/applications' },
-            { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
-            { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
-            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
-            { title: "Agents", icon: Handshake, url: '/staff/agents' },
-            { title: "Finance", icon: DollarSign, url: '/staff/finance' },
-          ]
+          items: opsItems
         },
         {
           label: "Admin",
@@ -97,6 +101,16 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
   }
 
   if (role === 'staff' || role === 'consultant' || role === 'accountant' || role === 'editor') {
+    const workItems: MenuItem[] = [
+      { title: "Leads", icon: Users, url: '/staff/leads' },
+      { title: "Students", icon: GraduationCap, url: '/staff/students' },
+      { title: "Applications", icon: FileText, url: '/staff/applications' },
+      { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
+      { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
+      { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
+      { title: "Agents", icon: Handshake, url: '/staff/agents' },
+    ];
+    if (showFinance) workItems.push({ title: "Finance", icon: Briefcase, url: '/staff/finance' });
     return {
       groups: [
         {
@@ -107,16 +121,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
         },
         {
           label: "Work",
-          items: [
-            { title: "Leads", icon: Users, url: '/staff/leads' },
-            { title: "Students", icon: GraduationCap, url: '/staff/students' },
-            { title: "Applications", icon: FileText, url: '/staff/applications' },
-            { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
-            { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
-            { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
-            { title: "Agents", icon: Handshake, url: '/staff/agents' },
-            { title: "Finance", icon: Briefcase, url: '/staff/finance' },
-          ]
+          items: workItems
         },
         {
           label: "System",

@@ -15,6 +15,10 @@ export const usersTable = pgTable("users", {
   language: text("language").notNull().default("en"),
   isActive: boolean("is_active").notNull().default(true),
   emailVerified: boolean("email_verified").notNull().default(false),
+  startDate: text("start_date"),
+  homeAddress: text("home_address"),
+  passportNumber: text("passport_number"),
+  contractUrl: text("contract_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

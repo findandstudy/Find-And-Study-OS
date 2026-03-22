@@ -38,7 +38,7 @@ const COMMISSION_PATCH_FIELDS = [
   "confirmedAt", "offsetAmount", "studentId", "agentId", "applicationId", "notes",
 ];
 
-router.get("/commissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { agentId, status, season, search, page = "1", limit = "100", includeExcluded } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
@@ -127,7 +127,7 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
   res.status(201).json(commission);
 });
 
-router.get("/commissions/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [c] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, id));
@@ -196,7 +196,7 @@ const SERVICE_FEE_PATCH_FIELDS = [
   "studentId", "agentId", "applicationId", "notes",
 ];
 
-router.get("/service-fees", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { studentId, agentId, status, financeStatus, season, page = "1", limit = "100", includeExcluded } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
@@ -316,7 +316,7 @@ router.delete("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), a
 
 /* ─── FINANCIAL TRANSACTIONS (collections & agent payments) ── */
 
-router.get("/financial-transactions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { commissionId, type, page = "1", limit = "100" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
@@ -455,7 +455,7 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
 
 /* ─── UNIVERSITY BREAKDOWN ──────────────────────────────────── */
 
-router.get("/finance/university-breakdown", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { season } = req.query as Record<string, string>;
   const conditions = [sql`${commissionsTable.status} != 'excluded'`];
   if (season) conditions.push(eq(commissionsTable.season, season));
@@ -537,7 +537,7 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...STAFF_RO
 
 /* ─── FINANCE SUMMARY ────────────────────────────────────────── */
 
-router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { season } = req.query as Record<string, string>;
   const conditions = [sql`${commissionsTable.status} != 'excluded'`];
   const sfConditions = [sql`${serviceFeesTable.financeStatus} != 'excluded'`];
@@ -618,7 +618,7 @@ router.get("/finance/summary", requireAuth, requireRole(...STAFF_ROLES), async (
 
 /* ─── INVOICES (kept for backward compat) ────────────────────── */
 
-router.get("/invoices", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { studentId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));

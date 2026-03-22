@@ -8,7 +8,7 @@ import { createSession, SESSION_TTL, type SessionData } from "../lib/replitAuth"
 
 const router: IRouter = Router();
 
-const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "isActive", "avatarUrl"];
+const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "isActive", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl"];
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role"];
 
 router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
