@@ -12,6 +12,7 @@ import { customFetch } from "@workspace/api-client-react";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
+  SlidersHorizontal, Building2, Award, Filter,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -550,51 +551,90 @@ export default function Programs() {
     setSearch("");
   }
 
+  const activeFilterCount = [country, city, universityType, universityId, level, language, feeMin, feeMax].filter(Boolean).length;
+
+  const pageNumbers = (() => {
+    const pages: (number | "...")[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push("...");
+      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+      if (page < totalPages - 2) pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  })();
+
   return (
     <PublicLayout>
-      <section className="pt-28 pb-8 bg-gradient-to-b from-primary/5 to-background">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="bg-card rounded-2xl shadow-lg shadow-black/5 border border-border/40 p-6 space-y-5">
+      <section className="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/[0.07] via-transparent to-transparent" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+            <div className="text-center mb-10">
+              <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6 border border-primary/20">
+                <GraduationCap className="w-4 h-4" /> {t("programs.title")}
+              </span>
+              <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
+                {t("programs.heroTitle")}
+              </h1>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                {t("programs.heroSubtitle")}
+              </p>
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.15 }}>
+            <div className="glass-card rounded-2xl p-6 space-y-5 -mb-16 relative z-20">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
                 <Input value={search} onChange={e => setSearch(e.target.value)}
                   placeholder={t("programs.searchPlaceholder")}
-                  className="pl-12 pr-4 h-12 text-base rounded-xl border-border/60 focus:border-primary bg-background" />
+                  className="pl-12 pr-4 h-13 text-base rounded-xl border-border/50 focus:border-primary bg-background/80 backdrop-blur-sm shadow-sm" />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterCountry")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Globe2 className="w-3 h-3" /> {t("programs.filterCountry")}
+                  </label>
                   <select value={country} onChange={e => setCountry(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
                     <option value="">{t("programs.allCountries")}</option>
                     {filters.countries.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterCity")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3" /> {t("programs.filterCity")}
+                  </label>
                   <select value={city} onChange={e => setCity(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
                     <option value="">{t("programs.allCities")}</option>
                     {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterUniversityType")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-3 h-3" /> {t("programs.filterUniversityType")}
+                  </label>
                   <select value={universityType} onChange={e => setUniversityType(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
                     <option value="">{t("programs.allTypes")}</option>
                     {filters.universityTypes.map(ut => <option key={ut} value={ut}>{ut}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterUniversity")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <GraduationCap className="w-3 h-3" /> {t("programs.filterUniversity")}
+                  </label>
                   <select value={universityId} onChange={e => setUniversityId(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
                     <option value="">{t("programs.allUniversities")}</option>
                     {filters.universities.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
                   </select>
@@ -603,46 +643,56 @@ export default function Programs() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterLevel")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <BookOpen className="w-3 h-3" /> {t("programs.filterLevel")}
+                  </label>
                   <select value={level} onChange={e => setLevel(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
                     <option value="">{t("programs.allLevels")}</option>
                     {filters.degrees.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterLanguage")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Languages className="w-3 h-3" /> {t("programs.filterLanguage")}
+                  </label>
                   <select value={language} onChange={e => setLanguage(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
                     <option value="">{t("programs.allLanguages")}</option>
                     {filters.languages.map(lg => <option key={lg} value={lg}>{lg}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-1.5 lg:col-span-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterTuitionFee")}</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <DollarSign className="w-3 h-3" /> {t("programs.filterTuitionFee")}
+                  </label>
                   <div className="flex items-center gap-2">
                     <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
                       placeholder={filters.feeRange ? `${t("programs.feeMin")} (${filters.feeRange.min})` : t("programs.feeMin")}
-                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0"
+                      className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                       max={filters.feeRange?.max} />
-                    <span className="text-muted-foreground text-sm">–</span>
+                    <span className="text-muted-foreground text-sm font-medium">–</span>
                     <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
                       placeholder={filters.feeRange ? `${t("programs.feeMax")} (${filters.feeRange.max})` : t("programs.feeMax")}
-                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0"
+                      className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                       max={filters.feeRange?.max} />
                   </div>
                 </div>
               </div>
 
               {hasActiveFilters && (
-                <div className="flex items-center justify-between pt-1">
-                  <p className="text-sm text-muted-foreground">
-                    {t("programs.showingResults", { count: String(total) })}
-                  </p>
-                  <button onClick={clearAllFilters} className="text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-                    {t("programs.clearFilters")}
+                <div className="flex items-center justify-between pt-2 border-t border-border/30">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-primary" />
+                    <p className="text-sm text-muted-foreground">
+                      {t("programs.showingResults", { count: String(total) })}
+                    </p>
+                    <Badge variant="secondary" className="text-xs rounded-full px-2">{activeFilterCount}</Badge>
+                  </div>
+                  <button onClick={clearAllFilters} className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors flex items-center gap-1.5 hover:gap-2">
+                    <X className="w-3.5 h-3.5" /> {t("programs.clearFilters")}
                   </button>
                 </div>
               )}
@@ -651,26 +701,51 @@ export default function Programs() {
         </div>
       </section>
 
-      <section className="py-12">
+      <section className="pt-24 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-8">
-            <p className="text-muted-foreground">
-              Showing <span className="font-bold text-foreground">{total}</span> programs
-            </p>
-          </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+            className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <BookOpen className="w-4 h-4 text-primary" />
+              </div>
+              <p className="text-muted-foreground">
+                Showing <span className="font-bold text-foreground">{total}</span> programs
+              </p>
+            </div>
+          </motion.div>
 
           {isLoading ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-72 rounded-2xl bg-secondary animate-pulse" />
+                <div key={i} className="rounded-2xl overflow-hidden border border-border/30 bg-card">
+                  <div className="h-20 bg-gradient-to-r from-secondary via-secondary/50 to-secondary animate-pulse relative overflow-hidden">
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <div className="h-5 bg-secondary rounded-lg w-4/5 animate-pulse" />
+                    <div className="h-4 bg-secondary rounded-lg w-3/5 animate-pulse" />
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                      <div className="h-4 bg-secondary rounded-lg animate-pulse" />
+                      <div className="h-4 bg-secondary rounded-lg animate-pulse" />
+                    </div>
+                    <div className="h-10 bg-secondary rounded-xl mt-4 animate-pulse" />
+                  </div>
+                </div>
               ))}
             </div>
           ) : programs.length === 0 ? (
-            <div className="text-center py-24">
-              <Globe2 className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-foreground mb-2">No programs found</h3>
-              <p className="text-muted-foreground">Try adjusting your filters or search terms</p>
-            </div>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-24 bg-gradient-to-br from-primary/[0.03] via-accent/[0.03] to-primary/[0.03] rounded-3xl border border-border/30">
+              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                <Globe2 className="w-10 h-10 text-primary/40" />
+              </div>
+              <h3 className="text-xl font-bold font-display text-foreground mb-2">No programs found</h3>
+              <p className="text-muted-foreground mb-6">Try adjusting your filters or search terms</p>
+              <Button variant="outline" onClick={clearAllFilters} className="rounded-full px-6">
+                <X className="w-4 h-4 mr-2" /> Clear All Filters
+              </Button>
+            </motion.div>
           ) : (
             <>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -678,11 +753,22 @@ export default function Programs() {
                   const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
                   const hasDiscount = prog.discountedFee && prog.tuitionFee && prog.discountedFee < prog.tuitionFee;
                   const logoSrc = fixStorageUrl(prog.universityLogoUrl);
+                  const cardGradients = [
+                    "from-blue-500/15 via-indigo-500/10 to-violet-500/5",
+                    "from-emerald-500/15 via-teal-500/10 to-cyan-500/5",
+                    "from-rose-500/15 via-pink-500/10 to-fuchsia-500/5",
+                    "from-amber-500/15 via-orange-500/10 to-yellow-500/5",
+                    "from-violet-500/15 via-purple-500/10 to-indigo-500/5",
+                    "from-cyan-500/15 via-sky-500/10 to-blue-500/5",
+                  ];
+                  const gradient = cardGradients[i % cardGradients.length];
+
                   return (
-                    <motion.div key={prog.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.03 }}
-                      className="group bg-card rounded-2xl overflow-hidden shadow-lg shadow-black/5 hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 border border-border/40 flex flex-col">
-                      <div className="h-16 bg-gradient-to-r from-primary/15 via-accent/10 to-primary/5 relative flex items-center px-5 gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white/90 shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
+                    <motion.div key={prog.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04, duration: 0.4 }}
+                      className="group bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
+                      <div className={`h-20 bg-gradient-to-r ${gradient} relative flex items-center px-5 gap-3`}>
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)]" />
+                        <div className="w-11 h-11 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden relative z-10 ring-2 ring-white/50">
                           {logoSrc ? (
                             <img src={logoSrc} alt={prog.universityName} className="w-8 h-8 object-contain" loading="lazy"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
@@ -690,52 +776,53 @@ export default function Programs() {
                           ) : null}
                           <GraduationCap className={`w-5 h-5 text-primary ${logoSrc ? "hidden" : ""}`} />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs text-muted-foreground truncate font-medium">{prog.universityName}</p>
+                        <div className="min-w-0 flex-1 relative z-10">
+                          <p className="text-xs text-foreground/70 truncate font-semibold">{prog.universityName}</p>
                         </div>
-                        <div className="flex gap-1.5 shrink-0">
+                        <div className="flex gap-1.5 shrink-0 relative z-10">
                           {prog.universityCountry && (
-                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5">{prog.universityCountry}</Badge>
+                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/70 dark:bg-card/70 backdrop-blur-sm border-0 shadow-sm">{prog.universityCountry}</Badge>
                           )}
                           {prog.degree && (
-                            <Badge className="bg-primary/90 text-white text-[10px] px-2 py-0.5">{prog.degree}</Badge>
+                            <Badge className="bg-primary/90 text-white text-[10px] px-2 py-0.5 shadow-sm">{prog.degree}</Badge>
                           )}
                         </div>
                       </div>
 
                       <div className="p-5 flex-1 flex flex-col">
-                        <h3 className="font-display font-bold text-foreground text-base mb-2 group-hover:text-primary transition-colors leading-tight line-clamp-2">
+                        <h3 className="font-display font-bold text-foreground text-[15px] mb-2.5 group-hover:text-primary transition-colors duration-200 leading-snug line-clamp-2">
                           {prog.name}
                         </h3>
-                        <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3.5">
+                          <MapPin className="w-3.5 h-3.5 shrink-0 text-primary/50" />
                           <span className="truncate">{[prog.universityCity, prog.universityCountry].filter(Boolean).join(", ")}</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-4">
+
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm text-muted-foreground mb-4 bg-secondary/30 dark:bg-secondary/20 rounded-xl p-3">
                           {prog.language && (
                             <span className="flex items-center gap-1.5">
                               <Languages className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                              <span className="truncate">{prog.language}</span>
+                              <span className="truncate text-xs font-medium">{prog.language}</span>
                             </span>
                           )}
                           {prog.duration && (
                             <span className="flex items-center gap-1.5">
                               <Clock className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                              <span className="truncate">{prog.duration}</span>
+                              <span className="truncate text-xs font-medium">{prog.duration}</span>
                             </span>
                           )}
                           {prog.intakes && (
                             <span className="flex items-center gap-1.5">
                               <BookOpen className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                              <span className="truncate">{prog.intakes}</span>
+                              <span className="truncate text-xs font-medium">{prog.intakes}</span>
                             </span>
                           )}
                           {effectiveFee ? (
                             <span className="flex items-center gap-1.5">
                               <DollarSign className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                              <span className="truncate">
+                              <span className="truncate text-xs font-medium">
                                 {hasDiscount && (
-                                  <span className="line-through text-muted-foreground/50 mr-1 text-xs">
+                                  <span className="line-through text-muted-foreground/40 mr-1">
                                     {formatFee(prog.tuitionFee, prog.currency)}
                                   </span>
                                 )}
@@ -744,15 +831,17 @@ export default function Programs() {
                             </span>
                           ) : null}
                         </div>
+
                         {prog.scholarship && prog.scholarship > 0 ? (
                           <div className="mb-4">
-                            <Badge variant="outline" className="text-xs border-green-500/30 text-green-600 bg-green-50 dark:bg-green-950/30">
-                              Scholarship: {formatFee(prog.scholarship, prog.currency)}
+                            <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1">
+                              <Award className="w-3 h-3" /> Scholarship: {formatFee(prog.scholarship, prog.currency)}
                             </Badge>
                           </div>
                         ) : null}
+
                         <div className="mt-auto">
-                          <Button onClick={() => setApplyProgram(prog)} className="w-full rounded-xl">
+                          <Button onClick={() => setApplyProgram(prog)} className="w-full rounded-xl shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
                             Apply Now
                           </Button>
                         </div>
@@ -763,13 +852,26 @@ export default function Programs() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3 mt-10">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-full">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                <div className="flex items-center justify-center gap-1.5 mt-12">
+                  <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-full w-10 h-10">
+                    <ChevronLeft className="w-4 h-4" />
                   </Button>
-                  <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="rounded-full">
-                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  {pageNumbers.map((p, idx) => (
+                    p === "..." ? (
+                      <span key={`dots-${idx}`} className="px-2 text-muted-foreground">...</span>
+                    ) : (
+                      <button key={p} onClick={() => setPage(p as number)}
+                        className={`w-10 h-10 rounded-full text-sm font-semibold transition-all duration-200 ${
+                          page === p
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        }`}>
+                        {p}
+                      </button>
+                    )
+                  ))}
+                  <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="rounded-full w-10 h-10">
+                    <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
               )}
@@ -779,10 +881,11 @@ export default function Programs() {
       </section>
 
       <section className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.1),transparent_60%)]" />
         <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
           <h2 className="text-3xl font-display font-bold mb-4">Can't find the right program?</h2>
           <p className="text-white/80 mb-8">Our advisors can help you find the perfect fit for your academic goals.</p>
-          <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold">
+          <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold shadow-xl shadow-black/10 hover:-translate-y-1 transition-all duration-300">
             <a href="/contact">Talk to an Advisor</a>
           </Button>
         </div>

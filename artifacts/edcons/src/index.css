@@ -190,3 +190,9 @@ html[lang="hi"] {
 [dir="rtl"] .me-auto {
   margin-inline-end: auto;
 }
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
