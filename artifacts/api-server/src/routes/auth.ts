@@ -407,7 +407,7 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
   });
   await sendEmail(user.email || "", emailContent);
 
-  res.json({ message: "A verification email has been sent." });
+  res.json({ message: "If the email is registered and unverified, a verification link has been sent." });
 });
 
 async function handleLogout(req: Request, res: Response) {
