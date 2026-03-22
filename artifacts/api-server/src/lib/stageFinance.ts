@@ -12,10 +12,10 @@ const EXCLUDED_COMMISSION_STAGES = [
 ];
 
 const EXCLUDED_SERVICE_FEE_STAGES = [
-  "rejected", "all_registered", "cancelled", "visa_reject", "refound",
+  "rejected", "all_registered", "cancelled", "refound",
 ];
 
-const SCHOLARSHIP_CONFIRMED_SERVICE_FEE_STAGE = "100scholar";
+const CONFIRMED_SERVICE_FEE_STAGES = ["100scholar", "visa_reject"];
 
 export function getCommissionFinanceStatus(stage: string): "potential" | "confirmed" | "excluded" {
   if (POTENTIAL_STAGES.includes(stage)) return "potential";
@@ -27,7 +27,7 @@ export function getCommissionFinanceStatus(stage: string): "potential" | "confir
 export function getServiceFeeFinanceStatus(stage: string): "potential" | "confirmed" | "excluded" {
   if (POTENTIAL_STAGES.includes(stage)) return "potential";
   if (stage === CONFIRMED_STAGE) return "confirmed";
-  if (stage === SCHOLARSHIP_CONFIRMED_SERVICE_FEE_STAGE) return "confirmed";
+  if (CONFIRMED_SERVICE_FEE_STAGES.includes(stage)) return "confirmed";
   if (EXCLUDED_SERVICE_FEE_STAGES.includes(stage)) return "excluded";
   return "potential";
 }
