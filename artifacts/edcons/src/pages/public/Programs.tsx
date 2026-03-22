@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -451,7 +452,8 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
 }
 
 export default function Programs() {
-  useSeo({ title: "Programs", description: "Browse programs at 200+ partner universities worldwide." });
+  const { t, lang } = useI18n();
+  useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [country, setCountry] = useState("All");

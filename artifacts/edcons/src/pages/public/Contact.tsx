@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
@@ -13,11 +14,11 @@ const offices = [
 ];
 
 export default function Contact() {
-  useSeo({ title: "Contact Us", description: "Get in touch with our team of education consultants." });
+  const { t, lang } = useI18n();
+  useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
   const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,7 +46,7 @@ export default function Contact() {
       }
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message || "Something went wrong. Please try again.");
+      setError(err.message || t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -53,71 +54,68 @@ export default function Contact() {
 
   return (
     <PublicLayout>
-      {/* Hero */}
       <section className="pt-24 pb-16 bg-gradient-to-br from-primary/5 to-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6">
-              <MessageSquare className="w-4 h-4" /> We're Here to Help
+              <MessageSquare className="w-4 h-4" /> {t("contact.badge")}
             </span>
             <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">
-              Contact <span className="text-primary">Us</span>
+              {t("contact.title")} <span className="text-primary">{t("contact.titleHighlight")}</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Book a free consultation or ask us anything. Our advisors typically respond within 2 hours.
+              {t("contact.subtitle")}
             </p>
           </motion.div>
         </div>
       </section>
 
-      {/* Content */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-16">
-          {/* Form */}
           <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
-            <h2 className="text-2xl font-display font-bold text-foreground mb-2">Send Us a Message</h2>
-            <p className="text-muted-foreground mb-8">Fill out the form below and we'll get back to you shortly.</p>
+            <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("contact.formTitle")}</h2>
+            <p className="text-muted-foreground mb-8">{t("contact.formSubtitle")}</p>
 
             {submitted ? (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-10 text-center">
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <h3 className="text-xl font-display font-bold text-foreground mb-2">Message Sent!</h3>
-                <p className="text-muted-foreground">Thank you for reaching out. One of our advisors will contact you within 2 hours.</p>
+                <h3 className="text-xl font-display font-bold text-foreground mb-2">{t("contact.successTitle")}</h3>
+                <p className="text-muted-foreground">{t("contact.successMessage")}</p>
                 <Button onClick={() => { setSubmitted(false); setForm({ name: "", email: "", phone: "", subject: "", message: "" }); }} 
                   variant="outline" className="mt-6 rounded-full">
-                  Send Another Message
+                  {t("contact.sendAnother")}
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Full Name *</label>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.fullName")} {t("contact.required")}</label>
                     <Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))}
-                      required placeholder="John Doe" className="rounded-xl" />
+                      required placeholder={t("contact.namePlaceholder")} className="rounded-xl" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Email *</label>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.email")} {t("contact.required")}</label>
                     <Input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))}
-                      required placeholder="john@example.com" className="rounded-xl" />
+                      required placeholder={t("contact.emailPlaceholder")} className="rounded-xl" />
                   </div>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Phone</label>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.phone")}</label>
                     <Input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
-                      placeholder="+1 555 000 0000" className="rounded-xl" />
+                      placeholder={t("contact.phonePlaceholder")} className="rounded-xl" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Subject *</label>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.subject")} {t("contact.required")}</label>
                     <Input value={form.subject} onChange={e => setForm(f => ({...f, subject: e.target.value}))}
-                      required placeholder="University application help" className="rounded-xl" />
+                      required placeholder={t("contact.subjectPlaceholder")} className="rounded-xl" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1.5 block">Message *</label>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.message")} {t("contact.required")}</label>
                   <textarea value={form.message} onChange={e => setForm(f => ({...f, message: e.target.value}))}
-                    required rows={5} placeholder="Tell us about your education goals..."
+                    required rows={5} placeholder={t("contact.messagePlaceholder")}
                     className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
                 </div>
                 {error && (
@@ -127,24 +125,23 @@ export default function Contact() {
                 )}
                 <Button type="submit" disabled={loading} size="lg" className="w-full rounded-xl">
                   {loading ? (
-                    <div className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sending...</div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> {t("contact.sending")}</div>
                   ) : (
-                    <div className="flex items-center gap-2"><Send className="w-4 h-4" /> Send Message</div>
+                    <div className="flex items-center gap-2"><Send className="w-4 h-4" /> {t("contact.send")}</div>
                   )}
                 </Button>
               </form>
             )}
           </motion.div>
 
-          {/* Info */}
           <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div>
-              <h2 className="text-2xl font-display font-bold text-foreground mb-6">Quick Contact</h2>
+              <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
               <div className="space-y-4">
                 {[
-                  { icon: Mail, label: "Email", value: "hello@educons.example.com", href: "mailto:hello@educons.example.com" },
-                  { icon: Phone, label: "Phone", value: "+90 212 555 0100", href: "tel:+902125550100" },
-                  { icon: Clock, label: "Hours", value: "Mon-Fri: 9am – 7pm | Sat: 10am – 4pm", href: undefined },
+                  { icon: Mail, label: t("contact.emailLabel"), value: "hello@educons.example.com", href: "mailto:hello@educons.example.com" },
+                  { icon: Phone, label: t("contact.phoneLabel"), value: "+90 212 555 0100", href: "tel:+902125550100" },
+                  { icon: Clock, label: t("contact.hoursLabel"), value: t("contact.hoursValue"), href: undefined },
                 ].map((c, i) => (
                   <a key={i} href={c.href || '#'}
                     className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/50 hover:bg-primary/5 transition-colors group">
@@ -161,7 +158,7 @@ export default function Contact() {
             </div>
 
             <div>
-              <h3 className="text-xl font-display font-bold text-foreground mb-6">Our Offices</h3>
+              <h3 className="text-xl font-display font-bold text-foreground mb-6">{t("contact.ourOffices")}</h3>
               <div className="space-y-4">
                 {offices.map((office, i) => (
                   <div key={i} className="p-5 rounded-2xl border border-border/60 hover:border-primary/30 transition-colors">

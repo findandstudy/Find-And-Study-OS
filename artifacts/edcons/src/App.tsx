@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation, useRoute } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +9,8 @@ import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
 import { PageLoader } from "@/components/ui/page-loader";
+import { I18nProvider, useI18nContext } from "@/lib/i18n/context";
+import { isValidLanguage, DEFAULT_LANGUAGE, type Language } from "@/lib/i18n/index";
 import NotFound from "@/pages/not-found";
 
 import Home from "@/pages/public/Home";
@@ -68,25 +70,68 @@ const queryClient = new QueryClient({
   },
 });
 
+function LanguageRedirect() {
+  const [, setLocation] = useLocation();
+  const { lang } = useI18nContext();
+  useEffect(() => {
+    setLocation(`/${lang}`, { replace: true });
+  }, [lang, setLocation]);
+  return <PageLoader />;
+}
+
+function LoginRedirect() {
+  const [, setLocation] = useLocation();
+  const { lang } = useI18nContext();
+  useEffect(() => {
+    const search = window.location.search;
+    setLocation(`/${lang}/login${search}`, { replace: true });
+  }, [lang, setLocation]);
+  return <PageLoader />;
+}
+
+function LanguageSync({ lang }: { lang: string }) {
+  const { setLang } = useI18nContext();
+  useEffect(() => {
+    if (isValidLanguage(lang)) {
+      setLang(lang as Language);
+    }
+  }, [lang, setLang]);
+  return null;
+}
+
+function PublicRoutes({ lang }: { lang: string }) {
+  return (
+    <>
+      <LanguageSync lang={lang} />
+      <Switch>
+        <Route path={`/${lang}`} component={Home} />
+        <Route path={`/${lang}/about`} component={About} />
+        <Route path={`/${lang}/countries`} component={Countries} />
+        <Route path={`/${lang}/countries/:slug`}>
+          {(params) => <CountryDetail slug={params.slug} />}
+        </Route>
+        <Route path={`/${lang}/programs`} component={Programs} />
+        <Route path={`/${lang}/blog`} component={Blog} />
+        <Route path={`/${lang}/contact`} component={Contact} />
+        <Route path={`/${lang}/login`} component={Login} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
+  );
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {/* Public Pages */}
-        <Route path="/" component={Home} />
-        <Route path="/about" component={About} />
-        <Route path="/countries" component={Countries} />
-        <Route path="/countries/:slug">
-          {(params) => <CountryDetail slug={params.slug} />}
+        <Route path="/">
+          <LanguageRedirect />
         </Route>
-        <Route path="/programs" component={Programs} />
-        <Route path="/blog" component={Blog} />
-        <Route path="/contact" component={Contact} />
+        <Route path="/login">
+          <LoginRedirect />
+        </Route>
 
-        {/* Auth */}
-        <Route path="/login" component={Login} />
-
-        {/* Admin Portal */}
+        {/* Admin Portal - no language prefix */}
         <Route path="/admin">
           <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminDashboard /></ProtectedRoute>
         </Route>
@@ -187,6 +232,16 @@ function Router() {
           <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
         </Route>
 
+        {/* Language-prefixed public routes */}
+        <Route path="/:lang/:rest*">
+          {(params) => {
+            if (isValidLanguage(params.lang)) {
+              return <PublicRoutes lang={params.lang} />;
+            }
+            return <NotFound />;
+          }}
+        </Route>
+
         <Route component={NotFound} />
       </Switch>
     </Suspense>
@@ -198,14 +253,16 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <SeasonProvider>
-          <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <ActivityTrackerProvider>
-                <Router />
-              </ActivityTrackerProvider>
-            </WouterRouter>
-            <Toaster />
-          </TooltipProvider>
+          <I18nProvider>
+            <TooltipProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <ActivityTrackerProvider>
+                  <Router />
+                </ActivityTrackerProvider>
+              </WouterRouter>
+              <Toaster />
+            </TooltipProvider>
+          </I18nProvider>
         </SeasonProvider>
       </ThemeProvider>
     </QueryClientProvider>

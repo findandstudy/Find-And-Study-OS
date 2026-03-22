@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ type Tab = "login" | "register" | "verify" | "set-password";
 export default function Login() {
   const { user, isLoading } = useAuth(false);
   const { settings, resolvedTheme } = useTheme();
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
 
   const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -35,7 +37,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState(
-    verifiedSuccess ? "Your email has been verified! You can now sign in." :
+    verifiedSuccess ? "verified" :
     verifyError === "invalid" ? "" : ""
   );
   const [setPasswordForm, setSetPasswordForm] = useState({ password: "", confirmPassword: "" });
@@ -84,12 +86,12 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        setError(data.error || t("login.connectionError"));
         return;
       }
-      window.location.href = returnTo ? decodeURIComponent(returnTo) : "/login";
+      window.location.href = returnTo ? decodeURIComponent(returnTo) : "/login";  // /login redirects to /:lang/login
     } catch {
-      setError("Connection error. Please try again.");
+      setError(t("login.connectionError"));
     } finally {
       setLoading(false);
     }
@@ -100,11 +102,11 @@ export default function Login() {
     setError("");
 
     if (registerForm.password !== registerForm.confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("login.passwordsNoMatch"));
       return;
     }
     if (registerForm.password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("login.passwordMinLength"));
       return;
     }
 
@@ -123,13 +125,13 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Registration failed");
+        setError(data.error || t("login.connectionError"));
         return;
       }
       setVerifyEmail(registerForm.email);
       setTab("verify");
     } catch {
-      setError("Connection error. Please try again.");
+      setError(t("login.connectionError"));
     } finally {
       setLoading(false);
     }
@@ -148,12 +150,12 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Verification failed");
+        setError(data.error || t("login.connectionError"));
         return;
       }
-      window.location.href = "/login";
+      window.location.href = "/login";  // /login redirects to /:lang/login
     } catch {
-      setError("Connection error. Please try again.");
+      setError(t("login.connectionError"));
     } finally {
       setLoading(false);
     }
@@ -179,11 +181,11 @@ export default function Login() {
     setError("");
 
     if (setPasswordForm.password !== setPasswordForm.confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("login.passwordsNoMatch"));
       return;
     }
     if (setPasswordForm.password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("login.passwordMinLength"));
       return;
     }
 
@@ -196,12 +198,12 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to set password");
+        setError(data.error || t("login.connectionError"));
         return;
       }
       setPasswordSet(true);
     } catch {
-      setError("Connection error. Please try again.");
+      setError(t("login.connectionError"));
     } finally {
       setLoading(false);
     }
@@ -212,7 +214,7 @@ export default function Login() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-accent/5">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 text-primary animate-spin" />
-          <p className="text-muted-foreground font-medium">Loading...</p>
+          <p className="text-muted-foreground font-medium">{t("login.loading")}</p>
         </div>
       </div>
     );
@@ -238,19 +240,19 @@ export default function Login() {
               </>
             )}
           </div>
-          <h1 className="text-4xl font-display font-bold text-white mb-6 leading-tight">
-            Your Global Education<br />Journey Starts Here
+          <h1 className="text-4xl font-display font-bold text-white mb-6 leading-tight whitespace-pre-line">
+            {t("login.loginHeroTitle")}
           </h1>
           <p className="text-white/80 text-lg leading-relaxed max-w-md">
-            Access your personalized portal to track applications, manage documents, and connect with advisors.
+            {t("login.loginHeroSubtitle")}
           </p>
         </div>
 
         <div className="relative z-10 space-y-4">
           {[
-            { icon: Globe2, text: "200+ partner universities worldwide" },
-            { icon: Star, text: "95% visa approval success rate" },
-            { icon: GraduationCap, text: "10,000+ students successfully placed" },
+            { icon: Globe2, text: t("login.partnerUniversities") },
+            { icon: Star, text: t("login.visaApproval") },
+            { icon: GraduationCap, text: t("login.studentsPlaced") },
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-3 text-white/90">
               <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
@@ -280,13 +282,13 @@ export default function Login() {
           {successMessage && tab === "login" && (
             <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-sm mb-4 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 shrink-0" />
-              {successMessage}
+              {t("login.verifiedSuccess")}
             </div>
           )}
 
           {verifyError === "invalid" && tab === "login" && (
             <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm mb-4">
-              The verification link is invalid or has already been used. Please request a new one.
+              {t("login.invalidLink")}
             </div>
           )}
 
@@ -296,13 +298,13 @@ export default function Login() {
                 onClick={() => { setTab("login"); setError(""); }}
                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${tab === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                Sign In
+                {t("login.signIn")}
               </button>
               <button
                 onClick={() => { setTab("register"); setError(""); }}
                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${tab === "register" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                Student Registration
+                {t("login.studentRegistration")}
               </button>
             </div>
           )}
@@ -310,12 +312,12 @@ export default function Login() {
           <AnimatePresence mode="wait">
             {tab === "login" && (
               <motion.div key="login" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-                <h2 className="text-3xl font-display font-bold text-foreground mb-2">Welcome Back</h2>
-                <p className="text-muted-foreground mb-8">Sign in to access your portal.</p>
+                <h2 className="text-3xl font-display font-bold text-foreground mb-2">{t("login.welcomeBack")}</h2>
+                <p className="text-muted-foreground mb-8">{t("login.signInSubtitle")}</p>
 
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> {t("login.emailLabel")}</Label>
                     <Input
                       type="email"
                       value={loginForm.email}
@@ -327,13 +329,13 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> Password</Label>
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> {t("login.passwordLabel")}</Label>
                     <div className="relative">
                       <Input
                         type={showPassword ? "text" : "password"}
                         value={loginForm.password}
                         onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="Enter your password"
+                        placeholder={t("login.passwordLabel")}
                         className="rounded-xl h-12 pr-12"
                         required
                         autoComplete="current-password"
@@ -354,7 +356,7 @@ export default function Login() {
                   <Button type="submit" size="lg" disabled={loading}
                     className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ArrowRight className="w-5 h-5 mr-2" />}
-                    Sign In
+                    {t("login.signInButton")}
                   </Button>
                 </form>
               </motion.div>
@@ -362,13 +364,13 @@ export default function Login() {
 
             {tab === "register" && (
               <motion.div key="register" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <h2 className="text-3xl font-display font-bold text-foreground mb-2">Create Account</h2>
-                <p className="text-muted-foreground mb-8">Register as a student to get started.</p>
+                <h2 className="text-3xl font-display font-bold text-foreground mb-2">{t("login.createAccount")}</h2>
+                <p className="text-muted-foreground mb-8">{t("login.registerSubtitle")}</p>
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-sm font-semibold">First Name</Label>
+                      <Label className="text-sm font-semibold">{t("login.firstName")}</Label>
                       <Input
                         value={registerForm.firstName}
                         onChange={e => setRegisterForm(f => ({ ...f, firstName: e.target.value }))}
@@ -378,7 +380,7 @@ export default function Login() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-sm font-semibold">Last Name</Label>
+                      <Label className="text-sm font-semibold">{t("login.lastName")}</Label>
                       <Input
                         value={registerForm.lastName}
                         onChange={e => setRegisterForm(f => ({ ...f, lastName: e.target.value }))}
@@ -389,7 +391,7 @@ export default function Login() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> {t("login.emailLabel")}</Label>
                     <Input
                       type="email"
                       value={registerForm.email}
@@ -400,7 +402,7 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> Phone</Label>
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> {t("login.phoneLabel")}</Label>
                     <div className="flex gap-2">
                       <select
                         value={registerForm.phoneCode}
@@ -456,13 +458,13 @@ export default function Login() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> Password</Label>
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> {t("login.passwordLabel")}</Label>
                     <div className="relative">
                       <Input
                         type={showPassword ? "text" : "password"}
                         value={registerForm.password}
                         onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="Min. 8 characters"
+                        placeholder={t("login.minChars")}
                         className="rounded-xl h-11 pr-12"
                         required
                         minLength={8}
@@ -474,12 +476,12 @@ export default function Login() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold">Confirm Password</Label>
+                    <Label className="text-sm font-semibold">{t("login.confirmPassword")}</Label>
                     <Input
                       type="password"
                       value={registerForm.confirmPassword}
                       onChange={e => setRegisterForm(f => ({ ...f, confirmPassword: e.target.value }))}
-                      placeholder="Re-enter password"
+                      placeholder={t("login.reenterPassword")}
                       className="rounded-xl h-11"
                       required
                     />
@@ -494,11 +496,11 @@ export default function Login() {
                   <Button type="submit" size="lg" disabled={loading}
                     className="w-full rounded-xl py-5 text-base font-semibold shadow-lg shadow-primary/25 hover:shadow-xl transition-all hover:-translate-y-0.5">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <User className="w-5 h-5 mr-2" />}
-                    Create Account
+                    {t("login.createAccountButton")}
                   </Button>
 
                   <p className="text-xs text-muted-foreground text-center">
-                    A verification code will be sent to your email.
+                    {t("login.verificationNote")}
                   </p>
                 </form>
               </motion.div>
@@ -510,16 +512,16 @@ export default function Login() {
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <ShieldCheck className="w-8 h-8 text-primary" />
                   </div>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">Verify Your Email</h2>
+                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("login.verifyTitle")}</h2>
                   <p className="text-muted-foreground text-sm">
-                    We sent a 6-digit verification code to<br />
+                    {t("login.verifySubtitle", { email: "" })}<br />
                     <span className="font-semibold text-foreground">{verifyEmail}</span>
                   </p>
                 </div>
 
                 <form onSubmit={handleVerify} className="space-y-5">
                   <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold text-center block">Verification Code</Label>
+                    <Label className="text-sm font-semibold text-center block">{t("login.verificationCodeLabel")}</Label>
                     <Input
                       value={verifyCode}
                       onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -540,19 +542,19 @@ export default function Login() {
                   <Button type="submit" size="lg" disabled={loading || verifyCode.length !== 6}
                     className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShieldCheck className="w-5 h-5 mr-2" />}
-                    Verify & Sign In
+                    {t("login.verifyButton")}
                   </Button>
 
                   <div className="text-center">
                     <button type="button" onClick={handleResendCode} disabled={resending}
                       className="text-sm text-primary font-medium hover:underline disabled:opacity-50">
-                      {resending ? "Sending..." : "Resend verification code"}
+                      {resending ? t("login.loading") : t("login.resendCode")}
                     </button>
                   </div>
 
                   <button type="button" onClick={() => { setTab("login"); setError(""); }}
                     className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
-                    Back to Sign In
+                    {t("login.backToLogin")}
                   </button>
                 </form>
               </motion.div>
@@ -565,14 +567,14 @@ export default function Login() {
                     <div className="w-16 h-16 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4">
                       <ShieldCheck className="w-8 h-8 text-green-600 dark:text-green-400" />
                     </div>
-                    <h2 className="text-2xl font-display font-bold text-foreground mb-2">Password Set!</h2>
+                    <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("login.passwordSetSuccess")}</h2>
                     <p className="text-muted-foreground text-sm mb-6">
-                      Your password has been set successfully. Please also verify your email (check your inbox) to activate your account, then sign in.
+                      {t("login.setPasswordSubtitle")}
                     </p>
                     <Button size="lg" onClick={() => { setTab("login"); setError(""); setSuccessMessage(""); window.history.replaceState({}, "", "/login"); }}
                       className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
                       <ArrowRight className="w-5 h-5 mr-2" />
-                      Go to Sign In
+                      {t("login.goToSignIn")}
                     </Button>
                   </div>
                 ) : (
@@ -581,21 +583,21 @@ export default function Login() {
                       <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                         <Lock className="w-8 h-8 text-primary" />
                       </div>
-                      <h2 className="text-2xl font-display font-bold text-foreground mb-2">Set Your Password</h2>
+                      <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("login.setPasswordTitle")}</h2>
                       <p className="text-muted-foreground text-sm">
-                        Create a password to access your student portal.
+                        {t("login.setPasswordSubtitle")}
                       </p>
                     </div>
 
                     <form onSubmit={handleSetPassword} className="space-y-5">
                       <div className="space-y-1.5">
-                        <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> New Password</Label>
+                        <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> {t("login.newPassword")}</Label>
                         <div className="relative">
                           <Input
                             type={showPassword ? "text" : "password"}
                             value={setPasswordForm.password}
                             onChange={e => setSetPasswordForm(f => ({ ...f, password: e.target.value }))}
-                            placeholder="Min. 8 characters"
+                            placeholder={t("login.minChars")}
                             className="rounded-xl h-12 pr-12"
                             required
                             minLength={8}
@@ -608,12 +610,12 @@ export default function Login() {
                         </div>
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-sm font-semibold">Confirm Password</Label>
+                        <Label className="text-sm font-semibold">{t("login.confirmPassword")}</Label>
                         <Input
                           type="password"
                           value={setPasswordForm.confirmPassword}
                           onChange={e => setSetPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))}
-                          placeholder="Re-enter password"
+                          placeholder={t("login.reenterPassword")}
                           className="rounded-xl h-12"
                           required
                         />
@@ -628,12 +630,12 @@ export default function Login() {
                       <Button type="submit" size="lg" disabled={loading}
                         className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
                         {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ShieldCheck className="w-5 h-5 mr-2" />}
-                        Set Password
+                        {t("login.setPasswordButton")}
                       </Button>
 
                       <button type="button" onClick={() => { setTab("login"); setError(""); window.history.replaceState({}, "", "/login"); }}
                         className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
-                        Back to Sign In
+                        {t("login.backToLogin")}
                       </button>
                     </form>
                   </>
@@ -645,10 +647,10 @@ export default function Login() {
           {tab !== "verify" && tab !== "set-password" && (
             <div className="mt-8 p-5 rounded-2xl bg-secondary/50 border border-border/40">
               <p className="text-sm text-muted-foreground text-center">
-                By signing in, you agree to our{" "}
-                <span className="text-primary font-medium cursor-pointer hover:underline">Terms of Service</span>
-                {" "}and{" "}
-                <span className="text-primary font-medium cursor-pointer hover:underline">Privacy Policy</span>.
+                {t("login.termsText")}{" "}
+                <span className="text-primary font-medium cursor-pointer hover:underline">{t("login.termsOfService")}</span>
+                {" "}{t("login.and")}{" "}
+                <span className="text-primary font-medium cursor-pointer hover:underline">{t("login.privacyPolicy")}</span>.
               </p>
             </div>
           )}
@@ -656,13 +658,13 @@ export default function Login() {
           {tab === "login" && (
             <div className="mt-8 grid grid-cols-3 gap-4">
               {[
-                { label: "Students", icon: "🎓" },
-                { label: "Agents", icon: "🤝" },
-                { label: "Staff", icon: "💼" },
+                { label: t("login.studentsPortal"), icon: "🎓" },
+                { label: t("login.agentsPortal"), icon: "🤝" },
+                { label: t("login.staffPortal"), icon: "💼" },
               ].map((p, i) => (
                 <div key={i} className="text-center p-4 rounded-xl bg-secondary/30 border border-border/30">
                   <div className="text-2xl mb-2">{p.icon}</div>
-                  <p className="text-xs font-medium text-muted-foreground">{p.label} Portal</p>
+                  <p className="text-xs font-medium text-muted-foreground">{p.label}</p>
                 </div>
               ))}
             </div>

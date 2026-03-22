@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META, buildLocalizedPath, stripLanguagePrefix, type Language } from "@/lib/i18n/index";
 
 interface SeoOptions {
   title: string;
@@ -7,6 +8,7 @@ interface SeoOptions {
   noindex?: boolean;
   ogImage?: string;
   ogType?: "website" | "article";
+  lang?: Language;
 }
 
 function setMeta(name: string, content: string, isProperty = false) {
@@ -20,19 +22,27 @@ function setMeta(name: string, content: string, isProperty = false) {
   el.content = content;
 }
 
-function setLink(rel: string, href: string) {
-  let el = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+function setLink(rel: string, href: string, attrs?: Record<string, string>) {
+  const selector = attrs
+    ? `link[rel="${rel}"]${Object.entries(attrs).map(([k, v]) => `[${k}="${v}"]`).join("")}`
+    : `link[rel="${rel}"]`;
+  let el = document.querySelector<HTMLLinkElement>(selector);
   if (!el) {
     el = document.createElement("link");
     el.rel = rel;
+    if (attrs) Object.entries(attrs).forEach(([k, v]) => el!.setAttribute(k, v));
     document.head.appendChild(el);
   }
   el.href = href;
 }
 
-export function useSeo({ title, description, canonical, noindex = false, ogImage, ogType = "website" }: SeoOptions) {
+function removeHreflangLinks() {
+  document.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
+}
+
+export function useSeo({ title, description, canonical, noindex = false, ogImage, ogType = "website", lang }: SeoOptions) {
   useEffect(() => {
-    const siteName = "EduCons";
+    const siteName = "Find And Study";
     const fullTitle = `${title} | ${siteName}`;
 
     document.title = fullTitle;
@@ -54,5 +64,33 @@ export function useSeo({ title, description, canonical, noindex = false, ogImage
     setMeta("twitter:title", fullTitle);
     if (description) setMeta("twitter:description", description);
     if (ogImage) setMeta("twitter:image", ogImage);
-  }, [title, description, canonical, noindex, ogImage, ogType]);
+
+    removeHreflangLinks();
+
+    if (lang && !noindex) {
+      const origin = window.location.origin;
+      const basePath = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+      const currentPath = stripLanguagePrefix(window.location.pathname.replace(basePath, ""));
+
+      for (const code of SUPPORTED_LANGUAGES) {
+        const localizedPath = buildLocalizedPath(currentPath, code);
+        const href = `${origin}${basePath}${localizedPath}`;
+        const linkEl = document.createElement("link");
+        linkEl.rel = "alternate";
+        linkEl.hreflang = code;
+        linkEl.href = href;
+        document.head.appendChild(linkEl);
+      }
+
+      const defaultLink = document.createElement("link");
+      defaultLink.rel = "alternate";
+      defaultLink.hreflang = "x-default";
+      defaultLink.href = `${origin}${basePath}${buildLocalizedPath(currentPath, "en")}`;
+      document.head.appendChild(defaultLink);
+    }
+
+    return () => {
+      removeHreflangLinks();
+    };
+  }, [title, description, canonical, noindex, ogImage, ogType, lang]);
 }

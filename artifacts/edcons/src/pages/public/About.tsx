@@ -1,5 +1,6 @@
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -12,46 +13,45 @@ const team = [
   { name: "Olena Kovalenko", role: "Regional Manager - Europe", img: "OK", bio: "Specializes in European university placements and scholarship programs." },
 ];
 
-const values = [
-  { icon: Heart, title: "Student-First", desc: "Every decision we make centers on student success and wellbeing." },
-  { icon: Target, title: "Excellence", desc: "We maintain the highest standards in guidance and support." },
-  { icon: Globe2, title: "Global Reach", desc: "Partnerships with 200+ universities across 40 countries." },
-  { icon: Zap, title: "Innovation", desc: "Using technology to streamline the application journey." },
-  { icon: Users, title: "Community", desc: "Building lifelong connections between students and institutions." },
-  { icon: Award, title: "Integrity", desc: "Honest, transparent advice that puts students' interests first." },
-];
-
 export default function About() {
-  useSeo({ title: "About Us", description: "Learn about EduCons and our mission to connect students with the best universities worldwide." });
+  const { t, lang, localePath } = useI18n();
+  useSeo({ title: t("seo.aboutTitle"), description: t("seo.aboutDesc"), lang });
+
+  const values = [
+    { icon: Heart, title: t("about.studentFirst"), desc: t("about.studentFirstDesc") },
+    { icon: Target, title: t("about.excellence"), desc: t("about.excellenceDesc") },
+    { icon: Globe2, title: t("about.globalReach"), desc: t("about.globalReachDesc") },
+    { icon: Zap, title: t("about.innovation"), desc: t("about.innovationDesc") },
+    { icon: Users, title: t("about.community"), desc: t("about.communityDesc") },
+    { icon: Award, title: t("about.integrity"), desc: t("about.integrityDesc") },
+  ];
+
   return (
     <PublicLayout>
-      {/* Hero */}
       <section className="relative pt-24 pb-20 overflow-hidden bg-gradient-to-br from-primary/5 via-background to-accent/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6">
-              <Award className="w-4 h-4" /> About EduCons
+              <Award className="w-4 h-4" /> {t("about.badge")}
             </span>
             <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6 leading-tight">
-              We Make Global Education<br /><span className="text-primary">Accessible to Everyone</span>
+              {t("about.title")}<br /><span className="text-primary">{t("about.titleHighlight")}</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Founded in 2010, EduCons has helped over 10,000 students from 50+ countries achieve their academic dreams. 
-              We're more than consultants — we're your partners in global success.
+              {t("about.description")}
             </p>
           </motion.div>
         </div>
       </section>
 
-      {/* Stats */}
       <section className="py-16 bg-primary text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { num: "10,000+", label: "Students Placed" },
-              { num: "200+", label: "Partner Universities" },
-              { num: "40+", label: "Countries Served" },
-              { num: "95%", label: "Visa Success Rate" },
+              { num: "10,000+", label: t("about.studentsPlaced") },
+              { num: "200+", label: t("about.partnerUniversities") },
+              { num: "40+", label: t("about.countriesServed") },
+              { num: "95%", label: t("about.visaSuccessRate") },
             ].map((s, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
                 <p className="text-4xl md:text-5xl font-display font-bold">{s.num}</p>
@@ -62,21 +62,14 @@ export default function About() {
         </div>
       </section>
 
-      {/* Mission */}
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-16 items-center">
           <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }}>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-6">Our Mission</h2>
-            <p className="text-muted-foreground text-lg leading-relaxed mb-6">
-              We believe every motivated student deserves access to world-class education, regardless of their background. 
-              Our mission is to eliminate barriers and confusion from the international education journey.
-            </p>
-            <p className="text-muted-foreground text-lg leading-relaxed mb-8">
-              From your first inquiry to graduation day, we're with you every step — selecting the right university, 
-              crafting a compelling application, securing your visa, and settling into life abroad.
-            </p>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-6">{t("about.missionTitle")}</h2>
+            <p className="text-muted-foreground text-lg leading-relaxed mb-6">{t("about.missionP1")}</p>
+            <p className="text-muted-foreground text-lg leading-relaxed mb-8">{t("about.missionP2")}</p>
             <Button asChild size="lg" className="rounded-full px-8">
-              <Link href="/contact">Get Started Today</Link>
+              <Link href={localePath("/contact")}>{t("about.getStarted")}</Link>
             </Button>
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} className="grid grid-cols-2 gap-4">
@@ -91,12 +84,11 @@ export default function About() {
         </div>
       </section>
 
-      {/* Team */}
       <section className="py-24 bg-secondary/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">Meet Our Team</h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">Expert consultants with decades of combined experience in international education.</p>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">{t("about.teamTitle")}</h2>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("about.teamSubtitle")}</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {team.map((member, i) => (
@@ -114,17 +106,16 @@ export default function About() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="py-24 bg-gradient-to-br from-primary to-accent text-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-5xl font-display font-bold mb-6">Ready to Start Your Journey?</h2>
-          <p className="text-white/80 text-lg mb-10 max-w-2xl mx-auto">Book a free consultation with one of our expert advisors today.</p>
+          <h2 className="text-3xl md:text-5xl font-display font-bold mb-6">{t("about.ctaTitle")}</h2>
+          <p className="text-white/80 text-lg mb-10 max-w-2xl mx-auto">{t("about.ctaSubtitle")}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold hover:bg-white">
-              <Link href="/contact">Book Free Consultation</Link>
+              <Link href={localePath("/contact")}>{t("about.bookConsultation")}</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="rounded-full px-8 border-white text-white hover:bg-white/10">
-              <Link href="/programs">Browse Programs</Link>
+              <Link href={localePath("/programs")}>{t("about.browsePrograms")}</Link>
             </Button>
           </div>
         </div>

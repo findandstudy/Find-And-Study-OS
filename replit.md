@@ -179,6 +179,23 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Admin UI:** `/admin/embeds` page with widget table, create/edit dialog (4 tabs: General, Filters, Theme, Security), embed code generator, submissions viewer, delete with confirmation.
 - **Files:** `lib/db/src/schema/embeds.ts`, `artifacts/api-server/src/routes/embed.ts`, `artifacts/edcons/src/pages/admin/Embeds.tsx`
 
+## Multi-Language (i18n) System
+
+- **Supported Languages:** English (en), Turkish (tr), Arabic (ar), French (fr), Russian (ru), Persian (fa), Chinese (zh), Hindi (hi), Spanish (es), Indonesian (id)
+- **RTL Support:** Arabic (ar) and Persian (fa) render right-to-left with proper Noto Sans Arabic font. Chinese uses Noto Sans SC, Hindi uses Noto Sans Devanagari.
+- **URL Routing:** Public pages use language prefix `/:lang/path` (e.g., `/tr/about`, `/ar/contact`). Portal routes (`/admin`, `/staff`, `/student`, `/agent`) have no language prefix.
+- **Language Detection:** URL prefix → localStorage → browser language → English fallback.
+- **Translation Files:** JSON files in `artifacts/edcons/src/lib/i18n/translations/` with dot-notation keys (e.g., `nav.home`, `login.signIn`). Interpolation via `{placeholder}` syntax.
+- **Core Files:**
+  - `src/lib/i18n/index.ts` — language config, `getTranslation()`, `isValidLanguage()`, `LANGUAGES` array
+  - `src/lib/i18n/context.tsx` — `I18nProvider` with React context, sets `document.documentElement.dir` and `lang` attributes
+  - `src/hooks/use-i18n.ts` — `useI18n()` hook re-export returning `t()`, `lang`, `setLang`, `isRTL`, `dir`, `localePath()`
+- **SEO:** `useSeo` hook injects hreflang alternate links for all 10 languages + `x-default`, with proper canonical URLs.
+- **Language Switcher:** Dropdown in `PublicLayout` nav showing flag emoji + language code, triggers full page navigation on switch.
+- **Compatibility Route:** `/login` redirects to `/:lang/login` preserving query params for email verification flows.
+- **Wouter Routing:** Uses `/:lang/:rest*` wildcard syntax (not Express 5's `{*rest}`). Inner `PublicRoutes` component matches full paths like `/${lang}/about`.
+- **CSS:** RTL utilities and font imports in `src/index.css`. Uses CSS logical properties (`ms-auto`, `me-auto`) for RTL-safe margins.
+
 ## Production Deployment (Hostinger VPS)
 
 - **Deploy directory:** `deploy/` contains all production deployment configs
