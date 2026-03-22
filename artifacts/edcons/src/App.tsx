@@ -39,6 +39,7 @@ import AdminUsers from "@/pages/admin/Users";
 import AdminCatalog from "@/pages/admin/Catalog";
 import AdminAuditLog from "@/pages/admin/AuditLog";
 import AdminActivity from "@/pages/admin/Activity";
+import AdminEmbeds from "@/pages/admin/Embeds";
 
 // Student
 import StudentDashboard from "@/pages/student/Dashboard";
@@ -102,6 +103,9 @@ function Router() {
       </Route>
       <Route path="/admin/activity/:userId">
         {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity userId={Number(params.userId)} /></ProtectedRoute>}
+      </Route>
+      <Route path="/admin/embeds">
+        <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
       </Route>
 
       {/* Staff / Consultant Portal */}

@@ -24,6 +24,7 @@ import notificationsRouter from "./notifications";
 import integrationsRouter from "./integrations";
 import activityRouter from "./activity";
 import applicationStageDocumentsRouter from "./applicationStageDocuments";
+import embedRouter from "./embed";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(notificationsRouter);
 router.use(integrationsRouter);
 router.use(activityRouter);
 router.use(applicationStageDocumentsRouter);
+router.use(embedRouter);
 
 export default router;

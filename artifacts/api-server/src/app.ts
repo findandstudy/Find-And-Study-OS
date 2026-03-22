@@ -21,22 +21,38 @@ function getAllowedOrigins(): string[] {
   return origins;
 }
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-}));
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/public/embed/") && req.path.endsWith("/widget")) {
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      frameguard: false,
+    })(req, res, next);
+  } else {
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    })(req, res, next);
+  }
+});
 
-app.use(cors({
-  credentials: true,
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const allowed = getAllowedOrigins();
-    if (allowed.length === 0 || allowed.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
-}));
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/public/embed/")) {
+    cors({ origin: true, credentials: false })(req, res, next);
+  } else {
+    cors({
+      credentials: true,
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const allowed = getAllowedOrigins();
+        if (allowed.length === 0 || allowed.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`CORS: origin ${origin} not allowed`));
+      },
+    })(req, res, next);
+  }
+});
 
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));

@@ -161,6 +161,18 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Frontend:** `StageDocumentsPanel` component (`artifacts/edcons/src/components/StageDocumentsPanel.tsx`) — collapsible stage sections with upload buttons, file list, download, delete. Used in staff ApplicationDetail, agent EditApplicationDialog, and student Applications page.
 - **Files:** `lib/db/src/schema/applicationStageDocuments.ts`, `artifacts/api-server/src/routes/applicationStageDocuments.ts`, `artifacts/edcons/src/components/StageDocumentsPanel.tsx`
 
+## Embeddable Widgets
+
+- **Purpose:** Allow embedding course finder and application forms on external websites (WordPress, custom sites, etc.)
+- **DB tables:** `embed_widgets` (config: name, slug, mode, preset/locked/hidden/visible filters, theme JSONB, allowedDomains), `embed_submissions` (form data, UTM tracking, lead_id link). Indexes on `embed_submissions(widget_id, created_at, lead_id)`.
+- **Widget modes:** `combined` (course finder + application), `course_finder` (browse only), `application_only` (form only). Server validates mode on create/update, defaults to `combined` for invalid values.
+- **Admin endpoints (staff auth):** `GET/POST /api/embed/widgets`, `GET/PATCH/DELETE /api/embed/widgets/:id`, `GET /api/embed/widgets/:id/submissions`, `GET /api/embed/submissions`
+- **Public endpoints (no auth):** `GET /api/public/embed/:slug/config|programs|filters`, `POST /api/public/embed/:slug/apply` (rate limited, honeypot spam protection), `GET /api/public/embed/:slug/widget` (HTML page), `GET /api/public/embed/embed.js` (loader script)
+- **Embed methods:** JavaScript snippet (`<div data-edcons-widget="slug">` + `<script src="...embed.js">`) or iframe (`<iframe src="...widget">`)
+- **Security:** Domain validation (allowedDomains checked against Origin/Referer), `sanitizeTheme()` for CSS injection prevention, DB transaction for atomic lead+submission creation, rate limiting on submissions, CORS open for `/api/public/embed/` paths, X-Frame-Options disabled for widget HTML.
+- **Admin UI:** `/admin/embeds` page with widget table, create/edit dialog (4 tabs: General, Filters, Theme, Security), embed code generator, submissions viewer, delete with confirmation.
+- **Files:** `lib/db/src/schema/embeds.ts`, `artifacts/api-server/src/routes/embed.ts`, `artifacts/edcons/src/pages/admin/Embeds.tsx`
+
 ## Object Storage & Logo Upload
 
 - **Upload URL pattern:** `objectPath` from `/api/storage/uploads/request-url` returns paths like `/objects/uploads/<uuid>`. When constructing display URLs, **always strip** the `/objects` prefix: `objectPath.replace(/^\/objects/, "")` then build `${BASE_URL}/api/storage/objects${strippedPath}`. The serving route `/storage/objects/*path` internally re-adds the `/objects/` prefix.

@@ -42,6 +42,7 @@ import {
   Moon,
   Handshake,
   MessageCircle,
+  Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +88,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Users", icon: UserCheck, url: '/admin/users' },
             { title: "Audit Log", icon: Activity, url: '/admin/audit' },
             { title: "User Activity", icon: Activity, url: '/admin/activity' },
+            { title: "Embeds", icon: Code2, url: '/admin/embeds' },
             { title: "Settings", icon: Settings, url: '/admin/settings' },
           ]
         }

@@ -19,3 +19,4 @@ export * from "./notifications";
 export * from "./integrations";
 export * from "./activity";
 export * from "./applicationStageDocuments";
+export * from "./embeds";
