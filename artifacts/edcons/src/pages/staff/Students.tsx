@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -1805,6 +1806,14 @@ export default function StudentsPage() {
   function formatDate(d: string | null | undefined) {
     if (!d) return "-";
     return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <TableSkeleton />
+      </DashboardLayout>
+    );
   }
 
   return (

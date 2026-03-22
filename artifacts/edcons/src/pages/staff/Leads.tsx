@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -884,6 +885,14 @@ export default function LeadsPage() {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         },
       }
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <TableSkeleton />
+      </DashboardLayout>
     );
   }
 

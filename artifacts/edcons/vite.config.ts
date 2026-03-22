@@ -26,8 +26,6 @@ if (!basePath) {
   );
 }
 
-const isProd = process.env.NODE_ENV === "production";
-
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -66,12 +64,24 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    sourcemap: !isProd,
+    sourcemap: "hidden",
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
 
+          if (id.includes("react-dom") || (id.includes("/react/") && !id.includes("lucide-react"))) {
+            return "vendor-react";
+          }
+          if (id.includes("@tanstack")) {
+            return "vendor-tanstack";
+          }
+          if (id.includes("@radix-ui") || id.includes("class-variance-authority") || id.includes("clsx") || id.includes("tailwind-merge") || id.includes("cmdk")) {
+            return "vendor-ui";
+          }
+          if (id.includes("lucide-react")) {
+            return "vendor-icons";
+          }
           if (id.includes("jspdf") || id.includes("xlsx")) {
             return "vendor-export";
           }
@@ -80,6 +90,9 @@ export default defineConfig({
           }
           if (id.includes("framer-motion")) {
             return "vendor-motion";
+          }
+          if (id.includes("wouter") || id.includes("zod")) {
+            return "vendor-core";
           }
         },
       },
