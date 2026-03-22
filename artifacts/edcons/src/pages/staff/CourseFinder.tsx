@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -16,8 +16,9 @@ import {
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
   Download, CheckSquare, Square, FileDown, LayoutGrid, List, ArrowUpDown,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, Sparkles, CheckCircle2, AlertCircle, Upload,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
@@ -1325,6 +1326,143 @@ type StudentOption = {
   createdAt: string;
 };
 
+type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
+type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
+type UploadedDoc = { key: string; label: string; file: File; base64: string; mediaType: string; isImage: boolean };
+
+const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
+  pathway: [
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: false },
+    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: false },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: false },
+  ],
+  undergraduate: [
+    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: "image/*,.pdf", required: false, note: "If available" },
+  ],
+  graduate: [
+    { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "equivalency", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: true, note: "Recognition" },
+    { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
+    { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, note: "If required" },
+  ],
+  doctorate: [
+    { key: "master_diploma", label: "Master Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "master_transcript", label: "Master Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "equivalency", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: true, note: "Recognition" },
+    { key: "research_proposal", label: "Research Proposal", icon: "🔬", accept: "image/*,.pdf", required: false, note: "If required" },
+    { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
+  ],
+};
+
+function degreeToLevel(degree?: string | null): AppLevel {
+  if (!degree) return "undergraduate";
+  const d = degree.toLowerCase();
+  if (d.includes("phd") || d.includes("doctor")) return "doctorate";
+  if (d.includes("master") || d.includes("graduate") || d.includes("msc") || d.includes("mba") || d.includes("ma ")) return "graduate";
+  if (d.includes("pathway") || d.includes("prep") || d.includes("language") || d.includes("foundation")) return "pathway";
+  return "undergraduate";
+}
+
+function fileToBase64CF(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressImageCF(file: File, maxWidth = 1600, quality = 0.78): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality).split(",")[1]);
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepareDocBase64(file: File): Promise<{ base64: string; mediaType: string; isImage: boolean }> {
+  const isImage = file.type.startsWith("image/");
+  if (isImage) return { base64: await compressImageCF(file), mediaType: "image/jpeg", isImage: true };
+  return { base64: await fileToBase64CF(file), mediaType: file.type || "application/pdf", isImage: false };
+}
+
+function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
+  docType: LevelDoc; uploaded?: UploadedDoc;
+  onUpload: (doc: UploadedDoc) => void; onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  async function handleFile(file: File) {
+    const { base64, mediaType, isImage } = await prepareDocBase64(file);
+    onUpload({ key: docType.key, label: docType.label, file, base64, mediaType, isImage });
+  }
+
+  if (uploaded) {
+    return (
+      <div className="relative flex flex-col items-center gap-1 p-2.5 border-2 border-green-300 bg-green-50 rounded-xl text-center min-h-[100px] justify-center">
+        <button type="button" onClick={onRemove} className="absolute top-1.5 right-1.5 w-5 h-5 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-full flex items-center justify-center">
+          <X className="w-3 h-3" />
+        </button>
+        <CheckCircle2 className="w-5 h-5 text-green-500" />
+        <p className="text-[10px] font-semibold text-foreground truncate max-w-[80px]">{uploaded.file.name}</p>
+        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{docType.label}</span>
+      </div>
+    );
+  }
+
+  const requiredBadge = docType.required
+    ? <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Required</span>
+    : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Optional</span>;
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center gap-1 p-2.5 border-2 border-dashed rounded-xl text-center cursor-pointer min-h-[100px] justify-center transition-all",
+        dragging ? "border-primary bg-primary/10"
+          : docType.required ? "border-rose-200 hover:border-rose-400 hover:bg-rose-50/50" : "border-border hover:border-primary/50 hover:bg-secondary/50"
+      )}
+      onClick={() => inputRef.current?.click()}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+    >
+      <span className="text-xl">{docType.icon}</span>
+      <p className="text-[10px] font-semibold text-foreground leading-tight">{docType.label}</p>
+      {docType.note && <p className="text-[9px] text-muted-foreground leading-tight">{docType.note}</p>}
+      <div className="mt-0.5">{requiredBadge}</div>
+      <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+      />
+    </div>
+  );
+}
+
 function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | null; onClose: () => void; currentUser: any }) {
   const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
@@ -1334,6 +1472,13 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [step, setStep] = useState<"select" | "documents" | "analyzing" | "submit">("select");
+  const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
+  const [analysisResult, setAnalysisResult] = useState<Record<string, string> | null>(null);
+
+  const level = p ? degreeToLevel(p.degree) : "undergraduate";
+  const currentDocs = LEVEL_DOCS[level];
+  const uploadedCount = Object.keys(docs).length;
 
   const debouncedSearch = useMemo(() => searchTerm.trim(), [searchTerm]);
 
@@ -1372,14 +1517,77 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
     setNotes("");
     setSubmitting(false);
     setSuccess(false);
+    setStep("select");
+    setDocs({});
+    setAnalysisResult(null);
     onClose();
+  }
+
+  function handleNextToDocuments() {
+    if (!selectedStudent) return;
+    setStep("documents");
+  }
+
+  async function handleAnalyzeAndContinue() {
+    const uploadedDocs = Object.values(docs);
+    if (uploadedDocs.length === 0) {
+      setStep("submit");
+      return;
+    }
+    setStep("analyzing");
+    try {
+      const docPayload = uploadedDocs.map((d) => ({
+        type: d.isImage ? "image" : "pdf",
+        data: d.base64,
+        mediaType: d.mediaType,
+        label: d.label,
+      }));
+      const res = await fetch(`${BASE_URL}/api/ai/extract-document`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ documents: docPayload }),
+      });
+      if (res.ok) {
+        const { extracted } = await res.json();
+        setAnalysisResult(extracted);
+      }
+    } catch {}
+    setStep("submit");
+  }
+
+  async function saveDocumentsForApplication(studentId: number, applicationId: number, studentFirstName: string, studentLastName: string): Promise<number> {
+    const uploadedDocs = Object.values(docs);
+    if (uploadedDocs.length === 0) return 0;
+    const results = await Promise.allSettled(
+      uploadedDocs.map(async (d) => {
+        const docName = `${studentFirstName}-${studentLastName}-${d.label}`;
+        const res = await fetch(`${BASE_URL}/api/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: docName,
+            type: d.label?.toLowerCase() ?? "other",
+            status: "pending",
+            studentId,
+            applicationId,
+            fileData: d.base64,
+            mimeType: d.mediaType,
+            sizeBytes: d.file?.size ?? null,
+          }),
+        });
+        if (!res.ok) throw new Error(`Failed to upload ${d.label}`);
+      })
+    );
+    return results.filter(r => r.status === "fulfilled").length;
   }
 
   async function handleSubmit() {
     if (!selectedStudent || !p) return;
     setSubmitting(true);
     try {
-      await apiFetch(`${BASE_URL}/api/course-finder/apply`, {
+      const result = await apiFetch(`${BASE_URL}/api/course-finder/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1388,9 +1596,20 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
           notes: notes || null,
         }),
       });
+
+      const applicationId = (result as any)?.application?.id;
+      const docCount = Object.keys(docs).length;
+      if (docCount > 0 && applicationId) {
+        const savedCount = await saveDocumentsForApplication(selectedStudent.id, applicationId, selectedStudent.firstName, selectedStudent.lastName);
+        if (savedCount < docCount) {
+          toast({ title: "Warning", description: `${savedCount}/${docCount} documents uploaded. Some failed.`, variant: "destructive" });
+        }
+      }
+
       setSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["applications"] });
-      toast({ title: "Application created", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}` });
+      const docMsg = docCount > 0 ? ` with ${docCount} document${docCount !== 1 ? "s" : ""}` : "";
+      toast({ title: "Application created", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}${docMsg}` });
       setTimeout(() => handleClose(), 1500);
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to create application", variant: "destructive" });
@@ -1405,9 +1624,11 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
   const cur = p.currency ?? "USD";
   const commissionAmount = p.commissionRate && effectiveFee ? Math.round((effectiveFee * p.commissionRate) / 100) : null;
 
+  const levelLabel = level === "pathway" ? "Language / Prep" : level === "undergraduate" ? "Bachelor / Associate" : level === "graduate" ? "Master's Degree" : "Doctorate (PhD)";
+
   return (
     <Dialog open={!!p} onOpenChange={o => !o && handleClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg">Create Application</DialogTitle>
         </DialogHeader>
@@ -1419,8 +1640,11 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
             </div>
             <p className="text-lg font-semibold text-emerald-700">Application Created!</p>
             <p className="text-sm text-muted-foreground text-center">
-              Application, commission and service fee records have been created automatically.
+              {isStudentUser ? "Your application has been submitted for review." : "Application, commission and service fee records have been created automatically."}
             </p>
+            {uploadedCount > 0 && (
+              <p className="text-xs text-muted-foreground">{uploadedCount} document{uploadedCount !== 1 ? "s" : ""} uploaded successfully.</p>
+            )}
           </div>
         ) : (
           <div className="space-y-5">
@@ -1446,122 +1670,245 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
               </div>
             </div>
 
-            {isStudentUser ? (
-              <div className="bg-muted/30 rounded-xl p-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white shrink-0">
-                  {(currentUser?.firstName?.[0] || "").toUpperCase()}{(currentUser?.lastName?.[0] || "").toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{currentUser?.firstName} {currentUser?.lastName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{currentUser?.email}</p>
-                </div>
-                <Check className="w-4 h-4 text-primary shrink-0" />
-              </div>
-            ) : (
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Select Student</Label>
-              <div className="relative mb-3">
-                <UserSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, email or phone..."
-                  value={searchTerm}
-                  onChange={e => { setSearchTerm(e.target.value); setSelectedStudent(null); }}
-                  className="pl-10 rounded-lg"
-                />
-              </div>
-
-              {!debouncedSearch && recentStudents.length > 0 && (
-                <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">Recent Students</p>
-              )}
-
-              <div className="space-y-1.5 max-h-52 overflow-y-auto">
-                {isSearching ? (
-                  <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm">Searching...</span>
-                  </div>
-                ) : studentsToShow.length === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">{debouncedSearch.length >= 2 ? "No students found" : "No students yet"}</p>
+            {step === "select" && (
+              <>
+                {isStudentUser ? (
+                  <div className="bg-muted/30 rounded-xl p-3 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-white shrink-0">
+                      {(currentUser?.firstName?.[0] || "").toUpperCase()}{(currentUser?.lastName?.[0] || "").toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{currentUser?.firstName} {currentUser?.lastName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{currentUser?.email}</p>
+                    </div>
+                    <Check className="w-4 h-4 text-primary shrink-0" />
                   </div>
                 ) : (
-                  studentsToShow.map(s => {
-                    const isSelected = selectedStudent?.id === s.id;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => setSelectedStudent(isSelected ? null : s)}
-                        className={`w-full text-left p-3 rounded-lg border transition-all ${
-                          isSelected
-                            ? "border-primary bg-primary/5 ring-1 ring-primary"
-                            : "border-muted hover:border-primary/30 hover:bg-muted/40"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                            isSelected ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-                          }`}>
-                            {(s.firstName?.[0] || "").toUpperCase()}{(s.lastName?.[0] || "").toUpperCase()}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{s.firstName} {s.lastName}</p>
-                            <p className="text-xs text-muted-foreground truncate">{s.email}</p>
-                          </div>
-                          {s.nationality && (
-                            <Badge variant="outline" className="text-[10px] shrink-0">{s.nationality}</Badge>
-                          )}
-                          {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Select Student</Label>
+                    <div className="relative mb-3">
+                      <UserSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name, email or phone..."
+                        value={searchTerm}
+                        onChange={e => { setSearchTerm(e.target.value); setSelectedStudent(null); }}
+                        className="pl-10 rounded-lg"
+                      />
+                    </div>
+                    {!debouncedSearch && recentStudents.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">Recent Students</p>
+                    )}
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                      {isSearching ? (
+                        <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm">Searching...</span>
                         </div>
-                      </button>
-                    );
-                  })
+                      ) : studentsToShow.length === 0 ? (
+                        <div className="text-center py-6 text-muted-foreground">
+                          <User className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">{debouncedSearch.length >= 2 ? "No students found" : "No students yet"}</p>
+                        </div>
+                      ) : (
+                        studentsToShow.map(s => {
+                          const isSelected = selectedStudent?.id === s.id;
+                          return (
+                            <button
+                              key={s.id}
+                              onClick={() => setSelectedStudent(isSelected ? null : s)}
+                              className={`w-full text-left p-3 rounded-lg border transition-all ${
+                                isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-muted hover:border-primary/30 hover:bg-muted/40"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                  isSelected ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                                }`}>
+                                  {(s.firstName?.[0] || "").toUpperCase()}{(s.lastName?.[0] || "").toUpperCase()}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">{s.firstName} {s.lastName}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                                </div>
+                                {s.nationality && <Badge variant="outline" className="text-[10px] shrink-0">{s.nationality}</Badge>}
+                                {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
-            </div>
+                <Button onClick={handleNextToDocuments} disabled={!selectedStudent} className="w-full rounded-xl h-11">
+                  <FileText className="w-4 h-4 mr-2" /> Continue to Documents
+                </Button>
+              </>
             )}
 
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
-              <Textarea
-                rows={2}
-                placeholder="Add a note about this application..."
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                className="resize-none rounded-lg"
-              />
-            </div>
+            {step === "documents" && (
+              <>
+                <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-xl p-3 flex items-start gap-3">
+                  <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">AI-Powered Document Upload</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Upload documents for <strong>{levelLabel}</strong> level. AI will analyze them automatically.
+                    </p>
+                  </div>
+                </div>
 
-            {isStudentUser ? (
-              <div className="bg-blue-50 rounded-xl p-3">
-                <p className="text-xs text-blue-700">Your application will be submitted for review.</p>
-              </div>
-            ) : (
-              <div className="bg-blue-50 rounded-xl p-3 space-y-1">
-                <p className="text-xs font-semibold text-blue-700">The following will be created automatically:</p>
-                <ul className="text-xs text-blue-600 space-y-0.5">
-                  <li>• Application record (Applications → inquiry stage)</li>
-                  {commissionAmount != null && commissionAmount > 0 && (
-                    <li>• Commission record ({formatCurrency(commissionAmount, cur)} — potential)</li>
-                  )}
-                  {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                    <li>• Service fee ({formatCurrency(p.serviceFeeAmount, cur)} — 2 installments)</li>
-                  )}
-                </ul>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-foreground">Required Documents</p>
+                    <p className="text-xs text-muted-foreground">{uploadedCount}/{currentDocs.length} uploaded</p>
+                  </div>
+                  <div className={cn(
+                    "grid gap-2",
+                    currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
+                  )}>
+                    {currentDocs.map((dt) => (
+                      <ApplyDropZone
+                        key={dt.key}
+                        docType={dt}
+                        uploaded={docs[dt.key]}
+                        onUpload={(doc) => setDocs((d) => ({ ...d, [dt.key]: doc }))}
+                        onRemove={() => setDocs((d) => { const n = { ...d }; delete n[dt.key]; return n; })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
+                  <Textarea
+                    rows={2}
+                    placeholder="Add a note about this application..."
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    className="resize-none rounded-lg"
+                  />
+                </div>
+
+                {isStudentUser ? (
+                  <div className="bg-blue-50 rounded-xl p-3">
+                    <p className="text-xs text-blue-700">Your application will be submitted for review.</p>
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 rounded-xl p-3 space-y-1">
+                    <p className="text-xs font-semibold text-blue-700">The following will be created automatically:</p>
+                    <ul className="text-xs text-blue-600 space-y-0.5">
+                      <li>• Application record (Applications → inquiry stage)</li>
+                      {commissionAmount != null && commissionAmount > 0 && (
+                        <li>• Commission record ({formatCurrency(commissionAmount, cur)} — potential)</li>
+                      )}
+                      {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
+                        <li>• Service fee ({formatCurrency(p.serviceFeeAmount, cur)} — 2 installments)</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setStep("select")} className="rounded-xl h-11">
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
+                  <Button
+                    onClick={uploadedCount > 0 ? handleAnalyzeAndContinue : handleSubmit}
+                    disabled={submitting}
+                    className="flex-1 rounded-xl h-11"
+                  >
+                    {submitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>
+                    ) : uploadedCount > 0 ? (
+                      <><Sparkles className="w-4 h-4 mr-2" /> Analyze & Submit ({uploadedCount} doc{uploadedCount !== 1 ? "s" : ""})</>
+                    ) : (
+                      <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? "Submit Application" : "Submit Without Documents"}</>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {step === "analyzing" && (
+              <div className="flex flex-col items-center justify-center py-12 gap-5">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-100 to-blue-100 flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-violet-500" />
+                  </div>
+                  <div className="absolute inset-0 rounded-full border-4 border-violet-200 animate-ping opacity-40" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-base font-display font-semibold">AI is analyzing your documents...</p>
+                  <p className="text-sm text-muted-foreground">
+                    Processing {uploadedCount} document{uploadedCount !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 w-full max-w-xs">
+                  {Object.values(docs).map((d) => (
+                    <div key={d.key} className="flex items-center gap-2 text-sm bg-secondary/50 rounded-lg px-3 py-2">
+                      <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+                      <span className="text-sm text-muted-foreground">Analyzing {d.label}...</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            <Button
-              onClick={handleSubmit}
-              disabled={!selectedStudent || submitting}
-              className="w-full rounded-xl h-11"
-            >
-              {submitting ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStudentUser ? "Submitting..." : "Creating..."}</>
-              ) : (
-                <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? "Submit Application" : "Create Application"}</>
-              )}
-            </Button>
+            {step === "submit" && (
+              <>
+                {analysisResult && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-emerald-700">
+                      <strong>AI analysis complete.</strong> Documents processed and ready to submit.
+                    </p>
+                  </div>
+                )}
+
+                {uploadedCount > 0 && (
+                  <div className="bg-muted/30 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-foreground mb-2">{uploadedCount} Document{uploadedCount !== 1 ? "s" : ""} Ready</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.values(docs).map((d) => (
+                        <Badge key={d.key} variant="outline" className="text-[10px] gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-green-500" />
+                          {d.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
+                  <Textarea
+                    rows={2}
+                    placeholder="Add a note about this application..."
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    className="resize-none rounded-lg"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setStep("documents")} className="rounded-xl h-11">
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="flex-1 rounded-xl h-11"
+                  >
+                    {submitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStudentUser ? "Submitting..." : "Creating..."}</>
+                    ) : (
+                      <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? "Submit Application" : "Create Application"}</>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </DialogContent>

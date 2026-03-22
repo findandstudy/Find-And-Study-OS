@@ -45,8 +45,24 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
   res.json(docs);
 });
 
-router.post("/documents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/documents", requireAuth, async (req, res): Promise<void> => {
+  const user = req.user!;
+  const isStaff = STAFF_ROLES.includes(user.role as any);
   const { name, type, status = "pending", studentId, applicationId, fileUrl, fileData, mimeType, sizeBytes, notes } = req.body;
+
+  if (!isStaff) {
+    if (user.role === "student") {
+      const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+      if (!studentRec || (studentId && studentRec.id !== studentId)) {
+        res.status(403).json({ error: "Students can only upload documents for themselves" });
+        return;
+      }
+    } else {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  }
+
   if (!name || !type) {
     res.status(400).json({ error: "name and type are required" });
     return;
@@ -65,7 +81,7 @@ router.post("/documents", requireAuth, requireRole(...STAFF_ROLES), async (req, 
     sizeBytes: sizeBytes ? Number(sizeBytes) : null,
     notes: notes || null,
   }).returning();
-  await logAudit(req.user!.id, "create_document", "document", doc.id, { name, type }, req.ip);
+  await logAudit(user.id, "create_document", "document", doc.id, { name, type }, req.ip);
   res.status(201).json(doc);
 });
 
