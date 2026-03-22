@@ -746,7 +746,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, s
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-lg border bg-white flex items-center justify-center overflow-hidden shrink-0">
                         {p.universityLogoUrl ? (
-                          <img src={p.universityLogoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                          <img src={p.universityLogoUrl} alt={p.universityName || 'University logo'} width={36} height={36} loading="lazy" className="w-full h-full object-contain p-0.5" />
                         ) : (
                           <Building2 className="w-4 h-4 text-muted-foreground" />
                         )}
@@ -910,7 +910,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
               title={`Visit ${p.universityName} website`}
             >
               {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
               ) : (
                 <Building2 className="w-7 h-7 text-muted-foreground" />
               )}
@@ -918,7 +918,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
           ) : (
             <div className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
               {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
               ) : (
                 <Building2 className="w-7 h-7 text-muted-foreground" />
               )}
@@ -1072,7 +1072,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
               {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
               ) : (
                 <Building2 className="w-8 h-8 text-muted-foreground" />
               )}
@@ -1257,7 +1257,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission }: {
           <div className="flex items-start gap-3">
             <div className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
               {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
               ) : (
                 <Building2 className="w-7 h-7 text-muted-foreground" />
               )}

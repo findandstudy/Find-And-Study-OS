@@ -381,7 +381,7 @@ function UsersTab() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {user.avatarUrl ? (
-                          <img src={user.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover" />
+                          <img src={user.avatarUrl} alt={`${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User avatar'} width={40} height={40} loading="lazy" className="w-10 h-10 rounded-full object-cover" />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-sm text-foreground">
                             {initials}

@@ -543,7 +543,7 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-3">
                     {a.logoUrl ? (
-                      <img src={fixStorageUrl(a.logoUrl)!} alt="" className="w-9 h-9 rounded-lg object-cover border border-border" />
+                      <img src={fixStorageUrl(a.logoUrl)!} alt={a.name || 'Agent logo'} width={36} height={36} loading="lazy" className="w-9 h-9 rounded-lg object-cover border border-border" />
                     ) : (
                       <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-primary/20 to-accent/20 flex items-center justify-center font-bold text-xs text-primary">
                         {a.firstName[0]}{a.lastName[0]}

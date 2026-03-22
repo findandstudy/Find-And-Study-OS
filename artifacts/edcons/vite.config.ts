@@ -31,14 +31,18 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    runtimeErrorOverlay({
-      filter: (error: Error) => {
-        if (error.message === "(unknown runtime error)") return false;
-        if (error.message?.includes("HTTP 401")) return false;
-        if (error.message?.includes("HTTP 403")) return false;
-        return true;
-      },
-    }),
+    ...(process.env.NODE_ENV !== "production"
+      ? [
+          runtimeErrorOverlay({
+            filter: (error: Error) => {
+              if (error.message === "(unknown runtime error)") return false;
+              if (error.message?.includes("HTTP 401")) return false;
+              if (error.message?.includes("HTTP 403")) return false;
+              return true;
+            },
+          }),
+        ]
+      : []),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
