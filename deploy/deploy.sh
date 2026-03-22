@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "============================================"
+echo " Find And Study OS — Deploy"
+echo "============================================"
+
+cd "$PROJECT_ROOT"
+
+if [ ! -f ".env" ]; then
+  echo "[error] .env file not found. Copy deploy/.env.example to .env and configure it."
+  exit 1
+fi
+
+set -a
+source .env
+set +a
+
+echo ""
+echo "[1/4] Installing production dependencies..."
+pnpm install --frozen-lockfile
+
+echo ""
+echo "[2/4] Running production build (includes DB migrations)..."
+bash deploy/build-production.sh
+
+echo ""
+echo "[3/4] Creating log directory..."
+mkdir -p logs
+
+echo ""
+echo "[4/4] Starting/restarting PM2..."
+if command -v pm2 &> /dev/null; then
+  pm2 startOrRestart deploy/ecosystem.config.cjs --env production
+  pm2 save
+  echo ""
+  echo " PM2 process started. Useful commands:"
+  echo "   pm2 status           — View process status"
+  echo "   pm2 logs             — View logs"
+  echo "   pm2 monit            — Monitor dashboard"
+  echo "   pm2 restart all      — Restart all processes"
+else
+  echo "[warn] PM2 not found. Install it with: npm install -g pm2"
+  echo "       Then run: pm2 start deploy/ecosystem.config.cjs --env production"
+  echo ""
+  echo "       Or run directly with:"
+  echo "       NODE_ENV=production PORT=3000 node artifacts/api-server/dist/index.cjs"
+fi
+
+echo ""
+echo "============================================"
+echo " Deploy complete!"
+echo " App should be running on port ${PORT:-3000}"
+echo "============================================"

@@ -1,3 +1,4 @@
+import express from "express";
 import app from "./app";
 import { db, pool, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -5,6 +6,8 @@ import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
+const isProd = process.env.NODE_ENV === "production";
 
 function getSeedDir(): string {
   try {
@@ -18,6 +21,7 @@ function getSeedDir(): string {
 const seedDir = getSeedDir();
 
 async function ensureSuperAdmin() {
+  if (isProd) return;
   try {
     const email = "en@findandstudy.com";
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
@@ -41,6 +45,7 @@ async function ensureSuperAdmin() {
 }
 
 async function ensureAgentUser() {
+  if (isProd) return;
   try {
     const email = "omar@agent.com";
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
@@ -64,6 +69,7 @@ async function ensureAgentUser() {
 }
 
 async function runSeedSQL() {
+  if (isProd) return;
   try {
     const seedPath = path.join(seedDir, "seed.sql");
     if (!fs.existsSync(seedPath)) {
@@ -90,6 +96,7 @@ async function runSeedSQL() {
 }
 
 async function linkAgentUser() {
+  if (isProd) return;
   try {
     const [agentUser] = await db.select().from(usersTable).where(eq(usersTable.email, "omar@agent.com"));
     if (agentUser) {
@@ -101,6 +108,45 @@ async function linkAgentUser() {
   } catch (err) {
     console.error("[seed] linkAgentUser error:", err);
   }
+}
+
+function serveStaticFrontend() {
+  if (!isProd) return;
+
+  const distPath = process.env.FRONTEND_DIST_PATH
+    || path.resolve(getSeedDir(), "..", "..", "edcons", "dist", "public");
+
+  if (!fs.existsSync(distPath)) {
+    console.warn(`[static] Frontend dist not found at ${distPath}, skipping static serving`);
+    return;
+  }
+
+  app.use(
+    "/assets",
+    (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      next();
+    },
+    express.static(path.join(distPath, "assets"))
+  );
+
+  app.use(express.static(distPath, {
+    index: false,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".html")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
+    },
+  }));
+
+  app.get("*", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith("/api")) return next();
+    const indexPath = path.join(distPath, "index.html");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(indexPath);
+  });
+
+  console.log(`[static] Serving frontend from ${distPath}`);
 }
 
 const rawPort = process.env["PORT"];
@@ -122,7 +168,8 @@ if (Number.isNaN(port) || port <= 0) {
   await ensureAgentUser();
   await runSeedSQL();
   await linkAgentUser();
+  serveStaticFrontend();
   app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
+    console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
   });
 })();

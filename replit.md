@@ -175,6 +175,19 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 - **Admin UI:** `/admin/embeds` page with widget table, create/edit dialog (4 tabs: General, Filters, Theme, Security), embed code generator, submissions viewer, delete with confirmation.
 - **Files:** `lib/db/src/schema/embeds.ts`, `artifacts/api-server/src/routes/embed.ts`, `artifacts/edcons/src/pages/admin/Embeds.tsx`
 
+## Production Deployment (Hostinger VPS)
+
+- **Deploy directory:** `deploy/` contains all production deployment configs
+- **Static serving:** In production (`NODE_ENV=production`), Express serves the built frontend from `artifacts/edcons/dist/public/` with SPA fallback. Hashed `/assets/` get `immutable, max-age=1y`; `index.html` gets `no-cache`.
+- **Dev seed data gating:** All seed functions (`ensureSuperAdmin`, `ensureAgentUser`, `runSeedSQL`, `linkAgentUser`) are gated behind `NODE_ENV !== "production"` — they only run in development.
+- **Nginx config:** `deploy/nginx.conf` — reverse proxy, gzip, SSL placeholders, security headers, rate limiting (30r/s API, 5r/m login).
+- **PM2 config:** `deploy/ecosystem.config.cjs` — cluster mode, auto-restart, 512M memory limit, log rotation.
+- **Build script:** `deploy/build-production.sh` or `pnpm run build:prod` — builds frontend (BASE_PATH=/) then backend.
+- **Deploy script:** `deploy/deploy.sh` — installs deps, builds, migrates DB, starts PM2.
+- **Environment:** `deploy/.env.example` documents all required/optional variables.
+- **Shared hosting fallback:** `deploy/.htaccess` for Apache-based shared hosting (SPA rewrite, compression, cache headers).
+- **Full documentation:** `deploy/DEPLOYMENT.md` — step-by-step Hostinger VPS setup guide.
+
 ## Object Storage & Logo Upload
 
 - **Upload URL pattern:** `objectPath` from `/api/storage/uploads/request-url` returns paths like `/objects/uploads/<uuid>`. When constructing display URLs, **always strip** the `/objects` prefix: `objectPath.replace(/^\/objects/, "")` then build `${BASE_URL}/api/storage/objects${strippedPath}`. The serving route `/storage/objects/*path` internally re-adds the `/objects/` prefix.
