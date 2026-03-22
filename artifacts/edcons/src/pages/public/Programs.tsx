@@ -18,6 +18,15 @@ import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 interface Program {
   id: number;
   name: string;
@@ -38,8 +47,12 @@ interface Program {
 
 interface Filters {
   countries: string[];
+  cities: string[];
+  universityTypes: string[];
+  universities: { id: number; name: string }[];
   degrees: string[];
   languages: string[];
+  feeRange: { min: number; max: number } | null;
 }
 
 function formatFee(fee: number | null, currency: string | null): string {
@@ -456,11 +469,17 @@ export default function Programs() {
   useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [country, setCountry] = useState("All");
-  const [level, setLevel] = useState("All");
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
+  const [universityType, setUniversityType] = useState("");
+  const [universityId, setUniversityId] = useState("");
+  const [level, setLevel] = useState("");
+  const [language, setLanguage] = useState("");
+  const [feeMin, setFeeMin] = useState("");
+  const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({ countries: [], degrees: [], languages: [] });
+  const [filters, setFilters] = useState<Filters>({ countries: [], cities: [], universityTypes: [], universities: [], degrees: [], languages: [], feeRange: null });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -477,13 +496,28 @@ export default function Programs() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (country) {
+      setCity("");
+    }
+  }, [country]);
+
+  const debouncedFeeMin = useDebounce(feeMin, 500);
+  const debouncedFeeMax = useDebounce(feeMax, 500);
+
   const fetchPrograms = useCallback(async () => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "24" });
       if (debouncedSearch) params.set("search", debouncedSearch);
-      if (country !== "All") params.set("country", country);
-      if (level !== "All") params.set("level", level);
+      if (country) params.set("country", country);
+      if (city) params.set("city", city);
+      if (universityType) params.set("universityType", universityType);
+      if (universityId) params.set("universityId", universityId);
+      if (level) params.set("level", level);
+      if (language) params.set("language", language);
+      if (debouncedFeeMin) params.set("feeMin", debouncedFeeMin);
+      if (debouncedFeeMax) params.set("feeMax", debouncedFeeMax);
 
       const resp = await customFetch<{ data: Program[]; meta: { total: number; page: number; totalPages: number } }>(
         `/api/course-finder?${params.toString()}`,
@@ -497,62 +531,127 @@ export default function Programs() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, debouncedSearch, country, level]);
+  }, [page, debouncedSearch, country, city, universityType, universityId, level, language, debouncedFeeMin, debouncedFeeMax]);
 
   useEffect(() => { fetchPrograms(); }, [fetchPrograms]);
-  useEffect(() => { setPage(1); }, [debouncedSearch, country, level]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, country, city, universityType, universityId, level, language, debouncedFeeMin, debouncedFeeMax]);
 
-  const displayCountries = filters.countries.length > 0 ? ["All", ...filters.countries] : ["All"];
-  const displayDegrees = filters.degrees.length > 0 ? ["All", ...filters.degrees] : ["All"];
+  const filteredCities = country
+    ? filters.cities.filter(c => {
+        return true;
+      })
+    : filters.cities;
+
+  const hasActiveFilters = country || city || universityType || universityId || level || language || feeMin || feeMax;
+
+  function clearAllFilters() {
+    setCountry("");
+    setCity("");
+    setUniversityType("");
+    setUniversityId("");
+    setLevel("");
+    setLanguage("");
+    setFeeMin("");
+    setFeeMax("");
+    setSearch("");
+  }
 
   return (
     <PublicLayout>
-      <section className="pt-24 pb-16 bg-gradient-to-br from-primary/5 to-accent/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="pt-28 pb-8 bg-gradient-to-b from-primary/5 to-background">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6">
-              <GraduationCap className="w-4 h-4" /> {total > 0 ? `${total}+ Programs Available` : "Browse Programs"}
-            </span>
-            <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">
-              Find Your Perfect <span className="text-primary">Program</span>
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-              Browse programs at top universities worldwide and find the one that's right for you.
-            </p>
-            <div className="max-w-2xl mx-auto relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search programs, universities, locations..."
-                className="pl-12 pr-4 py-6 text-base rounded-full shadow-lg border-border/50 focus:border-primary" />
+            <div className="bg-card rounded-2xl shadow-lg shadow-black/5 border border-border/40 p-6 space-y-5">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder={t("programs.searchPlaceholder")}
+                  className="pl-12 pr-4 h-12 text-base rounded-xl border-border/60 focus:border-primary bg-background" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterCountry")}</label>
+                  <select value={country} onChange={e => setCountry(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <option value="">{t("programs.allCountries")}</option>
+                    {filters.countries.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterCity")}</label>
+                  <select value={city} onChange={e => setCity(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <option value="">{t("programs.allCities")}</option>
+                    {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterUniversityType")}</label>
+                  <select value={universityType} onChange={e => setUniversityType(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <option value="">{t("programs.allTypes")}</option>
+                    {filters.universityTypes.map(ut => <option key={ut} value={ut}>{ut}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterUniversity")}</label>
+                  <select value={universityId} onChange={e => setUniversityId(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <option value="">{t("programs.allUniversities")}</option>
+                    {filters.universities.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterLevel")}</label>
+                  <select value={level} onChange={e => setLevel(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <option value="">{t("programs.allLevels")}</option>
+                    {filters.degrees.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterLanguage")}</label>
+                  <select value={language} onChange={e => setLanguage(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-border/60 bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors">
+                    <option value="">{t("programs.allLanguages")}</option>
+                    {filters.languages.map(lg => <option key={lg} value={lg}>{lg}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 lg:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("programs.filterTuitionFee")}</label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
+                      placeholder={t("programs.feeMin")}
+                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0" />
+                    <span className="text-muted-foreground text-sm">–</span>
+                    <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
+                      placeholder={t("programs.feeMax")}
+                      className="h-10 rounded-lg border-border/60 bg-background text-sm flex-1" min="0" />
+                  </div>
+                </div>
+              </div>
+
+              {hasActiveFilters && (
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-sm text-muted-foreground">
+                    {t("programs.showingResults", { count: String(total) })}
+                  </p>
+                  <button onClick={clearAllFilters} className="text-sm text-primary hover:text-primary/80 font-medium transition-colors">
+                    {t("programs.clearFilters")}
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
-        </div>
-      </section>
-
-      <section className="sticky top-20 z-40 bg-background/95 backdrop-blur-sm border-b py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-6 overflow-x-auto pb-2">
-            <div className="flex gap-2 shrink-0">
-              <span className="text-sm text-muted-foreground self-center font-medium">Country:</span>
-              {displayCountries.map(c => (
-                <button key={c} onClick={() => setCountry(c)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
-                    ${country === c ? 'bg-primary text-white shadow-md shadow-primary/25' : 'bg-secondary hover:bg-primary/10 text-muted-foreground hover:text-primary'}`}>
-                  {c}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <span className="text-sm text-muted-foreground self-center font-medium">Level:</span>
-              {displayDegrees.map(l => (
-                <button key={l} onClick={() => setLevel(l)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap
-                    ${level === l ? 'bg-accent text-white shadow-md shadow-accent/25' : 'bg-secondary hover:bg-accent/10 text-muted-foreground hover:text-accent'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
