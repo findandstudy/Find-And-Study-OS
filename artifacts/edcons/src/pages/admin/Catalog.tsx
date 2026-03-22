@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
@@ -475,13 +476,20 @@ function CitiesTab() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search cities…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
-        <Select value={filterCountry} onValueChange={v => { setFilterCountry(v); setPage(1); setSelected(new Set()); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All countries" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All countries</SelectItem>
-            {countries.map(c => <SelectItem key={c.id} value={String(c.id)}><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span></SelectItem>)}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={filterCountry}
+          onValueChange={v => { setFilterCountry(v); setPage(1); setSelected(new Set()); }}
+          placeholder="All countries"
+          className="w-[200px]"
+          options={[
+            { value: "all", label: "All countries" },
+            ...countries.map(c => ({
+              value: String(c.id),
+              label: c.name,
+              icon: c.code ? <CountryFlag code={c.code} size="sm" /> : undefined,
+            })),
+          ]}
+        />
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
@@ -1178,13 +1186,19 @@ function ProgramsTab() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search programs…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
-        <Select value={filterUni} onValueChange={v => { setFilterUni(v); setPage(1); }}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="All universities" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All universities</SelectItem>
-            {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={filterUni}
+          onValueChange={v => { setFilterUni(v); setPage(1); }}
+          placeholder="All universities"
+          className="w-[220px]"
+          options={[
+            { value: "all", label: "All universities" },
+            ...universities.map(u => ({
+              value: String(u.id),
+              label: u.name,
+            })),
+          ]}
+        />
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
