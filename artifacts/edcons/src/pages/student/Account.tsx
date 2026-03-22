@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 const LANGUAGES = [
   { code: "en", label: "English",   country: "GB" },
@@ -70,6 +71,17 @@ export default function StudentAccount() {
       }
     },
   });
+
+  const { data: countriesResp } = useQuery({
+    queryKey: ["all-countries-nationality"],
+    queryFn: async () => customFetch("/api/countries?limit=500"),
+    staleTime: 5 * 60_000,
+  });
+  const nationalityOptions = ((countriesResp as any)?.data ?? []).map((c: any) => ({
+    value: c.name,
+    label: c.name,
+    icon: c.code ? <CountryFlag code={c.code} size="sm" /> : undefined,
+  }));
 
   useEffect(() => {
     if (studentProfile) {
@@ -283,7 +295,13 @@ export default function StudentAccount() {
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <Label>Nationality</Label>
-                        <Input value={studentForm.nationality} onChange={e => setStudentForm(f => ({ ...f, nationality: e.target.value }))} placeholder="e.g. Turkish" className="rounded-xl" />
+                        <SearchableSelect
+                          value={studentForm.nationality}
+                          onValueChange={v => setStudentForm(f => ({ ...f, nationality: v }))}
+                          options={nationalityOptions}
+                          placeholder="Select country..."
+                          className="rounded-xl"
+                        />
                       </div>
                       <div className="space-y-1.5">
                         <Label>Date of Birth</Label>
