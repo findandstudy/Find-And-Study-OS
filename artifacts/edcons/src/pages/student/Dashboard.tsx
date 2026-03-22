@@ -4,7 +4,8 @@ import { useListApplications, useListDocuments } from "@workspace/api-client-rea
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare } from "lucide-react";
+import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare, Search } from "lucide-react";
+import { useLocation } from "wouter";
 
 const STAGE_LABELS: Record<string, { label: string; color: string; step: number }> = {
   inquiry: { label: "Inquiry Received", color: "bg-slate-400", step: 1 },
@@ -21,6 +22,7 @@ const STEPS = ["inquiry", "documents_collected", "submitted", "offer_received", 
 
 export default function StudentDashboard() {
   const { user } = useAuth(true);
+  const [, setLocation] = useLocation();
   const { data: applicationsResp, isLoading: appsLoading } = useListApplications({ query: { queryKey: ['student-applications'] } });
   const { data: documentsResp } = useListDocuments({ query: { queryKey: ['student-docs'] } });
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
@@ -112,8 +114,8 @@ export default function StudentDashboard() {
             <GraduationCap className="w-16 h-16 text-primary/30 mx-auto mb-4" />
             <h3 className="text-xl font-display font-bold text-foreground mb-2">Start Your Application</h3>
             <p className="text-muted-foreground mb-6">Browse programs and submit your first university application.</p>
-            <Button className="rounded-xl gap-2 px-8">
-              <FileText className="w-4 h-4" /> Browse Programs
+            <Button className="rounded-xl gap-2 px-8" onClick={() => setLocation("/student/course-finder")}>
+              <Search className="w-4 h-4" /> Apply Now
             </Button>
           </Card>
         )}

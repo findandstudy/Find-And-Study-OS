@@ -205,6 +205,9 @@ function Router() {
         <Route path="/student/applications">
           <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentApplications /></EmailVerificationGuard></ProtectedRoute>
         </Route>
+        <Route path="/student/course-finder">
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StaffCourseFinder /></EmailVerificationGuard></ProtectedRoute>
+        </Route>
         <Route path="/student/account">
           <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentAccount /></EmailVerificationGuard></ProtectedRoute>
         </Route>

@@ -140,6 +140,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
           items: [
             { title: "Dashboard",        icon: LayoutDashboard, url: '/student' },
             { title: "My Applications",  icon: FileText,        url: '/student/applications' },
+            { title: "Course Finder",    icon: Search,          url: '/student/course-finder' },
           ]
         },
         {
