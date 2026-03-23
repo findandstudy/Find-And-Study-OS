@@ -70,8 +70,11 @@ export default function StudentApplications() {
                           </Badge>
                         </div>
                         <h2 className="font-display font-bold text-lg text-foreground">
-                          {app.universityId ? `University Application #${app.universityId}` : "University Application"}
+                          {app.universityName || (app.universityId ? `University #${app.universityId}` : "University Application")}
                         </h2>
+                        {app.programName && (
+                          <p className="text-sm text-muted-foreground">{app.programName}</p>
+                        )}
                         <div className="flex flex-wrap items-center gap-4 mt-1 text-sm text-muted-foreground">
                           {app.intakeDate && (
                             <span className="flex items-center gap-1">

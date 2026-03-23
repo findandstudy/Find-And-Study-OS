@@ -372,8 +372,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   <tbody>
                     {applications.map((app: any) => (
                       <tr key={app.id} className="border-t hover:bg-primary/5 transition-colors">
-                        <td className="px-4 py-3 font-medium">{app.universityId ?? "\u2014"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{app.programId ?? "\u2014"}</td>
+                        <td className="px-4 py-3 font-medium">{app.universityName ?? app.universityId ?? "\u2014"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{app.programName ?? app.programId ?? "\u2014"}</td>
                         <td className="px-4 py-3">
                           <Badge
                             className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}

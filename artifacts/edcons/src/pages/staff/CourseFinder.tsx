@@ -1619,8 +1619,9 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
   async function saveDocumentsForApplication(studentId: number, applicationId: number, studentFirstName: string, studentLastName: string): Promise<number> {
     const uploadedDocs = Object.values(docs);
     if (uploadedDocs.length === 0) return 0;
-    const results = await Promise.allSettled(
-      uploadedDocs.map(async (d) => {
+    let savedCount = 0;
+    for (const d of uploadedDocs) {
+      try {
         const docName = `${studentFirstName}-${studentLastName}-${d.label}`;
         const res = await fetch(`${BASE_URL}/api/documents`, {
           method: "POST",
@@ -1628,7 +1629,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
           credentials: "include",
           body: JSON.stringify({
             name: docName,
-            type: d.label?.toLowerCase() ?? "other",
+            type: d.label?.toLowerCase().replace(/\s+/g, "_") ?? "other",
             status: "pending",
             studentId,
             applicationId,
@@ -1637,10 +1638,16 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
             sizeBytes: d.file?.size ?? null,
           }),
         });
-        if (!res.ok) throw new Error(`Failed to upload ${d.label}`);
-      })
-    );
-    return results.filter(r => r.status === "fulfilled").length;
+        if (res.ok) {
+          savedCount++;
+        } else {
+          console.error(`Document upload failed for ${d.label}: ${res.status} ${res.statusText}`);
+        }
+      } catch (err) {
+        console.error(`Document upload error for ${d.label}:`, err);
+      }
+    }
+    return savedCount;
   }
 
   async function handleSubmit() {
@@ -1657,17 +1664,66 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
         }),
       });
 
-      const applicationId = (result as any)?.application?.id;
+      const application = (result as any)?.application;
+      const applicationId = application?.id;
+      const resolvedStudentId: number | undefined = application?.studentId ?? selectedStudent.id;
       const docCount = Object.keys(docs).length;
-      if (docCount > 0 && applicationId) {
-        const savedCount = await saveDocumentsForApplication(selectedStudent.id, applicationId, selectedStudent.firstName, selectedStudent.lastName);
+      if (docCount > 0 && applicationId && resolvedStudentId) {
+        const savedCount = await saveDocumentsForApplication(resolvedStudentId, applicationId, selectedStudent.firstName, selectedStudent.lastName);
         if (savedCount < docCount) {
           toast({ title: "Warning", description: `${savedCount}/${docCount} documents uploaded. Some failed.`, variant: "destructive" });
         }
       }
 
+      if (analysisResult && resolvedStudentId) {
+        try {
+          const studentRes = await fetch(`${BASE_URL}/api/students/${resolvedStudentId}`, {
+            credentials: "include",
+          });
+          if (studentRes.ok) {
+            const currentStudent = await studentRes.json();
+            const extractableFields = [
+              "dateOfBirth", "nationality", "passportNumber",
+              "passportIssueDate", "passportExpiry",
+              "motherName", "fatherName", "address",
+              "highSchool", "graduationYear", "gpa", "languageScore",
+            ] as const;
+            const profileFields: Record<string, unknown> = {};
+            for (const field of extractableFields) {
+              const val = analysisResult[field];
+              if (val && val !== "null") {
+                const existing = currentStudent[field];
+                if (!existing && existing !== 0) {
+                  if (field === "graduationYear") {
+                    const parsed = parseInt(String(val), 10);
+                    if (!isNaN(parsed)) profileFields[field] = parsed;
+                  } else {
+                    profileFields[field] = String(val);
+                  }
+                }
+              }
+            }
+            if (Object.keys(profileFields).length > 0) {
+              const patchRes = await fetch(`${BASE_URL}/api/students/${resolvedStudentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(profileFields),
+              });
+              if (!patchRes.ok) {
+                console.error(`Failed to save AI analysis to student profile: ${patchRes.status}`);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error saving AI analysis to student profile:", err);
+        }
+      }
+
       setSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       const docMsg = docCount > 0 ? ` with ${docCount} document${docCount !== 1 ? "s" : ""}` : "";
       toast({ title: "Application created", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}${docMsg}` });
       setTimeout(() => handleClose(), 1500);
