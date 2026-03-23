@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
-  FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe
+  FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download
 } from "lucide-react";
 
 interface Conversation {
@@ -256,6 +256,26 @@ function MessageThread({
 
   const isImage = (type: string) => type.startsWith("image/");
 
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      const downloadUrl = new URL(fileUrl, window.location.origin);
+      downloadUrl.searchParams.set("download", fileName);
+      const res = await fetch(downloadUrl.toString(), { credentials: "include" });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast({ title: "Download failed", description: "Could not download the file.", variant: "destructive" });
+    }
+  };
+
   const others = participants.filter(p => p.userId !== user?.id);
   const threadTitle = others.map(p => `${p.firstName} ${p.lastName}`).join(", ") || "Conversation";
 
@@ -306,23 +326,29 @@ function MessageThread({
                   )}
                   <div className={`rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-white rounded-tr-sm" : "bg-secondary rounded-tl-sm"}`}>
                     {att && isImage(att.fileType) && (
-                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block mb-1">
+                      <div className="mb-1 group/att relative">
                         <img src={att.fileUrl} alt={att.fileName} className="max-w-full max-h-48 rounded-lg object-cover" />
-                      </a>
+                        <button
+                          onClick={() => handleDownload(att.fileUrl, att.fileName)}
+                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity hover:bg-black/70"
+                          title="Download"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                     {att && !isImage(att.fileType) && (
-                      <a
-                        href={att.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`flex items-center gap-2 p-2 rounded-lg mb-1 ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
+                      <button
+                        onClick={() => handleDownload(att.fileUrl, att.fileName)}
+                        className={`flex items-center gap-2 p-2 rounded-lg mb-1 w-full text-left ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
                       >
                         <FileText className="w-5 h-5 shrink-0" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium truncate">{att.fileName}</p>
                           <p className={`text-[10px] ${isMe ? "text-white/60" : "text-muted-foreground"}`}>{formatFileSize(att.fileSize)}</p>
                         </div>
-                      </a>
+                        <Download className={`w-4 h-4 shrink-0 ${isMe ? "text-white/60" : "text-muted-foreground"}`} />
+                      </button>
                     )}
                     {hasTextContent && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
                   </div>

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Send, ArrowLeft, Loader2, User, Paperclip, FileText, X } from "lucide-react";
+import { MessageSquare, Send, ArrowLeft, Loader2, User, Paperclip, FileText, X, Download } from "lucide-react";
 import { useLocation } from "wouter";
 
 function getInitials(first?: string | null, last?: string | null) {
@@ -153,6 +153,26 @@ export default function StudentMessages() {
 
   const isImageType = (type: string) => type.startsWith("image/");
 
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    try {
+      const downloadUrl = new URL(fileUrl, window.location.origin);
+      downloadUrl.searchParams.set("download", fileName);
+      const res = await fetch(downloadUrl.toString(), { credentials: "include" });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast({ title: "Download failed", description: "Could not download the file.", variant: "destructive" });
+    }
+  };
+
   const hasConversation = !!conversationId;
 
   return (
@@ -238,23 +258,29 @@ export default function StudentMessages() {
                             : "bg-secondary text-foreground rounded-bl-md"
                         }`}>
                           {att && isImageType(att.fileType) && (
-                            <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block mb-1">
+                            <div className="mb-1 group/att relative">
                               <img src={att.fileUrl} alt={att.fileName} className="max-w-full max-h-48 rounded-lg object-cover" />
-                            </a>
+                              <button
+                                onClick={() => handleDownload(att.fileUrl, att.fileName)}
+                                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity hover:bg-black/70"
+                                title="Download"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
                           {att && !isImageType(att.fileType) && (
-                            <a
-                              href={att.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`flex items-center gap-2 p-2 rounded-lg mb-1 ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
+                            <button
+                              onClick={() => handleDownload(att.fileUrl, att.fileName)}
+                              className={`flex items-center gap-2 p-2 rounded-lg mb-1 w-full text-left ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
                             >
                               <FileText className="w-5 h-5 shrink-0" />
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="text-xs font-medium truncate">{att.fileName}</p>
                                 <p className={`text-[10px] ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{formatFileSize(att.fileSize)}</p>
                               </div>
-                            </a>
+                              <Download className={`w-4 h-4 shrink-0 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`} />
+                            </button>
                           )}
                           {hasTextContent && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                           <p className={`text-[10px] mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>

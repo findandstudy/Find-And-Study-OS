@@ -89,6 +89,11 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
 
+    const downloadName = req.query.download as string | undefined;
+    if (downloadName) {
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
+    }
+
     if (response.body) {
       const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
       nodeStream.pipe(res);
