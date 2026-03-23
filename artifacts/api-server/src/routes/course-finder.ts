@@ -344,6 +344,35 @@ router.get("/wishlists", requireAuth, async (req, res): Promise<void> => {
   res.json(rows.map(r => r.programId));
 });
 
+router.get("/wishlists/details", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const rows = await db.select().from(wishlistsTable).where(eq(wishlistsTable.userId, userId));
+  if (rows.length === 0) { res.json([]); return; }
+  const programIds = rows.map(r => r.programId);
+  const programs = await db
+    .select({
+      id: programsTable.id,
+      name: programsTable.name,
+      degree: programsTable.degree,
+      language: programsTable.language,
+      duration: programsTable.duration,
+      tuitionFee: programsTable.tuitionFee,
+      discountedFee: programsTable.discountedFee,
+      currency: programsTable.currency,
+      scholarship: programsTable.scholarship,
+      intakes: programsTable.intakes,
+      universityId: programsTable.universityId,
+      universityName: universitiesTable.name,
+      universityCountry: universitiesTable.country,
+      universityCity: universitiesTable.city,
+      universityLogo: universitiesTable.logoUrl,
+    })
+    .from(programsTable)
+    .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+    .where(inArray(programsTable.id, programIds));
+  res.json(programs);
+});
+
 router.post("/wishlists", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { programId } = req.body;

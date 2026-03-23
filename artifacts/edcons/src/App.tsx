@@ -46,6 +46,7 @@ const AdminEmbeds = lazy(() => import("@/pages/admin/Embeds"));
 
 const StudentDashboard = lazy(() => import("@/pages/student/Dashboard"));
 const StudentApplications = lazy(() => import("@/pages/student/Applications"));
+const StudentWishlist = lazy(() => import("@/pages/student/Wishlist"));
 const StudentAccount = lazy(() => import("@/pages/student/Account"));
 
 const AgentDashboard = lazy(() => import("@/pages/agent/Dashboard"));
@@ -201,6 +202,9 @@ function Router() {
         {/* Student Portal */}
         <Route path="/student">
           <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentDashboard /></EmailVerificationGuard></ProtectedRoute>
+        </Route>
+        <Route path="/student/wishlist">
+          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentWishlist /></EmailVerificationGuard></ProtectedRoute>
         </Route>
         <Route path="/student/applications">
           <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentApplications /></EmailVerificationGuard></ProtectedRoute>

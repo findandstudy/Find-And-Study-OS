@@ -135,6 +135,8 @@ export default function CourseFinder() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
+  const isStudent = user?.role === "student";
+  const showWishlist = isStudent || !user;
   const canUsePdfMarkup = user && ["super_admin", "admin", "manager", "agent", "sub_agent"].includes(user.role);
   const canExportExcel = user && ["super_admin", "admin"].includes(user.role);
 
@@ -591,6 +593,7 @@ export default function CourseFinder() {
                 onApply={() => setApplyProgram(prog)}
                 onUniversityClick={() => setSelectedUniversity(prog)}
                 showCommission={!!showCommission}
+                showWishlist={!!showWishlist}
                 isSelected={selectedIds.has(prog.id)}
                 onToggleSelect={() => toggleSelect(prog.id)}
               />
@@ -602,6 +605,7 @@ export default function CourseFinder() {
             wishlistIds={wishlistIds}
             selectedIds={selectedIds}
             showCommission={!!showCommission}
+            showWishlist={!!showWishlist}
             sortField={sortField}
             sortDir={sortDir}
             onSort={handleSort}
@@ -675,11 +679,12 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
   );
 }
 
-function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick }: {
+function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick }: {
   programs: Program[];
   wishlistIds: number[];
   selectedIds: Set<number>;
   showCommission: boolean;
+  showWishlist?: boolean;
   sortField: string;
   sortDir: "asc" | "desc";
   onSort: (field: string) => void;
@@ -839,13 +844,15 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, s
                   </td>
                   <td className="p-3">
                     <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => onToggleWishlist(p.id)}
-                        className="p-1.5 rounded-lg hover:bg-muted/80 transition-colors"
-                        title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                      >
-                        <Heart className={`w-3.5 h-3.5 ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-                      </button>
+                      {showWishlist && (
+                        <button
+                          onClick={() => onToggleWishlist(p.id)}
+                          className="p-1.5 rounded-lg hover:bg-muted/80 transition-colors"
+                          title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                        </button>
+                      )}
                       <button
                         onClick={() => onInfo(p)}
                         className="p-1.5 rounded-lg hover:bg-muted/80 transition-colors"
@@ -872,7 +879,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, s
   );
 }
 
-function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, isSelected, onToggleSelect }: {
+function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, showWishlist = true, isSelected, onToggleSelect }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
@@ -880,6 +887,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
   onApply: () => void;
   onUniversityClick: () => void;
   showCommission: boolean;
+  showWishlist?: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
 }) {
@@ -936,9 +944,11 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
             </button>
             <h3 className="font-semibold text-sm leading-tight line-clamp-2 mt-0.5">{p.name}</h3>
           </div>
-          <button onClick={onToggleWishlist} className="shrink-0 p-2 rounded-full hover:bg-muted/80 transition-colors" title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}>
-            <Heart className={`w-5 h-5 transition-all ${isWishlisted ? "fill-red-500 text-red-500 scale-110" : "text-muted-foreground hover:text-red-400"}`} />
-          </button>
+          {showWishlist && (
+            <button onClick={onToggleWishlist} className="shrink-0 p-2 rounded-full hover:bg-muted/80 transition-colors" title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}>
+              <Heart className={`w-5 h-5 transition-all ${isWishlisted ? "fill-red-500 text-red-500 scale-110" : "text-muted-foreground hover:text-red-400"}`} />
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-1.5">

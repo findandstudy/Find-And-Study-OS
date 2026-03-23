@@ -43,6 +43,7 @@ import {
   Handshake,
   MessageCircle,
   Code2,
+  Heart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -139,6 +140,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
           label: "My Portal",
           items: [
             { title: "Dashboard",        icon: LayoutDashboard, url: '/student' },
+            { title: "Wishlist",         icon: Heart,           url: '/student/wishlist' },
             { title: "My Applications",  icon: FileText,        url: '/student/applications' },
             { title: "Course Finder",    icon: Search,          url: '/student/course-finder' },
           ]
