@@ -151,6 +151,8 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
   "passportNumber": "string or null",
   "passportIssueDate": "YYYY-MM-DD format or null",
   "passportExpiry": "YYYY-MM-DD format or null",
+  "motherName": "string or null",
+  "fatherName": "string or null",
   "email": "string or null",
   "phone": "string or null",
   "address": "string or null",
@@ -162,9 +164,10 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
 }
 
 Rules:
-- For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates
-- For diplomas: extract school name, graduation year, GPA, student name
+- For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
+- For diplomas: extract school name, graduation year, GPA, student name, parent names if visible
 - For transcripts: extract school name, GPA, graduation year, student name
+- For photographs: note that a photo document was received
 - Always normalize dates to YYYY-MM-DD format
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;

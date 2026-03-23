@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -234,30 +234,119 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES), asyn
     }
   }
 
-  if (lead.email) {
-    const [existingByEmail] = await db.select().from(studentsTable).where(eq(studentsTable.email, lead.email));
-    if (existingByEmail) {
-      await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
-      await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: existingByEmail.id, merged: true }, req.ip);
-      res.json({ student: existingByEmail, merged: true });
-      return;
-    }
-  }
+  const embedSubmissions = await db.select().from(embedSubmissionsTable).where(eq(embedSubmissionsTable.leadId, lead.id));
+  const submission = embedSubmissions.length > 0 ? embedSubmissions[0] : null;
+  const aiData: Record<string, any> = (submission?.aiExtractedData as Record<string, any>) || {};
 
-  const [student] = await db.insert(studentsTable).values({
+  const s = (v: any) => (v && v !== "null" && v !== "N/A") ? String(v) : null;
+
+  const studentValues: any = {
     firstName: lead.firstName,
     lastName: lead.lastName,
     email: lead.email || null,
     phone: lead.phone || null,
-    nationality: lead.nationality || null,
+    nationality: lead.nationality || s(aiData.nationality) || null,
     agentId: (lead as any).agentId || null,
     status: "active",
-  }).returning();
+    motherName: s(aiData.motherName) || null,
+    fatherName: s(aiData.fatherName) || null,
+    passportNumber: s(aiData.passportNumber) || null,
+    passportIssueDate: s(aiData.passportIssueDate) || null,
+    passportExpiry: s(aiData.passportExpiry) || null,
+    dateOfBirth: s(aiData.dateOfBirth) || null,
+    address: s(aiData.address) || null,
+    highSchool: s(aiData.highSchool) || null,
+    graduationYear: aiData.graduationYear ? parseInt(String(aiData.graduationYear), 10) || null : null,
+    gpa: s(aiData.gpa) || null,
+    languageScore: s(aiData.languageScore) || null,
+  };
+
+  if (lead.email) {
+    const [existingByEmail] = await db.select().from(studentsTable).where(eq(studentsTable.email, lead.email));
+    if (existingByEmail) {
+      const mergeUpdates: any = {};
+      if (!existingByEmail.motherName && studentValues.motherName) mergeUpdates.motherName = studentValues.motherName;
+      if (!existingByEmail.fatherName && studentValues.fatherName) mergeUpdates.fatherName = studentValues.fatherName;
+      if (!existingByEmail.passportNumber && studentValues.passportNumber) mergeUpdates.passportNumber = studentValues.passportNumber;
+      if (!existingByEmail.passportIssueDate && studentValues.passportIssueDate) mergeUpdates.passportIssueDate = studentValues.passportIssueDate;
+      if (!existingByEmail.passportExpiry && studentValues.passportExpiry) mergeUpdates.passportExpiry = studentValues.passportExpiry;
+      if (!existingByEmail.dateOfBirth && studentValues.dateOfBirth) mergeUpdates.dateOfBirth = studentValues.dateOfBirth;
+      if (!existingByEmail.address && studentValues.address) mergeUpdates.address = studentValues.address;
+      if (!existingByEmail.highSchool && studentValues.highSchool) mergeUpdates.highSchool = studentValues.highSchool;
+      if (!existingByEmail.gpa && studentValues.gpa) mergeUpdates.gpa = studentValues.gpa;
+      if (!existingByEmail.languageScore && studentValues.languageScore) mergeUpdates.languageScore = studentValues.languageScore;
+      if (!existingByEmail.graduationYear && studentValues.graduationYear) mergeUpdates.graduationYear = studentValues.graduationYear;
+
+      if (Object.keys(mergeUpdates).length > 0) {
+        await db.update(studentsTable).set(mergeUpdates).where(eq(studentsTable.id, existingByEmail.id));
+      }
+
+      await db.update(documentsTable).set({ studentId: existingByEmail.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
+
+      if (submission?.programId) {
+        await createApplicationFromSubmission(existingByEmail.id, submission);
+      }
+
+      await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
+      await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: existingByEmail.id, merged: true }, req.ip);
+
+      const [updatedStudent] = await db.select().from(studentsTable).where(eq(studentsTable.id, existingByEmail.id));
+      res.json({ student: updatedStudent || existingByEmail, merged: true });
+      return;
+    }
+  }
+
+  const photoDocs = await db.select().from(documentsTable).where(and(eq(documentsTable.leadId, lead.id), eq(documentsTable.type, "photo")));
+  if (photoDocs.length > 0 && photoDocs[0].fileData) {
+    const photoDoc = photoDocs[0];
+    const mimeType = photoDoc.mimeType || "image/jpeg";
+    studentValues.photoUrl = `data:${mimeType};base64,${photoDoc.fileData}`;
+  }
+
+  const [student] = await db.insert(studentsTable).values(studentValues).returning();
+
+  await db.update(documentsTable).set({ studentId: student.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
+
+  if (submission?.programId) {
+    await createApplicationFromSubmission(student.id, submission);
+  }
 
   await db.update(leadsTable).set({ status: "converted", convertedStudentId: student.id }).where(eq(leadsTable.id, id));
   await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: student.id }, req.ip);
   res.json({ student, merged: false });
 });
+
+async function createApplicationFromSubmission(studentId: number, submission: any) {
+  try {
+    const programId = submission.programId;
+    const [program] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
+    if (!program) return;
+
+    const [university] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, program.universityId));
+
+    const [existingApp] = await db.select().from(applicationsTable)
+      .where(and(eq(applicationsTable.studentId, studentId), eq(applicationsTable.programId, programId)));
+    if (existingApp) return;
+
+    await db.insert(applicationsTable).values({
+      studentId,
+      programId: program.id,
+      universityId: program.universityId,
+      programName: program.name,
+      universityName: university?.name || submission.universityName || null,
+      country: university?.country || null,
+      level: program.degree || null,
+      instructionLanguage: program.language || null,
+      tuitionFee: program.tuitionFee || null,
+      discountedFee: program.discountedFee || null,
+      scholarship: program.scholarship || null,
+      stage: "inquiry",
+      season: "2026",
+    });
+  } catch (err) {
+    console.error("Failed to create application from submission:", err);
+  }
+}
 
 router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);

@@ -31,8 +31,8 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
 }
 
 Rules:
-- For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates
-- For diplomas: extract school name, graduation year, GPA, student name
+- For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
+- For diplomas: extract school name, graduation year, GPA, student name, parent names if visible
 - For transcripts: extract school name, GPA, graduation year, student name, courses if relevant
 - For photos: only set confidence to "low", documentType to "photo", everything else null
 - Always normalize dates to YYYY-MM-DD format

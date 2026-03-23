@@ -987,7 +987,7 @@ function handleAnalyze(){
     aiResult=data.extracted||null;
     if(aiResult){
       extractedFields={};
-      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth'};
+      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth',motherName:'motherName',fatherName:'fatherName',passportNumber:'passportNumber',address:'address',highSchool:'highSchool'};
       var mKeys=Object.keys(mapping);
       for(var i=0;i<mKeys.length;i++){
         var ek=mKeys[i];
