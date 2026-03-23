@@ -82,6 +82,12 @@ export default function AgentDashboard() {
   });
   const latestStudents: any[] = latestStudentsData?.data || [];
 
+  const { data: latestAuditData } = useQuery<any>({
+    queryKey: ["/api/audit", "agent-dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+  });
+  const latestUpdates: any[] = latestAuditData?.data || [];
+
   const { data: notificationsData } = useQuery<any>({
     queryKey: ["/api/notifications", "agent-dashboard-latest"],
     queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()),
@@ -208,7 +214,7 @@ export default function AgentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                 <GraduationCap className="w-4 h-4 text-green-500" />
               </div>
-              <h3 className="font-display font-bold text-base">My Students</h3>
+              <h3 className="font-display font-bold text-base">Latest Students</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestStudents.length === 0 ? (
@@ -252,33 +258,33 @@ export default function AgentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                 <Activity className="w-4 h-4 text-purple-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Recent Activity</h3>
+              <h3 className="font-display font-bold text-base">Latest Updates</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
-              {applications.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent activity.</p>
+              {latestUpdates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent updates.</p>
               ) : (
-                applications.slice(0, 5).map((app: any, i: number) => {
-                  const stageCfg = STAGE_CONFIG[app.stage] || STAGE_CONFIG.inquiry;
-                  return (
-                    <div key={app.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-foreground truncate">
-                          Application #{app.id}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Student #{app.studentId} · {stageCfg.label}
-                        </p>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">
-                        {timeAgo(app.createdAt)}
-                      </div>
+                latestUpdates.map((u: any, i: number) => (
+                  <div key={u.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
+                      {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
                     </div>
-                  );
-                })
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {u.userName || "System"}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                        {u.action}{u.resource ? ` — ${u.resource}` : ""}
+                        {u.resourceId ? ` #${u.resourceId}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">
+                      {new Date(u.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
+                      <br />
+                      {new Date(u.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </Card>

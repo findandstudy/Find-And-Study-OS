@@ -2,14 +2,11 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
-
-const MANAGER_ROLES = ["super_admin", "admin", "manager"];
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -75,8 +72,6 @@ const mockChartData = [
 function isOverdue(d: string) { return new Date(d) < new Date(); }
 
 export default function StaffDashboard() {
-  const { user } = useAuth(true);
-  const canAccessAudit = MANAGER_ROLES.includes(user?.role || "");
   const { data: stats, isLoading } = useGetOverviewStats();
 
   const { data: upcomingFollowUps = [] } = useQuery<any[]>({
@@ -93,7 +88,6 @@ export default function StaffDashboard() {
   const { data: latestAuditData } = useQuery<any>({
     queryKey: ["/api/audit", "staff-dashboard-latest"],
     queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
-    enabled: canAccessAudit,
   });
   const latestUpdates: any[] = latestAuditData?.data || [];
 
