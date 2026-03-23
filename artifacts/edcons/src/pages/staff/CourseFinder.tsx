@@ -1517,6 +1517,9 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
   const currentDocs = LEVEL_DOCS[level];
   const uploadedCount = Object.keys(docs).length;
+  const requiredDocKeys = currentDocs.filter(d => d.required).map(d => d.key);
+  const missingRequiredCount = requiredDocKeys.filter(k => !docs[k]).length;
+  const allRequiredUploaded = missingRequiredCount === 0;
 
   const debouncedSearch = useMemo(() => searchTerm.trim(), [searchTerm]);
 
@@ -1853,15 +1856,17 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
                   </Button>
                   <Button
                     onClick={uploadedCount > 0 ? handleAnalyzeAndContinue : handleSubmit}
-                    disabled={submitting}
+                    disabled={submitting || !allRequiredUploaded}
                     className="flex-1 rounded-xl h-11"
                   >
                     {submitting ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>
+                    ) : !allRequiredUploaded ? (
+                      <><Send className="w-4 h-4 mr-2" /> Upload Required Documents ({missingRequiredCount} remaining)</>
                     ) : uploadedCount > 0 ? (
                       <><Sparkles className="w-4 h-4 mr-2" /> Analyze & Submit ({uploadedCount} doc{uploadedCount !== 1 ? "s" : ""})</>
                     ) : (
-                      <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? "Submit Application" : "Submit Without Documents"}</>
+                      <><Send className="w-4 h-4 mr-2" /> Submit Application</>
                     )}
                   </Button>
                 </div>
