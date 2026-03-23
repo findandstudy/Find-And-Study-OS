@@ -252,7 +252,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
     if (p.degree) badges.push(p.degree);
     if (p.language) badges.push(p.language);
     if (p.duration) badges.push(p.duration);
-    if (p.universityCountry) badges.push(p.universityCountry);
+    if (p.universityType) badges.push(p.universityType);
     if (p.universityCity) badges.push(p.universityCity);
 
     let bx = ix;

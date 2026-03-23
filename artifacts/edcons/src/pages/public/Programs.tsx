@@ -42,6 +42,7 @@ interface Program {
   intakes: string | null;
   universityName: string;
   universityCountry: string | null;
+  universityType: string | null;
   universityCity: string | null;
   universityLogoUrl: string | null;
 }
@@ -820,8 +821,8 @@ export default function Programs() {
                           <p className="text-xs text-foreground/70 truncate font-semibold">{prog.universityName}</p>
                         </div>
                         <div className="flex gap-1.5 shrink-0 relative z-10">
-                          {prog.universityCountry && (
-                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/70 dark:bg-card/70 backdrop-blur-sm border-0 shadow-sm">{prog.universityCountry}</Badge>
+                          {prog.universityType && (
+                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/70 dark:bg-card/70 backdrop-blur-sm border-0 shadow-sm">{prog.universityType}</Badge>
                           )}
                           {prog.degree && (
                             <Badge className="bg-primary/90 text-white text-[10px] px-2 py-0.5 shadow-sm">{prog.degree}</Badge>
