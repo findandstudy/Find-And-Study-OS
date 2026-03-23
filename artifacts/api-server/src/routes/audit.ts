@@ -34,7 +34,7 @@ router.get("/audit", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
       changes: auditLogsTable.changes,
       ipAddress: auditLogsTable.ipAddress,
       createdAt: auditLogsTable.createdAt,
-      userName: sql<string>`COALESCE(${usersTable.firstName} || ' ' || ${usersTable.lastName}, 'System')`,
+      userName: sql<string>`COALESCE(NULLIF(CONCAT_WS(' ', ${usersTable.firstName}, ${usersTable.lastName}), ''), 'System')`,
     })
     .from(auditLogsTable)
     .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
