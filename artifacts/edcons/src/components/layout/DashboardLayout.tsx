@@ -254,9 +254,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 )}
                 <div>
                   {!sidebarLogo && <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>}
-                  <div className={`text-xs font-semibold px-1.5 py-0.5 rounded-md mt-0.5 inline-block ${roleBadgeColor}`}>
-                    {ROLE_LABELS[user.role] || user.role}
-                  </div>
                 </div>
               </Link>
             </div>
