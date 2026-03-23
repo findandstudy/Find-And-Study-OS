@@ -659,6 +659,48 @@ function EmbedCodeDialog({ widget, onClose }: { widget: Widget; onClose: () => v
   allowfullscreen>
 </iframe>`;
 
+  const programsEndpoint = `${apiUrl}/public/embed/${widget.slug}/programs`;
+  const filtersEndpoint = `${apiUrl}/public/embed/${widget.slug}/filters`;
+  const configEndpoint = `${apiUrl}/public/embed/${widget.slug}/config`;
+
+  const apiExample = `// 1. Get widget config
+fetch("${configEndpoint}")
+  .then(res => res.json())
+  .then(config => console.log(config));
+
+// 2. Get filter options (countries, cities, levels, languages)
+fetch("${filtersEndpoint}")
+  .then(res => res.json())
+  .then(filters => console.log(filters));
+
+// 3. Get programs (with optional filters)
+const params = new URLSearchParams({
+  page: "1",
+  limit: "20",
+  // country: "Turkey",
+  // level: "Bachelor",
+  // language: "English",
+  // search: "engineering",
+});
+fetch("${programsEndpoint}?" + params)
+  .then(res => res.json())
+  .then(data => {
+    console.log(data.data);    // array of programs
+    console.log(data.meta);    // { total, page, limit, totalPages }
+  });`;
+
+  const curlExample = `# Get programs
+curl "${programsEndpoint}?page=1&limit=20"
+
+# Get filters
+curl "${filtersEndpoint}"
+
+# Get config
+curl "${configEndpoint}"
+
+# With filters
+curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&limit=20"`;
+
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: `${label} copied to clipboard` });
@@ -672,9 +714,10 @@ function EmbedCodeDialog({ widget, onClose }: { widget: Widget; onClose: () => v
         </DialogHeader>
 
         <Tabs defaultValue="script">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="script">JavaScript Embed</TabsTrigger>
             <TabsTrigger value="iframe">Iframe Embed</TabsTrigger>
+            <TabsTrigger value="api">API</TabsTrigger>
           </TabsList>
 
           <TabsContent value="script" className="mt-4">
@@ -709,6 +752,90 @@ function EmbedCodeDialog({ widget, onClose }: { widget: Widget; onClose: () => v
                   onClick={() => copy(iframeCode, "Iframe embed code")}>
                   <Copy className="w-3 h-3 mr-1" /> Copy
                 </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="api" className="mt-4">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Use the REST API to fetch program data directly and build your own custom UI.
+                All endpoints are public and return JSON.
+              </p>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold">Endpoints</h4>
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-md">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800 shrink-0 mt-0.5">GET</Badge>
+                    <div className="min-w-0">
+                      <code className="text-xs font-mono break-all">/public/embed/{widget.slug}/programs</code>
+                      <p className="text-xs text-muted-foreground mt-0.5">List programs with pagination & filters</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-md">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800 shrink-0 mt-0.5">GET</Badge>
+                    <div className="min-w-0">
+                      <code className="text-xs font-mono break-all">/public/embed/{widget.slug}/filters</code>
+                      <p className="text-xs text-muted-foreground mt-0.5">Available filter options (countries, cities, levels, languages)</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-md">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800 shrink-0 mt-0.5">GET</Badge>
+                    <div className="min-w-0">
+                      <code className="text-xs font-mono break-all">/public/embed/{widget.slug}/config</code>
+                      <p className="text-xs text-muted-foreground mt-0.5">Widget configuration (name, mode, theme, filters)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold">Query Parameters (programs)</h4>
+                <div className="grid grid-cols-2 gap-1.5 text-xs">
+                  {[
+                    ["page", "Page number (default: 1)"],
+                    ["limit", "Items per page (default: 20, max: 100)"],
+                    ["search", "Search by program or university name"],
+                    ["country", "Filter by country"],
+                    ["city", "Filter by city"],
+                    ["level", "Filter by degree level"],
+                    ["language", "Filter by instruction language"],
+                    ["feeMin", "Minimum tuition fee"],
+                    ["feeMax", "Maximum tuition fee"],
+                  ].map(([param, desc]) => (
+                    <div key={param} className="flex gap-1.5 p-1.5 bg-muted/30 rounded">
+                      <code className="font-mono text-primary font-medium shrink-0">{param}</code>
+                      <span className="text-muted-foreground">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">JavaScript Example</h4>
+                  <Button size="sm" variant="secondary" className="h-6 text-[10px] px-2"
+                    onClick={() => copy(apiExample, "JavaScript API example")}>
+                    <Copy className="w-3 h-3 mr-1" /> Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted rounded-lg p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-48 overflow-y-auto">
+                  {apiExample}
+                </pre>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">cURL Example</h4>
+                  <Button size="sm" variant="secondary" className="h-6 text-[10px] px-2"
+                    onClick={() => copy(curlExample, "cURL API example")}>
+                    <Copy className="w-3 h-3 mr-1" /> Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted rounded-lg p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono max-h-36 overflow-y-auto">
+                  {curlExample}
+                </pre>
               </div>
             </div>
           </TabsContent>
