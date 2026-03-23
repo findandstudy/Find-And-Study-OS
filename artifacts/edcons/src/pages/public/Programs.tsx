@@ -256,7 +256,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   }
 
   async function handleSubmit() {
-    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName) {
+    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName || !form.nationality) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
@@ -455,7 +455,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Nationality {extracted.has("nationality") && <AiBadge />}
+                  Nationality <span className="text-destructive ml-0.5">*</span>
+                  {extracted.has("nationality") && <AiBadge />}
                 </Label>
                 <select value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
                   className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
