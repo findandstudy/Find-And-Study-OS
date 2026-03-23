@@ -375,7 +375,7 @@ export default function SettingsPage() {
       case "language": return LanguageTab();
       case "notifications": return NotificationsTab();
       case "security": return SecurityTab();
-      case "pipeline": return isManager ? PipelineTab() : null;
+      case "pipeline": return isManager ? <PipelineTabContent /> : null;
       case "branding": return isManager ? BrandingTab() : null;
       case "company": return isManager ? CompanyTab() : null;
       case "seo": return isManager ? SeoTab() : null;
@@ -561,66 +561,8 @@ export default function SettingsPage() {
     );
   }
 
-  function PipelineTab() {
-    const leadPipeline = usePipelineStages("lead");
-    const applicationPipeline = usePipelineStages("application");
-    const studentPipeline = usePipelineStages("student");
-    const [editingType, setEditingType] = useState<string | null>(null);
-
-    const pipelines = [
-      { type: "lead", label: "Lead Pipeline", description: "Stages for tracking prospective student leads from initial contact to conversion.", pipeline: leadPipeline },
-      { type: "application", label: "Application Pipeline", description: "Stages for tracking university applications from inquiry to enrollment.", pipeline: applicationPipeline },
-      { type: "student", label: "Student Pipeline", description: "Stages for tracking student lifecycle from active enrollment to graduation.", pipeline: studentPipeline },
-    ];
-
-    const activePipeline = pipelines.find(p => p.type === editingType);
-
-    return (
-      <div className="space-y-6">
-        <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Pipeline Stages" description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents." />
-          <div className="space-y-4">
-            {pipelines.map(({ type, label, description, pipeline }) => (
-              <div key={type} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-foreground">{label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {pipeline.stages.map(s => (
-                      <span key={s.key} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                        s.variant === "won" ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800" :
-                        s.variant === "lost" ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800" :
-                        "bg-secondary text-muted-foreground border-border/50"
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${s.variant === "won" ? "bg-emerald-500" : s.variant === "lost" ? "bg-rose-500" : "bg-muted-foreground/40"}`} />
-                        {s.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" className="shrink-0 ml-4" onClick={() => setEditingType(type)}>
-                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {activePipeline && (
-          <EditStagesDialog
-            open={!!editingType}
-            onClose={() => setEditingType(null)}
-            stages={activePipeline.pipeline.stages}
-            onSave={async (s) => {
-              await activePipeline.pipeline.saveStages(s);
-              qc.invalidateQueries({ queryKey: ["pipeline-stages"] });
-            }}
-            isSaving={activePipeline.pipeline.isSaving}
-            entityLabel={activePipeline.label.replace(" Pipeline", "")}
-          />
-        )}
-      </div>
-    );
+  function PipelineTabContent() {
+    return <PipelineTab qc={qc} />;
   }
 
   function BrandingTab() {
@@ -1159,5 +1101,67 @@ export default function SettingsPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
+  const leadPipeline = usePipelineStages("lead");
+  const applicationPipeline = usePipelineStages("application");
+  const studentPipeline = usePipelineStages("student");
+  const [editingType, setEditingType] = useState<string | null>(null);
+
+  const pipelines = [
+    { type: "lead", label: "Lead Pipeline", description: "Stages for tracking prospective student leads from initial contact to conversion.", pipeline: leadPipeline },
+    { type: "application", label: "Application Pipeline", description: "Stages for tracking university applications from inquiry to enrollment.", pipeline: applicationPipeline },
+    { type: "student", label: "Student Pipeline", description: "Stages for tracking student lifecycle from active enrollment to graduation.", pipeline: studentPipeline },
+  ];
+
+  const activePipeline = pipelines.find(p => p.type === editingType);
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <SectionHeader title="Pipeline Stages" description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents." />
+        <div className="space-y-4">
+          {pipelines.map(({ type, label, description, pipeline }) => (
+            <div key={type} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-foreground">{label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {pipeline.stages.map(s => (
+                    <span key={s.key} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                      s.variant === "won" ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800" :
+                      s.variant === "lost" ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800" :
+                      "bg-secondary text-muted-foreground border-border/50"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.variant === "won" ? "bg-emerald-500" : s.variant === "lost" ? "bg-rose-500" : "bg-muted-foreground/40"}`} />
+                      {s.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Button variant="outline" size="sm" className="shrink-0 ml-4" onClick={() => setEditingType(type)}>
+                <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {activePipeline && (
+        <EditStagesDialog
+          open={!!editingType}
+          onClose={() => setEditingType(null)}
+          stages={activePipeline.pipeline.stages}
+          onSave={async (s) => {
+            await activePipeline.pipeline.saveStages(s);
+            qc.invalidateQueries({ queryKey: ["pipeline-stages"] });
+          }}
+          isSaving={activePipeline.pipeline.isSaving}
+          entityLabel={activePipeline.label.replace(" Pipeline", "")}
+        />
+      )}
+    </div>
   );
 }

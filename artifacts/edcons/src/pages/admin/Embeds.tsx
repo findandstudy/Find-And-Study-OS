@@ -345,10 +345,24 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [slug, setSlug] = useState("");
   const [mode, setMode] = useState("combined");
   const [presetCountry, setPresetCountry] = useState("");
+  const [presetCity, setPresetCity] = useState("");
   const [presetUniversityType, setPresetUniversityType] = useState("");
   const [presetUniversityId, setPresetUniversityId] = useState("");
   const [presetLevel, setPresetLevel] = useState("");
   const [presetLanguage, setPresetLanguage] = useState("");
+
+  const { data: filterOptions } = useQuery({
+    queryKey: ["course-finder-filters"],
+    queryFn: () => customFetch("/api/course-finder/filters") as Promise<{
+      countries: string[];
+      cities: string[];
+      universityTypes: string[];
+      universities: { id: number; name: string }[];
+      degrees: string[];
+      languages: string[];
+    }>,
+    staleTime: 5 * 60 * 1000,
+  });
   const [locked, setLocked] = useState<string[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [domains, setDomains] = useState("");
@@ -368,6 +382,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setMode(widget.mode);
       const pf = widget.presetFilters || {};
       setPresetCountry(pf.country || "");
+      setPresetCity(pf.city || "");
       setPresetUniversityType(pf.universityType || "");
       setPresetUniversityId(pf.universityId ? String(pf.universityId) : "");
       setPresetLevel(pf.level || "");
@@ -382,7 +397,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setIsActive(widget.isActive);
     } else {
       setName(""); setSlug(""); setMode("combined");
-      setPresetCountry(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage("");
+      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage("");
       setLocked([]); setHidden([]); setDomains("");
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
       setIsActive(true);
@@ -397,6 +412,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     setSaving(true);
     const presetFilters: Record<string, any> = {};
     if (presetCountry) presetFilters.country = presetCountry;
+    if (presetCity) presetFilters.city = presetCity;
     if (presetUniversityType) presetFilters.universityType = presetUniversityType;
     if (presetUniversityId) presetFilters.universityId = parseInt(presetUniversityId, 10);
     if (presetLevel) presetFilters.level = presetLevel;
@@ -483,23 +499,75 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium">Country</label>
-                  <Input value={presetCountry} onChange={e => setPresetCountry(e.target.value)} placeholder="e.g., Turkey" />
+                  <Select value={presetCountry || "__none__"} onValueChange={v => setPresetCountry(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Countries" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Countries</SelectItem>
+                      {(filterOptions?.countries || []).map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium">City</label>
+                  <Select value={presetCity || "__none__"} onValueChange={v => setPresetCity(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Cities" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Cities</SelectItem>
+                      {(filterOptions?.cities || []).map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs font-medium">University Type</label>
-                  <Input value={presetUniversityType} onChange={e => setPresetUniversityType(e.target.value)} placeholder="e.g., Private" />
+                  <Select value={presetUniversityType || "__none__"} onValueChange={v => setPresetUniversityType(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Types</SelectItem>
+                      {(filterOptions?.universityTypes || []).map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium">University ID</label>
-                  <Input value={presetUniversityId} onChange={e => setPresetUniversityId(e.target.value)} placeholder="e.g., 1" type="number" />
+                  <label className="text-xs font-medium">University</label>
+                  <Select value={presetUniversityId || "__none__"} onValueChange={v => setPresetUniversityId(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Universities" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Universities</SelectItem>
+                      {(filterOptions?.universities || []).map(u => (
+                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs font-medium">Level</label>
-                  <Input value={presetLevel} onChange={e => setPresetLevel(e.target.value)} placeholder="e.g., Master" />
+                  <Select value={presetLevel || "__none__"} onValueChange={v => setPresetLevel(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Levels" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Levels</SelectItem>
+                      {(filterOptions?.degrees || []).map(d => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs font-medium">Language</label>
-                  <Input value={presetLanguage} onChange={e => setPresetLanguage(e.target.value)} placeholder="e.g., English" />
+                  <Select value={presetLanguage || "__none__"} onValueChange={v => setPresetLanguage(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Languages" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Languages</SelectItem>
+                      {(filterOptions?.languages || []).map(l => (
+                        <SelectItem key={l} value={l}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
