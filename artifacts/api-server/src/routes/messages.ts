@@ -282,9 +282,22 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
   const userId = req.user!.id;
   const { content, channel = "internal", replyToId, metadata } = req.body;
 
-  if (!content || !content.trim()) {
-    res.status(400).json({ error: "Message content is required" });
+  const hasAttachment = metadata?.attachment?.fileName;
+  if ((!content || !content.trim()) && !hasAttachment) {
+    res.status(400).json({ error: "Message content or attachment is required" });
     return;
+  }
+
+  if (hasAttachment) {
+    const att = metadata.attachment;
+    if (!att.fileUrl || typeof att.fileUrl !== "string" || !att.fileUrl.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: "Invalid attachment URL" });
+      return;
+    }
+    if (typeof att.fileSize !== "number" || att.fileSize <= 0 || att.fileSize > 25 * 1024 * 1024) {
+      res.status(400).json({ error: "Invalid attachment size" });
+      return;
+    }
   }
 
   const participant = await db
@@ -302,12 +315,14 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     return;
   }
 
+  const messageContent = content?.trim() || (hasAttachment ? `📎 ${metadata.attachment.fileName}` : "");
+
   const [message] = await db
     .insert(messagesTable)
     .values({
       conversationId,
       senderId: userId,
-      content: content.trim(),
+      content: messageContent,
       channel,
       status: "sent",
       replyToId: replyToId || null,
@@ -315,11 +330,12 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     })
     .returning();
 
+  const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
   await db
     .update(conversationsTable)
     .set({
       lastMessageAt: new Date(),
-      lastMessagePreview: content.trim().substring(0, 100),
+      lastMessagePreview: preview,
     })
     .where(eq(conversationsTable.id, conversationId));
 
@@ -349,7 +365,7 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
       userId: p.userId,
       type: "message.new",
       title: `New message from ${senderName}`,
-      body: content.trim().substring(0, 150),
+      body: messageContent.substring(0, 150),
       icon: "message-circle",
       actionUrl: `/staff/messages`,
       channel: "in_app",
@@ -748,6 +764,7 @@ router.get("/student/conversations/:id/messages", requireAuth, async (req, res):
   const messages = await db.select({
     id: messagesTable.id, conversationId: messagesTable.conversationId, content: messagesTable.content,
     channel: messagesTable.channel, status: messagesTable.status, createdAt: messagesTable.createdAt,
+    metadata: messagesTable.metadata,
     senderId: messagesTable.senderId, senderFirstName: usersTable.firstName, senderLastName: usersTable.lastName,
     senderRole: usersTable.role, senderAvatarUrl: usersTable.avatarUrl,
   })
@@ -798,19 +815,33 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
   const userId = req.user!.id;
   const conversationId = parseInt(req.params.id, 10);
   if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
-  const { content } = req.body;
+  const { content, metadata } = req.body;
 
-  if (!content || !content.trim()) { res.status(400).json({ error: "Message content is required" }); return; }
+  const hasAttachment = metadata?.attachment?.fileName;
+  if ((!content || !content.trim()) && !hasAttachment) { res.status(400).json({ error: "Message content or attachment is required" }); return; }
+
+  if (hasAttachment) {
+    const att = metadata.attachment;
+    if (!att.fileUrl || typeof att.fileUrl !== "string" || !att.fileUrl.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: "Invalid attachment URL" }); return;
+    }
+    if (typeof att.fileSize !== "number" || att.fileSize <= 0 || att.fileSize > 25 * 1024 * 1024) {
+      res.status(400).json({ error: "Invalid attachment size" }); return;
+    }
+  }
 
   const participation = await db.select().from(conversationParticipantsTable)
     .where(and(eq(conversationParticipantsTable.conversationId, conversationId), eq(conversationParticipantsTable.userId, userId)));
   if (participation.length === 0) { res.status(403).json({ error: "Not a participant" }); return; }
 
+  const messageContent = content?.trim() || (hasAttachment ? `📎 ${metadata.attachment.fileName}` : "");
+
   const [message] = await db.insert(messagesTable).values({
-    conversationId, senderId: userId, content: content.trim(), channel: "internal", status: "sent", metadata: {},
+    conversationId, senderId: userId, content: messageContent, channel: "internal", status: "sent", metadata: metadata || {},
   }).returning();
 
-  await db.update(conversationsTable).set({ lastMessageAt: new Date() }).where(eq(conversationsTable.id, conversationId));
+  const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
+  await db.update(conversationsTable).set({ lastMessageAt: new Date(), lastMessagePreview: preview }).where(eq(conversationsTable.id, conversationId));
   res.status(201).json(message);
 });
 

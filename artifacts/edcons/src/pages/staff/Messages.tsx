@@ -28,6 +28,13 @@ interface Conversation {
   unreadCount: number;
 }
 
+interface MessageAttachment {
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+}
+
 interface Message {
   id: number;
   conversationId: number;
@@ -36,6 +43,7 @@ interface Message {
   channel: string;
   status: string;
   createdAt: string;
+  metadata?: { attachment?: MessageAttachment };
   senderFirstName: string | null;
   senderLastName: string | null;
   senderAvatarUrl: string | null;
@@ -148,8 +156,11 @@ function MessageThread({
   const [channel, setChannel] = useState("internal");
   const [sending, setSending] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -175,16 +186,50 @@ function MessageThread({
     }
   }, [messages]);
 
+  const uploadFile = async (file: File): Promise<MessageAttachment | null> => {
+    try {
+      setUploading(true);
+      const urlRes = await customFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const { uploadURL, objectPath } = urlRes as any;
+      const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!uploadResp.ok) throw new Error("File upload failed");
+      return {
+        fileName: file.name,
+        fileUrl: `/api/storage/objects/${objectPath}`,
+        fileType: file.type,
+        fileSize: file.size,
+      };
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const sendMessage = async () => {
-    if (!newMessage.trim() || sending) return;
+    if ((!newMessage.trim() && !pendingFile) || sending) return;
     setSending(true);
     try {
+      let attachment: MessageAttachment | undefined;
+      if (pendingFile) {
+        const uploaded = await uploadFile(pendingFile);
+        if (!uploaded) { setSending(false); return; }
+        attachment = uploaded;
+      }
+      const metadata = attachment ? { attachment } : undefined;
       await customFetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newMessage.trim(), channel }),
+        body: JSON.stringify({ content: newMessage.trim() || "", channel, metadata }),
       });
       setNewMessage("");
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       fetchMessages();
     } catch (err: any) {
       toast({ title: "Failed to send", description: err.message, variant: "destructive" });
@@ -192,6 +237,24 @@ function MessageThread({
       setSending(false);
     }
   };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum file size is 25MB", variant: "destructive" });
+      return;
+    }
+    setPendingFile(file);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const isImage = (type: string) => type.startsWith("image/");
 
   const others = participants.filter(p => p.userId !== user?.id);
   const threadTitle = others.map(p => `${p.firstName} ${p.lastName}`).join(", ") || "Conversation";
@@ -228,6 +291,8 @@ function MessageThread({
           messages.map(msg => {
             const isMe = msg.senderId === user?.id;
             const initials = `${msg.senderFirstName?.[0] || ""}${msg.senderLastName?.[0] || ""}`;
+            const att = (msg.metadata as any)?.attachment as MessageAttachment | undefined;
+            const hasTextContent = msg.content && !msg.content.startsWith("\u{1F4CE}");
             return (
               <div key={msg.id} className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}>
                 {!isMe && (
@@ -240,7 +305,26 @@ function MessageThread({
                     <p className="text-xs text-muted-foreground mb-1">{msg.senderFirstName} {msg.senderLastName}</p>
                   )}
                   <div className={`rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-white rounded-tr-sm" : "bg-secondary rounded-tl-sm"}`}>
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    {att && isImage(att.fileType) && (
+                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block mb-1">
+                        <img src={att.fileUrl} alt={att.fileName} className="max-w-full max-h-48 rounded-lg object-cover" />
+                      </a>
+                    )}
+                    {att && !isImage(att.fileType) && (
+                      <a
+                        href={att.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`flex items-center gap-2 p-2 rounded-lg mb-1 ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
+                      >
+                        <FileText className="w-5 h-5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{att.fileName}</p>
+                          <p className={`text-[10px] ${isMe ? "text-white/60" : "text-muted-foreground"}`}>{formatFileSize(att.fileSize)}</p>
+                        </div>
+                      </a>
+                    )}
+                    {hasTextContent && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
                   </div>
                   <p className={`text-[10px] text-muted-foreground mt-1 ${isMe ? "text-right" : ""}`}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -268,7 +352,33 @@ function MessageThread({
             </button>
           ))}
         </div>
+        {pendingFile && (
+          <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-secondary/50 text-sm">
+            <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="truncate flex-1">{pendingFile.name}</span>
+            <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(pendingFile.size)}</span>
+            <button onClick={() => { setPendingFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="text-muted-foreground hover:text-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-xl"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending || uploading}
+          >
+            <Paperclip className="w-4 h-4" />
+          </Button>
           <Input
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
@@ -276,8 +386,9 @@ function MessageThread({
             className="flex-1 rounded-xl"
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
           />
-          <Button onClick={sendMessage} disabled={sending || !newMessage.trim()} className="rounded-xl gap-1.5">
-            <Send className="w-4 h-4" /> Send
+          <Button onClick={sendMessage} disabled={sending || uploading || (!newMessage.trim() && !pendingFile)} className="rounded-xl gap-1.5">
+            {(sending || uploading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Send
           </Button>
         </div>
       </div>

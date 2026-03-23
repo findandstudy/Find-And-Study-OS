@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Send, ArrowLeft, Loader2, User } from "lucide-react";
+import { MessageSquare, Send, ArrowLeft, Loader2, User, Paperclip, FileText, X } from "lucide-react";
 import { useLocation } from "wouter";
 
 function getInitials(first?: string | null, last?: string | null) {
@@ -22,7 +22,10 @@ export default function StudentMessages() {
   const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: advisor, isLoading: advisorLoading } = useQuery<any>({
     queryKey: ["my-advisor"],
@@ -64,15 +67,37 @@ export default function StudentMessages() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs.length]);
 
+  const uploadFile = async (file: File) => {
+    try {
+      setUploading(true);
+      const urlRes = await customFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const { uploadURL, objectPath } = urlRes as any;
+      const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!uploadResp.ok) throw new Error("File upload failed");
+      return { fileName: file.name, fileUrl: `/api/storage/objects/${objectPath}`, fileType: file.type, fileSize: file.size };
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const sendMutation = useMutation({
-    mutationFn: (content: string) =>
+    mutationFn: (payload: { content: string; metadata?: any }) =>
       customFetch(`/api/student/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: () => {
       setMessage("");
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       qc.invalidateQueries({ queryKey: ["student-messages", conversationId] });
       qc.invalidateQueries({ queryKey: ["student-conversations"] });
     },
@@ -99,10 +124,34 @@ export default function StudentMessages() {
     }
   }
 
-  function handleSend() {
-    if (!message.trim() || !conversationId) return;
-    sendMutation.mutate(message.trim());
+  async function handleSend() {
+    if ((!message.trim() && !pendingFile) || !conversationId) return;
+    let metadata: any;
+    if (pendingFile) {
+      const att = await uploadFile(pendingFile);
+      if (!att) return;
+      metadata = { attachment: att };
+    }
+    sendMutation.mutate({ content: message.trim() || "", metadata });
   }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum file size is 25MB", variant: "destructive" });
+      return;
+    }
+    setPendingFile(file);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const isImageType = (type: string) => type.startsWith("image/");
 
   const hasConversation = !!conversationId;
 
@@ -179,6 +228,8 @@ export default function StudentMessages() {
                 ) : (
                   msgs.map((msg: any) => {
                     const isMe = msg.senderId === user?.id;
+                    const att = msg.metadata?.attachment;
+                    const hasTextContent = msg.content && !msg.content.startsWith("\u{1F4CE}");
                     return (
                       <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
@@ -186,7 +237,26 @@ export default function StudentMessages() {
                             ? "bg-primary text-primary-foreground rounded-br-md"
                             : "bg-secondary text-foreground rounded-bl-md"
                         }`}>
-                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                          {att && isImageType(att.fileType) && (
+                            <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block mb-1">
+                              <img src={att.fileUrl} alt={att.fileName} className="max-w-full max-h-48 rounded-lg object-cover" />
+                            </a>
+                          )}
+                          {att && !isImageType(att.fileType) && (
+                            <a
+                              href={att.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`flex items-center gap-2 p-2 rounded-lg mb-1 ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
+                            >
+                              <FileText className="w-5 h-5 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{att.fileName}</p>
+                                <p className={`text-[10px] ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>{formatFileSize(att.fileSize)}</p>
+                              </div>
+                            </a>
+                          )}
+                          {hasTextContent && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                           <p className={`text-[10px] mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                             {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </p>
@@ -199,24 +269,51 @@ export default function StudentMessages() {
               </div>
 
               <div className="p-4 border-t">
+                {pendingFile && (
+                  <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-secondary/50 text-sm">
+                    <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="truncate flex-1">{pendingFile.name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(pendingFile.size)}</span>
+                    <button onClick={() => { setPendingFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="text-muted-foreground hover:text-foreground">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
                 <form
                   className="flex gap-2"
                   onSubmit={e => { e.preventDefault(); handleSend(); }}
                 >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-xl shrink-0"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sendMutation.isPending || uploading}
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </Button>
                   <Input
                     value={message}
                     onChange={e => setMessage(e.target.value)}
                     placeholder="Type a message..."
                     className="flex-1 rounded-xl"
-                    disabled={sendMutation.isPending}
+                    disabled={sendMutation.isPending || uploading}
                   />
                   <Button
                     type="submit"
                     size="icon"
                     className="rounded-xl shrink-0"
-                    disabled={!message.trim() || sendMutation.isPending}
+                    disabled={(!message.trim() && !pendingFile) || sendMutation.isPending || uploading}
                   >
-                    {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {(sendMutation.isPending || uploading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </Button>
                 </form>
               </div>
