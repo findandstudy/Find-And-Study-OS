@@ -207,7 +207,7 @@ export default function SettingsPage() {
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "", passportUrl: "", emergencyContactName: "", emergencyContactPhone: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "", passportUrl: "", emergencyContactName: "", emergencyPhoneCode: "+90", emergencyPhone: "" });
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -223,7 +223,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (user) {
       const parsed = parsePhoneCode((user as any).phone || "");
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "", startDate: (user as any).startDate || "", homeAddress: (user as any).homeAddress || "", passportNumber: (user as any).passportNumber || "", contractUrl: (user as any).contractUrl || "", passportUrl: (user as any).passportUrl || "", emergencyContactName: (user as any).emergencyContactName || "", emergencyContactPhone: (user as any).emergencyContactPhone || "" });
+      const emergencyParsed = parsePhoneCode((user as any).emergencyContactPhone || "");
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "", startDate: (user as any).startDate || "", homeAddress: (user as any).homeAddress || "", passportNumber: (user as any).passportNumber || "", contractUrl: (user as any).contractUrl || "", passportUrl: (user as any).passportUrl || "", emergencyContactName: (user as any).emergencyContactName || "", emergencyPhoneCode: emergencyParsed.phoneCode, emergencyPhone: emergencyParsed.phone });
     }
   }, [user]);
 
@@ -343,7 +344,7 @@ export default function SettingsPage() {
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined, startDate: form.startDate || null, homeAddress: form.homeAddress || null, passportNumber: form.passportNumber || null, contractUrl: form.contractUrl || null, passportUrl: form.passportUrl || null, emergencyContactName: form.emergencyContactName || null, emergencyContactPhone: form.emergencyContactPhone || null }),
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined, startDate: form.startDate || null, homeAddress: form.homeAddress || null, passportNumber: form.passportNumber || null, contractUrl: form.contractUrl || null, passportUrl: form.passportUrl || null, emergencyContactName: form.emergencyContactName || null, emergencyContactPhone: form.emergencyPhone ? `${form.emergencyPhoneCode}${form.emergencyPhone}` : null }),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile updated" });
@@ -533,7 +534,25 @@ export default function SettingsPage() {
             <Input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Enter emergency contact name" className="rounded-xl" />
           </FieldGroup>
           <FieldGroup label="Phone Number">
-            <Input value={form.emergencyContactPhone} onChange={e => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} placeholder="+90 555 123 4567" className="rounded-xl" />
+            <div className="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0 rounded-xl">
+                    <CountryFlag code={PHONE_CODES.find(p => p.code === form.emergencyPhoneCode)?.country || "TR"} size="sm" />
+                    <span className="text-xs">{form.emergencyPhoneCode}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
+                  {PHONE_CODES.map(pc => (
+                    <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, emergencyPhoneCode: pc.code }))} className="gap-2 text-xs">
+                      <CountryFlag code={pc.country} size="sm" /> {pc.code}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Input value={form.emergencyPhone} onChange={e => setForm(f => ({ ...f, emergencyPhone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
+            </div>
           </FieldGroup>
         </div>
         <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
