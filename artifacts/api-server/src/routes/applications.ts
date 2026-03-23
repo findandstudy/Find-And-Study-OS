@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
@@ -12,7 +12,9 @@ const APP_PATCH_FIELDS = [
   "stage", "universityId", "programId", "agentId",
   "universityName", "country", "programName", "intake",
   "level", "instructionLanguage", "deadline",
-  "tuitionFee", "scholarship", "notes", "season",
+  "tuitionFee", "discountedFee", "scholarship", "commissionRate",
+  "serviceFeeAmount", "applicationFee", "depositFee", "advancedFee",
+  "languageFee", "currency", "notes", "season",
 ];
 
 router.get("/applications", requireAuth, async (req, res): Promise<void> => {
@@ -131,39 +133,101 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
   const [studentRec2] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
   const studentFullName = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : null;
 
+  let snapshotTuitionFee = tuitionFee ? Number(tuitionFee) : null;
+  let snapshotDiscountedFee: number | null = null;
+  let snapshotScholarship = scholarship ? Number(scholarship) : null;
+  let snapshotCommissionRate: number | null = null;
+  let snapshotServiceFeeAmount: number | null = null;
+  let snapshotApplicationFee: number | null = null;
+  let snapshotDepositFee: number | null = null;
+  let snapshotAdvancedFee: number | null = null;
+  let snapshotLanguageFee: number | null = null;
+  let snapshotCurrency = "USD";
+  let snapshotProgramName = programName || null;
+  let snapshotUniversityName = universityName || null;
+  let snapshotCountry = country || null;
+  let snapshotLevel: string | null = level || null;
+  let snapshotLanguage: string | null = instructionLanguage || null;
+  let snapshotUniversityId = universityId || null;
+  let isStateUniversity = false;
+
+  if (programId) {
+    const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, parseInt(String(programId), 10)));
+    if (prog) {
+      snapshotTuitionFee = snapshotTuitionFee ?? prog.tuitionFee ?? null;
+      snapshotDiscountedFee = prog.discountedFee ?? null;
+      snapshotScholarship = snapshotScholarship ?? prog.scholarship ?? null;
+      snapshotCommissionRate = prog.commissionRate ?? null;
+      snapshotServiceFeeAmount = prog.serviceFeeAmount ?? null;
+      snapshotApplicationFee = prog.applicationFee ?? null;
+      snapshotDepositFee = prog.depositFee ?? null;
+      snapshotAdvancedFee = prog.advancedFee ?? null;
+      snapshotLanguageFee = prog.languageFee ?? null;
+      snapshotCurrency = prog.currency || "USD";
+      snapshotProgramName = snapshotProgramName || prog.name;
+      snapshotLevel = snapshotLevel || prog.degree || null;
+      snapshotLanguage = snapshotLanguage || prog.language || null;
+      snapshotUniversityId = snapshotUniversityId || prog.universityId;
+
+      if (prog.universityId) {
+        const [uni] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, prog.universityId));
+        if (uni) {
+          snapshotUniversityName = snapshotUniversityName || uni.name;
+          snapshotCountry = snapshotCountry || uni.country || null;
+          isStateUniversity = uni.universityType === "state";
+        }
+      }
+    }
+  }
+
   const [app] = await db.insert(applicationsTable).values({
     studentId, stage,
     season: season || currentYear,
-    universityId: universityId || null,
+    universityId: snapshotUniversityId || null,
     programId: programId || null,
     agentId: resolvedAgentId,
-    universityName: universityName || null,
-    country: country || null,
-    programName: programName || null,
+    universityName: snapshotUniversityName,
+    country: snapshotCountry,
+    programName: snapshotProgramName,
     intake: intake || null,
-    level: level || null,
-    instructionLanguage: instructionLanguage || null,
+    level: snapshotLevel,
+    instructionLanguage: snapshotLanguage,
     deadline: deadline || null,
-    tuitionFee: tuitionFee ? Number(tuitionFee) : null,
-    scholarship: scholarship ? Number(scholarship) : null,
+    tuitionFee: snapshotTuitionFee,
+    discountedFee: snapshotDiscountedFee,
+    scholarship: snapshotScholarship,
+    commissionRate: snapshotCommissionRate,
+    serviceFeeAmount: snapshotServiceFeeAmount,
+    applicationFee: snapshotApplicationFee,
+    depositFee: snapshotDepositFee,
+    advancedFee: snapshotAdvancedFee,
+    languageFee: snapshotLanguageFee,
+    currency: snapshotCurrency,
     notes: notes || null,
   }).returning();
+
+  const commissionBaseFee = snapshotDiscountedFee ?? snapshotTuitionFee;
 
   const commFinStatus = getCommissionFinanceStatus(stage);
   if (commFinStatus !== "excluded") {
     const existingComm = await db.select({ id: commissionsTable.id }).from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
     if (existingComm.length === 0) {
+      const uCommAmount = commissionBaseFee && snapshotCommissionRate
+        ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
       await db.insert(commissionsTable).values({
         applicationId: app.id,
         studentId: parseInt(studentId, 10),
         agentId: resolvedAgentId,
         studentName: studentFullName,
-        universityName: universityName || null,
-        programName: programName || null,
+        universityName: snapshotUniversityName,
+        programName: snapshotProgramName,
+        isStateUniversity: isStateUniversity,
         season: season || currentYear,
-        currency: "USD",
+        currency: snapshotCurrency,
         status: commFinStatus,
-        programFee: tuitionFee ? String(tuitionFee) : null,
+        programFee: commissionBaseFee ? String(commissionBaseFee) : null,
+        universityCommissionRate: snapshotCommissionRate ? String(snapshotCommissionRate) : null,
+        universityCommissionAmount: uCommAmount > 0 ? String(uCommAmount) : null,
       });
     }
   }
@@ -172,15 +236,20 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
   if (sfFinStatus !== "excluded") {
     const existingSF = await db.select({ id: serviceFeesTable.id }).from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
     if (existingSF.length === 0) {
+      const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
+      const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;
       await db.insert(serviceFeesTable).values({
         applicationId: app.id,
         studentId: parseInt(studentId, 10),
         agentId: resolvedAgentId,
         studentName: studentFullName,
-        universityName: universityName || null,
+        universityName: snapshotUniversityName,
+        isStateUniversity: isStateUniversity,
         season: season || currentYear,
-        currency: "USD",
-        totalAmount: "0",
+        currency: snapshotCurrency,
+        totalAmount: sfTotal,
+        firstInstallmentAmount: sfHalf,
+        secondInstallmentAmount: sfHalf,
         financeStatus: sfFinStatus,
         status: "pending",
       });
@@ -272,12 +341,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
     if (existingComms.length === 0 && commStatus !== "excluded") {
       const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
       const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
+      const baseFee = app.discountedFee ?? app.tuitionFee;
+      const uCommAmt = baseFee && app.commissionRate ? (baseFee * app.commissionRate) / 100 : 0;
       await db.insert(commissionsTable).values({
         applicationId: id, studentId: app.studentId, agentId: app.agentId,
         studentName: sName, universityName: app.universityName || null,
         programName: app.programName || null, season: app.season || String(new Date().getFullYear()),
-        currency: "USD", status: commStatus,
-        programFee: app.tuitionFee ? String(app.tuitionFee) : null,
+        currency: app.currency || "USD", status: commStatus,
+        programFee: baseFee ? String(baseFee) : null,
+        universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
+        universityCommissionAmount: uCommAmt > 0 ? String(uCommAmt) : null,
         ...(commStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
       });
     }
@@ -304,11 +377,17 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
     if (existingSFs.length === 0 && sfStatus !== "excluded") {
       const [studentRec] = existingComms.length > 0 ? [null] : await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
       const sName2 = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : (existingComms[0]?.studentName || null);
+      const sfAmt = app.serviceFeeAmount ? String(app.serviceFeeAmount) : "0";
+      const sfHalf = app.serviceFeeAmount ? String(app.serviceFeeAmount / 2) : null;
       await db.insert(serviceFeesTable).values({
         applicationId: id, studentId: app.studentId, agentId: app.agentId,
         studentName: sName2, universityName: app.universityName || null,
         season: app.season || String(new Date().getFullYear()),
-        currency: "USD", totalAmount: "0", financeStatus: sfStatus, status: "pending",
+        currency: app.currency || "USD",
+        totalAmount: sfAmt,
+        firstInstallmentAmount: sfHalf,
+        secondInstallmentAmount: sfHalf,
+        financeStatus: sfStatus, status: "pending",
       });
     }
     for (const sf of existingSFs) {
