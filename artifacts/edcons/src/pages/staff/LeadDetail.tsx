@@ -78,18 +78,17 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     return "Staff Member";
   }
 
-  async function handleAssignToMe() {
-    if (!user) return;
+  async function handleAssign(targetUserId: number | null) {
     setAssigning(true);
     try {
       await customFetch(`/api/leads/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignedTo: user.id }),
+        body: JSON.stringify({ assignedTo: targetUserId }),
       });
       queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-      toast({ title: "Lead assigned to you" });
+      toast({ title: targetUserId ? "Lead assigned" : "Lead unassigned" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -457,6 +456,30 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               </h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
+              ) : isAdmin ? (
+                <Select
+                  value={lead?.assignedToId ? String(lead.assignedToId) : "unassigned"}
+                  onValueChange={(val) => handleAssign(val === "unassigned" ? null : Number(val))}
+                  disabled={assigning}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select assignee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {(() => {
+                      const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
+                      const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
+                      return list
+                        .filter((u: any) => staffRoles.includes(u.role))
+                        .map((u: any) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.id === user?.id ? `${u.firstName || ''} ${u.lastName || ''} (You)`.trim() : `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
+                          </SelectItem>
+                        ));
+                    })()}
+                  </SelectContent>
+                </Select>
               ) : lead?.assignedToId ? (
                 <div className="flex items-center gap-2">
                   <UserCheck2 className="w-4 h-4 text-emerald-600" />
@@ -469,7 +492,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     size="sm"
                     variant="outline"
                     className="w-full rounded-full"
-                    onClick={handleAssignToMe}
+                    onClick={() => handleAssign(user?.id ?? null)}
                     disabled={assigning}
                   >
                     <UserPlus className="w-3.5 h-3.5 mr-1.5" />
