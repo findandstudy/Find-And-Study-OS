@@ -641,7 +641,12 @@ export default function SettingsPage() {
   }
 
   function SeasonsTabContent() {
-    return <SeasonsTab />;
+    return (
+      <div className="space-y-6">
+        <YearsManagement />
+        <SeasonsTab />
+      </div>
+    );
   }
 
   function BrandingTab() {
@@ -1244,6 +1249,113 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
         />
       )}
     </div>
+  );
+}
+
+function YearsManagement() {
+  const { toast } = useToast();
+  const [years, setYears] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [newYear, setNewYear] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data: any = await customFetch("/api/settings/available-years");
+        setYears(data.years || []);
+      } catch {
+        const currentYear = new Date().getFullYear();
+        setYears(Array.from({ length: 6 }, (_, i) => currentYear - 2 + i));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function saveYears(updated: number[]) {
+    setSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ availableYears: updated.sort((a, b) => a - b) }),
+      });
+      setYears(updated.sort((a, b) => a - b));
+      toast({ title: "Years updated" });
+    } catch (err: any) {
+      toast({ title: "Failed to update years", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleAddYear() {
+    const y = parseInt(newYear, 10);
+    if (isNaN(y) || y < 2000 || y > 2100) {
+      toast({ title: "Enter a valid year (2000-2100)", variant: "destructive" });
+      return;
+    }
+    if (years.includes(y)) {
+      toast({ title: "Year already exists", variant: "destructive" });
+      return;
+    }
+    setNewYear("");
+    saveYears([...years, y]);
+  }
+
+  function handleRemoveYear(y: number) {
+    saveYears(years.filter(yr => yr !== y));
+  }
+
+  if (loading) {
+    return (
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-none shadow-lg shadow-black/5 p-6">
+      <SectionHeader title="Academic Years" description="Manage the years available in the year selector across the system. Users will see these years in the top navigation dropdown." />
+
+      <div className="flex items-center gap-3 mb-6">
+        <Input
+          type="number"
+          value={newYear}
+          onChange={e => setNewYear(e.target.value)}
+          placeholder="e.g. 2027"
+          className="rounded-xl w-[140px]"
+          min={2000}
+          max={2100}
+          onKeyDown={e => { if (e.key === "Enter") handleAddYear(); }}
+        />
+        <Button onClick={handleAddYear} disabled={saving || !newYear.trim()} className="rounded-xl gap-2 shrink-0">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          Add Year
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {years.map(y => (
+          <div key={y} className="flex items-center gap-1.5 bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5">
+            <CalendarDays className="w-3.5 h-3.5 text-primary" />
+            <span className="text-sm font-semibold text-foreground">{y}</span>
+            <button
+              onClick={() => handleRemoveYear(y)}
+              disabled={saving || years.length <= 1}
+              className="ml-1 w-5 h-5 rounded-full hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30"
+              title="Remove year"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

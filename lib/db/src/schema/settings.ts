@@ -107,6 +107,9 @@ export const settingsTable = pgTable("settings", {
   pdfSealImageUrl: text("pdf_seal_image_url"),
   pdfPrimaryColor: text("pdf_primary_color"),
 
+  // Season Years
+  availableYears: jsonb("available_years").$type<number[]>(),
+
   // Advanced
   sitemapUrl: text("sitemap_url"),
   robotsTxtContent: text("robots_txt_content"),

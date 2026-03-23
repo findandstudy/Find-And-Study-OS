@@ -34,6 +34,7 @@ const SETTINGS_PATCH_FIELDS = [
   "sitemapUrl", "robotsTxtContent", "customHeadScript", "customBodyEndScript",
   "linkedinInsightTag", "clarityId", "recaptchaSiteKey",
   "whatsappWidgetNumber", "liveChatScript", "featureFlags",
+  "availableYears",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
@@ -106,6 +107,14 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
     delete safe[f];
   }
   res.json(safe);
+});
+
+router.get("/settings/available-years", async (req, res): Promise<void> => {
+  const [settings] = await db.select({ availableYears: settingsTable.availableYears }).from(settingsTable);
+  const currentYear = new Date().getFullYear();
+  const defaultYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
+  const years = (settings?.availableYears as number[] | null) || defaultYears;
+  res.json({ years: years.sort((a, b) => a - b) });
 });
 
 const objectStorageService = new ObjectStorageService();

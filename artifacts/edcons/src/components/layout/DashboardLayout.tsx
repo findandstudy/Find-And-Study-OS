@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
-import { useSeason, SEASON_YEARS } from "@/contexts/SeasonContext";
+import { useSeason } from "@/contexts/SeasonContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -201,7 +201,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { t } = useI18n();
   useSeo({ title: "Portal", noindex: true });
-  const { season, setSeason } = useSeason();
+  const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent");
 
@@ -389,7 +389,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent align="end">
-                      {SEASON_YEARS.map(y => (
+                      {availableYears.map(y => (
                         <SelectItem key={y} value={y} className="text-sm font-medium">{y}</SelectItem>
                       ))}
                     </SelectContent>
