@@ -147,7 +147,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(studentsTable.createdAt);
+    .orderBy(desc(studentsTable.createdAt));
 
   const studentIds = rows.map(r => r.id);
   let photoSet = new Set<number>();

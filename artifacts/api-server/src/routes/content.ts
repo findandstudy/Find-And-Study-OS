@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, blogPostsTable, announcementsTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { CONTENT_ROLES, MANAGER_ROLES } from "../lib/roles";
 
@@ -34,7 +34,7 @@ router.get("/blog", async (req, res): Promise<void> => {
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(blogPostsTable.createdAt);
+    .orderBy(desc(blogPostsTable.createdAt));
 
   res.json({
     data,
@@ -103,7 +103,7 @@ router.get("/announcements", async (req, res): Promise<void> => {
     .select()
     .from(announcementsTable)
     .where(eq(announcementsTable.isActive, true))
-    .orderBy(announcementsTable.createdAt);
+    .orderBy(desc(announcementsTable.createdAt));
   res.json(data);
 });
 

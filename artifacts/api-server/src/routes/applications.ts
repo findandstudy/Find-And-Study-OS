@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
-import { eq, sql, and, inArray } from "drizzle-orm";
+import { eq, sql, and, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -90,7 +90,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(applicationsTable.createdAt);
+    .orderBy(desc(applicationsTable.createdAt));
 
   res.json({
     data: rows,

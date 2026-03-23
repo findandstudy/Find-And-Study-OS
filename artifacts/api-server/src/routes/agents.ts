@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, agentsTable, usersTable } from "@workspace/db";
-import { eq, sql, isNull, isNotNull, and, or, ilike, inArray } from "drizzle-orm";
+import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
@@ -95,7 +95,7 @@ router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (re
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(agentsTable.createdAt);
+    .orderBy(desc(agentsTable.createdAt));
 
   res.json({
     data,
@@ -289,7 +289,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(agentsTable.createdAt);
+    .orderBy(desc(agentsTable.createdAt));
 
   res.json({
     data,
@@ -304,7 +304,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 
 router.get("/agents/:id/sub-agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const parentId = parseInt(req.params.id, 10);
-  const subs = await db.select().from(agentsTable).where(eq(agentsTable.parentAgentId, parentId)).orderBy(agentsTable.createdAt);
+  const subs = await db.select().from(agentsTable).where(eq(agentsTable.parentAgentId, parentId)).orderBy(desc(agentsTable.createdAt));
   res.json(subs);
 });
 

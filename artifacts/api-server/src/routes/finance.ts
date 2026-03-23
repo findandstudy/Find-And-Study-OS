@@ -60,7 +60,7 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(commissionsTable).where(whereClause);
   const data = await db.select().from(commissionsTable).where(whereClause).limit(limitNum).offset(offset)
-    .orderBy(commissionsTable.createdAt);
+    .orderBy(desc(commissionsTable.createdAt));
 
   const summaryConditions = conditions.filter(c => c !== sql`${commissionsTable.status} != 'excluded'`);
   summaryConditions.push(sql`${commissionsTable.status} != 'excluded'`);
@@ -215,7 +215,7 @@ router.get("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (r
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(serviceFeesTable).where(whereClause);
   const data = await db.select().from(serviceFeesTable).where(whereClause).limit(limitNum).offset(offset)
-    .orderBy(serviceFeesTable.createdAt);
+    .orderBy(desc(serviceFeesTable.createdAt));
 
   const sfSummaryConditions = conditions.filter(c => c !== sql`${serviceFeesTable.financeStatus} != 'excluded'`);
   sfSummaryConditions.push(sql`${serviceFeesTable.financeStatus} != 'excluded'`);
@@ -628,7 +628,7 @@ router.get("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req, 
   if (status) conditions.push(eq(invoicesTable.status, status));
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(invoicesTable).where(whereClause);
-  const data = await db.select().from(invoicesTable).where(whereClause).limit(limitNum).offset(offset).orderBy(invoicesTable.createdAt);
+  const data = await db.select().from(invoicesTable).where(whereClause).limit(limitNum).offset(offset).orderBy(desc(invoicesTable.createdAt));
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 

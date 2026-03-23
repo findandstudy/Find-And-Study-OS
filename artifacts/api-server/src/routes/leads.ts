@@ -94,7 +94,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "s
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause);
-  const data = await db.select().from(leadsTable).where(whereClause).limit(limitNum).offset(offset).orderBy(leadsTable.createdAt);
+  const data = await db.select().from(leadsTable).where(whereClause).limit(limitNum).offset(offset).orderBy(desc(leadsTable.createdAt));
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });

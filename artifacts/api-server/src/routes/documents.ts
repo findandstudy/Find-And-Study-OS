@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, documentsTable, studentsTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 
@@ -41,7 +41,7 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-  const docs = await db.select().from(documentsTable).where(whereClause).orderBy(documentsTable.createdAt);
+  const docs = await db.select().from(documentsTable).where(whereClause).orderBy(desc(documentsTable.createdAt));
   res.json(docs);
 });
 
