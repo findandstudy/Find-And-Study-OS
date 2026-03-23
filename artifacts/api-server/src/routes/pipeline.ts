@@ -31,9 +31,8 @@ const DEFAULT_STAGES: Record<string, Array<{ key: string; label: string; sortOrd
     { key: "contacted", label: "Contacted", sortOrder: 1 },
     { key: "interested", label: "Interested", sortOrder: 2 },
     { key: "qualified", label: "Qualified", sortOrder: 3 },
-    { key: "converted", label: "Converted", sortOrder: 4 },
-    { key: "won", label: "WON", sortOrder: 5, variant: "won" },
-    { key: "lost", label: "LOST", sortOrder: 6, variant: "lost" },
+    { key: "converted", label: "Converted", sortOrder: 4, variant: "won" },
+    { key: "lost", label: "LOST", sortOrder: 5, variant: "lost" },
   ],
   application: [
     { key: "inquiry", label: "Inquiry", sortOrder: 0 },
@@ -103,28 +102,37 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     }
   }
 
-  const keys = stages.map((s: any) => s.key);
-  const uniqueKeys = new Set(keys);
-  if (uniqueKeys.size !== keys.length) {
+  const normalizedKeys = stages.map((s: any) => String(s.key).toLowerCase().replace(/[^a-z0-9_]/g, "_"));
+  const uniqueKeys = new Set(normalizedKeys);
+  if (uniqueKeys.size !== normalizedKeys.length) {
     res.status(400).json({ error: "Duplicate keys not allowed" });
     return;
   }
 
-  await db.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
+  try {
+    const inserted = await db.transaction(async (tx) => {
+      await tx.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
 
-  const inserted = await db.insert(pipelineStagesTable)
-    .values(stages.map((s: any, i: number) => ({
-      entityType,
-      key: String(s.key).toLowerCase().replace(/[^a-z0-9_]/g, "_"),
-      label: String(s.label).slice(0, 50),
-      sortOrder: i,
-      variant: s.variant || null,
-      icon: s.icon || null,
-      color: s.color || null,
-    })))
-    .returning();
+      const rows = await tx.insert(pipelineStagesTable)
+        .values(stages.map((s: any, i: number) => ({
+          entityType,
+          key: normalizedKeys[i],
+          label: String(s.label).slice(0, 50),
+          sortOrder: i,
+          variant: s.variant || null,
+          icon: s.icon || null,
+          color: s.color || null,
+        })))
+        .returning();
 
-  res.json(inserted.sort((a, b) => a.sortOrder - b.sortOrder));
+      return rows;
+    });
+
+    res.json(inserted.sort((a, b) => a.sortOrder - b.sortOrder));
+  } catch (err: any) {
+    console.error("Failed to save pipeline stages:", err);
+    res.status(500).json({ error: "Failed to save pipeline stages" });
+  }
 });
 
 export default router;

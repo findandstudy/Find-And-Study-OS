@@ -26,7 +26,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       setLocalStages(stages.map(s => ({ ...s })));
       setError("");
     }
-  }, [open, stages]);
+  }, [open]);
 
   function addStage() {
     const order = localStages.length;
