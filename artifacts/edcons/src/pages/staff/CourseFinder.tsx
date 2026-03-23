@@ -269,6 +269,7 @@ export default function CourseFinder() {
         companyPhone: settings?.companyPhone || undefined,
         companyWebsite: settings?.companyWebsite || undefined,
         showCommission: !!showCommission,
+        agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup > 0 ? pdfMarkup : undefined,
         hideServiceFee,
       });

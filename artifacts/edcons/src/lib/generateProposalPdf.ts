@@ -30,6 +30,7 @@ type ProposalOptions = {
   companyPhone?: string;
   companyWebsite?: string;
   showCommission?: boolean;
+  agentShareRate?: number | null;
   serviceFeeMarkup?: number;
   hideServiceFee?: boolean;
 };
