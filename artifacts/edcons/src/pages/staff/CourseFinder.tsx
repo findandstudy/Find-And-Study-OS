@@ -511,15 +511,17 @@ export default function CourseFinder() {
                           )}
                         </Button>
                       )}
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={hideServiceFee}
-                          onChange={e => setHideServiceFee(e.target.checked)}
-                          className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
-                        />
-                        Hide Service Fee
-                      </label>
+                      {!isStudent && (
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={hideServiceFee}
+                            onChange={e => setHideServiceFee(e.target.checked)}
+                            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                          />
+                          Hide Service Fee
+                        </label>
+                      )}
                       <Button
                         size="sm"
                         onClick={handleGeneratePdf}
