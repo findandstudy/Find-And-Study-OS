@@ -402,10 +402,10 @@ export default function StudentDetail({ id }: Props) {
 
           <TabsContent value="documents" className="mt-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-muted-foreground">{documents.length} belge</p>
+              <p className="text-sm text-muted-foreground">{documents.length} documents</p>
               <Button size="sm" onClick={openUpload}>
                 <Upload className="w-4 h-4 mr-2" />
-                Belge Y\u00fckle
+                Upload Docs
               </Button>
             </div>
 
@@ -416,8 +416,8 @@ export default function StudentDetail({ id }: Props) {
                   onClick={openUpload}
                 >
                   <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">Hen\u00fcz belge yok</p>
-                  <p className="text-xs mt-1">T\u0131klayarak belge y\u00fckleyin</p>
+                  <p className="font-medium">No documents yet</p>
+                  <p className="text-xs mt-1">Click to upload documents</p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
@@ -457,13 +457,13 @@ export default function StudentDetail({ id }: Props) {
                               className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                              \u0130ndir
+                              Download
                             </button>
                           )}
                           {doc.fileUrl && !doc.fileData && (
                             <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                              G\u00f6r\u00fcnt\u00fcle
+                              View
                             </a>
                           )}
                         </td>
@@ -480,12 +480,12 @@ export default function StudentDetail({ id }: Props) {
       <Dialog open={uploadOpen} onOpenChange={o => { if (!uploading) setUploadOpen(o); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Belge Y\u00fckle</DialogTitle>
+            <DialogTitle>Upload Document</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Belge T\u00fcr\u00fc</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Document Type</Label>
               <Select value={uploadType} onValueChange={v => {
                 setUploadType(v);
                 const type = (DOC_TYPES.find(d => d.key === v)?.label ?? "document").toLowerCase();
@@ -505,7 +505,7 @@ export default function StudentDetail({ id }: Props) {
             </div>
 
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Belge Ad\u0131</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Document Name</Label>
               <Input
                 className="mt-1"
                 value={uploadName}
@@ -515,7 +515,7 @@ export default function StudentDetail({ id }: Props) {
             </div>
 
             <div>
-              <Label className="text-xs font-medium text-muted-foreground">Dosya</Label>
+              <Label className="text-xs font-medium text-muted-foreground">File</Label>
               <div
                 className={`mt-1 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
                   dragging ? "border-primary bg-primary/5" : uploadFile ? "border-primary/40 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-secondary/40"
@@ -548,8 +548,8 @@ export default function StudentDetail({ id }: Props) {
                 ) : (
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                    <p className="text-sm font-medium text-muted-foreground">S\u00fcr\u00fckle b\u0131rak veya t\u0131kla</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG \u2014 maks. 10 MB</p>
+                    <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG — max 10 MB</p>
                   </>
                 )}
               </div>
@@ -568,9 +568,9 @@ export default function StudentDetail({ id }: Props) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>\u0130ptal</Button>
+            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
             <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-              {uploading ? "Y\u00fckleniyor\u2026" : "Kaydet"}
+              {uploading ? "Uploading\u2026" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
