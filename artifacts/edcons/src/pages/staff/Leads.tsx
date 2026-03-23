@@ -258,10 +258,12 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
 
 
 /* ── FilterPopover ────────────────────────────────────────── */
-function FilterPopover({ filters, onChange, columns }: {
+function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId }: {
   filters: { source: string; status: string; appSource: string; assignment: string };
   onChange: (f: { source: string; status: string; appSource: string; assignment: string }) => void;
   columns: ColDef[];
+  staffUsers: any[];
+  currentUserId?: number;
 }) {
   const [open, setOpen] = useState(false);
   const hasActive = filters.source !== "all" || filters.status !== "all" || filters.appSource !== "all" || filters.assignment !== "all";
@@ -334,13 +336,18 @@ function FilterPopover({ filters, onChange, columns }: {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Assignment</Label>
+          <Label className="text-xs">Assigned To</Label>
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              <SelectItem value="mine">Assigned to Me</SelectItem>
+              <SelectItem value="mine">Me</SelectItem>
               <SelectItem value="unassigned">Unassigned</SelectItem>
+              {staffUsers.filter(u => u.id !== currentUserId).map((u: any) => (
+                <SelectItem key={u.id} value={String(u.id)}>
+                  {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -712,10 +719,9 @@ export default function LeadsPage() {
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
     queryFn: () => customFetch("/api/users") as Promise<any>,
-    enabled: isAdmin,
     staleTime: 5 * 60 * 1000,
   });
-  const staffUsers = (isAdmin && staffUsersData)
+  const staffUsers = staffUsersData
     ? (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []).filter((u: any) => ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"].includes(u.role))
     : [];
   const queryClient = useQueryClient();
@@ -766,6 +772,7 @@ export default function LeadsPage() {
     if (filters.appSource === "staff" && l.agentId) return false;
     if (filters.assignment === "mine" && l.assignedToId !== user?.id) return false;
     if (filters.assignment === "unassigned" && l.assignedToId != null) return false;
+    if (filters.assignment !== "all" && filters.assignment !== "mine" && filters.assignment !== "unassigned" && l.assignedToId !== Number(filters.assignment)) return false;
     return true;
   });
 
@@ -969,7 +976,7 @@ export default function LeadsPage() {
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
               />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} columns={columns} />
+            <FilterPopover filters={filters} onChange={setFilters} columns={columns} staffUsers={staffUsers} currentUserId={user?.id} />
 
             <div className="flex items-center border rounded-full overflow-hidden">
               <button
