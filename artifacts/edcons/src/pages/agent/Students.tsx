@@ -389,6 +389,44 @@ function FormField({
 
 type Step = "upload" | "analyzing" | "review";
 
+function NationalityCombobox({ value, onChange, countries, aiExtracted }: { value: string; onChange: (v: string) => void; countries: Array<{ id: number; name: string; code?: string }>; aiExtracted?: boolean }) {
+  const [inputVal, setInputVal] = useState(value);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setInputVal(value); }, [value]);
+
+  const filtered = inputVal
+    ? countries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
+    : countries;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative cursor-text" onClick={() => setOpen(true)}>
+          <Input
+            value={inputVal}
+            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Select or type..."
+            className="h-9 text-sm"
+            autoComplete="off"
+          />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+        {filtered.map(c => (
+          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
+            <CountryFlag code={c.code || ""} size="sm" />
+            {c.name}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function AddStudentModal({
   open,
   onClose,
@@ -500,6 +538,50 @@ function AddStudentModal({
               newForm.phone = phoneStr;
             }
             newExtracted.add("phone");
+          } else if (fk === "nationality") {
+            const natVal = String(val).trim();
+            const lower = natVal.toLowerCase();
+            const exactMatch = allCountries.find(c => c.name.toLowerCase() === lower);
+            if (exactMatch) {
+              newForm.nationality = exactMatch.name;
+            } else {
+              const DEMONYM_MAP: Record<string, string> = {
+                "afghan": "Afghanistan", "turkish": "Turkey", "iranian": "Iran",
+                "pakistani": "Pakistan", "indian": "India", "iraqi": "Iraq",
+                "syrian": "Syria", "jordanian": "Jordan", "lebanese": "Lebanon",
+                "palestinian": "Palestine", "egyptian": "Egypt", "moroccan": "Morocco",
+                "algerian": "Algeria", "tunisian": "Tunisia", "libyan": "Libya",
+                "sudanese": "Sudan", "somali": "Somalia", "nigerian": "Nigeria",
+                "ethiopian": "Ethiopia", "kenyan": "Kenya", "ghanaian": "Ghana",
+                "british": "United Kingdom", "american": "United States", "canadian": "Canada",
+                "french": "France", "german": "Germany", "dutch": "Netherlands",
+                "swedish": "Sweden", "italian": "Italy", "spanish": "Spain",
+                "polish": "Poland", "hungarian": "Hungary", "czech": "Czech Republic",
+                "romanian": "Romania", "ukrainian": "Ukraine", "russian": "Russia",
+                "australian": "Australia", "chinese": "China", "japanese": "Japan",
+                "korean": "South Korea", "malaysian": "Malaysia", "singaporean": "Singapore",
+                "bangladeshi": "Bangladesh", "azerbaijani": "Azerbaijan",
+                "kazakh": "Kazakhstan", "uzbek": "Uzbekistan", "kyrgyz": "Kyrgyzstan",
+                "tajik": "Tajikistan", "turkmen": "Turkmenistan",
+                "saudi": "Saudi Arabia", "emirati": "UAE", "qatari": "Qatar",
+                "kuwaiti": "Kuwait", "yemeni": "Yemen",
+                "afg": "Afghanistan", "tur": "Turkey", "irn": "Iran", "pak": "Pakistan",
+                "ind": "India", "irq": "Iraq", "syr": "Syria",
+              };
+              const mapped = DEMONYM_MAP[lower];
+              if (mapped) {
+                const countryMatch = allCountries.find(c => c.name.toLowerCase() === mapped.toLowerCase());
+                newForm.nationality = countryMatch ? countryMatch.name : mapped;
+              } else {
+                const codeMatch = allCountries.find(c => c.code?.toLowerCase() === lower);
+                if (codeMatch) {
+                  newForm.nationality = codeMatch.name;
+                } else {
+                  newForm.nationality = natVal;
+                }
+              }
+            }
+            newExtracted.add("nationality");
           } else if (fk === "gpa") {
             const gpaStr = String(val).trim();
             const gpaMatch = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
@@ -814,18 +896,9 @@ function AddStudentModal({
                   <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
-                    <Select value={form.nationality} onValueChange={field("nationality")}>
-                      <SelectTrigger className="mt-1 h-9 text-sm">
-                        <SelectValue placeholder="Select country..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {allCountries.map(c => (
-                          <SelectItem key={c.id} value={c.name}>
-                            <span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="mt-1">
+                      <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
+                    </div>
                   </div>
                   <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" aiExtracted={ef.has("motherName")} />
                   <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" aiExtracted={ef.has("fatherName")} />
@@ -1242,18 +1315,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Nationality</Label>
-                <Select value={form.nationality} onValueChange={field("nationality")}>
-                  <SelectTrigger className="h-9 text-sm rounded-xl">
-                    <SelectValue placeholder="Select country..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allCountries.map(c => (
-                      <SelectItem key={c.id} value={c.name}>
-                        <span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
               </div>
               <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" />
               <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" />
