@@ -131,6 +131,13 @@ router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), as
   const rows: {
     name: string; country: string; city?: string; website?: string;
     description?: string; ranking?: number; logoUrl?: string;
+    universityType?: string; taxType?: string; taxPercent?: number;
+    qsRanking?: number; timesRanking?: number; shanghaiRanking?: number;
+    cwtsLeidenRanking?: number; address?: string; onlinePaymentUrl?: string;
+    cricosLink?: string; documentsLink?: string; currentFeeListLink?: string;
+    initialDepositOptions?: string; admissionProcess?: string;
+    contactPersonName?: string; contactPersonPhone?: string; contactPersonEmail?: string;
+    status?: string; isActive?: string | boolean;
   }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
@@ -138,7 +145,25 @@ router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), as
     name: r.name, country: r.country, city: r.city ?? null,
     website: r.website ?? null, description: r.description ?? null,
     ranking: r.ranking ? Number(r.ranking) : null, logoUrl: r.logoUrl ?? null,
-    isActive: true,
+    universityType: r.universityType ?? null,
+    taxType: r.taxType ?? null,
+    taxPercent: r.taxPercent ? Number(r.taxPercent) : null,
+    qsRanking: r.qsRanking ? Number(r.qsRanking) : null,
+    timesRanking: r.timesRanking ? Number(r.timesRanking) : null,
+    shanghaiRanking: r.shanghaiRanking ? Number(r.shanghaiRanking) : null,
+    cwtsLeidenRanking: r.cwtsLeidenRanking ? Number(r.cwtsLeidenRanking) : null,
+    address: r.address ?? null,
+    onlinePaymentUrl: r.onlinePaymentUrl ?? null,
+    cricosLink: r.cricosLink ?? null,
+    documentsLink: r.documentsLink ?? null,
+    currentFeeListLink: r.currentFeeListLink ?? null,
+    initialDepositOptions: r.initialDepositOptions ?? null,
+    admissionProcess: r.admissionProcess ?? null,
+    contactPersonName: r.contactPersonName ?? null,
+    contactPersonPhone: r.contactPersonPhone ?? null,
+    contactPersonEmail: r.contactPersonEmail ?? null,
+    status: r.status ?? "open",
+    isActive: r.isActive === false || r.isActive === "No" || r.isActive === "no" || r.isActive === "false" ? false : true,
   }));
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows" }); return; }
@@ -155,7 +180,9 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     degree?: string; field?: string; language?: string;
     duration?: string; tuitionFee?: number; currency?: string;
     scholarship?: number; intakes?: string; requirements?: string;
-    commissionRate?: number;
+    commissionRate?: number; applicationFee?: number; advancedFee?: number;
+    depositFee?: number; serviceFeeAmount?: number; discountedFee?: number;
+    languageFee?: number; feeType?: string; isActive?: string | boolean;
   }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
@@ -174,7 +201,14 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
       scholarship: r.scholarship ? Number(r.scholarship) : null,
       intakes: r.intakes ?? null, requirements: r.requirements ?? null,
       commissionRate: r.commissionRate ? Number(r.commissionRate) : null,
-      isActive: true,
+      applicationFee: r.applicationFee ? Number(r.applicationFee) : null,
+      advancedFee: r.advancedFee ? Number(r.advancedFee) : null,
+      depositFee: r.depositFee ? Number(r.depositFee) : null,
+      serviceFeeAmount: r.serviceFeeAmount ? Number(r.serviceFeeAmount) : null,
+      discountedFee: r.discountedFee ? Number(r.discountedFee) : null,
+      languageFee: r.languageFee ? Number(r.languageFee) : null,
+      feeType: r.feeType ?? null,
+      isActive: r.isActive === false || r.isActive === "No" || r.isActive === "no" || r.isActive === "false" ? false : true,
     };
   }).filter(Boolean) as ReturnType<typeof programsTable.$inferInsert>[];
 
