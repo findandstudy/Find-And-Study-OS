@@ -58,8 +58,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return m === "system" ? getSystemTheme() : m;
   });
 
-  const [settings, setSettings] = useState<ThemeSettings>({
-    logoUrl: null, logoDarkUrl: null, themePrimary: null, themeButton: null, themeHover: null, companyName: null,
+  const [settings, setSettings] = useState<ThemeSettings>(() => {
+    const defaults: ThemeSettings = { logoUrl: null, logoDarkUrl: null, themePrimary: null, themeButton: null, themeHover: null, companyName: null };
+    if (typeof window === "undefined") return defaults;
+    try {
+      const cached = localStorage.getItem("edcons_branding");
+      if (cached) return { ...defaults, ...JSON.parse(cached) };
+    } catch {}
+    return defaults;
   });
 
   const setMode = useCallback((m: ThemeMode) => {
@@ -131,8 +137,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       };
       setSettings(s);
       applyThemeColors(s);
+      try { localStorage.setItem("edcons_branding", JSON.stringify(s)); } catch {}
     } catch {}
   }, [applyThemeColors]);
+
+  useEffect(() => {
+    applyThemeColors(settings);
+  }, []);
 
   useEffect(() => {
     refreshSettings();
