@@ -175,9 +175,10 @@ type ApplyStep = "upload" | "analyzing" | "form" | "success";
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
   nationality: "", dateOfBirth: "", notes: "",
+  motherName: "", fatherName: "",
 };
 
-function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () => void; program: Program | null }) {
+function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
   const { toast } = useToast();
   const [step, setStep] = useState<ApplyStep>("upload");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
@@ -233,6 +234,7 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
         ["firstName", "firstName"], ["lastName", "lastName"],
         ["email", "email"], ["phone", "phone"],
         ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
+        ["motherName", "motherName"], ["fatherName", "fatherName"],
       ];
 
       for (const [fk, ek] of mapping) {
@@ -253,7 +255,7 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
   }
 
   async function handleSubmit() {
-    if (!form.firstName || !form.lastName || !form.email) {
+    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
@@ -409,6 +411,25 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Mother Name <span className="text-destructive ml-0.5">*</span>
+                  {extracted.has("motherName") && <AiBadge />}
+                </Label>
+                <Input value={form.motherName} onChange={(e) => setForm(f => ({ ...f, motherName: e.target.value }))}
+                  placeholder="Mother's full name" className={`rounded-xl ${extracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Father Name <span className="text-destructive ml-0.5">*</span>
+                  {extracted.has("fatherName") && <AiBadge />}
+                </Label>
+                <Input value={form.fatherName} onChange={(e) => setForm(f => ({ ...f, fatherName: e.target.value }))}
+                  placeholder="Father's full name" className={`rounded-xl ${extracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold flex items-center">
                 Email <span className="text-destructive ml-0.5">*</span>
@@ -421,7 +442,8 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Phone {extracted.has("phone") && <AiBadge />}
+                  Phone <span className="text-destructive ml-0.5">*</span>
+                  {extracted.has("phone") && <AiBadge />}
                 </Label>
                 <div className="flex gap-1.5">
                   <Input value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
@@ -434,8 +456,11 @@ function ApplyDialog({ open, onClose, program }: { open: boolean; onClose: () =>
                 <Label className="text-sm font-semibold flex items-center">
                   Nationality {extracted.has("nationality") && <AiBadge />}
                 </Label>
-                <Input value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
-                  placeholder="Nationality" className={`rounded-xl ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                <select value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
+                  className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
+                  <option value="">Select nationality</option>
+                  {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
             </div>
 
@@ -906,7 +931,7 @@ export default function Programs() {
         </div>
       </section>
 
-      <ApplyDialog open={!!applyProgram} onClose={() => setApplyProgram(null)} program={applyProgram} />
+      <ApplyDialog open={!!applyProgram} onClose={() => setApplyProgram(null)} program={applyProgram} countries={filters.countries} />
     </PublicLayout>
   );
 }

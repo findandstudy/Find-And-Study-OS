@@ -25,10 +25,10 @@ const aiExtractLimiter = rateLimit({
 });
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName } = req.body;
 
-  if (!firstName || !lastName || !email) {
-    res.status(400).json({ error: "firstName, lastName, and email are required" });
+  if (!firstName || !lastName || !email || !phone) {
+    res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
 
@@ -76,6 +76,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           lastName: existingUser.lastName || lastName,
           email: normalizedEmail,
           phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+          motherName: s(motherName, 100),
+          fatherName: s(fatherName, 100),
         }).returning();
       }
       await db.update(leadsTable).set({ convertedStudentId: existingStudent.id }).where(eq(leadsTable.id, lead.id));
@@ -113,6 +115,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         email: normalizedEmail,
         phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
         nationality: nationality || null,
+        motherName: s(motherName, 100),
+        fatherName: s(fatherName, 100),
       }).returning();
 
       await db.update(leadsTable).set({ convertedStudentId: newStudent.id }).where(eq(leadsTable.id, lead.id));
