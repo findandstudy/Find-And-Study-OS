@@ -212,6 +212,37 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  const isStaff = ["super_admin","admin","manager","staff","consultant","editor","accountant"].includes(user?.role || "");
+  const isStudent = user?.role === "student";
+
+  const { data: unreadMsgData } = useQuery({
+    queryKey: ["unread-messages-count"],
+    enabled: isStaff,
+    queryFn: async () => {
+      const res = await customFetch<{ data: any[] }>("/api/conversations");
+      const convs = (res as any)?.data || res || [];
+      const total = convs.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
+      return total;
+    },
+    refetchInterval: 15000,
+    staleTime: 10000,
+  });
+
+  const { data: studentUnreadData } = useQuery({
+    queryKey: ["student-unread-messages"],
+    enabled: isStudent,
+    queryFn: async () => {
+      const res = await customFetch<{ data: any[] }>("/api/student/conversations");
+      const convs = (res as any)?.data || res || [];
+      const total = convs.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
+      return total;
+    },
+    refetchInterval: 15000,
+    staleTime: 10000,
+  });
+
+  const totalUnreadMessages = (isStaff ? (unreadMsgData || 0) : 0) + (isStudent ? (studentUnreadData || 0) : 0);
+
   if (isLoading || !user) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -283,7 +314,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                             >
                               <Link href={item.url}>
                                 <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
-                                <span>{item.title}</span>
+                                <span className="flex-1">{item.title}</span>
+                                {item.title === "Messages" && totalUnreadMessages > 0 && (
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                    {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
+                                  </span>
+                                )}
                               </Link>
                             </SidebarMenuButton>
                           </SidebarMenuItem>

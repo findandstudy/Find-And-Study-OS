@@ -842,6 +842,27 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
 
   const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
   await db.update(conversationsTable).set({ lastMessageAt: new Date(), lastMessagePreview: preview }).where(eq(conversationsTable.id, conversationId));
+
+  const otherParticipants = await db
+    .select({ odUserId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable)
+    .where(and(eq(conversationParticipantsTable.conversationId, conversationId), sql`${conversationParticipantsTable.userId} != ${userId}`));
+
+  const senderUser = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, userId));
+  const senderName = senderUser[0] ? `${senderUser[0].firstName} ${senderUser[0].lastName}` : "Student";
+  for (const p of otherParticipants) {
+    await db.insert(notificationsTable).values({
+      userId: p.odUserId,
+      type: "message.new",
+      title: `New message from ${senderName}`,
+      body: messageContent.substring(0, 150),
+      icon: "message-circle",
+      actionUrl: `/staff/messages`,
+      channel: "in_app",
+      data: { conversationId, messageId: message.id },
+    });
+  }
+
   res.status(201).json(message);
 });
 
