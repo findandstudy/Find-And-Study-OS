@@ -259,12 +259,12 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
 
 /* ── FilterPopover ────────────────────────────────────────── */
 function FilterPopover({ filters, onChange, columns }: {
-  filters: { source: string; status: string; appSource: string };
-  onChange: (f: { source: string; status: string; appSource: string }) => void;
+  filters: { source: string; status: string; appSource: string; assignment: string };
+  onChange: (f: { source: string; status: string; appSource: string; assignment: string }) => void;
   columns: ColDef[];
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.source !== "all" || filters.status !== "all" || filters.appSource !== "all";
+  const hasActive = filters.source !== "all" || filters.status !== "all" || filters.appSource !== "all" || filters.assignment !== "all";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -288,7 +288,7 @@ function FilterPopover({ filters, onChange, columns }: {
               variant="ghost"
               size="sm"
               className="h-6 text-xs text-muted-foreground"
-              onClick={() => onChange({ source: "all", status: "all", appSource: "all" })}
+              onClick={() => onChange({ source: "all", status: "all", appSource: "all", assignment: "all" })}
             >
               Clear
             </Button>
@@ -329,6 +329,18 @@ function FilterPopover({ filters, onChange, columns }: {
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="agent">Agent</SelectItem>
               <SelectItem value="staff">Staff</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Assignment</Label>
+          <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="mine">Assigned to Me</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -674,7 +686,7 @@ export default function LeadsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [filters, setFilters] = useState({ source: "all", status: "all", appSource: "all" });
+  const [filters, setFilters] = useState({ source: "all", status: "all", appSource: "all", assignment: "all" });
   const { stages: pipelineStages } = usePipelineStages("lead");
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
@@ -752,6 +764,8 @@ export default function LeadsPage() {
     if (filters.status !== "all" && l.status !== filters.status) return false;
     if (filters.appSource === "agent" && !l.agentId) return false;
     if (filters.appSource === "staff" && l.agentId) return false;
+    if (filters.assignment === "mine" && l.assignedToId !== user?.id) return false;
+    if (filters.assignment === "unassigned" && l.assignedToId != null) return false;
     return true;
   });
 
