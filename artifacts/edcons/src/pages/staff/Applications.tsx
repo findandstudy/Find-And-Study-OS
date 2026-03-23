@@ -563,11 +563,11 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 /* ── FilterPopover ────────────────────────────────────────── */
 function FilterPopover({ filters, onChange, stages }: {
   stages: PipelineStage[];
-  filters: { stage: string; country: string };
-  onChange: (f: { stage: string; country: string }) => void;
+  filters: { stage: string; country: string; source: string };
+  onChange: (f: { stage: string; country: string; source: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.stage !== "all" || filters.country !== "all";
+  const hasActive = filters.stage !== "all" || filters.country !== "all" || filters.source !== "all";
   const { data: allCountries = [] } = useCountries();
   const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
 
@@ -582,7 +582,7 @@ function FilterPopover({ filters, onChange, stages }: {
       <PopoverContent className="w-64 p-4 space-y-4" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Filters</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ stage: "all", country: "all" })}>Clear</Button>}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ stage: "all", country: "all", source: "all" })}>Clear</Button>}
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Stage</Label>
@@ -601,6 +601,17 @@ function FilterPopover({ filters, onChange, stages }: {
             <SelectContent className="max-h-60">
               <SelectItem value="all">All</SelectItem>
               {activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Applications</Label>
+          <Select value={filters.source} onValueChange={v => onChange({ ...filters, source: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="staff">Staff</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -777,7 +788,7 @@ export default function ApplicationsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
-  const [filters, setFilters] = useState({ stage: "all", country: "all" });
+  const [filters, setFilters] = useState({ stage: "all", country: "all", source: "all" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
   const [editApp, setEditApp] = useState<any>(null);
@@ -804,6 +815,8 @@ export default function ApplicationsPage() {
   const filteredApps = allApps.filter((a: any) => {
     if (filters.stage !== "all" && a.stage !== filters.stage) return false;
     if (filters.country !== "all" && a.country !== filters.country) return false;
+    if (filters.source === "agent" && !a.agentId) return false;
+    if (filters.source === "staff" && a.agentId) return false;
     if (search) {
       const q = search.toLowerCase();
       const name = `${a.studentFirstName || ""} ${a.studentLastName || ""}`.toLowerCase();
