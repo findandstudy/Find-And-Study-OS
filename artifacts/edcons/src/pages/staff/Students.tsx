@@ -1610,10 +1610,10 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
 
 function StuFilterPopover({ filters, onChange, stages }: {
   stages: PipelineStage[];
-  filters: { status: string }; onChange: (f: { status: string }) => void;
+  filters: { status: string; appSource: string }; onChange: (f: { status: string; appSource: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.status !== "all";
+  const hasActive = filters.status !== "all" || filters.appSource !== "all";
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -1625,15 +1625,26 @@ function StuFilterPopover({ filters, onChange, stages }: {
       <PopoverContent className="w-56 p-4 space-y-4" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Filter</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ status: "all" })}>Clear</Button>}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ status: "all", appSource: "all" })}>Clear</Button>}
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Status</Label>
-          <Select value={filters.status} onValueChange={v => onChange({ status: v })}>
+          <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
               {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Applications</Label>
+          <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="staff">Staff</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1655,7 +1666,7 @@ export default function StudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
-  const [filters, setFilters] = useState({ status: "all" });
+  const [filters, setFilters] = useState({ status: "all", appSource: "all" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
   const [editStudent, setEditStudent] = useState<any>(null);
@@ -1708,6 +1719,8 @@ export default function StudentsPage() {
 
   const filteredStudents = allStudents.filter((s: any) => {
     if (filters.status !== "all" && s.status !== filters.status) return false;
+    if (filters.appSource === "agent" && !s.agentId) return false;
+    if (filters.appSource === "staff" && s.agentId) return false;
     return true;
   });
 

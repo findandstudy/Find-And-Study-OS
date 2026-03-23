@@ -259,12 +259,12 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
 
 /* ── FilterPopover ────────────────────────────────────────── */
 function FilterPopover({ filters, onChange, columns }: {
-  filters: { source: string; status: string };
-  onChange: (f: { source: string; status: string }) => void;
+  filters: { source: string; status: string; appSource: string };
+  onChange: (f: { source: string; status: string; appSource: string }) => void;
   columns: ColDef[];
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.source !== "all" || filters.status !== "all";
+  const hasActive = filters.source !== "all" || filters.status !== "all" || filters.appSource !== "all";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -282,15 +282,15 @@ function FilterPopover({ filters, onChange, columns }: {
       </PopoverTrigger>
       <PopoverContent className="w-64 p-4 space-y-4" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filtreler</p>
+          <p className="text-sm font-semibold">Filters</p>
           {hasActive && (
             <Button
               variant="ghost"
               size="sm"
               className="h-6 text-xs text-muted-foreground"
-              onClick={() => onChange({ source: "all", status: "all" })}
+              onClick={() => onChange({ source: "all", status: "all", appSource: "all" })}
             >
-              Temizle
+              Clear
             </Button>
           )}
         </div>
@@ -321,8 +321,20 @@ function FilterPopover({ filters, onChange, columns }: {
           </Select>
         </div>
 
+        <div className="space-y-1.5">
+          <Label className="text-xs">Applications</Label>
+          <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="staff">Staff</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
-          Uygula
+          Apply
         </Button>
       </PopoverContent>
     </Popover>
@@ -662,7 +674,7 @@ export default function LeadsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [filters, setFilters] = useState({ source: "all", status: "all" });
+  const [filters, setFilters] = useState({ source: "all", status: "all", appSource: "all" });
   const { stages: pipelineStages } = usePipelineStages("lead");
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
@@ -738,6 +750,8 @@ export default function LeadsPage() {
   const filteredLeads = allLeads.filter((l: any) => {
     if (filters.source !== "all" && l.source !== filters.source) return false;
     if (filters.status !== "all" && l.status !== filters.status) return false;
+    if (filters.appSource === "agent" && !l.agentId) return false;
+    if (filters.appSource === "staff" && l.agentId) return false;
     return true;
   });
 
