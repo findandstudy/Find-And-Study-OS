@@ -53,6 +53,7 @@ interface Filters {
   universities: { id: number; name: string }[];
   degrees: string[];
   languages: string[];
+  fields: string[];
   feeRange: { min: number; max: number } | null;
 }
 
@@ -476,11 +477,12 @@ export default function Programs() {
   const [universityId, setUniversityId] = useState("");
   const [level, setLevel] = useState("");
   const [language, setLanguage] = useState("");
+  const [field, setField] = useState("");
   const [feeMin, setFeeMin] = useState("");
   const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({ countries: [], cities: [], universityTypes: [], universities: [], degrees: [], languages: [], feeRange: null });
+  const [filters, setFilters] = useState<Filters>({ countries: [], cities: [], universityTypes: [], universities: [], degrees: [], languages: [], fields: [], feeRange: null });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -515,6 +517,7 @@ export default function Programs() {
       if (universityId) params.set("universityId", universityId);
       if (level) params.set("level", level);
       if (language) params.set("language", language);
+      if (field) params.set("field", field);
       if (debouncedFeeMin) params.set("feeMin", debouncedFeeMin);
       if (debouncedFeeMax) params.set("feeMax", debouncedFeeMax);
 
@@ -530,14 +533,14 @@ export default function Programs() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, debouncedSearch, country, city, universityType, universityId, level, language, debouncedFeeMin, debouncedFeeMax]);
+  }, [page, debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax]);
 
   useEffect(() => { fetchPrograms(); }, [fetchPrograms]);
-  useEffect(() => { setPage(1); }, [debouncedSearch, country, city, universityType, universityId, level, language, debouncedFeeMin, debouncedFeeMax]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax]);
 
   const filteredCities = filters.cities;
 
-  const hasActiveFilters = country || city || universityType || universityId || level || language || feeMin || feeMax;
+  const hasActiveFilters = country || city || universityType || universityId || level || language || field || feeMin || feeMax;
 
   function clearAllFilters() {
     setCountry("");
@@ -546,12 +549,13 @@ export default function Programs() {
     setUniversityId("");
     setLevel("");
     setLanguage("");
+    setField("");
     setFeeMin("");
     setFeeMax("");
     setSearch("");
   }
 
-  const activeFilterCount = [country, city, universityType, universityId, level, language, feeMin, feeMax].filter(Boolean).length;
+  const activeFilterCount = [country, city, universityType, universityId, level, language, field, feeMin, feeMax].filter(Boolean).length;
 
   const pageNumbers = (() => {
     const pages: (number | "...")[] = [];
@@ -664,18 +668,29 @@ export default function Programs() {
                   </select>
                 </div>
 
-                <div className="space-y-1.5 lg:col-span-2">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Award className="w-3 h-3" /> Field
+                  </label>
+                  <select value={field} onChange={e => setField(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                    <option value="">All Fields</option>
+                    {filters.fields.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
                   <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <DollarSign className="w-3 h-3" /> {t("programs.filterTuitionFee")}
                   </label>
                   <div className="flex items-center gap-2">
                     <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
-                      placeholder={filters.feeRange ? `${t("programs.feeMin")} (${filters.feeRange.min})` : t("programs.feeMin")}
+                      placeholder={filters.feeRange ? `Min (${filters.feeRange.min})` : t("programs.feeMin")}
                       className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                       max={filters.feeRange?.max} />
                     <span className="text-muted-foreground text-sm font-medium">–</span>
                     <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
-                      placeholder={filters.feeRange ? `${t("programs.feeMax")} (${filters.feeRange.max})` : t("programs.feeMax")}
+                      placeholder={filters.feeRange ? `Max (${filters.feeRange.max})` : t("programs.feeMax")}
                       className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                       max={filters.feeRange?.max} />
                   </div>
@@ -701,7 +716,7 @@ export default function Programs() {
         </div>
       </section>
 
-      <section className="pt-24 pb-16">
+      <section className="pt-28 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
             className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
