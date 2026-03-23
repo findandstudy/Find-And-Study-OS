@@ -53,7 +53,7 @@ The project is structured as a pnpm monorepo with separate packages for the API 
 ## External Dependencies
 
 - **bcryptjs:** For password hashing (email/password auth).
-- **Anthropic Claude:** AI integration for document OCR (claude-sonnet-4-6) and CSV parsing (claude-haiku-4-5) via Replit AI Integrations proxy.
+- **Anthropic Claude:** AI integration for document OCR (claude-sonnet-4-6) and CSV parsing (claude-haiku-4-5) via direct Anthropic API using `ANTHROPIC_API_KEY` environment secret.
 - **PostgreSQL:** Primary database for all application data.
 - **Object Storage:** For storing uploaded files like invoices, receipts, and branding assets (accessed via presigned URLs).
 - **Stripe:** For payment processing (implied by finance system, though not explicitly detailed in the provided content, common in SaaS).
