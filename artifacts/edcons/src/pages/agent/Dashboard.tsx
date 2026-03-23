@@ -4,9 +4,61 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useListApplications } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Users, FileText, DollarSign, TrendingUp, Link2, Copy, Star, Clock, CheckCircle, ArrowRight } from "lucide-react";
+import { Users, FileText, DollarSign, TrendingUp, Link2, Copy, Star, Clock, CheckCircle, ArrowRight, GraduationCap, Activity, Bell, UserPlus, FileCheck, CreditCard, CalendarClock, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const AVATAR_COLORS = [
+  "bg-blue-500/15 text-blue-600",
+  "bg-purple-500/15 text-purple-600",
+  "bg-emerald-500/15 text-emerald-600",
+  "bg-amber-500/15 text-amber-600",
+  "bg-rose-500/15 text-rose-600",
+  "bg-cyan-500/15 text-cyan-600",
+];
+
+function getInitials(firstName?: string, lastName?: string) {
+  return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
+  "lead.created": UserPlus,
+  "lead.assigned": Users,
+  "lead.stage_changed": Activity,
+  "lead.follow_up_due": CalendarClock,
+  "application.created": FileText,
+  "application.stage_changed": FileCheck,
+  "application.offer_received": GraduationCap,
+  "application.visa_update": FileCheck,
+  "student.created": GraduationCap,
+  "student.document_uploaded": FileText,
+  "student.status_changed": Activity,
+  "finance.commission_confirmed": CreditCard,
+  "finance.payment_received": DollarSign,
+  "finance.payment_due": AlertCircle,
+  "finance.agent_payout": CreditCard,
+  "agent.new_registration": UserPlus,
+  "agent.sub_agent_added": Users,
+  "system.user_activated": Shield,
+  "system.broadcast": Megaphone,
+  "system.announcement": Megaphone,
+  "message.new": MessageCircle,
+  "message.mention": MessageCircle,
+};
 
 const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   inquiry:             { label: "Inquiry",        color: "bg-slate-100 text-slate-700 border-slate-200" },
@@ -23,6 +75,18 @@ export default function AgentDashboard() {
   const { user } = useAuth(true);
   const { data: appsResp, isLoading } = useListApplications({ query: { queryKey: ["agent-dash-apps"] } });
   const applications: any[] = (appsResp as any)?.data || appsResp || [];
+
+  const { data: latestStudentsData } = useQuery<any>({
+    queryKey: ["/api/students", "agent-dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/students?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+  });
+  const latestStudents: any[] = latestStudentsData?.data || [];
+
+  const { data: notificationsData } = useQuery<any>({
+    queryKey: ["/api/notifications", "agent-dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()),
+  });
+  const latestNotifications: any[] = notificationsData?.data || [];
 
   const enrolled = applications.filter(a => a.stage === "enrolled").length;
   const inProgress = applications.filter(a => !["enrolled", "rejected"].includes(a.stage)).length;
@@ -136,6 +200,126 @@ export default function AgentDashboard() {
               </div>
             </Card>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <GraduationCap className="w-4 h-4 text-green-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">My Students</h3>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
+              {latestStudents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No students yet.</p>
+              ) : (
+                latestStudents.map((s: any, i: number) => (
+                  <Link key={s.id} href="/agent/students">
+                    <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
+                        <img
+                          src={`${BASE}/api/students/${s.id}/photo`}
+                          alt={`${s.firstName} ${s.lastName}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = "none";
+                            el.parentElement!.textContent = getInitials(s.firstName, s.lastName);
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground truncate uppercase">
+                          {s.firstName} {s.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(s.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
+                        {i + 1}
+                      </Badge>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Activity className="w-4 h-4 text-purple-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Recent Activity</h3>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
+              {applications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent activity.</p>
+              ) : (
+                applications.slice(0, 5).map((app: any, i: number) => {
+                  const stageCfg = STAGE_CONFIG[app.stage] || STAGE_CONFIG.inquiry;
+                  return (
+                    <div key={app.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          Application #{app.id}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Student #{app.studentId} · {stageCfg.label}
+                        </p>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">
+                        {timeAgo(app.createdAt)}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Bell className="w-4 h-4 text-amber-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Notifications</h3>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
+              {latestNotifications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No notifications.</p>
+              ) : (
+                latestNotifications.map((n: any) => {
+                  const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
+                  return (
+                    <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${n.isRead ? "bg-muted/50" : "bg-primary/10"}`}>
+                          <NIcon className={`w-3.5 h-3.5 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
+                            {n.title}
+                          </p>
+                          {n.body && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
+                          {timeAgo(n.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Recent Applications */}
