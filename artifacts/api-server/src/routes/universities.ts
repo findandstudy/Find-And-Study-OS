@@ -202,4 +202,10 @@ router.delete("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async
   res.sendStatus(204);
 });
 
+router.delete("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const result = await db.delete(programsTable).returning({ id: programsTable.id });
+  await logAudit(req.user!.id, "delete_all_programs", "program", undefined, { count: result.length }, req.ip);
+  res.json({ deleted: result.length });
+});
+
 export default router;

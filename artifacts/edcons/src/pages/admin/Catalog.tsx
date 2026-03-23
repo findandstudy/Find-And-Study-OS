@@ -1099,6 +1099,8 @@ function ProgramsTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [delAllOpen, setDelAllOpen] = useState(false);
+  const [delAllInProgress, setDelAllInProgress] = useState(false);
 
   const { data: unisData } = useQuery({
     queryKey: ["universities", 1, ""],
@@ -1155,6 +1157,17 @@ function ProgramsTab() {
     qc.invalidateQueries({ queryKey: ["programs"] });
   }
 
+  async function handleDeleteAll() {
+    setDelAllInProgress(true);
+    try {
+      await apiDelete("/api/programs");
+      setSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["programs"] });
+    } catch {}
+    setDelAllInProgress(false);
+    setDelAllOpen(false);
+  }
+
   const save = useMutation({
     mutationFn: async (f: Partial<Program>) => f.id
       ? api(`/api/programs/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
@@ -1204,6 +1217,9 @@ function ProgramsTab() {
             <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
           </Button>
         )}
+        <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => setDelAllOpen(true)}>
+          <Trash2 className="h-4 w-4" />Delete All
+        </Button>
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
         <Button variant="outline" onClick={async () => {
           try {
@@ -1435,6 +1451,19 @@ function ProgramsTab() {
       </Dialog>
 
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
+
+      <Dialog open={delAllOpen} onOpenChange={o => !o && setDelAllOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete All Programs</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>all programs</strong> from the system? This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDelAllOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteAll} disabled={delAllInProgress}>
+              {delAllInProgress ? "Deleting…" : "Delete All Programs"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
