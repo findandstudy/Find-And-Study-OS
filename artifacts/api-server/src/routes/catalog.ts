@@ -225,8 +225,11 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
   let updatedCount = 0;
   const toInsert: typeof parsed = [];
 
+  const seenKeys = new Set<string>();
   for (const val of parsed) {
     const key = `${val.universityId}|${(val.name || "").toLowerCase()}|${(val.degree || "").toLowerCase()}|${(val.language || "").toLowerCase()}`;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
     const existingId = existingMap.get(key);
     if (existingId) {
       const { universityId: _uid, ...updates } = val;
