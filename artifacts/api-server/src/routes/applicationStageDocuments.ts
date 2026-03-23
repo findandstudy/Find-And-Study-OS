@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { requireAuth, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
@@ -66,7 +66,7 @@ router.get("/applications/:id/stage-documents", requireAuth, async (req, res): P
     })
     .from(applicationStageDocumentsTable)
     .where(and(...conditions))
-    .orderBy(applicationStageDocumentsTable.createdAt);
+    .orderBy(desc(applicationStageDocumentsTable.createdAt));
 
   res.json(docs);
 });
@@ -184,7 +184,7 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, async (req, res):
       eq(applicationStageDocumentsTable.stage, "missing_docs"),
       eq(applicationStageDocumentsTable.isMissingDocNote, true),
     ))
-    .orderBy(applicationStageDocumentsTable.createdAt);
+    .orderBy(desc(applicationStageDocumentsTable.createdAt));
 
   res.json(notes);
 });
@@ -231,7 +231,7 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, async (req, res)
     eq(applicationStageDocumentsTable.applicationId, applicationId),
     eq(applicationStageDocumentsTable.stage, "missing_docs"),
     eq(applicationStageDocumentsTable.isMissingDocNote, true),
-  )).orderBy(applicationStageDocumentsTable.createdAt);
+  )).orderBy(desc(applicationStageDocumentsTable.createdAt));
 
   await logAudit(user.id, "update_missing_doc_notes", "application", applicationId, { count: result.length }, req.ip);
   res.json(result);

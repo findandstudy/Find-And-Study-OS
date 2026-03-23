@@ -771,7 +771,7 @@ router.get("/student/conversations/:id/messages", requireAuth, async (req, res):
     .from(messagesTable)
     .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
     .where(eq(messagesTable.conversationId, conversationId))
-    .orderBy(messagesTable.createdAt);
+    .orderBy(desc(messagesTable.createdAt));
 
   await db.update(messagesTable)
     .set({ status: "read" })

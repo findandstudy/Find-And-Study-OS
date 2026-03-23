@@ -430,7 +430,7 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), 
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")))
-    .orderBy(notesTable.createdAt);
+    .orderBy(desc(notesTable.createdAt));
   res.json(notes);
 });
 

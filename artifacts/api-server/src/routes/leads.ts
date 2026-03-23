@@ -361,7 +361,7 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "lead")))
-    .orderBy(notesTable.createdAt);
+    .orderBy(desc(notesTable.createdAt));
   res.json(notes);
 });
 
