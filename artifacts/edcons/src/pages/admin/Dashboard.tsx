@@ -3,7 +3,7 @@ import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink } from "lucide-react";
+import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, RefreshCw } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
 
@@ -22,12 +22,54 @@ const chartData = [
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#22c55e', '#f59e0b'];
 
+const AVATAR_COLORS = [
+  "bg-blue-500/15 text-blue-600",
+  "bg-purple-500/15 text-purple-600",
+  "bg-emerald-500/15 text-emerald-600",
+  "bg-amber-500/15 text-amber-600",
+  "bg-rose-500/15 text-rose-600",
+  "bg-cyan-500/15 text-cyan-600",
+];
+
+function getInitials(firstName?: string, lastName?: string) {
+  return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
   const { data: upcomingFollowUps = [] } = useQuery<any[]>({
     queryKey: ["/api/follow-ups/upcoming"],
     queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()),
   });
+
+  const { data: latestStudentsData } = useQuery<any>({
+    queryKey: ["/api/students", "dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/students?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+  });
+  const latestStudents: any[] = latestStudentsData?.data || [];
+
+  const { data: latestAuditData } = useQuery<any>({
+    queryKey: ["/api/audit", "dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+  });
+  const latestUpdates: any[] = latestAuditData?.data || [];
+
+  const { data: notificationsData } = useQuery<any>({
+    queryKey: ["/api/notifications", "dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()),
+  });
+  const latestNotifications: any[] = notificationsData?.data || [];
 
   const statCards = [
     { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10", trend: "+12%" },
@@ -128,6 +170,113 @@ export default function AdminDashboard() {
                       </p>
                     </div>
                   </Link>
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Latest Students, Latest Updates, Notifications */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <GraduationCap className="w-4 h-4 text-green-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Latest Students</h3>
+            </div>
+            <div className="space-y-3">
+              {latestStudents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No students yet.</p>
+              ) : (
+                latestStudents.map((s: any, i: number) => (
+                  <Link key={s.id} href={`/staff/students/${s.id}`}>
+                    <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
+                        {getInitials(s.firstName, s.lastName)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground truncate uppercase">
+                          {s.firstName} {s.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(s.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}{", "}
+                          {new Date(s.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
+                        {i + 1}
+                      </Badge>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <RefreshCw className="w-4 h-4 text-purple-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Latest Updates</h3>
+            </div>
+            <div className="space-y-3">
+              {latestUpdates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent updates.</p>
+              ) : (
+                latestUpdates.map((u: any, i: number) => (
+                  <div key={u.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
+                      {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {u.userName || "System"}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                        {u.action}{u.resource ? ` — ${u.resource}` : ""}
+                        {u.resourceId ? ` #${u.resourceId}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">
+                      {new Date(u.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
+                      <br />
+                      {new Date(u.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Bell className="w-4 h-4 text-amber-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Notifications</h3>
+            </div>
+            <div className="space-y-3">
+              {latestNotifications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No notifications.</p>
+              ) : (
+                latestNotifications.map((n: any) => (
+                  <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
+                          {n.title}
+                        </p>
+                        {n.body && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
+                        {timeAgo(n.createdAt)}
+                      </span>
+                    </div>
+                  </div>
                 ))
               )}
             </div>

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, auditLogsTable } from "@workspace/db";
-import { sql, desc, ilike, or } from "drizzle-orm";
+import { db, auditLogsTable, usersTable } from "@workspace/db";
+import { sql, desc, ilike, or, eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 
@@ -25,8 +25,19 @@ router.get("/audit", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
     .where(where);
 
   const data = await db
-    .select()
+    .select({
+      id: auditLogsTable.id,
+      userId: auditLogsTable.userId,
+      action: auditLogsTable.action,
+      resource: auditLogsTable.resource,
+      resourceId: auditLogsTable.resourceId,
+      changes: auditLogsTable.changes,
+      ipAddress: auditLogsTable.ipAddress,
+      createdAt: auditLogsTable.createdAt,
+      userName: sql<string>`COALESCE(${usersTable.firstName} || ' ' || ${usersTable.lastName}, 'System')`,
+    })
     .from(auditLogsTable)
+    .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
     .where(where)
     .orderBy(desc(auditLogsTable.createdAt))
     .limit(limitNum)
