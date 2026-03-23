@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import crypto from "crypto";
 import { db, leadsTable, usersTable, studentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -99,7 +100,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         isActive: false,
         emailVerified: false,
         language: "en",
-        passwordResetToken: passwordToken,
+        passwordResetToken: crypto.createHash("sha256").update(passwordToken).digest("hex"),
         passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),
         emailVerificationToken: verificationToken,
         createdFromSource: "public_apply",

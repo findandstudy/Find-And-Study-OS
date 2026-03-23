@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-type Tab = "login" | "register" | "verify" | "set-password";
+type Tab = "login" | "register" | "verify" | "set-password" | "forgot-password";
 
 export default function Login() {
   const { user, isLoading } = useAuth(false);
@@ -48,6 +48,8 @@ export default function Login() {
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [resending, setResending] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
 
   const hasLogo = resolvedTheme === "dark" && settings.logoDarkUrl ? settings.logoDarkUrl : settings.logoUrl;
   const logoSrc = hasLogo
@@ -176,6 +178,29 @@ export default function Login() {
     }
   }
 
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        return;
+      }
+      setForgotSent(true);
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -292,7 +317,7 @@ export default function Login() {
             </div>
           )}
 
-          {tab !== "verify" && tab !== "set-password" && (
+          {tab !== "verify" && tab !== "set-password" && tab !== "forgot-password" && (
             <div className="flex rounded-xl bg-secondary/50 p-1 mb-8">
               <button
                 onClick={() => { setTab("login"); setError(""); }}
@@ -358,6 +383,16 @@ export default function Login() {
                     {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <ArrowRight className="w-5 h-5 mr-2" />}
                     {t("login.signInButton")}
                   </Button>
+
+                  <div className="text-center mt-4">
+                    <button
+                      type="button"
+                      onClick={() => { setTab("forgot-password"); setError(""); setForgotSent(false); setForgotEmail(loginForm.email); }}
+                      className="text-sm text-primary hover:text-primary/80 font-medium transition-colors hover:underline"
+                    >
+                      {t("login.forgotPassword") || "Forgot your password?"}
+                    </button>
+                  </div>
                 </form>
               </motion.div>
             )}
@@ -560,6 +595,75 @@ export default function Login() {
               </motion.div>
             )}
 
+            {tab === "forgot-password" && (
+              <motion.div key="forgot-password" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                {forgotSent ? (
+                  <div className="text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4">
+                      <Mail className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+                      {t("login.resetEmailSent") || "Check Your Email"}
+                    </h2>
+                    <p className="text-muted-foreground text-sm mb-6">
+                      {t("login.resetEmailSentDesc") || "If an account exists with that email, we've sent a password reset link. Please check your inbox and spam folder."}
+                    </p>
+                    <Button size="lg" onClick={() => { setTab("login"); setError(""); setForgotSent(false); }}
+                      className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
+                      <ArrowRight className="w-5 h-5 mr-2" />
+                      {t("login.backToLogin") || "Back to Sign In"}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-center mb-8">
+                      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                        <Lock className="w-8 h-8 text-primary" />
+                      </div>
+                      <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+                        {t("login.forgotPasswordTitle") || "Forgot Password?"}
+                      </h2>
+                      <p className="text-muted-foreground text-sm">
+                        {t("login.forgotPasswordDesc") || "Enter your email address and we'll send you a link to reset your password."}
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleForgotPassword} className="space-y-5">
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> {t("login.emailLabel")}</Label>
+                        <Input
+                          type="email"
+                          value={forgotEmail}
+                          onChange={e => setForgotEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          className="rounded-xl h-12"
+                          required
+                          autoFocus
+                        />
+                      </div>
+
+                      {error && (
+                        <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                          {error}
+                        </div>
+                      )}
+
+                      <Button type="submit" size="lg" disabled={loading}
+                        className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Mail className="w-5 h-5 mr-2" />}
+                        {t("login.sendResetLink") || "Send Reset Link"}
+                      </Button>
+
+                      <button type="button" onClick={() => { setTab("login"); setError(""); }}
+                        className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
+                        {t("login.backToLogin") || "Back to Sign In"}
+                      </button>
+                    </form>
+                  </>
+                )}
+              </motion.div>
+            )}
+
             {tab === "set-password" && (
               <motion.div key="set-password" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
                 {passwordSet ? (
@@ -644,7 +748,7 @@ export default function Login() {
             )}
           </AnimatePresence>
 
-          {tab !== "verify" && tab !== "set-password" && (
+          {tab !== "verify" && tab !== "set-password" && tab !== "forgot-password" && (
             <div className="mt-8 p-5 rounded-2xl bg-secondary/50 border border-border/40">
               <p className="text-sm text-muted-foreground text-center">
                 {t("login.termsText")}{" "}

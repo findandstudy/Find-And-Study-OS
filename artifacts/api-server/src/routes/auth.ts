@@ -285,6 +285,54 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
   res.json({ message: "A new verification code has been sent to your email." });
 });
 
+router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const ip = req.ip || "unknown";
+  if (!checkRateLimit(`forgot:${ip}`, 5) || !checkRateLimit(`forgot:${normalizedEmail}`, 3)) {
+    res.status(429).json({ error: "Too many reset requests. Please try again later." });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+
+  if (!user) {
+    res.json({ message: "If an account with that email exists, a password reset link has been sent." });
+    return;
+  }
+
+  const { generateSecureToken, buildPasswordResetEmail, sendEmail } = await import("../lib/email");
+  const resetToken = generateSecureToken();
+  const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+  const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+
+  await db
+    .update(usersTable)
+    .set({ passwordResetToken: tokenHash, passwordResetExpires: resetExpires })
+    .where(eq(usersTable.id, user.id));
+
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "http://localhost:5000";
+  const resetUrl = `${baseUrl}/login?token=${resetToken}`;
+
+  const emailContent = buildPasswordResetEmail({
+    firstName: user.firstName || "User",
+    resetUrl,
+  });
+  await sendEmail(user.email || normalizedEmail, emailContent);
+
+  console.log(`[PASSWORD RESET] Reset email sent to ${normalizedEmail}`);
+
+  res.json({ message: "If an account with that email exists, a password reset link has been sent." });
+});
+
 router.post("/auth/set-password", async (req: Request, res: Response) => {
   const { token, password } = req.body;
   if (!token || !password) {
@@ -303,12 +351,13 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
     return;
   }
 
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const [user] = await db
     .select()
     .from(usersTable)
     .where(
       and(
-        eq(usersTable.passwordResetToken, token),
+        eq(usersTable.passwordResetToken, tokenHash),
         gt(usersTable.passwordResetExpires, new Date()),
       )
     );
