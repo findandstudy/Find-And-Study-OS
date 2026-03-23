@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -777,6 +778,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
 /* ── ApplicationsPage ────────────────────────────────────── */
 export default function AgentAppsPage() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { season } = useSeason();
@@ -950,7 +952,7 @@ export default function AgentAppsPage() {
               >
                 {pipelineStages.map(s => {
                   const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
-                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => { const a = allApps.find((x: any) => x.id === id); if (a) setEditApp(a); }} />;
+                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/agent/applications/${id}`)} />;
                 })}
 
                 <DragOverlay>
@@ -1014,7 +1016,7 @@ export default function AgentAppsPage() {
                     const stageLabel = sm?.label || app.stage;
                     const levelLabel = STUDY_LEVELS.find(l => l.value === app.level)?.label || app.level || "-";
                     return (
-                      <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setEditApp(app)}>
+                      <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/agent/applications/${app.id}`)}>
                         <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
                         <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>

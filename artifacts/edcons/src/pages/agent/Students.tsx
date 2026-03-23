@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListStudents, useCreateStudent } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -1391,6 +1392,7 @@ function StuFilterPopover({ filters, onChange, stages }: {
 }
 
 export default function AgentStudentsPage() {
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth(true, ["agent", "sub_agent"]);
@@ -1561,7 +1563,7 @@ export default function AgentStudentsPage() {
               >
                 {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
-                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => { const s = allStudents.find((x: any) => x.id === id); if (s) setEditStudent(s); }} />;
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/agent/students/${id}`)} />;
                 })}
 
                 <DragOverlay>
@@ -1607,7 +1609,7 @@ export default function AgentStudentsPage() {
                   ) : pagedStudents.map((student: any) => (
                     <TableRow key={student.id} className={`cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(student.id) ? "bg-primary/5" : ""}`}>
                       <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(student.id)} onCheckedChange={() => toggleSelect(student.id)} /></TableCell>
-                      <TableCell className="font-medium" onClick={() => setEditStudent(student)}>
+                      <TableCell className="font-medium cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>
                         <div className="flex items-center gap-2">
                           <StudentAvatar student={student} />
                           <div>
@@ -1616,13 +1618,13 @@ export default function AgentStudentsPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground" onClick={() => setEditStudent(student)}>{student.email || "-"}</TableCell>
-                      <TableCell onClick={() => setEditStudent(student)}>{student.nationality || "-"}</TableCell>
-                      <TableCell className="font-mono text-xs" onClick={() => setEditStudent(student)}>{student.passportNumber || "-"}</TableCell>
-                      <TableCell onClick={() => setEditStudent(student)}>
+                      <TableCell className="text-muted-foreground cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>{student.email || "-"}</TableCell>
+                      <TableCell className="cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>{student.nationality || "-"}</TableCell>
+                      <TableCell className="font-mono text-xs cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>{student.passportNumber || "-"}</TableCell>
+                      <TableCell className="cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-xs" onClick={() => setEditStudent(student)}>{formatDate(student.createdAt)}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>

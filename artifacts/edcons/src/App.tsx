@@ -227,11 +227,20 @@ function Router() {
         <Route path="/agent/leads">
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentLeads /></ProtectedRoute>
         </Route>
+        <Route path="/agent/leads/:id">
+          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><LeadDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+        </Route>
         <Route path="/agent/students">
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentStudents /></ProtectedRoute>
         </Route>
+        <Route path="/agent/students/:id">
+          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><StudentDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+        </Route>
         <Route path="/agent/applications">
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApps /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/applications/:id">
+          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><ApplicationDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
         </Route>
         <Route path="/agent/commissions">
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>

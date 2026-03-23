@@ -58,9 +58,10 @@ function getStageColor(stageKey: string) {
 
 interface Props {
   id: number;
+  basePath?: string;
 }
 
-export default function ApplicationDetail({ id }: Props) {
+export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -106,7 +107,7 @@ export default function ApplicationDetail({ id }: Props) {
     <DashboardLayout>
       <div className="space-y-6 max-w-5xl">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/staff/applications")}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/applications`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1 min-w-0">
@@ -285,7 +286,7 @@ export default function ApplicationDetail({ id }: Props) {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => setLocation(`/staff/students/${app.studentId}`)}
+                onClick={() => setLocation(`${basePath}/students/${app.studentId}`)}
               >
                 <User className="w-4 h-4 mr-2" />
                 View Student Profile

@@ -30,6 +30,7 @@ const DOC_TYPES = [
 
 interface Props {
   id: number;
+  basePath?: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -64,7 +65,7 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
   return `${sanitize(docType || "document")}-${sanitize(firstName)}-${sanitize(lastName)}.${ext}`;
 }
 
-export default function StudentDetail({ id }: Props) {
+export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
 
@@ -195,7 +196,7 @@ export default function StudentDetail({ id }: Props) {
     <DashboardLayout>
       <div className="space-y-6 max-w-4xl">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/staff/students")}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/students`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="relative group shrink-0">
@@ -387,7 +388,7 @@ export default function StudentDetail({ id }: Props) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setLocation(`/staff/applications/${app.id}`)}
+                            onClick={() => setLocation(`${basePath}/applications/${app.id}`)}
                           >
                             View
                           </Button>

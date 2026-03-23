@@ -36,9 +36,10 @@ const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 interface Props {
   id: number;
+  basePath?: string;
 }
 
-export default function LeadDetail({ id }: Props) {
+export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth(true);
@@ -154,7 +155,7 @@ export default function LeadDetail({ id }: Props) {
       {
         onSuccess: (student: any) => {
           toast({ title: "Lead converted to student" });
-          setLocation(`/staff/students/${student.id}`);
+          setLocation(`${basePath}/students/${student.id}`);
         },
         onError: () => {
           toast({ title: "Conversion failed", variant: "destructive" });
@@ -193,7 +194,7 @@ export default function LeadDetail({ id }: Props) {
     <DashboardLayout>
       <div className="space-y-6 max-w-4xl">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/staff/leads")}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/leads`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1">

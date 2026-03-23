@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -638,6 +639,7 @@ const EMPTY_FORM = {
 
 /* ── LeadsPage ────────────────────────────────────────────── */
 export default function AgentLeadsPage() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -907,7 +909,7 @@ export default function AgentLeadsPage() {
                       col={col}
                       leads={columnLeads}
                       showRevenue={canSeeRevenue}
-                      onView={(id) => { const l = allLeads.find((x: any) => x.id === id); if (l) setEditLead(l); }}
+                      onView={(id) => setLocation(`/agent/leads/${id}`)}
                     />
                   );
                 })}
@@ -995,18 +997,18 @@ export default function AgentLeadsPage() {
                         />
                       </TableCell>
                       <TableCell
-                        className="font-medium"
-                        onClick={() => setEditLead(lead)}
+                        className="font-medium cursor-pointer"
+                        onClick={() => setLocation(`/agent/leads/${lead.id}`)}
                       >
                         {lead.firstName} {lead.lastName}
                       </TableCell>
                       <TableCell
-                        className="text-muted-foreground"
-                        onClick={() => setEditLead(lead)}
+                        className="text-muted-foreground cursor-pointer"
+                        onClick={() => setLocation(`/agent/leads/${lead.id}`)}
                       >
                         {lead.email || "-"}
                       </TableCell>
-                      <TableCell onClick={() => setEditLead(lead)}>
+                      <TableCell className="cursor-pointer" onClick={() => setLocation(`/agent/leads/${lead.id}`)}>
                         {(() => {
                           const sm = leadStageMap[lead.status];
                           const color = sm ? getLeadStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
@@ -1014,30 +1016,30 @@ export default function AgentLeadsPage() {
                         })()}
                       </TableCell>
                       <TableCell
-                        className="text-muted-foreground capitalize"
-                        onClick={() => setEditLead(lead)}
+                        className="text-muted-foreground capitalize cursor-pointer"
+                        onClick={() => setLocation(`/agent/leads/${lead.id}`)}
                       >
                         {lead.source?.replace(/_/g, " ") || "-"}
                       </TableCell>
                       <TableCell
-                        className="max-w-[150px] truncate"
-                        onClick={() => setEditLead(lead)}
+                        className="max-w-[150px] truncate cursor-pointer"
+                        onClick={() => setLocation(`/agent/leads/${lead.id}`)}
                       >
                         {lead.interestedProgram || "-"}
                       </TableCell>
-                      <TableCell onClick={() => setEditLead(lead)}>
+                      <TableCell className="cursor-pointer" onClick={() => setLocation(`/agent/leads/${lead.id}`)}>
                         {lead.interestedCountry || "-"}
                       </TableCell>
                       {canSeeRevenue && (
-                        <TableCell onClick={() => setEditLead(lead)}>
+                        <TableCell className="cursor-pointer" onClick={() => setLocation(`/agent/leads/${lead.id}`)}>
                           {lead.estimatedValue ? (
                             <span className="text-emerald-600 font-medium">{formatCurrency(lead.estimatedValue)}</span>
                           ) : "-"}
                         </TableCell>
                       )}
                       <TableCell
-                        className="text-muted-foreground text-xs"
-                        onClick={() => setEditLead(lead)}
+                        className="text-muted-foreground text-xs cursor-pointer"
+                        onClick={() => setLocation(`/agent/leads/${lead.id}`)}
                       >
                         {formatDate(lead.createdAt)}
                       </TableCell>
