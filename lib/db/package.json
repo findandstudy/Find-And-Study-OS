@@ -9,7 +9,7 @@
   },
   "scripts": {
     "pre-migrate": "node ./pre-migrate.mjs",
-    "push": "pnpm run pre-migrate && drizzle-kit push --config ./drizzle.config.ts",
+    "push": "pnpm run pre-migrate && node ./retry-push.mjs",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
   },
   "dependencies": {
