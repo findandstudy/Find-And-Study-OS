@@ -371,18 +371,18 @@ export default function SettingsPage() {
 
   function renderContent() {
     switch (activeTab) {
-      case "profile": return <ProfileTab />;
-      case "language": return <LanguageTab />;
-      case "notifications": return <NotificationsTab />;
-      case "security": return <SecurityTab />;
-      case "pipeline": return isManager ? <PipelineTab /> : null;
-      case "branding": return isManager ? <BrandingTab /> : null;
-      case "company": return isManager ? <CompanyTab /> : null;
-      case "seo": return isManager ? <SeoTab /> : null;
-      case "email": return isManager ? <EmailBrandingTab /> : null;
-      case "documents": return isManager ? <DocumentsTab /> : null;
-      case "integrations": return isManager ? <IntegrationsTab /> : null;
-      case "advanced": return isManager ? <AdvancedTab /> : null;
+      case "profile": return ProfileTab();
+      case "language": return LanguageTab();
+      case "notifications": return NotificationsTab();
+      case "security": return SecurityTab();
+      case "pipeline": return isManager ? PipelineTab() : null;
+      case "branding": return isManager ? BrandingTab() : null;
+      case "company": return isManager ? CompanyTab() : null;
+      case "seo": return isManager ? SeoTab() : null;
+      case "email": return isManager ? EmailBrandingTab() : null;
+      case "documents": return isManager ? DocumentsTab() : null;
+      case "integrations": return isManager ? IntegrationsTab() : null;
+      case "advanced": return isManager ? AdvancedTab() : null;
       default: return null;
     }
   }
