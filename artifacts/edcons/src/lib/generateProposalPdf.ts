@@ -65,28 +65,6 @@ function detectImageFormat(dataUrl: string): string {
   return "PNG";
 }
 
-const PRIMARY = [22, 78, 99];
-const PRIMARY_DARK = [15, 52, 67];
-const ACCENT_GOLD = [180, 142, 58];
-const DARK = [20, 20, 30];
-const BODY = [55, 65, 81];
-const SUBTLE = [140, 150, 165];
-const BORDER_LIGHT = [220, 225, 232];
-const CARD_BG = [248, 249, 252];
-const WHITE = [255, 255, 255];
-const GREEN = [16, 140, 90];
-
-function drawRoundedRect(doc: jsPDF, x: number, y: number, w: number, h: number, r: number, fillColor: number[]) {
-  doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-  doc.roundedRect(x, y, w, h, r, r, "F");
-}
-
-function drawLine(doc: jsPDF, x1: number, y1: number, x2: number, y2: number, color: number[], width = 0.3) {
-  doc.setDrawColor(color[0], color[1], color[2]);
-  doc.setLineWidth(width);
-  doc.line(x1, y1, x2, y2);
-}
-
 function getTurkeyDateTime(): { date: string; time: string } {
   const now = new Date();
   const turkeyDate = new Intl.DateTimeFormat("en-GB", {
@@ -100,174 +78,172 @@ function getTurkeyDateTime(): { date: string; time: string } {
   return { date: turkeyDate.replace(/\//g, "-"), time: turkeyTime };
 }
 
+const BLUE = [41, 98, 255];
+const BLUE_DARK = [30, 64, 175];
+const NAVY = [15, 23, 42];
+const DARK = [30, 41, 59];
+const BODY = [71, 85, 105];
+const SUBTLE = [148, 163, 184];
+const BORDER = [226, 232, 240];
+const LIGHT_BG = [248, 250, 252];
+const WHITE = [255, 255, 255];
+const EMERALD = [16, 185, 129];
+const AMBER = [245, 158, 11];
+
 export async function generateProposalPdf(options: ProposalOptions) {
-  const { programs, logoDataUrl, companyName = "Find And Study", companyEmail, companyPhone, companyWebsite, showCommission = false, serviceFeeMarkup = 0 } = options;
+  const { programs, logoDataUrl, companyName = "Find And Study", companyEmail, companyPhone, companyWebsite } = options;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
   const pageH = 297;
-  const margin = 16;
-  const contentW = pageW - margin * 2;
+  const mx = 18;
+  const cw = pageW - mx * 2;
   const { date: dateStr, time: timeStr } = getTurkeyDateTime();
 
   const uniLogos = new Map<string, string | null>();
   const uniLogoUrls = [...new Set(programs.filter(p => p.universityLogoUrl).map(p => p.universityLogoUrl!))];
-  await Promise.all(
-    uniLogoUrls.map(async (url) => {
-      const dataUrl = await loadImageAsDataUrl(url);
-      uniLogos.set(url, dataUrl);
-    })
-  );
+  await Promise.all(uniLogoUrls.map(async (url) => {
+    uniLogos.set(url, await loadImageAsDataUrl(url));
+  }));
+
+  function setC(c: number[]) { doc.setTextColor(c[0], c[1], c[2]); }
+  function setF(c: number[]) { doc.setFillColor(c[0], c[1], c[2]); }
 
   function drawHeader(isFirst: boolean) {
-    doc.setFillColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
-    doc.rect(0, 0, pageW, 38, "F");
+    setF(WHITE);
+    doc.rect(0, 0, pageW, 32, "F");
 
-    doc.setFillColor(PRIMARY_DARK[0], PRIMARY_DARK[1], PRIMARY_DARK[2]);
-    doc.rect(0, 38, pageW, 1.5, "F");
-
-    let logoX = margin;
+    let logoRight = mx;
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, detectImageFormat(logoDataUrl), margin, 6, 24, 24);
-        logoX = margin + 28;
+        doc.addImage(logoDataUrl, detectImageFormat(logoDataUrl), mx, 5, 22, 22);
+        logoRight = mx + 26;
       } catch {
-        logoX = margin;
+        logoRight = mx;
       }
     }
 
-    doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
+    setC(NAVY);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text(companyName, logoX, 18);
+    doc.setFontSize(16);
+    doc.text(companyName, logoRight, 15);
 
+    setC(SUBTLE);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(200, 220, 230);
-    doc.text(isFirst ? "Program Proposal" : "Program Proposal (cont.)", logoX, 24);
-
-    const contactLines: string[] = [];
-    if (companyEmail) contactLines.push(companyEmail);
-    if (companyPhone) contactLines.push(companyPhone);
-    if (companyWebsite) contactLines.push(companyWebsite);
-
-    doc.setTextColor(200, 220, 230);
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    contactLines.forEach((txt, i) => {
-      doc.text(txt, pageW - margin, 12 + i * 4, { align: "right" });
-    });
-
-    const dateTimeY = 12 + contactLines.length * 4 + 2;
-    doc.setTextColor(ACCENT_GOLD[0], ACCENT_GOLD[1], ACCENT_GOLD[2]);
-    doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.text(`${dateStr}  ${timeStr}`, pageW - margin, dateTimeY, { align: "right" });
+    doc.text(isFirst ? "Program Proposal" : "Program Proposal (continued)", logoRight, 21);
+
+    const contactParts: string[] = [];
+    if (companyPhone) contactParts.push(companyPhone);
+    if (companyEmail) contactParts.push(companyEmail);
+    if (companyWebsite) contactParts.push(companyWebsite);
+
+    if (contactParts.length > 0) {
+      setC(BODY);
+      doc.setFontSize(6.5);
+      doc.text(contactParts.join("  |  "), pageW - mx, 14, { align: "right" });
+    }
+
+    setC(BLUE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text(`${dateStr}  ${timeStr}`, pageW - mx, 20, { align: "right" });
+
+    setF(BLUE);
+    doc.rect(0, 31, pageW, 0.6, "F");
+    setF([241, 245, 249]);
+    doc.rect(0, 31.6, pageW, 0.3, "F");
   }
 
   function drawFooter(pageNum: number, totalPages: number) {
-    const footerY = pageH - 8;
-    drawLine(doc, margin, footerY - 4, pageW - margin, footerY - 4, BORDER_LIGHT, 0.4);
+    const fy = pageH - 10;
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setLineWidth(0.3);
+    doc.line(mx, fy, pageW - mx, fy);
 
-    if (serviceFeeMarkup > 0) {
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(6);
-      doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
-      doc.text("* Fees may include agency-applied service adjustments.", margin, footerY - 7);
-    }
-
+    setC(SUBTLE);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
-    doc.text(`${companyName}  |  Confidential`, margin, footerY);
-    doc.text(`Page ${pageNum} / ${totalPages}`, pageW - margin, footerY, { align: "right" });
+    doc.setFontSize(6);
+    doc.text(companyName, mx, fy + 4);
+    doc.text(`${pageNum} / ${totalPages}`, pageW - mx, fy + 4, { align: "right" });
   }
 
-  let currentY = 47;
-  let pageCount = 1;
+  let cy = 40;
 
   drawHeader(true);
 
-  doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+  setC(NAVY);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Selected Programs", margin, currentY);
+  doc.setFontSize(14);
+  doc.text("Selected Programs", mx, cy);
+  cy += 6;
 
-  currentY += 5;
+  setC(SUBTLE);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
-  doc.text(`${programs.length} program${programs.length !== 1 ? "s" : ""} curated for your review`, margin, currentY);
-
-  currentY += 5;
-  doc.setFillColor(ACCENT_GOLD[0], ACCENT_GOLD[1], ACCENT_GOLD[2]);
-  doc.rect(margin, currentY, 30, 0.8, "F");
-  doc.setFillColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
-  doc.rect(margin + 30, currentY, contentW - 30, 0.3, "F");
-  currentY += 7;
+  doc.text(`${programs.length} program${programs.length !== 1 ? "s" : ""} curated for your review`, mx, cy);
+  cy += 8;
 
   for (let i = 0; i < programs.length; i++) {
     const p = programs[i];
     const cur = p.currency ?? "USD";
     const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
+    const hasScholarship = p.scholarship != null && p.scholarship > 0;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    const preCalcLines = Math.min(doc.splitTextToSize(p.name, contentW - 42).length, 2);
-    const preCalcServiceFee = (p.serviceFeeAmount ?? 0) + serviceFeeMarkup;
-    let cardH = 55 + (preCalcLines - 1) * 4.5;
-    if (p.scholarship && p.scholarship > 0) cardH += 6;
-    if (p.applicationFee && p.applicationFee > 0) cardH += 6;
-    if (preCalcServiceFee > 0) cardH += 6;
+    const nameLines = Math.min(doc.splitTextToSize(p.name, cw - 36).length, 2);
+    let rowCount = 1;
+    if (hasScholarship) rowCount++;
+    if (p.applicationFee && p.applicationFee > 0) rowCount++;
+    if (p.intakes) rowCount++;
+    const cardH = 38 + (nameLines - 1) * 5 + rowCount * 7;
 
-    if (currentY + cardH > pageH - 18) {
-      pageCount++;
+    if (cy + cardH + 4 > pageH - 16) {
       doc.addPage();
       drawHeader(false);
-      currentY = 47;
+      cy = 40;
     }
 
-    drawRoundedRect(doc, margin, currentY, contentW, cardH, 2.5, CARD_BG);
+    setF(LIGHT_BG);
+    doc.roundedRect(mx, cy, cw, cardH, 3, 3, "F");
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(mx, cy, cw, cardH, 3, 3, "S");
 
-    doc.setFillColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
-    doc.roundedRect(margin, currentY, 2.5, cardH, 1.2, 1.2, "F");
+    const ix = mx + 6;
+    let iy = cy + 6;
 
-    const innerX = margin + 8;
-    let innerY = currentY + 7;
-
-    drawRoundedRect(doc, innerX, currentY + 3, 14, 5.5, 1.5, PRIMARY);
-    doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
+    setF(BLUE);
+    doc.roundedRect(ix, iy - 2.5, 11, 5, 1.2, 1.2, "F");
+    setC(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.text(`#${i + 1}`, innerX + 7, currentY + 7, { align: "center" });
+    doc.setFontSize(7);
+    doc.text(`${i + 1}`, ix + 5.5, iy + 1, { align: "center" });
 
-    const nameX = innerX + 18;
-
+    let tx = ix + 14;
     if (p.universityLogoUrl && uniLogos.get(p.universityLogoUrl)) {
       try {
-        const uniLogoData = uniLogos.get(p.universityLogoUrl)!;
-        doc.addImage(uniLogoData, detectImageFormat(uniLogoData), nameX - 1, currentY + 2.5, 7, 7);
+        const uld = uniLogos.get(p.universityLogoUrl)!;
+        doc.addImage(uld, detectImageFormat(uld), tx, iy - 3.5, 6, 6);
+        tx += 8;
       } catch {}
     }
 
-    const textStartX = (p.universityLogoUrl && uniLogos.get(p.universityLogoUrl)) ? nameX + 9 : nameX;
-
-    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    setC(SUBTLE);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.text(p.universityName, textStartX, innerY - 2);
+    doc.setFontSize(7);
+    doc.text(p.universityName, tx, iy - 0.5);
 
-    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+    setC(NAVY);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    const maxNameW = margin + contentW - 8 - textStartX;
-    const programName = doc.splitTextToSize(p.name, maxNameW) as string[];
-    const nameLines = Math.min(programName.length, 2);
-    for (let nl = 0; nl < nameLines; nl++) {
-      doc.text(programName[nl], textStartX, innerY + 3 + nl * 4.5);
+    const maxNameW = mx + cw - 6 - tx;
+    const pName = doc.splitTextToSize(p.name, maxNameW) as string[];
+    for (let nl = 0; nl < Math.min(pName.length, 2); nl++) {
+      doc.text(pName[nl], tx, iy + 4.5 + nl * 5);
     }
-
-    innerY += 5 + (nameLines - 1) * 4.5;
+    iy += 7 + (Math.min(pName.length, 2) - 1) * 5;
 
     const badges: string[] = [];
     if (p.degree) badges.push(p.degree);
@@ -276,100 +252,109 @@ export async function generateProposalPdf(options: ProposalOptions) {
     if (p.universityCountry) badges.push(p.universityCountry);
     if (p.universityCity) badges.push(p.universityCity);
 
-    let bx = innerX;
-    badges.forEach(badge => {
+    let bx = ix;
+    for (const badge of badges) {
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.5);
-      const tw = doc.getTextWidth(badge) + 5;
-      doc.setFillColor(230, 235, 242);
-      doc.roundedRect(bx, innerY, tw, 5, 1, 1, "F");
-      doc.setTextColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
-      doc.text(badge, bx + 2.5, innerY + 3.5);
-      bx += tw + 2;
-    });
-
-    innerY += 10;
-    drawLine(doc, innerX, innerY, margin + contentW - 8, innerY, BORDER_LIGHT, 0.3);
-    innerY += 5;
-
-    const col1 = innerX;
-    const colVal = margin + contentW - 8;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(BODY[0], BODY[1], BODY[2]);
-    doc.text("Tuition Fee" + (p.feeType ? ` (${p.feeType})` : ""), col1, innerY);
-    if (hasDiscount) {
-      doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
-      doc.setFont("helvetica", "normal");
-      const oldFee = fmt(p.tuitionFee, cur);
-      const oldFeeW = doc.getTextWidth(oldFee);
-      doc.text(oldFee, colVal - 30, innerY, { align: "right" });
-      doc.setLineWidth(0.25);
-      doc.setDrawColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
-      doc.line(colVal - 30 - oldFeeW, innerY - 1, colVal - 30, innerY - 1);
-
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
-      doc.text(fmt(p.discountedFee, cur), colVal, innerY, { align: "right" });
-    } else {
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(fmt(p.tuitionFee, cur), colVal, innerY, { align: "right" });
+      doc.setFontSize(6);
+      const bw = doc.getTextWidth(badge) + 4;
+      if (bx + bw > mx + cw - 6) break;
+      setF([241, 245, 249]);
+      doc.roundedRect(bx, iy, bw, 4.5, 1, 1, "F");
+      doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+      doc.setLineWidth(0.15);
+      doc.roundedRect(bx, iy, bw, 4.5, 1, 1, "S");
+      setC(DARK);
+      doc.text(badge, bx + 2, iy + 3.2);
+      bx += bw + 2;
     }
-    innerY += 6;
 
-    if (p.scholarship && p.scholarship > 0) {
+    iy += 8;
+
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setLineWidth(0.15);
+    doc.line(ix, iy, mx + cw - 6, iy);
+    iy += 5;
+
+    const rv = mx + cw - 6;
+
+    function drawRow(label: string, value: string, labelColor: number[], valueColor: number[], valueBold = true) {
+      setC(labelColor);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
-      doc.text("Scholarship", col1, innerY);
+      doc.text(label, ix, iy);
+      setC(valueColor);
+      doc.setFont("helvetica", valueBold ? "bold" : "normal");
+      doc.text(value, rv, iy, { align: "right" });
+      iy += 7;
+    }
+
+    const feeLabel = "Tuition Fee" + (p.feeType ? ` (${p.feeType})` : "");
+    if (hasDiscount) {
+      setC(BODY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text(feeLabel, ix, iy);
+
+      if (hasScholarship) {
+        const scholarshipPct = p.tuitionFee && p.tuitionFee > 0
+          ? Math.round((p.scholarship! / p.tuitionFee) * 100)
+          : 0;
+        if (scholarshipPct > 0) {
+          const pctText = `(${scholarshipPct}% Scholarship)`;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6.5);
+          setC(EMERALD);
+          const labelW = doc.getTextWidth(feeLabel);
+          doc.text(pctText, ix + labelW + 3, iy);
+        }
+      }
+
+      setC(SUBTLE);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      const oldFee = fmt(p.tuitionFee, cur);
+      const oldW = doc.getTextWidth(oldFee);
+      const oldX = rv - 25;
+      doc.text(oldFee, oldX, iy, { align: "right" });
+      doc.setDrawColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+      doc.setLineWidth(0.3);
+      doc.line(oldX - oldW, iy - 1.2, oldX, iy - 1.2);
+
+      setC(EMERALD);
       doc.setFont("helvetica", "bold");
-      doc.text(fmt(p.scholarship, cur), colVal, innerY, { align: "right" });
-      innerY += 6;
+      doc.setFontSize(9);
+      doc.text(fmt(p.discountedFee, cur), rv, iy, { align: "right" });
+      iy += 7;
+    } else {
+      drawRow(feeLabel, fmt(p.tuitionFee, cur), BODY, NAVY);
+    }
+
+    if (hasScholarship && !hasDiscount) {
+      drawRow("Scholarship", fmt(p.scholarship, cur), EMERALD, EMERALD);
     }
 
     if (p.applicationFee && p.applicationFee > 0) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(BODY[0], BODY[1], BODY[2]);
-      doc.text("Application Fee", col1, innerY);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(fmt(p.applicationFee, cur), colVal, innerY, { align: "right" });
-      innerY += 6;
-    }
-
-    const rawServiceFee = p.serviceFeeAmount ?? 0;
-    const adjustedServiceFee = rawServiceFee + serviceFeeMarkup;
-    if (adjustedServiceFee > 0) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(BODY[0], BODY[1], BODY[2]);
-      doc.text("Service Fee", col1, innerY);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(fmt(adjustedServiceFee, cur), colVal, innerY, { align: "right" });
-      innerY += 6;
+      drawRow("Application Fee", fmt(p.applicationFee, cur), BODY, DARK);
     }
 
     if (p.intakes) {
+      setC(BODY);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(BODY[0], BODY[1], BODY[2]);
-      doc.text("Intakes", col1, innerY);
+      doc.text("Intakes", ix, iy);
+      setC(BLUE);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(p.intakes, colVal, innerY, { align: "right" });
+      doc.text(p.intakes, rv, iy, { align: "right" });
+      iy += 7;
     }
 
-    currentY += cardH + 5;
+    cy += cardH + 5;
   }
 
   const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    drawFooter(i, totalPages);
+  for (let pg = 1; pg <= totalPages; pg++) {
+    doc.setPage(pg);
+    drawFooter(pg, totalPages);
   }
 
   const fileName = `${companyName.replace(/\s+/g, "_")}_Proposal_${dateStr}_${timeStr.replace(":", "-")}.pdf`;
