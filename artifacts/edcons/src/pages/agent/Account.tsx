@@ -140,7 +140,7 @@ export default function AgentAccount() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatarUrl }),
       });
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile photo updated" });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
@@ -155,7 +155,7 @@ export default function AgentAccount() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatarUrl: null }),
       });
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile photo removed" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -178,7 +178,7 @@ export default function AgentAccount() {
           avatarUrl: form.avatarUrl || null,
         }),
       });
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile updated", description: "Your information has been saved." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });

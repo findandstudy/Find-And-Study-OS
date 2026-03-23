@@ -132,7 +132,7 @@ export default function StudentAccount() {
           phone:     form.phone || undefined,
         }),
       });
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile updated", description: "Your information has been saved." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -200,7 +200,7 @@ export default function StudentAccount() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatarUrl }),
       });
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Photo updated", description: "Your profile photo has been saved." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
