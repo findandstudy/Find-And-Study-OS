@@ -250,6 +250,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES), asyn
     email: lead.email || null,
     phone: lead.phone || null,
     nationality: lead.nationality || null,
+    agentId: (lead as any).agentId || null,
     status: "active",
   }).returning();
 

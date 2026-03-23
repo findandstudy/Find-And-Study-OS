@@ -844,7 +844,9 @@ export default function LeadsPage() {
 
   const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const isMainStaff = user?.role && !["agent", "sub_agent", "student"].includes(user.role);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
@@ -864,12 +866,34 @@ export default function LeadsPage() {
     const lead = allLeads.find((l: any) => l.id === leadId);
     if (!lead || lead.status === targetStatus) return;
 
+    const targetCol = columns.find(c => c.id === targetStatus);
+    const isWonColumn = targetCol?.variant === "won";
+
+    if (isWonColumn && isMainStaff) {
+      try {
+        const result = await customFetch(`/api/leads/${leadId}/convert`, { method: "POST" }) as any;
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+        const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
+        toast({
+          title: "Lead converted to student",
+          description: result.merged
+            ? `Merged with existing student: ${studentName}`
+            : `New student created: ${studentName}`,
+        });
+      } catch (err: any) {
+        toast({ title: "Conversion failed", description: err.message || "Failed to convert lead", variant: "destructive" });
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      }
+      return;
+    }
+
     updateLead.mutate(
       { id: leadId, data: { status: targetStatus } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-          const colLabel = columns.find(c => c.id === targetStatus)?.title ?? targetStatus;
+          const colLabel = targetCol?.title ?? targetStatus;
           toast({ title: `Lead moved to ${colLabel}` });
         },
         onError: () => {
