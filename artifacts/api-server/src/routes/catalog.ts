@@ -189,7 +189,7 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
   const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
   const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.toLowerCase(), u.id]));
 
-  const values = rows.map(r => {
+  const parsed = rows.map(r => {
     const uid = r.universityId ?? (r.universityName ? uniNameMap[r.universityName.toLowerCase()] : undefined);
     if (!uid || !r.name) return null;
     return {
@@ -212,10 +212,38 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     };
   }).filter(Boolean) as ReturnType<typeof programsTable.$inferInsert>[];
 
-  if (values.length === 0) { res.status(400).json({ error: "No valid rows (universityId or universityName + name required)" }); return; }
-  const inserted = await db.insert(programsTable).values(values).returning();
-  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { count: inserted.length }, req.ip);
-  res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
+  if (parsed.length === 0) { res.status(400).json({ error: "No valid rows (universityId or universityName + name required)" }); return; }
+
+  const existingPrograms = await db.select().from(programsTable);
+  const existingMap = new Map<string, number>();
+  for (const p of existingPrograms) {
+    const key = `${p.universityId}|${(p.name || "").toLowerCase()}|${(p.degree || "").toLowerCase()}|${(p.language || "").toLowerCase()}`;
+    existingMap.set(key, p.id);
+  }
+
+  let insertedCount = 0;
+  let updatedCount = 0;
+  const toInsert: typeof parsed = [];
+
+  for (const val of parsed) {
+    const key = `${val.universityId}|${(val.name || "").toLowerCase()}|${(val.degree || "").toLowerCase()}|${(val.language || "").toLowerCase()}`;
+    const existingId = existingMap.get(key);
+    if (existingId) {
+      const { universityId: _uid, ...updates } = val;
+      await db.update(programsTable).set({ ...updates, updatedAt: new Date() }).where(eq(programsTable.id, existingId));
+      updatedCount++;
+    } else {
+      toInsert.push(val);
+    }
+  }
+
+  if (toInsert.length > 0) {
+    const inserted = await db.insert(programsTable).values(toInsert).returning();
+    insertedCount = inserted.length;
+  }
+
+  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount }, req.ip);
+  res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length });
 });
 
 /* ─── CATALOG OPTIONS ──────────────────────────────────────── */

@@ -87,9 +87,9 @@ type Program = { id: number; universityId: number; name: string; degree?: string
 
 function BulkImportModal({ open, onClose, title, templateRows, headers, onImport }: {
   open: boolean; onClose: () => void; title: string;
-  templateRows: Record<string, any>[]; headers: string; onImport: (rows: Record<string, string>[]) => Promise<{ inserted: number; skipped: number }>;
+  templateRows: Record<string, any>[]; headers: string; onImport: (rows: Record<string, string>[]) => Promise<{ inserted: number; skipped: number; updated?: number }>;
 }) {
-  const [result, setResult] = useState<{ inserted: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ inserted: number; skipped: number; updated?: number } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -131,7 +131,7 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
           {result && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
               <p className="font-medium text-green-700">Import completed</p>
-              <p className="text-green-600">Added: <strong>{result.inserted}</strong> — Skipped (existing): <strong>{result.skipped}</strong></p>
+              <p className="text-green-600">Added: <strong>{result.inserted}</strong>{result.updated ? <> — Updated: <strong>{result.updated}</strong></> : null} — Skipped: <strong>{result.skipped}</strong></p>
             </div>
           )}
         </div>
