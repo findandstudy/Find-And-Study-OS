@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable } from "@workspace/db";
+import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable } from "@workspace/db";
 import { eq, ilike, sql, and, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
@@ -311,7 +311,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     return;
   }
 
-  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp } = req.body;
+  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData } = req.body;
 
   if (_hp) { res.json({ success: true }); return; }
 
@@ -330,6 +330,15 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
   try { sourceWebsite = origin || (referer ? new URL(referer).origin : null) || null; } catch {}
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
+
+  const rawDocs = Array.isArray(documents) ? documents.slice(0, 4) : [];
+  const docArray = rawDocs.filter((d: any) => d && typeof d === 'object' && d.label && d.data && typeof d.data === 'string' && d.data.length < 7_000_000);
+
+  const totalDocSize = docArray.reduce((sum: number, d: any) => sum + (d.data?.length || 0), 0);
+  if (totalDocSize > 20_000_000) {
+    res.status(413).json({ error: "Documents too large. Maximum total size is ~15MB." });
+    return;
+  }
 
   const result = await db.transaction(async (tx) => {
     const [lead] = await tx.insert(leadsTable).values({
@@ -368,8 +377,25 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
       utmTerm: s(utmTerm, 100),
       utmContent: s(utmContent, 100),
       leadId: lead.id,
+      aiExtractedData: aiExtractedData || null,
+      documentCount: docArray.length,
       status: "new",
     }).returning();
+
+    if (docArray.length > 0) {
+      for (const doc of docArray) {
+        if (!doc.label || !doc.data) continue;
+        await tx.insert(documentsTable).values({
+          leadId: lead.id,
+          name: `${firstName}-${lastName}-${doc.label}`.slice(0, 255),
+          type: (doc.label || "other").toLowerCase(),
+          status: "pending",
+          fileData: doc.data,
+          mimeType: doc.mediaType || null,
+          sizeBytes: doc.sizeBytes || null,
+        });
+      }
+    }
 
     return { leadId: lead.id, submissionId: submission.id };
   });
@@ -499,12 +525,51 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-phone-group select{width:100px;flex-shrink:0}
 .ew-phone-group input{flex:1}
 .ew-hp{position:absolute;left:-9999px;opacity:0;height:0}
+.ew-steps{display:flex;align-items:center;gap:0;margin-bottom:24px;padding:0 4px}
+.ew-step{display:flex;align-items:center;gap:8px;flex:1}
+.ew-step-num{width:28px;height:28px;border-radius:50%;background:#e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;transition:all .3s}
+.ew-step.active .ew-step-num{background:${primaryColor};color:#fff}
+.ew-step.done .ew-step-num{background:#22c55e;color:#fff}
+.ew-step-label{font-size:0.75rem;color:#94a3b8;font-weight:500;white-space:nowrap}
+.ew-step.active .ew-step-label{color:${primaryColor};font-weight:600}
+.ew-step.done .ew-step-label{color:#22c55e}
+.ew-step-line{flex:1;height:2px;background:#e2e8f0;margin:0 4px}
+.ew-step.done+.ew-step-line,.ew-step.done .ew-step-line{background:#22c55e}
+.ew-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.ew-doc-slot{border:2px dashed #d1d5db;border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.ew-doc-slot:hover{border-color:${primaryColor};background:${primaryColor}08}
+.ew-doc-slot.uploaded{border-color:#22c55e;border-style:solid;background:#f0fdf4}
+.ew-doc-slot input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.ew-doc-icon{font-size:1.5rem}
+.ew-doc-label{font-size:0.8rem;font-weight:600;color:#374151}
+.ew-doc-hint{font-size:0.65rem;color:#94a3b8}
+.ew-doc-status{font-size:0.7rem;color:#22c55e;font-weight:600}
+.ew-doc-required{color:#ef4444;font-size:0.65rem}
+.ew-doc-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.ew-doc-header span:first-child{font-size:0.9rem;font-weight:600;color:#1f2937}
+.ew-doc-header span:last-child{font-size:0.75rem;color:#64748b}
+.ew-analyzing{text-align:center;padding:40px 20px}
+.ew-analyzing-spinner{width:56px;height:56px;border:4px solid #e2e8f0;border-top-color:${primaryColor};border-radius:50%;animation:ew-spin 1s linear infinite;margin:0 auto 20px}
+@keyframes ew-spin{to{transform:rotate(360deg)}}
+.ew-analyzing h4{font-size:1.1rem;font-weight:600;color:#1f2937;margin-bottom:6px}
+.ew-analyzing p{font-size:0.85rem;color:#64748b}
+.ew-ai-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;font-size:0.7rem;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:12px}
+.ew-extracted-info{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;margin-top:12px;margin-bottom:12px}
+.ew-extracted-info h5{font-size:0.8rem;font-weight:600;color:#166534;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.ew-extracted-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}
+.ew-extracted-item{font-size:0.75rem;color:#374151}
+.ew-extracted-item span{color:#64748b}
+.ew-btn-back{background:transparent;color:#64748b;border:1.5px solid #d1d5db;cursor:pointer;padding:10px 20px;border-radius:6px;font-size:0.875rem;font-weight:500;transition:all .2s}
+.ew-btn-back:hover{background:#f8fafc;color:#374151}
 @media(max-width:640px){
   .ew-grid{grid-template-columns:1fr}
   .ew-filters{flex-direction:column}
   .ew-form-grid{grid-template-columns:1fr}
   .ew-modal{padding:20px}
   .ew-form-actions{flex-direction:column}
+  .ew-doc-grid{grid-template-columns:1fr}
+  .ew-steps{gap:0}
+  .ew-step-label{display:none}
 }
 </style>
 </head>
@@ -517,8 +582,62 @@ var SLUG='${slug}';
 var MODE='${safeMode}';
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
+var formStep='info';
+var uploadedDocs={};
+var aiResult=null;
 var searchDebounce=null;
 var userFilters={};
+
+var LEVEL_DOCS={
+  pathway:[
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
+    {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:false},
+    {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:false},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:false}
+  ],
+  undergraduate:[
+    {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
+    {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:true},
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:true}
+  ],
+  graduate:[
+    {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
+    {key:'bachelor_transcript',label:'Bachelor Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:true},
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:true},
+    {key:'equivalency',label:'Equivalency Letter',icon:'\\ud83d\\udcdc',accept:'image/*,.pdf',required:true}
+  ],
+  doctorate:[
+    {key:'master_diploma',label:'Master Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
+    {key:'master_transcript',label:'Master Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:true},
+    {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:true}
+  ]
+};
+
+function degreeToLevel(degree){
+  if(!degree)return 'undergraduate';
+  var d=degree.toLowerCase();
+  if(d.indexOf('phd')>=0||d.indexOf('doctor')>=0)return 'doctorate';
+  if(d.indexOf('master')>=0||d.indexOf('graduate')>=0||d.indexOf('msc')>=0||d.indexOf('mba')>=0)return 'graduate';
+  if(d.indexOf('pathway')>=0||d.indexOf('prep')>=0||d.indexOf('language')>=0||d.indexOf('foundation')>=0)return 'pathway';
+  return 'undergraduate';
+}
+
+function fileToBase64(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(){
+      var result=reader.result;
+      var base64=result.split(',')[1]||result;
+      resolve({base64:base64,mediaType:file.type,size:file.size,isImage:file.type.startsWith('image/')});
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 function $(s,p){return (p||document).querySelector(s)}
 function $$(s,p){return (p||document).querySelectorAll(s)}
@@ -674,37 +793,132 @@ function renderPagination(){
 
 function renderFormInline(){
   if(formSubmitted) return renderSuccess();
-  return '<div style="max-width:540px;margin:0 auto">'+renderFormFields(null)+'</div>';
+  return '<div style="max-width:580px;margin:0 auto">'+renderFormContent(null)+'</div>';
 }
 
-function renderFormFields(prog){
-  var h='<h3>Apply Now</h3>';
-  if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.name)+' — '+esc(prog.universityName||'')+'</div>';
-  else h+='<div class="ew-modal-subtitle">Fill in the form below to submit your application</div>';
-  h+='<form id="ew-form">';
-  h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
-  h+='<div class="ew-form-grid">';
-  h+='<div class="ew-form-group"><label>First Name *</label><input name="firstName" required></div>';
-  h+='<div class="ew-form-group"><label>Last Name *</label><input name="lastName" required></div>';
-  h+='<div class="ew-form-group"><label>Email *</label><input name="email" type="email" required></div>';
-  h+='<div class="ew-form-group"><label>Phone</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90" selected>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number"></div></div>';
-  h+='<div class="ew-form-group"><label>Nationality</label><input name="nationality"></div>';
-  h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation">Foundation</option><option value="Associate">Associate</option><option value="Bachelor">Bachelor</option><option value="Master">Master</option><option value="PhD">PhD</option></select></div>';
-  if(!prog){
-    h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity"></div>';
-    h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram"></div>';
+function renderSteps(){
+  var steps=['Your Info','Documents','Submit'];
+  var stepKeys=['info','documents','submit'];
+  var currentIdx=stepKeys.indexOf(formStep);
+  if(formStep==='analyzing')currentIdx=1;
+  var h='<div class="ew-steps">';
+  for(var i=0;i<steps.length;i++){
+    var cls='ew-step';
+    if(i<currentIdx)cls+=' done';
+    else if(i===currentIdx)cls+=' active';
+    h+='<div class="'+cls+'"><div class="ew-step-num">'+(i<currentIdx?'\\u2713':(i+1))+'</div><div class="ew-step-label">'+steps[i]+'</div></div>';
+    if(i<steps.length-1)h+='<div class="ew-step-line" style="background:'+(i<currentIdx?'#22c55e':'#e2e8f0')+'"></div>';
   }
-  h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3"></textarea></div>';
   h+='</div>';
-  h+='<div class="ew-form-actions"><button type="submit" class="ew-btn"'+(formLoading?' disabled':'')+'>'+
-    (formLoading?'Submitting...':'Submit Application')+'</button>';
-  if(formOpen) h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
-  h+='</div></form>';
+  return h;
+}
+
+function getFormLevel(){
+  if(formProgram&&formProgram.degree)return degreeToLevel(formProgram.degree);
+  var v=savedFormData.desiredLevel||'';
+  if(v){
+    v=v.toLowerCase();
+    if(v.indexOf('phd')>=0||v.indexOf('doctor')>=0)return 'doctorate';
+    if(v.indexOf('master')>=0)return 'graduate';
+    if(v.indexOf('foundation')>=0||v.indexOf('pathway')>=0)return 'pathway';
+  }
+  return 'undergraduate';
+}
+
+function renderFormContent(prog){
+  var h=renderSteps();
+  if(formStep==='info'){
+    h+='<h3>Apply Now</h3>';
+    if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.name)+' \\u2014 '+esc(prog.universityName||'')+'</div>';
+    else h+='<div class="ew-modal-subtitle">Fill in your details to start your application</div>';
+    h+='<form id="ew-form">';
+    h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
+    h+='<div class="ew-form-grid">';
+    h+='<div class="ew-form-group"><label>First Name *</label><input name="firstName" required></div>';
+    h+='<div class="ew-form-group"><label>Last Name *</label><input name="lastName" required></div>';
+    h+='<div class="ew-form-group"><label>Email *</label><input name="email" type="email" required></div>';
+    h+='<div class="ew-form-group"><label>Phone</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90" selected>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number"></div></div>';
+    h+='<div class="ew-form-group"><label>Nationality</label><input name="nationality"></div>';
+    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation">Foundation</option><option value="Associate">Associate</option><option value="Bachelor">Bachelor</option><option value="Master">Master</option><option value="PhD">PhD</option></select></div>';
+    if(!prog){
+      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity"></div>';
+      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram"></div>';
+    }
+    h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3"></textarea></div>';
+    h+='</div>';
+    h+='<div class="ew-form-actions"><button type="submit" class="ew-btn">Next: Upload Documents \\u2192</button>';
+    if(formOpen) h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
+    h+='</div></form>';
+  } else if(formStep==='documents'){
+    var level=getFormLevel();
+    var docs=LEVEL_DOCS[level]||LEVEL_DOCS.undergraduate;
+    var levelLabel=level==='pathway'?'Language / Prep':level==='graduate'?"Master's Degree":level==='doctorate'?'Doctorate (PhD)':'Bachelor / Associate';
+    h+='<div class="ew-ai-badge">\\u2728 AI-Powered Document Upload</div>';
+    h+='<h3>Upload Your Documents</h3>';
+    h+='<div class="ew-modal-subtitle">Upload documents for <strong>'+levelLabel+'</strong> level. AI will analyze them automatically.</div>';
+    h+='<div class="ew-doc-grid">';
+    for(var i=0;i<docs.length;i++){
+      var d=docs[i];
+      var isUploaded=!!uploadedDocs[d.key];
+      h+='<div class="ew-doc-slot'+(isUploaded?' uploaded':'')+'" data-doc-key="'+d.key+'">';
+      h+='<input type="file" accept="'+d.accept+'" data-doc-input="'+d.key+'">';
+      h+='<div class="ew-doc-icon">'+d.icon+'</div>';
+      h+='<div class="ew-doc-label">'+d.label+'</div>';
+      if(isUploaded){
+        h+='<div class="ew-doc-status">\\u2713 Uploaded</div>';
+      } else {
+        h+='<div class="ew-doc-hint">Click to upload</div>';
+        if(d.required)h+='<div class="ew-doc-required">Required</div>';
+      }
+      h+='</div>';
+    }
+    h+='</div>';
+    var uploadCount=Object.keys(uploadedDocs).length;
+    h+='<div style="margin-top:12px;font-size:0.8rem;color:#64748b">'+uploadCount+' document'+(uploadCount!==1?'s':'')+' uploaded</div>';
+    h+='<div class="ew-form-actions">';
+    h+='<button type="button" class="ew-btn" id="ew-analyze-btn">'+(uploadCount>0?'Analyze & Continue \\u2192':'Skip & Continue \\u2192')+'</button>';
+    h+='<button type="button" class="ew-btn-back" id="ew-back-info">\\u2190 Back</button>';
+    h+='</div>';
+  } else if(formStep==='analyzing'){
+    h+='<div class="ew-analyzing">';
+    h+='<div class="ew-analyzing-spinner"></div>';
+    h+='<h4>AI is analyzing your documents...</h4>';
+    h+='<p>Processing '+Object.keys(uploadedDocs).length+' document'+(Object.keys(uploadedDocs).length!==1?'s':'')+'</p>';
+    h+='</div>';
+  } else if(formStep==='submit'){
+    h+='<h3>Review & Submit</h3>';
+    h+='<div class="ew-modal-subtitle">Review your application details and submit</div>';
+    if(aiResult){
+      h+='<div class="ew-extracted-info">';
+      h+='<h5>\\u2728 AI-Extracted Information</h5>';
+      h+='<div class="ew-extracted-grid">';
+      var keys=Object.keys(aiResult);
+      for(var i=0;i<keys.length;i++){
+        var k=keys[i];
+        var v=aiResult[k];
+        if(v&&v!=='null'&&v!=='N/A'){
+          var label=k.replace(/_/g,' ').replace(/\\b\\w/g,function(c){return c.toUpperCase()});
+          h+='<div class="ew-extracted-item"><span>'+esc(label)+':</span> '+esc(String(v))+'</div>';
+        }
+      }
+      h+='</div></div>';
+    }
+    var docCount=Object.keys(uploadedDocs).length;
+    if(docCount>0){
+      h+='<div style="font-size:0.8rem;color:#64748b;margin-bottom:12px">\\ud83d\\udcc4 '+docCount+' document'+(docCount!==1?'s':'')+' will be submitted with your application</div>';
+    }
+    h+='<div class="ew-form-actions">';
+    h+='<button type="button" class="ew-btn" id="ew-submit-final"'+(formLoading?' disabled':'')+'>'+(formLoading?'Submitting...':'Submit Application')+'</button>';
+    h+='<button type="button" class="ew-btn-back" id="ew-back-docs">\\u2190 Back to Documents</button>';
+    h+='</div>';
+  }
   return h;
 }
 
 function renderSuccess(){
-  return '<div class="ew-success"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>Application Submitted!</h3><p>Thank you! We will review your application and get back to you shortly.</p></div>';
+  var docCount=Object.keys(uploadedDocs).length;
+  var docMsg=docCount>0?' with '+docCount+' document'+(docCount!==1?'s':''):'';
+  return '<div class="ew-success"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>Application Submitted!</h3><p>Thank you! Your application'+docMsg+' has been received. We will review it and get back to you shortly.</p></div>';
 }
 
 function showModal(){
@@ -712,16 +926,121 @@ function showModal(){
   if(existing)existing.remove();
   var overlay=el('div','ew-modal-overlay');
   var modal=el('div','ew-modal');
-  modal.innerHTML='<button class="ew-close-btn" id="ew-modal-close">&times;</button>'+(formSubmitted?renderSuccess():renderFormFields(formProgram));
+  modal.innerHTML='<button class="ew-close-btn" id="ew-modal-close">&times;</button>'+(formSubmitted?renderSuccess():renderFormContent(formProgram));
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay){formOpen=false;overlay.remove()}});
+  bindModalEvents(modal,overlay);
+}
+
+function bindModalEvents(modal,overlay){
   var closeBtn=$('#ew-modal-close',modal);
   if(closeBtn)closeBtn.addEventListener('click',function(){formOpen=false;overlay.remove()});
   var cancelBtn=$('#ew-cancel',modal);
   if(cancelBtn)cancelBtn.addEventListener('click',function(){formOpen=false;overlay.remove()});
   var form=$('#ew-form',modal);
-  if(form)form.addEventListener('submit',handleSubmit);
+  if(form)form.addEventListener('submit',handleInfoStep);
+  $$('[data-doc-input]',modal).forEach(function(input){
+    input.addEventListener('change',function(e){
+      var key=input.getAttribute('data-doc-input');
+      var file=e.target.files[0];
+      if(!file)return;
+      if(file.size>5*1024*1024){alert('File too large. Maximum 5MB.');return;}
+      fileToBase64(file).then(function(result){
+        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
+        if(formOpen)showModal();
+      });
+    });
+  });
+  var analyzeBtn=$('#ew-analyze-btn',modal);
+  if(analyzeBtn)analyzeBtn.addEventListener('click',handleAnalyze);
+  var backInfoBtn=$('#ew-back-info',modal);
+  if(backInfoBtn)backInfoBtn.addEventListener('click',function(){formStep='info';showModal()});
+  var backDocsBtn=$('#ew-back-docs',modal);
+  if(backDocsBtn)backDocsBtn.addEventListener('click',function(){formStep='documents';showModal()});
+  var submitFinalBtn=$('#ew-submit-final',modal);
+  if(submitFinalBtn)submitFinalBtn.addEventListener('click',handleFinalSubmit);
+}
+
+var savedFormData={};
+function handleInfoStep(e){
+  e.preventDefault();
+  var form=e.target;
+  savedFormData={};
+  new FormData(form).forEach(function(v,k){savedFormData[k]=v});
+  formStep='documents';
+  if(formOpen)showModal();
+  else render(false);
+}
+
+function handleAnalyze(){
+  var docKeys=Object.keys(uploadedDocs);
+  if(docKeys.length===0){formStep='submit';if(formOpen)showModal();else render(false);return;}
+  formStep='analyzing';
+  if(formOpen)showModal();else render(false);
+  var docPayload=docKeys.map(function(k){
+    var d=uploadedDocs[k];
+    return {type:d.isImage?'image':'pdf',data:d.base64,mediaType:d.mediaType,label:d.label};
+  });
+  var apiBase=API.replace('/public/embed/'+SLUG,'');
+  fetch(apiBase+'/public/ai/extract-document',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({documents:docPayload})
+  }).then(function(r){
+    if(r.ok)return r.json();
+    throw new Error('AI analysis failed');
+  }).then(function(data){
+    aiResult=data.extracted||null;
+  }).catch(function(){
+    aiResult=null;
+  }).finally(function(){
+    formStep='submit';
+    if(formOpen)showModal();else render(false);
+  });
+}
+
+function handleFinalSubmit(){
+  if(formLoading)return;
+  formLoading=true;
+  if(formOpen)showModal();
+  var data=Object.assign({},savedFormData);
+  if(formProgram){
+    data.programId=formProgram.id;
+    data.programName=formProgram.name;
+    data.universityName=formProgram.universityName;
+  }
+  try{data.sourcePageUrl=window.parent.location.href}catch(ex){data.sourcePageUrl=window.location.href}
+  var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
+  try{
+    var search=window.location.search;
+    try{search=window.parent.location.search}catch(ex){}
+    var params=new URLSearchParams(search);
+    Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)data[utmMap[k]]=v});
+  }catch(ex){}
+  var docKeys=Object.keys(uploadedDocs);
+  if(docKeys.length>0){
+    data.documents=docKeys.map(function(k){
+      var d=uploadedDocs[k];
+      return {label:d.label,data:d.base64,mediaType:d.mediaType,sizeBytes:d.sizeBytes};
+    });
+  }
+  if(aiResult)data.aiExtractedData=aiResult;
+  fetch(API+'/apply',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(data)
+  }).then(function(r){
+    formLoading=false;
+    if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Submission failed')});
+    formSubmitted=true;
+    if(formOpen)showModal();
+    else render(false);
+  }).catch(function(err){
+    formLoading=false;
+    if(formOpen)showModal();
+    alert(err.message||'Something went wrong. Please try again.');
+  });
 }
 
 function bindEvents(){
@@ -744,7 +1063,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
-      formOpen=true;formSubmitted=false;
+      formOpen=true;formSubmitted=false;formStep='info';uploadedDocs={};aiResult=null;savedFormData={};
       showModal();
     });
   });
@@ -755,44 +1074,7 @@ function bindEvents(){
     });
   });
   var inlineForm=$('#ew-form');
-  if(inlineForm&&!formOpen)inlineForm.addEventListener('submit',handleSubmit);
-}
-
-function handleSubmit(e){
-  e.preventDefault();
-  if(formLoading)return;
-  formLoading=true;
-  var form=e.target;
-  var data={};
-  new FormData(form).forEach(function(v,k){data[k]=v});
-  if(formProgram){
-    data.programId=formProgram.id;
-    data.programName=formProgram.name;
-    data.universityName=formProgram.universityName;
-  }
-  try{data.sourcePageUrl=window.parent.location.href}catch(ex){data.sourcePageUrl=window.location.href}
-  var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
-  try{
-    var search=window.location.search;
-    try{search=window.parent.location.search}catch(ex){}
-    var params=new URLSearchParams(search);
-    Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)data[utmMap[k]]=v});
-  }catch(ex){}
-
-  fetch(API+'/apply',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(data)
-  }).then(function(r){
-    formLoading=false;
-    if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Submission failed')});
-    formSubmitted=true;
-    if(formOpen)showModal();
-    else render(false);
-  }).catch(function(err){
-    formLoading=false;
-    alert(err.message||'Something went wrong. Please try again.');
-  });
+  if(inlineForm&&!formOpen)inlineForm.addEventListener('submit',handleInfoStep);
 }
 
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -6,6 +6,7 @@ export const documentsTable = pgTable("documents", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id"),
   applicationId: integer("application_id"),
+  leadId: integer("lead_id"),
   name: text("name").notNull(),
   type: text("type").notNull(),
   status: text("status").notNull().default("pending"),

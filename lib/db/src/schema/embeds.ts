@@ -42,6 +42,8 @@ export const embedSubmissionsTable = pgTable("embed_submissions", {
   utmTerm: text("utm_term"),
   utmContent: text("utm_content"),
   leadId: integer("lead_id"),
+  aiExtractedData: jsonb("ai_extracted_data"),
+  documentCount: integer("document_count").default(0),
   status: text("status").notNull().default("new"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
