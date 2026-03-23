@@ -163,7 +163,7 @@ router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), as
     contactPersonPhone: r.contactPersonPhone ?? null,
     contactPersonEmail: r.contactPersonEmail ?? null,
     status: r.status ?? "open",
-    isActive: r.isActive === false || r.isActive === "No" || r.isActive === "no" || r.isActive === "false" ? false : true,
+    isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
   }));
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows" }); return; }
@@ -208,7 +208,7 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
       discountedFee: r.discountedFee ? Number(r.discountedFee) : null,
       languageFee: r.languageFee ? Number(r.languageFee) : null,
       feeType: r.feeType ?? null,
-      isActive: r.isActive === false || r.isActive === "No" || r.isActive === "no" || r.isActive === "false" ? false : true,
+      isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
     };
   }).filter(Boolean) as ReturnType<typeof programsTable.$inferInsert>[];
 
