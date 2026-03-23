@@ -103,11 +103,18 @@ function formatCurrency(amount: number | null | undefined, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
-function calcCommissionAmount(program: Program): number | null {
+function calcCommissionAmount(program: Program, agentShareRate?: number | null | undefined): number | null {
   if (program.commissionRate == null) return null;
   const effectiveFee = program.discountedFee ?? program.tuitionFee;
   if (effectiveFee == null) return null;
-  return Math.round((effectiveFee * program.commissionRate) / 100);
+  const fullCommission = (effectiveFee * program.commissionRate) / 100;
+  if (agentShareRate === undefined) {
+    return null;
+  }
+  if (agentShareRate !== null) {
+    return Math.round((fullCommission * agentShareRate) / 100);
+  }
+  return Math.round(fullCommission);
 }
 
 function ensureUrl(url: string | null | undefined): string | null {
@@ -218,12 +225,16 @@ export default function CourseFinder() {
     staleTime: 10 * 60_000,
   });
 
-  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string }>({
+  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null }>({
     queryKey: ["agent-me-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
     enabled: !!isAgent,
     staleTime: 10 * 60_000,
   });
+
+  const agentShareRate: number | null | undefined = isAgent
+    ? (agentProfile?.commissionRate ?? undefined)
+    : null;
 
   async function handleGeneratePdf() {
     const selected = programs.filter(p => selectedIds.has(p.id));
@@ -329,7 +340,7 @@ export default function CourseFinder() {
       "Scholarship": p.scholarship ?? "",
       "Application Fee": p.applicationFee ?? "",
       "Commission Rate (%)": p.commissionRate ?? "",
-      "Commission Amount": calcCommissionAmount(p) ?? "",
+      "Commission Amount": calcCommissionAmount(p, agentShareRate) ?? "",
       "Fee Type": p.feeType || "",
       "Intakes": p.intakes || "",
       "University Type": p.universityType || "",
@@ -621,6 +632,7 @@ export default function CourseFinder() {
                 onApply={() => setApplyProgram(prog)}
                 onUniversityClick={() => setSelectedUniversity(prog)}
                 showCommission={!!showCommission}
+                agentShareRate={agentShareRate}
                 showWishlist={!!showWishlist}
                 isSelected={selectedIds.has(prog.id)}
                 onToggleSelect={() => toggleSelect(prog.id)}
@@ -633,6 +645,7 @@ export default function CourseFinder() {
             wishlistIds={wishlistIds}
             selectedIds={selectedIds}
             showCommission={!!showCommission}
+            agentShareRate={agentShareRate}
             showWishlist={!!showWishlist}
             sortField={sortField}
             sortDir={sortDir}
@@ -664,6 +677,7 @@ export default function CourseFinder() {
         program={selectedProgram}
         onClose={() => setSelectedProgram(null)}
         showCommission={!!showCommission}
+        agentShareRate={agentShareRate}
       />
 
       <UniversityInfoDialog
@@ -675,6 +689,7 @@ export default function CourseFinder() {
         program={applyProgram}
         onClose={() => setApplyProgram(null)}
         currentUser={user}
+        agentShareRate={agentShareRate}
       />
 
       {canUsePdfMarkup && (
@@ -707,11 +722,12 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
   );
 }
 
-function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick }: {
+function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick }: {
   programs: Program[];
   wishlistIds: number[];
   selectedIds: Set<number>;
   showCommission: boolean;
+  agentShareRate?: number | null | undefined;
   showWishlist?: boolean;
   sortField: string;
   sortDir: "asc" | "desc";
@@ -758,7 +774,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, s
           <tbody>
             {programs.map(p => {
               const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
-              const commissionAmount = calcCommissionAmount(p);
+              const commissionAmount = calcCommissionAmount(p, agentShareRate);
               const cur = p.currency ?? "USD";
               const isSelected = selectedIds.has(p.id);
               const isWishlisted = wishlistIds.includes(p.id);
@@ -907,7 +923,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, s
   );
 }
 
-function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, showWishlist = true, isSelected, onToggleSelect }: {
+function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, agentShareRate, showWishlist = true, isSelected, onToggleSelect }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
@@ -915,12 +931,13 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
   onApply: () => void;
   onUniversityClick: () => void;
   showCommission: boolean;
+  agentShareRate?: number | null;
   showWishlist?: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
 }) {
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
-  const commissionAmount = calcCommissionAmount(p);
+  const commissionAmount = calcCommissionAmount(p, agentShareRate);
   const cur = p.currency ?? "USD";
   const websiteUrl = ensureUrl(p.universityWebsite);
 
@@ -1238,15 +1255,16 @@ function UniversityInfoDialog({ program: p, onClose }: {
   );
 }
 
-function ProgramInfoDialog({ program: p, onClose, showCommission }: {
+function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate }: {
   program: Program | null;
   onClose: () => void;
   showCommission: boolean;
+  agentShareRate?: number | null;
 }) {
   if (!p) return null;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const cur = p.currency ?? "USD";
-  const commissionAmount = calcCommissionAmount(p);
+  const commissionAmount = calcCommissionAmount(p, agentShareRate);
 
   const sections: { title: string; icon: typeof GraduationCap; items: { label: string; value: string | null | undefined; highlight?: string }[] }[] = [
     {
@@ -1501,7 +1519,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
   );
 }
 
-function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | null; onClose: () => void; currentUser: any }) {
+function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined }) {
   const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1663,7 +1681,7 @@ function ApplyDialog({ program: p, onClose, currentUser }: { program: Program | 
 
   const effectiveFee = p.discountedFee ?? p.tuitionFee;
   const cur = p.currency ?? "USD";
-  const commissionAmount = p.commissionRate && effectiveFee ? Math.round((effectiveFee * p.commissionRate) / 100) : null;
+  const commissionAmount = calcCommissionAmount(p, agentShareRate);
 
   const levelLabel = level === "pathway" ? "Language / Prep" : level === "undergraduate" ? "Bachelor / Associate" : level === "graduate" ? "Master's Degree" : "Doctorate (PhD)";
 
