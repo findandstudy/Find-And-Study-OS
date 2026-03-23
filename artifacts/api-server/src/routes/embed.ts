@@ -28,6 +28,12 @@ function validateDomain(widget: any, origin: string | undefined, referer: string
   }
 }
 
+function getBaseUrl(req: any): string {
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  return `${proto}://${host}`;
+}
+
 const VALID_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
 const VALID_RADIUS_RE = /^\d{1,3}(px|rem|em|%)$/;
 const VALID_FONT_RE = /^[a-zA-Z0-9\s,\-'"]+$/;
@@ -376,14 +382,14 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).send("Widget not found"); return; }
 
-  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const baseUrl = getBaseUrl(req);
   const html = generateWidgetHTML(slug, baseUrl, widget);
   res.setHeader("Content-Type", "text/html");
   res.send(html);
 });
 
 router.get("/public/embed/embed.js", async (_req, res): Promise<void> => {
-  const baseUrl = `${_req.protocol}://${_req.get("host")}`;
+  const baseUrl = getBaseUrl(_req);
   const js = generateEmbedScript(baseUrl);
   res.setHeader("Content-Type", "application/javascript");
   res.setHeader("Cache-Control", "public, max-age=3600");
