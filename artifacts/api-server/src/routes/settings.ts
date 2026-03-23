@@ -10,7 +10,7 @@ const router: IRouter = Router();
 
 const SETTINGS_PATCH_FIELDS = [
   "defaultLanguage", "supportedLanguages", "companyName", "companyEmail",
-  "companyPhone", "companyAddress", "smtpHost", "smtpPort", "smtpUser",
+  "companyPhone", "companyAddress", "companyWebsite", "smtpHost", "smtpPort", "smtpUser",
   "smtpPassword", "whatsappEnabled", "whatsappToken",
   "metaLeadEnabled", "n8nWebhookUrl", "googleSheetsId",
   "logoUrl", "logoDarkUrl", "faviconUrl", "themePrimary", "themeButton", "themeHover",

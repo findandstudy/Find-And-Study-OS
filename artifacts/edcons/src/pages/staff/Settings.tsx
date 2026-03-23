@@ -675,6 +675,7 @@ export default function SettingsPage() {
             <FieldGroup label="Support Email"><Input value={s.supportEmail || ""} onChange={e => updateSettings({ supportEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Sales Email"><Input value={s.salesEmail || ""} onChange={e => updateSettings({ salesEmail: e.target.value })} type="email" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Phone"><Input value={s.companyPhone || ""} onChange={e => updateSettings({ companyPhone: e.target.value })} className="rounded-xl" /></FieldGroup>
+            <FieldGroup label="Website"><Input value={s.companyWebsite || ""} onChange={e => updateSettings({ companyWebsite: e.target.value })} placeholder="https://findandstudy.com" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="WhatsApp Number"><Input value={s.whatsappNumber || ""} onChange={e => updateSettings({ whatsappNumber: e.target.value })} placeholder="+90 555 123 4567" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Working Hours"><Input value={s.workingHours || ""} onChange={e => updateSettings({ workingHours: e.target.value })} placeholder="Mon-Fri 9:00-18:00" className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Address" className="sm:col-span-2"><Input value={s.companyAddress || ""} onChange={e => updateSettings({ companyAddress: e.target.value })} className="rounded-xl" /></FieldGroup>
@@ -723,6 +724,7 @@ export default function SettingsPage() {
           legalCompanyName: s.legalCompanyName || null, publicBrandName: s.publicBrandName || null,
           companyEmail: s.companyEmail || null, supportEmail: s.supportEmail || null,
           salesEmail: s.salesEmail || null, companyPhone: s.companyPhone || null,
+          companyWebsite: s.companyWebsite || null,
           whatsappNumber: s.whatsappNumber || null, companyAddress: s.companyAddress || null,
           companyCity: s.companyCity || null, companyCountry: s.companyCountry || null,
           workingHours: s.workingHours || null,

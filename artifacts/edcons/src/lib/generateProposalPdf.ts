@@ -28,6 +28,7 @@ type ProposalOptions = {
   companyName?: string;
   companyEmail?: string;
   companyPhone?: string;
+  companyWebsite?: string;
   showCommission?: boolean;
   serviceFeeMarkup?: number;
 };
@@ -39,13 +40,6 @@ function fmt(amount: number | null | undefined, currency = "USD"): string {
   } catch {
     return `$${amount.toLocaleString()}`;
   }
-}
-
-function calcCommission(p: ProgramData): number | null {
-  if (p.commissionRate == null) return null;
-  const fee = p.discountedFee ?? p.tuitionFee;
-  if (fee == null) return null;
-  return Math.round((fee * p.commissionRate) / 100);
 }
 
 async function loadImageAsDataUrl(url: string): Promise<string | null> {
@@ -71,12 +65,16 @@ function detectImageFormat(dataUrl: string): string {
   return "PNG";
 }
 
-const PRIMARY = [30, 64, 175];
-const PRIMARY_LIGHT = [239, 246, 255];
-const DARK = [15, 23, 42];
-const GRAY = [100, 116, 139];
-const ACCENT = [16, 185, 129];
+const PRIMARY = [22, 78, 99];
+const PRIMARY_DARK = [15, 52, 67];
+const ACCENT_GOLD = [180, 142, 58];
+const DARK = [20, 20, 30];
+const BODY = [55, 65, 81];
+const SUBTLE = [140, 150, 165];
+const BORDER_LIGHT = [220, 225, 232];
+const CARD_BG = [248, 249, 252];
 const WHITE = [255, 255, 255];
+const GREEN = [16, 140, 90];
 
 function drawRoundedRect(doc: jsPDF, x: number, y: number, w: number, h: number, r: number, fillColor: number[]) {
   doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
@@ -89,15 +87,28 @@ function drawLine(doc: jsPDF, x1: number, y1: number, x2: number, y2: number, co
   doc.line(x1, y1, x2, y2);
 }
 
+function getTurkeyDateTime(): { date: string; time: string } {
+  const now = new Date();
+  const turkeyDate = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    day: "2-digit", month: "2-digit", year: "numeric"
+  }).format(now);
+  const turkeyTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    hour: "2-digit", minute: "2-digit", hour12: false
+  }).format(now);
+  return { date: turkeyDate.replace(/\//g, "-"), time: turkeyTime };
+}
+
 export async function generateProposalPdf(options: ProposalOptions) {
-  const { programs, logoDataUrl, companyName = "EduCons", companyEmail, companyPhone, showCommission = false, serviceFeeMarkup = 0 } = options;
+  const { programs, logoDataUrl, companyName = "Find And Study", companyEmail, companyPhone, companyWebsite, showCommission = false, serviceFeeMarkup = 0 } = options;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
   const pageH = 297;
-  const margin = 15;
+  const margin = 16;
   const contentW = pageW - margin * 2;
-  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const { date: dateStr, time: timeStr } = getTurkeyDateTime();
 
   const uniLogos = new Map<string, string | null>();
   const uniLogoUrls = [...new Set(programs.filter(p => p.universityLogoUrl).map(p => p.universityLogoUrl!))];
@@ -109,17 +120,17 @@ export async function generateProposalPdf(options: ProposalOptions) {
   );
 
   function drawHeader(isFirst: boolean) {
-    drawRoundedRect(doc, 0, 0, pageW, 42, 0, PRIMARY);
+    doc.setFillColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
+    doc.rect(0, 0, pageW, 38, "F");
 
-    doc.setFillColor(255, 255, 255, 15);
-    doc.circle(pageW - 20, 10, 30, "F");
-    doc.circle(pageW - 60, -10, 20, "F");
+    doc.setFillColor(PRIMARY_DARK[0], PRIMARY_DARK[1], PRIMARY_DARK[2]);
+    doc.rect(0, 38, pageW, 1.5, "F");
 
     let logoX = margin;
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, detectImageFormat(logoDataUrl), margin, 8, 26, 26);
-        logoX = margin + 30;
+        doc.addImage(logoDataUrl, detectImageFormat(logoDataUrl), margin, 6, 24, 24);
+        logoX = margin + 28;
       } catch {
         logoX = margin;
       }
@@ -127,124 +138,136 @@ export async function generateProposalPdf(options: ProposalOptions) {
 
     doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text(companyName, logoX, 20);
+    doc.setFontSize(18);
+    doc.text(companyName, logoX, 18);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text(isFirst ? "Program Proposal" : "Program Proposal (cont.)", logoX, 27);
-
     doc.setFontSize(8);
-    const rightTexts: string[] = [date];
-    if (companyEmail) rightTexts.push(companyEmail);
-    if (companyPhone) rightTexts.push(companyPhone);
-    rightTexts.forEach((txt, i) => {
-      doc.text(txt, pageW - margin, 14 + i * 5, { align: "right" });
+    doc.setTextColor(200, 220, 230);
+    doc.text(isFirst ? "Program Proposal" : "Program Proposal (cont.)", logoX, 24);
+
+    const contactLines: string[] = [];
+    if (companyEmail) contactLines.push(companyEmail);
+    if (companyPhone) contactLines.push(companyPhone);
+    if (companyWebsite) contactLines.push(companyWebsite);
+
+    doc.setTextColor(200, 220, 230);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    contactLines.forEach((txt, i) => {
+      doc.text(txt, pageW - margin, 12 + i * 4, { align: "right" });
     });
+
+    const dateTimeY = 12 + contactLines.length * 4 + 2;
+    doc.setTextColor(ACCENT_GOLD[0], ACCENT_GOLD[1], ACCENT_GOLD[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text(`${dateStr}  ${timeStr}`, pageW - margin, dateTimeY, { align: "right" });
   }
 
   function drawFooter(pageNum: number, totalPages: number) {
-    const footerY = pageH - 10;
-    drawLine(doc, margin, footerY - 3, pageW - margin, footerY - 3, [226, 232, 240]);
-    doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
+    const footerY = pageH - 8;
+    drawLine(doc, margin, footerY - 4, pageW - margin, footerY - 4, BORDER_LIGHT, 0.4);
+
     if (serviceFeeMarkup > 0) {
       doc.setFont("helvetica", "italic");
-      doc.text("Fees in this PDF may include agency-added service adjustments.", margin, footerY - 7);
-      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+      doc.text("* Fees may include agency-applied service adjustments.", margin, footerY - 7);
     }
-    doc.text(`${companyName} | Confidential`, margin, footerY);
-    doc.text(`Page ${pageNum} of ${totalPages}`, pageW - margin, footerY, { align: "right" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+    doc.text(`${companyName}  |  Confidential`, margin, footerY);
+    doc.text(`Page ${pageNum} / ${totalPages}`, pageW - margin, footerY, { align: "right" });
   }
 
-  let currentY = 50;
+  let currentY = 47;
   let pageCount = 1;
 
   drawHeader(true);
 
-  currentY = 52;
   doc.setTextColor(DARK[0], DARK[1], DARK[2]);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
+  doc.setFontSize(13);
   doc.text("Selected Programs", margin, currentY);
-  currentY += 3;
 
+  currentY += 5;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
-  doc.text(`${programs.length} program${programs.length !== 1 ? "s" : ""} selected for your review`, margin, currentY + 5);
-  currentY += 12;
+  doc.setFontSize(8.5);
+  doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+  doc.text(`${programs.length} program${programs.length !== 1 ? "s" : ""} curated for your review`, margin, currentY);
 
-  drawLine(doc, margin, currentY, pageW - margin, currentY, PRIMARY, 0.6);
-  currentY += 6;
+  currentY += 5;
+  doc.setFillColor(ACCENT_GOLD[0], ACCENT_GOLD[1], ACCENT_GOLD[2]);
+  doc.rect(margin, currentY, 30, 0.8, "F");
+  doc.setFillColor(BORDER_LIGHT[0], BORDER_LIGHT[1], BORDER_LIGHT[2]);
+  doc.rect(margin + 30, currentY, contentW - 30, 0.3, "F");
+  currentY += 7;
 
   for (let i = 0; i < programs.length; i++) {
     const p = programs[i];
     const cur = p.currency ?? "USD";
     const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
-    const commAmt = calcCommission(p);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    const preCalcLines = Math.min(doc.splitTextToSize(p.name, contentW - 40).length, 2);
+    doc.setFontSize(10);
+    const preCalcLines = Math.min(doc.splitTextToSize(p.name, contentW - 42).length, 2);
     const preCalcServiceFee = (p.serviceFeeAmount ?? 0) + serviceFeeMarkup;
-    let cardH = 62 + (preCalcLines - 1) * 4.5;
+    let cardH = 55 + (preCalcLines - 1) * 4.5;
     if (p.scholarship && p.scholarship > 0) cardH += 6;
     if (p.applicationFee && p.applicationFee > 0) cardH += 6;
     if (preCalcServiceFee > 0) cardH += 6;
-    if (showCommission && commAmt != null) cardH += 8;
 
-    if (currentY + cardH > pageH - 20) {
+    if (currentY + cardH > pageH - 18) {
       pageCount++;
       doc.addPage();
       drawHeader(false);
-      currentY = 50;
+      currentY = 47;
     }
 
-    drawRoundedRect(doc, margin, currentY, contentW, cardH, 3, [250, 250, 252]);
-
-    doc.setDrawColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
-    doc.setLineWidth(0.8);
-    doc.line(margin, currentY, margin, currentY + cardH);
-
-    const innerX = margin + 5;
-    let innerY = currentY + 7;
+    drawRoundedRect(doc, margin, currentY, contentW, cardH, 2.5, CARD_BG);
 
     doc.setFillColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
-    doc.roundedRect(innerX, currentY + 3.5, 16, 5, 1, 1, "F");
+    doc.roundedRect(margin, currentY, 2.5, cardH, 1.2, 1.2, "F");
+
+    const innerX = margin + 8;
+    let innerY = currentY + 7;
+
+    drawRoundedRect(doc, innerX, currentY + 3, 14, 5.5, 1.5, PRIMARY);
     doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(`#${i + 1}`, innerX + 8, currentY + 7, { align: "center" });
+    doc.setFontSize(7.5);
+    doc.text(`#${i + 1}`, innerX + 7, currentY + 7, { align: "center" });
 
-    const nameX = innerX + 20;
+    const nameX = innerX + 18;
 
     if (p.universityLogoUrl && uniLogos.get(p.universityLogoUrl)) {
       try {
         const uniLogoData = uniLogos.get(p.universityLogoUrl)!;
-        doc.addImage(uniLogoData, detectImageFormat(uniLogoData), nameX - 1, currentY + 3, 7, 7);
+        doc.addImage(uniLogoData, detectImageFormat(uniLogoData), nameX - 1, currentY + 2.5, 7, 7);
       } catch {}
     }
 
-    const textStartX = (p.universityLogoUrl && uniLogos.get(p.universityLogoUrl)) ? nameX + 8 : nameX;
+    const textStartX = (p.universityLogoUrl && uniLogos.get(p.universityLogoUrl)) ? nameX + 9 : nameX;
 
-    doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+    doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(p.universityName, textStartX, innerY - 1.5);
+    doc.setFontSize(7.5);
+    doc.text(p.universityName, textStartX, innerY - 2);
 
     doc.setTextColor(DARK[0], DARK[1], DARK[2]);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    const maxNameW = margin + contentW - 5 - textStartX;
+    doc.setFontSize(10);
+    const maxNameW = margin + contentW - 8 - textStartX;
     const programName = doc.splitTextToSize(p.name, maxNameW) as string[];
     const nameLines = Math.min(programName.length, 2);
     for (let nl = 0; nl < nameLines; nl++) {
-      doc.text(programName[nl], textStartX, innerY + 3.5 + nl * 4.5);
+      doc.text(programName[nl], textStartX, innerY + 3 + nl * 4.5);
     }
 
-    innerY += 6 + (nameLines - 1) * 4.5;
+    innerY += 5 + (nameLines - 1) * 4.5;
 
     const badges: string[] = [];
     if (p.degree) badges.push(p.degree);
@@ -255,66 +278,65 @@ export async function generateProposalPdf(options: ProposalOptions) {
 
     let bx = innerX;
     badges.forEach(badge => {
-      const tw = doc.getTextWidth(badge) + 4;
-      drawRoundedRect(doc, bx, innerY, tw + 2, 5, 1, PRIMARY_LIGHT);
-      doc.setTextColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.text(badge, bx + 2, innerY + 3.5);
-      bx += tw + 4;
+      doc.setFontSize(6.5);
+      const tw = doc.getTextWidth(badge) + 5;
+      doc.setFillColor(230, 235, 242);
+      doc.roundedRect(bx, innerY, tw, 5, 1, 1, "F");
+      doc.setTextColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
+      doc.text(badge, bx + 2.5, innerY + 3.5);
+      bx += tw + 2;
     });
 
     innerY += 10;
-
-    drawLine(doc, innerX, innerY, margin + contentW - 5, innerY, [226, 232, 240]);
+    drawLine(doc, innerX, innerY, margin + contentW - 8, innerY, BORDER_LIGHT, 0.3);
     innerY += 5;
 
     const col1 = innerX;
-    const col2 = innerX + contentW / 2 - 5;
+    const colVal = margin + contentW - 8;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+    doc.setTextColor(BODY[0], BODY[1], BODY[2]);
     doc.text("Tuition Fee" + (p.feeType ? ` (${p.feeType})` : ""), col1, innerY);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
     if (hasDiscount) {
-      doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+      doc.setTextColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
       doc.setFont("helvetica", "normal");
       const oldFee = fmt(p.tuitionFee, cur);
-      doc.text(oldFee, col2, innerY, { align: "right" });
-      const oldW = doc.getTextWidth(oldFee);
-      doc.setDrawColor(GRAY[0], GRAY[1], GRAY[2]);
-      doc.setLineWidth(0.3);
-      doc.line(col2 - oldW, innerY - 1.2, col2, innerY - 1.2);
+      const oldFeeW = doc.getTextWidth(oldFee);
+      doc.text(oldFee, colVal - 30, innerY, { align: "right" });
+      doc.setLineWidth(0.25);
+      doc.setDrawColor(SUBTLE[0], SUBTLE[1], SUBTLE[2]);
+      doc.line(colVal - 30 - oldFeeW, innerY - 1, colVal - 30, innerY - 1);
 
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
-      doc.text(fmt(p.discountedFee, cur), col2 + 25, innerY, { align: "right" });
+      doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
+      doc.text(fmt(p.discountedFee, cur), colVal, innerY, { align: "right" });
     } else {
-      doc.text(fmt(p.tuitionFee, cur), col2, innerY, { align: "right" });
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+      doc.text(fmt(p.tuitionFee, cur), colVal, innerY, { align: "right" });
     }
-
     innerY += 6;
 
     if (p.scholarship && p.scholarship > 0) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
+      doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
       doc.text("Scholarship", col1, innerY);
       doc.setFont("helvetica", "bold");
-      doc.text(fmt(p.scholarship, cur), col2, innerY, { align: "right" });
+      doc.text(fmt(p.scholarship, cur), colVal, innerY, { align: "right" });
       innerY += 6;
     }
 
     if (p.applicationFee && p.applicationFee > 0) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+      doc.setTextColor(BODY[0], BODY[1], BODY[2]);
       doc.text("Application Fee", col1, innerY);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(fmt(p.applicationFee, cur), col2, innerY, { align: "right" });
+      doc.text(fmt(p.applicationFee, cur), colVal, innerY, { align: "right" });
       innerY += 6;
     }
 
@@ -323,35 +345,25 @@ export async function generateProposalPdf(options: ProposalOptions) {
     if (adjustedServiceFee > 0) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+      doc.setTextColor(BODY[0], BODY[1], BODY[2]);
       doc.text("Service Fee", col1, innerY);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(fmt(adjustedServiceFee, cur), col2, innerY, { align: "right" });
+      doc.text(fmt(adjustedServiceFee, cur), colVal, innerY, { align: "right" });
       innerY += 6;
     }
 
     if (p.intakes) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+      doc.setTextColor(BODY[0], BODY[1], BODY[2]);
       doc.text("Intakes", col1, innerY);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.text(p.intakes, col2, innerY, { align: "right" });
-      innerY += 6;
+      doc.text(p.intakes, colVal, innerY, { align: "right" });
     }
 
-    if (showCommission && commAmt != null) {
-      drawLine(doc, innerX, innerY - 2, margin + contentW - 5, innerY - 2, [226, 232, 240], 0.5);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(PRIMARY[0], PRIMARY[1], PRIMARY[2]);
-      doc.text("Commission", col1, innerY + 3);
-      doc.text(fmt(commAmt, cur), col2, innerY + 3, { align: "right" });
-    }
-
-    currentY += cardH + 6;
+    currentY += cardH + 5;
   }
 
   const totalPages = doc.getNumberOfPages();
@@ -360,5 +372,6 @@ export async function generateProposalPdf(options: ProposalOptions) {
     drawFooter(i, totalPages);
   }
 
-  doc.save(`${companyName.replace(/\s+/g, "_")}_Proposal_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const fileName = `${companyName.replace(/\s+/g, "_")}_Proposal_${dateStr}_${timeStr.replace(":", "-")}.pdf`;
+  doc.save(fileName);
 }

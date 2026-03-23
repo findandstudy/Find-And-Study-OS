@@ -208,7 +208,7 @@ export default function CourseFinder() {
     }
   }
 
-  const { data: settings } = useQuery<{ companyName?: string; companyEmail?: string; companyPhone?: string; logoUrl?: string | null }>({
+  const { data: settings } = useQuery<{ companyName?: string; companyEmail?: string; companyPhone?: string; companyWebsite?: string; logoUrl?: string | null }>({
     queryKey: ["settings-for-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
     staleTime: 10 * 60_000,
@@ -244,7 +244,7 @@ export default function CourseFinder() {
         } catch {}
       }
 
-      const name = isAgent && agentProfile?.companyName ? agentProfile.companyName : settings?.companyName || "EduCons";
+      const name = isAgent && agentProfile?.companyName ? agentProfile.companyName : settings?.companyName || "Find And Study";
 
       await generateProposalPdf({
         programs: selected,
@@ -252,6 +252,7 @@ export default function CourseFinder() {
         companyName: name,
         companyEmail: settings?.companyEmail || undefined,
         companyPhone: settings?.companyPhone || undefined,
+        companyWebsite: settings?.companyWebsite || undefined,
         showCommission: !!showCommission,
         serviceFeeMarkup: pdfMarkup > 0 ? pdfMarkup : undefined,
       });

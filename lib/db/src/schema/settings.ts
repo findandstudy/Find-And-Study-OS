@@ -8,6 +8,7 @@ export const settingsTable = pgTable("settings", {
   companyEmail: text("company_email"),
   companyPhone: text("company_phone"),
   companyAddress: text("company_address"),
+  companyWebsite: text("company_website"),
   defaultLanguage: text("default_language").notNull().default("en"),
   supportedLanguages: text("supported_languages").notNull().default("en,tr,ar,fr,ru"),
   smtpHost: text("smtp_host"),
