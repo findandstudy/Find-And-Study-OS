@@ -1,11 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray } from "drizzle-orm";
+import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
-import { isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -445,23 +444,54 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
 });
 
 router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+  const isAdmin = ADMIN_ROLES.includes(userRole);
   const now = new Date();
   const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const baseConditions = [
+    eq(followUpsTable.completed, false),
+    lte(followUpsTable.scheduledAt, nextWeek),
+  ];
+
+  if (!isAdmin) {
+    const leadAssignedOrUnassigned = or(
+      sql`(SELECT assigned_to_id FROM leads WHERE leads.id = ${followUpsTable.leadId}) = ${userId}`,
+      sql`(SELECT assigned_to_id FROM leads WHERE leads.id = ${followUpsTable.leadId}) IS NULL`
+    );
+
+    const studentAssignedOrUnassigned = or(
+      sql`(SELECT assigned_to_id FROM students WHERE students.id = ${followUpsTable.studentId}) = ${userId}`,
+      sql`(SELECT assigned_to_id FROM students WHERE students.id = ${followUpsTable.studentId}) IS NULL`
+    );
+
+    baseConditions.push(
+      or(
+        and(sql`${followUpsTable.leadId} IS NOT NULL`, leadAssignedOrUnassigned),
+        and(sql`${followUpsTable.studentId} IS NOT NULL`, studentAssignedOrUnassigned),
+        eq(followUpsTable.assignedToId, userId),
+        and(isNull(followUpsTable.leadId), isNull(followUpsTable.studentId), isNull(followUpsTable.assignedToId))
+      )!
+    );
+  }
+
   const data = await db
     .select({
       id: followUpsTable.id,
       leadId: followUpsTable.leadId,
+      studentId: followUpsTable.studentId,
       title: followUpsTable.title,
       scheduledAt: followUpsTable.scheduledAt,
       completed: followUpsTable.completed,
       notes: followUpsTable.notes,
-      leadName: sql<string | null>`(SELECT concat(first_name, ' ', last_name) FROM leads WHERE leads.id = ${followUpsTable.leadId})`,
+      leadName: sql<string | null>`COALESCE(
+        (SELECT concat(first_name, ' ', last_name) FROM leads WHERE leads.id = ${followUpsTable.leadId}),
+        (SELECT concat(first_name, ' ', last_name) FROM students WHERE students.id = ${followUpsTable.studentId})
+      )`,
     })
     .from(followUpsTable)
-    .where(and(
-      eq(followUpsTable.completed, false),
-      lte(followUpsTable.scheduledAt, nextWeek)
-    ))
+    .where(and(...baseConditions))
     .orderBy(asc(followUpsTable.scheduledAt))
     .limit(20);
   res.json(data);
