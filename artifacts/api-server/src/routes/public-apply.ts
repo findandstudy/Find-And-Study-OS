@@ -27,8 +27,8 @@ const aiExtractLimiter = rateLimit({
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
   const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName } = req.body;
 
-  if (!firstName || !lastName || !email || !phone) {
-    res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
+  if (!firstName || !lastName || !email || !phone || !motherName || !fatherName) {
+    res.status(400).json({ error: "firstName, lastName, email, phone, motherName, and fatherName are required" });
     return;
   }
 
