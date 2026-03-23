@@ -582,9 +582,10 @@ var SLUG='${slug}';
 var MODE='${safeMode}';
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
-var formStep='info';
+var formStep='upload';
 var uploadedDocs={};
 var aiResult=null;
+var extractedFields={};
 var searchDebounce=null;
 var userFilters={};
 
@@ -797,10 +798,10 @@ function renderFormInline(){
 }
 
 function renderSteps(){
-  var steps=['Your Info','Documents','Submit'];
-  var stepKeys=['info','documents','submit'];
+  var steps=['Upload Docs','Your Info','Submit'];
+  var stepKeys=['upload','form','submit'];
   var currentIdx=stepKeys.indexOf(formStep);
-  if(formStep==='analyzing')currentIdx=1;
+  if(formStep==='analyzing')currentIdx=0;
   var h='<div class="ew-steps">';
   for(var i=0;i<steps.length;i++){
     var cls='ew-step';
@@ -827,38 +828,24 @@ function getFormLevel(){
 
 function renderFormContent(prog){
   var h=renderSteps();
-  if(formStep==='info'){
-    h+='<h3>Apply Now</h3>';
-    if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.name)+' \\u2014 '+esc(prog.universityName||'')+'</div>';
-    else h+='<div class="ew-modal-subtitle">Fill in your details to start your application</div>';
-    h+='<form id="ew-form">';
-    h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
-    h+='<div class="ew-form-grid">';
-    h+='<div class="ew-form-group"><label>First Name *</label><input name="firstName" required></div>';
-    h+='<div class="ew-form-group"><label>Last Name *</label><input name="lastName" required></div>';
-    h+='<div class="ew-form-group"><label>Email *</label><input name="email" type="email" required></div>';
-    h+='<div class="ew-form-group"><label>Phone</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90" selected>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number"></div></div>';
-    h+='<div class="ew-form-group"><label>Nationality</label><input name="nationality"></div>';
-    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation">Foundation</option><option value="Associate">Associate</option><option value="Bachelor">Bachelor</option><option value="Master">Master</option><option value="PhD">PhD</option></select></div>';
-    if(!prog){
-      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity"></div>';
-      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram"></div>';
-    }
-    h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3"></textarea></div>';
+  if(formStep==='upload'){
+    h+='<div class="ew-ai-badge">\\u2728 AI-Powered Document Analysis</div>';
+    h+='<h3>Apply'+(prog?' \\u2014 '+esc(prog.name):'')+'</h3>';
+    if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.universityName||'')+'</div>';
+    else h+='<div class="ew-modal-subtitle">Upload your documents and our AI will automatically extract your information.</div>';
+    h+='<div style="background:${primaryColor}08;border:1px solid ${primaryColor}25;border-radius:10px;padding:14px;margin:12px 0">';
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:1rem">\\u2728</span><strong style="font-size:0.85rem">AI-Powered Document Analysis</strong></div>';
+    h+='<p style="font-size:0.78rem;color:#64748b;margin:0">Upload your documents and our AI will automatically extract your information. You can review and edit before submitting.</p>';
     h+='</div>';
-    h+='<div class="ew-form-actions"><button type="submit" class="ew-btn">Next: Upload Documents \\u2192</button>';
-    if(formOpen) h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
-    h+='</div></form>';
-  } else if(formStep==='documents'){
-    var level=getFormLevel();
-    var docs=LEVEL_DOCS[level]||LEVEL_DOCS.undergraduate;
-    var levelLabel=level==='pathway'?'Language / Prep':level==='graduate'?"Master's Degree":level==='doctorate'?'Doctorate (PhD)':'Bachelor / Associate';
-    h+='<div class="ew-ai-badge">\\u2728 AI-Powered Document Upload</div>';
-    h+='<h3>Upload Your Documents</h3>';
-    h+='<div class="ew-modal-subtitle">Upload documents for <strong>'+levelLabel+'</strong> level. AI will analyze them automatically.</div>';
+    var docTypes=[
+      {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
+      {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:false},
+      {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:false},
+      {key:'photo',label:'Photo',icon:'\\ud83d\\udcf7',accept:'image/*',required:false}
+    ];
     h+='<div class="ew-doc-grid">';
-    for(var i=0;i<docs.length;i++){
-      var d=docs[i];
+    for(var i=0;i<docTypes.length;i++){
+      var d=docTypes[i];
       var isUploaded=!!uploadedDocs[d.key];
       h+='<div class="ew-doc-slot'+(isUploaded?' uploaded':'')+'" data-doc-key="'+d.key+'">';
       h+='<input type="file" accept="'+d.accept+'" data-doc-input="'+d.key+'">';
@@ -874,43 +861,59 @@ function renderFormContent(prog){
     }
     h+='</div>';
     var uploadCount=Object.keys(uploadedDocs).length;
-    h+='<div style="margin-top:12px;font-size:0.8rem;color:#64748b">'+uploadCount+' document'+(uploadCount!==1?'s':'')+' uploaded</div>';
-    h+='<div class="ew-form-actions">';
-    h+='<button type="button" class="ew-btn" id="ew-analyze-btn">'+(uploadCount>0?'Analyze & Continue \\u2192':'Skip & Continue \\u2192')+'</button>';
-    h+='<button type="button" class="ew-btn-back" id="ew-back-info">\\u2190 Back</button>';
+    h+='<div class="ew-form-actions" style="margin-top:16px">';
+    h+='<button type="button" class="ew-btn" id="ew-analyze-btn" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">'+(uploadCount>0?'\\u2728 Analyze with AI & Continue':'\\u2728 Analyze with AI & Continue')+'</button>';
+    h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-skip-btn">Skip, fill manually</button>';
+    if(formOpen)h+='<button type="button" class="ew-btn-back" id="ew-cancel">Cancel</button>';
     h+='</div>';
   } else if(formStep==='analyzing'){
     h+='<div class="ew-analyzing">';
     h+='<div class="ew-analyzing-spinner"></div>';
-    h+='<h4>AI is analyzing your documents...</h4>';
-    h+='<p>Processing '+Object.keys(uploadedDocs).length+' document'+(Object.keys(uploadedDocs).length!==1?'s':'')+'</p>';
+    h+='<h4>\\u2728 AI is analyzing your documents...</h4>';
+    h+='<p>This usually takes a few seconds</p>';
     h+='</div>';
-  } else if(formStep==='submit'){
-    h+='<h3>Review & Submit</h3>';
-    h+='<div class="ew-modal-subtitle">Review your application details and submit</div>';
-    if(aiResult){
-      h+='<div class="ew-extracted-info">';
-      h+='<h5>\\u2728 AI-Extracted Information</h5>';
-      h+='<div class="ew-extracted-grid">';
-      var keys=Object.keys(aiResult);
-      for(var i=0;i<keys.length;i++){
-        var k=keys[i];
-        var v=aiResult[k];
-        if(v&&v!=='null'&&v!=='N/A'){
-          var label=k.replace(/_/g,' ').replace(/\\b\\w/g,function(c){return c.toUpperCase()});
-          h+='<div class="ew-extracted-item"><span>'+esc(label)+':</span> '+esc(String(v))+'</div>';
-        }
-      }
-      h+='</div></div>';
+  } else if(formStep==='form'){
+    h+='<h3>Your Information</h3>';
+    if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.name)+' \\u2014 '+esc(prog.universityName||'')+'</div>';
+    else h+='<div class="ew-modal-subtitle">Review and complete your details</div>';
+    var eKeys=Object.keys(extractedFields);
+    if(eKeys.length>0){
+      h+='<div class="ew-extracted-info" style="margin-bottom:16px">';
+      h+='<h5>\\u2713 AI extracted '+eKeys.length+' field'+(eKeys.length!==1?'s':'')+'. Please review and complete the form.</h5>';
+      h+='</div>';
     }
+    h+='<form id="ew-form">';
+    h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
+    h+='<div class="ew-form-grid">';
+    var fv=savedFormData;
+    function aiField(name,label,type,required,isHalf){
+      var val=fv[name]||'';
+      var isAi=!!extractedFields[name];
+      var cls='ew-form-group'+(isHalf?'':' full');
+      var style=isAi?'border-color:#22c55e;background:#f0fdf4':'';
+      h+='<div class="'+cls+'"><label>'+label+(required?' *':'')+(isAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><input name="'+name+'" type="'+(type||'text')+'" value="'+esc(val)+'" style="'+style+'"'+(required?' required':'')+'></div>';
+    }
+    aiField('firstName','First Name','text',true,true);
+    aiField('lastName','Last Name','text',true,true);
+    aiField('email','Email','email',true,true);
+    h+='<div class="ew-form-group"><label>Phone</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90" selected>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'"></div></div>';
+    aiField('nationality','Nationality','text',false,true);
+    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
+    if(!prog){
+      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv.preferredUniversity||'')+'"></div>';
+      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv.desiredProgram||'')+'"></div>';
+    }
+    h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3">'+esc(fv.message||'')+'</textarea></div>';
+    h+='</div>';
     var docCount=Object.keys(uploadedDocs).length;
     if(docCount>0){
-      h+='<div style="font-size:0.8rem;color:#64748b;margin-bottom:12px">\\ud83d\\udcc4 '+docCount+' document'+(docCount!==1?'s':'')+' will be submitted with your application</div>';
+      h+='<div style="font-size:0.8rem;color:#64748b;margin-bottom:8px">\\ud83d\\udcc4 '+docCount+' document'+(docCount!==1?'s':'')+' will be submitted with your application</div>';
     }
     h+='<div class="ew-form-actions">';
-    h+='<button type="button" class="ew-btn" id="ew-submit-final"'+(formLoading?' disabled':'')+'>'+(formLoading?'Submitting...':'Submit Application')+'</button>';
-    h+='<button type="button" class="ew-btn-back" id="ew-back-docs">\\u2190 Back to Documents</button>';
-    h+='</div>';
+    h+='<button type="submit" class="ew-btn"'+(formLoading?' disabled':'')+'>'+(formLoading?'Submitting...':'Submit Application')+'</button>';
+    h+='<button type="button" class="ew-btn-back" id="ew-back-upload">\\u2190 Back to Documents</button>';
+    if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
+    h+='</div></form>';
   }
   return h;
 }
@@ -939,7 +942,7 @@ function bindModalEvents(modal,overlay){
   var cancelBtn=$('#ew-cancel',modal);
   if(cancelBtn)cancelBtn.addEventListener('click',function(){formOpen=false;overlay.remove()});
   var form=$('#ew-form',modal);
-  if(form)form.addEventListener('submit',handleInfoStep);
+  if(form)form.addEventListener('submit',handleFormSubmit);
   $$('[data-doc-input]',modal).forEach(function(input){
     input.addEventListener('change',function(e){
       var key=input.getAttribute('data-doc-input');
@@ -949,33 +952,23 @@ function bindModalEvents(modal,overlay){
       fileToBase64(file).then(function(result){
         uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
         if(formOpen)showModal();
+        else render(false);
       });
     });
   });
   var analyzeBtn=$('#ew-analyze-btn',modal);
   if(analyzeBtn)analyzeBtn.addEventListener('click',handleAnalyze);
-  var backInfoBtn=$('#ew-back-info',modal);
-  if(backInfoBtn)backInfoBtn.addEventListener('click',function(){formStep='info';showModal()});
-  var backDocsBtn=$('#ew-back-docs',modal);
-  if(backDocsBtn)backDocsBtn.addEventListener('click',function(){formStep='documents';showModal()});
-  var submitFinalBtn=$('#ew-submit-final',modal);
-  if(submitFinalBtn)submitFinalBtn.addEventListener('click',handleFinalSubmit);
+  var skipBtn=$('#ew-skip-btn',modal);
+  if(skipBtn)skipBtn.addEventListener('click',function(){formStep='form';if(formOpen)showModal();else render(false)});
+  var backUploadBtn=$('#ew-back-upload',modal);
+  if(backUploadBtn)backUploadBtn.addEventListener('click',function(){formStep='upload';if(formOpen)showModal();else render(false)});
 }
 
 var savedFormData={};
-function handleInfoStep(e){
-  e.preventDefault();
-  var form=e.target;
-  savedFormData={};
-  new FormData(form).forEach(function(v,k){savedFormData[k]=v});
-  formStep='documents';
-  if(formOpen)showModal();
-  else render(false);
-}
 
 function handleAnalyze(){
   var docKeys=Object.keys(uploadedDocs);
-  if(docKeys.length===0){formStep='submit';if(formOpen)showModal();else render(false);return;}
+  if(docKeys.length===0){formStep='form';if(formOpen)showModal();else render(false);return;}
   formStep='analyzing';
   if(formOpen)showModal();else render(false);
   var docPayload=docKeys.map(function(k){
@@ -992,18 +985,39 @@ function handleAnalyze(){
     throw new Error('AI analysis failed');
   }).then(function(data){
     aiResult=data.extracted||null;
+    if(aiResult){
+      extractedFields={};
+      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth'};
+      var mKeys=Object.keys(mapping);
+      for(var i=0;i<mKeys.length;i++){
+        var ek=mKeys[i];
+        var fk=mapping[ek];
+        var val=aiResult[ek];
+        if(val&&val!=='null'&&val!=='N/A'&&val!==''){
+          savedFormData[fk]=String(val);
+          extractedFields[fk]=true;
+        }
+      }
+    }
   }).catch(function(){
     aiResult=null;
   }).finally(function(){
-    formStep='submit';
+    formStep='form';
     if(formOpen)showModal();else render(false);
   });
 }
 
-function handleFinalSubmit(){
+function handleFormSubmit(e){
+  e.preventDefault();
+  var form=e.target;
+  new FormData(form).forEach(function(v,k){savedFormData[k]=v});
+  if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email){
+    alert('Please fill in all required fields.');
+    return;
+  }
   if(formLoading)return;
   formLoading=true;
-  if(formOpen)showModal();
+  if(formOpen)showModal();else render(false);
   var data=Object.assign({},savedFormData);
   if(formProgram){
     data.programId=formProgram.id;
@@ -1038,7 +1052,7 @@ function handleFinalSubmit(){
     else render(false);
   }).catch(function(err){
     formLoading=false;
-    if(formOpen)showModal();
+    if(formOpen)showModal();else render(false);
     alert(err.message||'Something went wrong. Please try again.');
   });
 }
@@ -1063,7 +1077,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
-      formOpen=true;formSubmitted=false;formStep='info';uploadedDocs={};aiResult=null;savedFormData={};
+      formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
       showModal();
     });
   });
@@ -1074,7 +1088,26 @@ function bindEvents(){
     });
   });
   var inlineForm=$('#ew-form');
-  if(inlineForm&&!formOpen)inlineForm.addEventListener('submit',handleInfoStep);
+  if(inlineForm&&!formOpen)inlineForm.addEventListener('submit',handleFormSubmit);
+  var inlineAnalyzeBtn=$('#ew-analyze-btn');
+  if(inlineAnalyzeBtn&&!formOpen)inlineAnalyzeBtn.addEventListener('click',handleAnalyze);
+  var inlineSkipBtn=$('#ew-skip-btn');
+  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){formStep='form';render(false)});
+  var inlineBackUploadBtn=$('#ew-back-upload');
+  if(inlineBackUploadBtn&&!formOpen)inlineBackUploadBtn.addEventListener('click',function(){formStep='upload';render(false)});
+  $$('[data-doc-input]').forEach(function(input){
+    if(formOpen)return;
+    input.addEventListener('change',function(e){
+      var key=input.getAttribute('data-doc-input');
+      var file=e.target.files[0];
+      if(!file)return;
+      if(file.size>5*1024*1024){alert('File too large. Maximum 5MB.');return;}
+      fileToBase64(file).then(function(result){
+        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
+        render(false);
+      });
+    });
+  });
 }
 
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
