@@ -3,7 +3,7 @@ import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, RefreshCw } from "lucide-react";
+import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, UserPlus, FileCheck, CreditCard, MessageCircle, Megaphone, AlertCircle } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
 
@@ -45,6 +45,31 @@ function timeAgo(dateStr: string) {
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
+
+const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
+  "lead.created": UserPlus,
+  "lead.assigned": Users,
+  "lead.stage_changed": Activity,
+  "lead.follow_up_due": CalendarClock,
+  "application.created": FileText,
+  "application.stage_changed": FileCheck,
+  "application.offer_received": GraduationCap,
+  "application.visa_update": FileCheck,
+  "student.created": GraduationCap,
+  "student.document_uploaded": FileText,
+  "student.status_changed": Activity,
+  "finance.commission_confirmed": CreditCard,
+  "finance.payment_received": DollarSign,
+  "finance.payment_due": AlertCircle,
+  "finance.agent_payout": CreditCard,
+  "agent.new_registration": UserPlus,
+  "agent.sub_agent_added": Users,
+  "system.user_activated": Shield,
+  "system.broadcast": Megaphone,
+  "system.announcement": Megaphone,
+  "message.new": MessageCircle,
+  "message.mention": MessageCircle,
+};
 
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
@@ -185,15 +210,24 @@ export default function AdminDashboard() {
               </div>
               <h3 className="font-display font-bold text-base">Latest Students</h3>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestStudents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No students yet.</p>
               ) : (
                 latestStudents.map((s: any, i: number) => (
                   <Link key={s.id} href={`/staff/students/${s.id}`}>
                     <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
-                        {getInitials(s.firstName, s.lastName)}
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
+                        <img
+                          src={`${BASE}/api/students/${s.id}/photo`}
+                          alt={`${s.firstName} ${s.lastName}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = "none";
+                            el.parentElement!.textContent = getInitials(s.firstName, s.lastName);
+                          }}
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground truncate uppercase">
@@ -217,11 +251,11 @@ export default function AdminDashboard() {
           <Card className="p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-center gap-2 mb-5">
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <RefreshCw className="w-4 h-4 text-purple-500" />
+                <Activity className="w-4 h-4 text-purple-500" />
               </div>
               <h3 className="font-display font-bold text-base">Latest Updates</h3>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestUpdates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No recent updates.</p>
               ) : (
@@ -257,27 +291,33 @@ export default function AdminDashboard() {
               </div>
               <h3 className="font-display font-bold text-base">Notifications</h3>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestNotifications.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No notifications.</p>
               ) : (
-                latestNotifications.map((n: any) => (
-                  <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
-                          {n.title}
-                        </p>
-                        {n.body && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
-                        )}
+                latestNotifications.map((n: any) => {
+                  const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
+                  return (
+                    <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${n.isRead ? "bg-muted/50" : "bg-primary/10"}`}>
+                          <NIcon className={`w-3.5 h-3.5 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
+                            {n.title}
+                          </p>
+                          {n.body && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
+                          {timeAgo(n.createdAt)}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
-                        {timeAgo(n.createdAt)}
-                      </span>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </Card>
