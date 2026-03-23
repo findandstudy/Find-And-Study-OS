@@ -199,7 +199,7 @@ function MessageThread({
       if (!uploadResp.ok) throw new Error("File upload failed");
       return {
         fileName: file.name,
-        fileUrl: `/api/storage/objects/${objectPath}`,
+        fileUrl: `/api/storage${objectPath}`,
         fileType: file.type,
         fileSize: file.size,
       };

@@ -78,7 +78,7 @@ export default function StudentMessages() {
       const { uploadURL, objectPath } = urlRes as any;
       const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
       if (!uploadResp.ok) throw new Error("File upload failed");
-      return { fileName: file.name, fileUrl: `/api/storage/objects/${objectPath}`, fileType: file.type, fileSize: file.size };
+      return { fileName: file.name, fileUrl: `/api/storage${objectPath}`, fileType: file.type, fileSize: file.size };
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
       return null;
