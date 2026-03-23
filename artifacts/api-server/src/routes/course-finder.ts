@@ -20,6 +20,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   if (universityId) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
   if (level) conditions.push(ilike(programsTable.degree, `%${level}%`));
   if (language) conditions.push(ilike(programsTable.language, language));
+  if ((req.query as Record<string, string>).field) conditions.push(ilike(programsTable.field, (req.query as Record<string, string>).field));
   if (intake) conditions.push(ilike(programsTable.intakes, `%${intake}%`));
   if (feeMin) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${parseInt(feeMin, 10)}`);
   if (feeMax) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${parseInt(feeMax, 10)}`);
@@ -136,6 +137,12 @@ router.get("/course-finder/filters", async (_req, res): Promise<void> => {
     .where(and(eq(programsTable.isActive, true), sql`${programsTable.language} IS NOT NULL`))
     .orderBy(programsTable.language);
 
+  const fields = await db
+    .selectDistinct({ field: programsTable.field })
+    .from(programsTable)
+    .where(and(eq(programsTable.isActive, true), sql`${programsTable.field} IS NOT NULL AND ${programsTable.field} != ''`))
+    .orderBy(programsTable.field);
+
   const feeRange = await db
     .select({
       min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
@@ -151,6 +158,7 @@ router.get("/course-finder/filters", async (_req, res): Promise<void> => {
     universities: universities.map(r => ({ id: r.id, name: r.name })),
     degrees: degrees.map(r => r.degree).filter(Boolean),
     languages: languages.map(r => r.language).filter(Boolean),
+    fields: fields.map(r => r.field).filter(Boolean),
     feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
   });
 });

@@ -31,6 +31,7 @@ type ProposalOptions = {
   companyWebsite?: string;
   showCommission?: boolean;
   serviceFeeMarkup?: number;
+  hideServiceFee?: boolean;
 };
 
 function fmt(amount: number | null | undefined, currency = "USD"): string {
@@ -91,7 +92,7 @@ const EMERALD = [16, 185, 129];
 const AMBER = [245, 158, 11];
 
 export async function generateProposalPdf(options: ProposalOptions) {
-  const { programs, logoDataUrl, companyName = "Find And Study", companyEmail, companyPhone, companyWebsite } = options;
+  const { programs, logoDataUrl, companyName = "Find And Study", companyEmail, companyPhone, companyWebsite, hideServiceFee = false, serviceFeeMarkup = 0 } = options;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
@@ -193,9 +194,11 @@ export async function generateProposalPdf(options: ProposalOptions) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     const nameLines = Math.min(doc.splitTextToSize(p.name, cw - 36).length, 2);
+    const showServiceFee = !hideServiceFee && ((p.serviceFeeAmount ?? 0) + serviceFeeMarkup) > 0;
     let rowCount = 1;
     if (hasScholarship) rowCount++;
     if (p.applicationFee && p.applicationFee > 0) rowCount++;
+    if (showServiceFee) rowCount++;
     if (p.intakes) rowCount++;
     const cardH = 38 + (nameLines - 1) * 5 + rowCount * 7;
 
@@ -335,6 +338,11 @@ export async function generateProposalPdf(options: ProposalOptions) {
 
     if (p.applicationFee && p.applicationFee > 0) {
       drawRow("Application Fee", fmt(p.applicationFee, cur), BODY, DARK);
+    }
+
+    if (showServiceFee) {
+      const totalServiceFee = (p.serviceFeeAmount ?? 0) + serviceFeeMarkup;
+      drawRow("Service Fee", fmt(totalServiceFee, cur), BODY, DARK);
     }
 
     if (p.intakes) {

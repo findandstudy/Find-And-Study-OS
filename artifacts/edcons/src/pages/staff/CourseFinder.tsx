@@ -79,6 +79,7 @@ type FilterOptions = {
   universities: { id: number; name: string }[];
   degrees: string[];
   languages: string[];
+  fields: string[];
   feeRange: { min: number; max: number };
 };
 
@@ -89,6 +90,7 @@ type Filters = {
   universityId: string;
   level: string;
   language: string;
+  field: string;
   search: string;
   feeMin: string;
   feeMax: string;
@@ -120,8 +122,9 @@ export default function CourseFinder() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>({
     country: "", city: "", universityType: "", universityId: "",
-    level: "", language: "", search: "", feeMin: "", feeMax: "",
+    level: "", language: "", field: "", search: "", feeMin: "", feeMax: "",
   });
+  const [hideServiceFee, setHideServiceFee] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedUniversity, setSelectedUniversity] = useState<Program | null>(null);
@@ -156,6 +159,7 @@ export default function CourseFinder() {
     if (filters.universityId) p.set("universityId", filters.universityId);
     if (filters.level) p.set("level", filters.level);
     if (filters.language) p.set("language", filters.language);
+    if (filters.field) p.set("field", filters.field);
     if (filters.search) p.set("search", filters.search);
     if (filters.feeMin) p.set("feeMin", filters.feeMin);
     if (filters.feeMax) p.set("feeMax", filters.feeMax);
@@ -255,6 +259,7 @@ export default function CourseFinder() {
         companyWebsite: settings?.companyWebsite || undefined,
         showCommission: !!showCommission,
         serviceFeeMarkup: pdfMarkup > 0 ? pdfMarkup : undefined,
+        hideServiceFee,
       });
       toast({ title: "PDF generated", description: `Proposal with ${selected.length} program${selected.length !== 1 ? "s" : ""} downloaded.` });
     } catch (err: any) {
@@ -272,13 +277,13 @@ export default function CourseFinder() {
   }
 
   function clearFilters() {
-    setFilters({ country: "", city: "", universityType: "", universityId: "", level: "", language: "", search: "", feeMin: "", feeMax: "" });
+    setFilters({ country: "", city: "", universityType: "", universityId: "", level: "", language: "", field: "", search: "", feeMin: "", feeMax: "" });
     setPage(1);
     setSelectedIds(new Set());
     setPdfMarkup(0);
   }
 
-  const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.search || filters.feeMin || filters.feeMax;
+  const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.field || filters.search || filters.feeMin || filters.feeMax;
 
   function handleSort(field: string) {
     if (sortField === field) {
@@ -426,6 +431,17 @@ export default function CourseFinder() {
             </div>
 
             <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Field</Label>
+              <Select value={filters.field} onValueChange={v => handleFilterChange("field", v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Fields" /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectItem value="_all">All Fields</SelectItem>
+                  {filterOptions?.fields?.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">
                 Tuition Fee {filters.feeMin || filters.feeMax ? (
                   <span className="text-primary">
@@ -495,6 +511,15 @@ export default function CourseFinder() {
                           )}
                         </Button>
                       )}
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={hideServiceFee}
+                          onChange={e => setHideServiceFee(e.target.checked)}
+                          className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                        />
+                        Hide Service Fee
+                      </label>
                       <Button
                         size="sm"
                         onClick={handleGeneratePdf}
