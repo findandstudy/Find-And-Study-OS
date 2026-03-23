@@ -697,4 +697,121 @@ router.delete("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES,
   res.json({ success: true });
 });
 
+router.get("/student/conversations", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
+
+  const myParticipations = await db
+    .select({ conversationId: conversationParticipantsTable.conversationId })
+    .from(conversationParticipantsTable)
+    .where(eq(conversationParticipantsTable.userId, userId));
+
+  if (myParticipations.length === 0) { res.json({ data: [] }); return; }
+
+  const convIds = myParticipations.map(p => p.conversationId);
+  const conversations = await db
+    .select()
+    .from(conversationsTable)
+    .where(inArray(conversationsTable.id, convIds))
+    .orderBy(desc(conversationsTable.lastMessageAt));
+
+  const result = [];
+  for (const conv of conversations) {
+    const participants = await db
+      .select({ userId: conversationParticipantsTable.userId, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl })
+      .from(conversationParticipantsTable)
+      .innerJoin(usersTable, eq(conversationParticipantsTable.userId, usersTable.id))
+      .where(eq(conversationParticipantsTable.conversationId, conv.id));
+
+    const lastMsg = await db.select().from(messagesTable)
+      .where(eq(messagesTable.conversationId, conv.id))
+      .orderBy(desc(messagesTable.createdAt)).limit(1);
+
+    const unread = await db.select({ count: sql<number>`count(*)::int` }).from(messagesTable)
+      .where(and(eq(messagesTable.conversationId, conv.id), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+
+    result.push({ ...conv, participants, lastMessage: lastMsg[0] || null, unreadCount: unread[0]?.count || 0 });
+  }
+  res.json({ data: result });
+});
+
+router.get("/student/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
+  const userId = req.user!.id;
+  const conversationId = parseInt(req.params.id, 10);
+  if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
+
+  const participation = await db.select().from(conversationParticipantsTable)
+    .where(and(eq(conversationParticipantsTable.conversationId, conversationId), eq(conversationParticipantsTable.userId, userId)));
+  if (participation.length === 0) { res.status(403).json({ error: "Not a participant" }); return; }
+
+  const messages = await db.select({
+    id: messagesTable.id, conversationId: messagesTable.conversationId, content: messagesTable.content,
+    channel: messagesTable.channel, status: messagesTable.status, createdAt: messagesTable.createdAt,
+    senderId: messagesTable.senderId, senderFirstName: usersTable.firstName, senderLastName: usersTable.lastName,
+    senderRole: usersTable.role, senderAvatarUrl: usersTable.avatarUrl,
+  })
+    .from(messagesTable)
+    .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
+    .where(eq(messagesTable.conversationId, conversationId))
+    .orderBy(messagesTable.createdAt);
+
+  await db.update(messagesTable)
+    .set({ status: "read" })
+    .where(and(eq(messagesTable.conversationId, conversationId), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+
+  res.json({ data: messages });
+});
+
+router.post("/student/conversations", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
+  const userId = req.user!.id;
+
+  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
+  if (!student || !student.assignedToId) { res.status(400).json({ error: "No advisor assigned" }); return; }
+
+  const advisorId = student.assignedToId;
+  const myConvs = await db.select({ conversationId: conversationParticipantsTable.conversationId })
+    .from(conversationParticipantsTable).where(eq(conversationParticipantsTable.userId, userId));
+
+  for (const mc of myConvs) {
+    const [conv] = await db.select().from(conversationsTable)
+      .where(and(eq(conversationsTable.id, mc.conversationId), eq(conversationsTable.type, "direct")));
+    if (conv) {
+      const advisorP = await db.select().from(conversationParticipantsTable)
+        .where(and(eq(conversationParticipantsTable.conversationId, conv.id), eq(conversationParticipantsTable.userId, advisorId)));
+      if (advisorP.length > 0) {
+        res.json(conv);
+        return;
+      }
+    }
+  }
+
+  const [conv] = await db.insert(conversationsTable).values({ type: "direct", createdById: userId }).returning();
+  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId });
+  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId: advisorId });
+  res.status(201).json(conv);
+});
+
+router.post("/student/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
+  const userId = req.user!.id;
+  const conversationId = parseInt(req.params.id, 10);
+  if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
+  const { content } = req.body;
+
+  if (!content || !content.trim()) { res.status(400).json({ error: "Message content is required" }); return; }
+
+  const participation = await db.select().from(conversationParticipantsTable)
+    .where(and(eq(conversationParticipantsTable.conversationId, conversationId), eq(conversationParticipantsTable.userId, userId)));
+  if (participation.length === 0) { res.status(403).json({ error: "Not a participant" }); return; }
+
+  const [message] = await db.insert(messagesTable).values({
+    conversationId, senderId: userId, content: content.trim(), channel: "internal", status: "sent", metadata: {},
+  }).returning();
+
+  await db.update(conversationsTable).set({ lastMessageAt: new Date() }).where(eq(conversationsTable.id, conversationId));
+  res.status(201).json(message);
+});
+
 export default router;

@@ -25,6 +25,27 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   res.json(student);
 });
 
+router.get("/students/my-advisor", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
+  if (!student) { res.status(404).json({ error: "Student profile not found" }); return; }
+  if (!student.assignedToId) { res.json(null); return; }
+  const [advisor] = await db
+    .select({
+      id: usersTable.id,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      role: usersTable.role,
+      avatarUrl: usersTable.avatarUrl,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, student.assignedToId));
+  if (!advisor) { res.json(null); return; }
+  res.json(advisor);
+});
+
 router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
   if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
   const userId = req.user!.id;

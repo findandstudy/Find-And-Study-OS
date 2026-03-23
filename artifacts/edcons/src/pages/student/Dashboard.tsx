@@ -1,10 +1,11 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
-import { useListApplications, useListDocuments } from "@workspace/api-client-react";
+import { useListApplications, useListDocuments, customFetch } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare, Search } from "lucide-react";
+import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare, Search, Mail, Phone, User } from "lucide-react";
 import { useLocation } from "wouter";
 
 const STAGE_LABELS: Record<string, { label: string; color: string; step: number }> = {
@@ -20,6 +21,15 @@ const STAGE_LABELS: Record<string, { label: string; color: string; step: number 
 
 const STEPS = ["inquiry", "documents_collected", "submitted", "offer_received", "visa_applied", "visa_approved", "enrolled"];
 
+function getInitials(first?: string | null, last?: string | null) {
+  return `${(first || "")[0] || ""}${(last || "")[0] || ""}`.toUpperCase() || "?";
+}
+
+function formatRole(role?: string | null) {
+  if (!role) return "Consultant";
+  return role.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function StudentDashboard() {
   const { user } = useAuth(true);
   const [, setLocation] = useLocation();
@@ -27,6 +37,18 @@ export default function StudentDashboard() {
   const { data: documentsResp } = useListDocuments({ query: { queryKey: ['student-docs'] } });
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
   const documents: any[] = (documentsResp as any)?.data || documentsResp || [];
+
+  const { data: advisor, isLoading: advisorLoading } = useQuery<any>({
+    queryKey: ["my-advisor"],
+    queryFn: async () => {
+      try {
+        return await customFetch("/api/students/my-advisor");
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!user,
+  });
 
   const latestApp = applications?.[0];
   const stageInfo = latestApp ? STAGE_LABELS[latestApp.stage] : null;
@@ -36,7 +58,6 @@ export default function StudentDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        {/* Welcome */}
         <div className="bg-gradient-to-r from-primary to-accent rounded-2xl p-8 text-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/10 -translate-y-16 translate-x-16" />
           <div className="relative z-10">
@@ -50,7 +71,6 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* Quick Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: "Applications", value: applications?.length || 0, icon: FileText, color: "text-blue-500 bg-blue-500/10" },
@@ -68,7 +88,6 @@ export default function StudentDashboard() {
           ))}
         </div>
 
-        {/* Application Progress */}
         {latestApp ? (
           <Card className="p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-start justify-between mb-8">
@@ -120,7 +139,6 @@ export default function StudentDashboard() {
           </Card>
         )}
 
-        {/* Documents + Advisor */}
         <div className="grid lg:grid-cols-2 gap-6">
           <Card className="border-none shadow-lg shadow-black/5">
             <div className="p-5 border-b border-border/50 flex items-center justify-between">
@@ -157,7 +175,7 @@ export default function StudentDashboard() {
               ))}
             </div>
             <div className="p-4">
-              <Button variant="outline" className="w-full rounded-xl gap-2">
+              <Button variant="outline" className="w-full rounded-xl gap-2" onClick={() => setLocation("/student/account")}>
                 <Upload className="w-4 h-4" /> Upload Document
               </Button>
             </div>
@@ -165,38 +183,51 @@ export default function StudentDashboard() {
 
           <Card className="border-none shadow-lg shadow-black/5 p-6">
             <h3 className="font-display font-bold text-lg mb-5">Your Advisor</h3>
-            <div className="flex items-center gap-4 p-5 rounded-2xl bg-primary/5 border border-primary/20 mb-5">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-xl shadow-md">
-                EC
+            {advisorLoading ? (
+              <div className="space-y-3">
+                <div className="h-20 bg-secondary animate-pulse rounded-2xl" />
+                <div className="h-10 bg-secondary animate-pulse rounded-xl" />
               </div>
-              <div>
-                <p className="font-display font-bold text-foreground">EduCons Advisor</p>
-                <p className="text-muted-foreground text-sm">Your Dedicated Consultant</p>
-                <p className="text-primary text-sm font-semibold mt-1">advisor@educons.com</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-xl bg-secondary/40 mb-4">
-              <Clock className="w-4 h-4 text-primary" />
-              <span>Mon–Fri 9am–6pm (GMT+3)</span>
-            </div>
-            <Button className="w-full rounded-xl gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90">
-              <MessageSquare className="w-4 h-4" /> Message Advisor
-            </Button>
-            <div className="mt-5 space-y-3">
-              <h4 className="font-bold text-sm text-foreground">Upcoming Tasks</h4>
-              {[
-                { task: "Submit passport copy", due: "Due in 3 days", urgent: true },
-                { task: "Complete language test", due: "Due in 2 weeks", urgent: false },
-              ].map((t, i) => (
-                <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border text-sm ${t.urgent ? 'border-rose-200 bg-rose-50' : 'border-border bg-secondary/30'}`}>
-                  {t.urgent ? <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" /> : <Clock className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />}
+            ) : advisor ? (
+              <>
+                <div className="flex items-center gap-4 p-5 rounded-2xl bg-primary/5 border border-primary/20 mb-5">
+                  {advisor.avatarUrl ? (
+                    <img src={advisor.avatarUrl} alt="" className="w-14 h-14 rounded-2xl object-cover shadow-md" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-xl shadow-md">
+                      {getInitials(advisor.firstName, advisor.lastName)}
+                    </div>
+                  )}
                   <div>
-                    <p className="font-medium text-foreground">{t.task}</p>
-                    <p className={`text-xs mt-0.5 ${t.urgent ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}`}>{t.due}</p>
+                    <p className="font-display font-bold text-foreground">{advisor.firstName} {advisor.lastName}</p>
+                    <p className="text-muted-foreground text-sm">{formatRole(advisor.role)}</p>
+                    {advisor.email && (
+                      <p className="text-primary text-sm font-semibold mt-1 flex items-center gap-1">
+                        <Mail className="w-3.5 h-3.5" /> {advisor.email}
+                      </p>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
+                {advisor.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-xl bg-secondary/40 mb-4">
+                    <Phone className="w-4 h-4 text-primary" />
+                    <span>{advisor.phone}</span>
+                  </div>
+                )}
+                <Button
+                  className="w-full rounded-xl gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                  onClick={() => setLocation("/student/messages")}
+                >
+                  <MessageSquare className="w-4 h-4" /> Message Advisor
+                </Button>
+              </>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No advisor assigned yet</p>
+                <p className="text-xs mt-1">An advisor will be assigned to you soon</p>
+              </div>
+            )}
           </Card>
         </div>
       </div>

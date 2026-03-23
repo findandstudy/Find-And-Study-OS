@@ -44,6 +44,7 @@ import {
   MessageCircle,
   Code2,
   Heart,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +143,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
             { title: "Dashboard",        icon: LayoutDashboard, url: '/student' },
             { title: "Wishlist",         icon: Heart,           url: '/student/wishlist' },
             { title: "My Applications",  icon: FileText,        url: '/student/applications' },
+            { title: "Messages",         icon: MessageSquare,   url: '/student/messages' },
             { title: "Course Finder",    icon: Search,          url: '/student/course-finder' },
           ]
         },
