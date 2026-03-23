@@ -591,7 +591,7 @@ export default function Programs() {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.15 }}>
-            <div className="glass-card rounded-2xl p-6 space-y-5 -mb-16 relative z-20">
+            <div className="glass-card rounded-2xl p-6 pb-8 space-y-5 -mb-8 relative z-20">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
                 <Input value={search} onChange={e => setSearch(e.target.value)}
@@ -716,7 +716,7 @@ export default function Programs() {
         </div>
       </section>
 
-      <section className="pt-28 pb-16">
+      <section className="pt-20 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
             className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
