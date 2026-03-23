@@ -71,10 +71,11 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "fileUrl must be a valid http/https URL" });
     return;
   }
+  const effectiveStatus = isStaff ? status : "pending";
   const [doc] = await db.insert(documentsTable).values({
-    name, type, status,
+    name, type, status: effectiveStatus,
     studentId: studentId || null,
-    applicationId: applicationId || null,
+    applicationId: isStaff ? (applicationId || null) : null,
     fileUrl: fileUrl || null,
     fileData: fileData || null,
     mimeType: mimeType || null,

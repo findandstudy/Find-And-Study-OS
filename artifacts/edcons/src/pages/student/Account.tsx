@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   User, Globe, Shield, Save, Check, GraduationCap,
   Loader2, FileText, MapPin, Phone, Mail, Calendar, Camera,
-  BookOpen, Languages, Award,
+  BookOpen, Languages, Award, Upload, FolderOpen, Download,
+  CheckCircle2, X,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+
+const DOC_TYPES = [
+  { key: "passport", label: "Passport" },
+  { key: "diploma", label: "Diploma" },
+  { key: "transcript", label: "Transcript" },
+  { key: "photo", label: "Photo" },
+  { key: "language_certificate", label: "Language Certificate" },
+  { key: "cv", label: "CV / Resume" },
+  { key: "motivation_letter", label: "Motivation Letter" },
+  { key: "recommendation", label: "Recommendation Letter" },
+  { key: "other", label: "Other" },
+];
 
 const LANGUAGES = [
   { code: "en", label: "English",   country: "GB" },
@@ -209,6 +224,7 @@ export default function StudentAccount() {
           <TabsList className="rounded-xl bg-secondary/50 p-1">
             <TabsTrigger value="profile"     className="rounded-lg gap-2"><User className="w-4 h-4" /> Profile</TabsTrigger>
             <TabsTrigger value="student"     className="rounded-lg gap-2"><GraduationCap className="w-4 h-4" /> Student Info</TabsTrigger>
+            <TabsTrigger value="documents"   className="rounded-lg gap-2"><FolderOpen className="w-4 h-4" /> Documents</TabsTrigger>
             <TabsTrigger value="language"    className="rounded-lg gap-2"><Globe className="w-4 h-4" /> Language</TabsTrigger>
             <TabsTrigger value="security"    className="rounded-lg gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
           </TabsList>
@@ -387,6 +403,11 @@ export default function StudentAccount() {
             </Card>
           </TabsContent>
 
+          {/* ── Documents ── */}
+          <TabsContent value="documents" className="mt-6">
+            <StudentDocumentsTab user={user} studentProfile={studentProfile} />
+          </TabsContent>
+
           {/* ── Language ── */}
           <TabsContent value="language" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
@@ -441,5 +462,273 @@ export default function StudentAccount() {
         </Tabs>
       </div>
     </DashboardLayout>
+  );
+}
+
+function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfile: any }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadType, setUploadType] = useState("passport");
+  const [uploadName, setUploadName] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: documents = [], isLoading } = useQuery<any[]>({
+    queryKey: ["student-documents"],
+    enabled: !!user,
+    queryFn: () => customFetch("/api/documents"),
+  });
+
+  function openUpload() {
+    setUploadType("passport");
+    setUploadFile(null);
+    const first = (user?.firstName ?? "").toLowerCase();
+    const last = (user?.lastName ?? "").toLowerCase();
+    setUploadName(`passport-${first}-${last}`);
+    setUploadOpen(true);
+  }
+
+  function handleFileSelect(file: File) {
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum 10 MB", variant: "destructive" });
+      return;
+    }
+    setUploadFile(file);
+  }
+
+  async function handleUpload() {
+    if (!uploadFile) return;
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(uploadFile);
+      });
+      const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
+      const first = (user?.firstName ?? "").toLowerCase();
+      const last = (user?.lastName ?? "").toLowerCase();
+      const docName = uploadName.trim() || `${type}-${first}-${last}`;
+
+      await customFetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: docName,
+          type: uploadType,
+          studentId: studentProfile?.id || null,
+          fileData: base64,
+          mimeType: uploadFile.type,
+          sizeBytes: uploadFile.size,
+        }),
+      });
+      await qc.invalidateQueries({ queryKey: ["student-documents"] });
+      toast({ title: "Document uploaded" });
+      setUploadOpen(false);
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function buildDownloadFilename(type: string, firstName: string, lastName: string, mimeType: string) {
+    const ext = mimeType.includes("pdf") ? "pdf" : mimeType.includes("png") ? "png" : "jpg";
+    return `${type}-${firstName}-${lastName}.${ext}`.toLowerCase().replace(/\s+/g, "-");
+  }
+
+  return (
+    <Card className="border-none shadow-lg shadow-black/5 p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="font-display font-bold text-lg">My Documents</h2>
+          <p className="text-sm text-muted-foreground mt-1">{documents.length} document{documents.length !== 1 ? "s" : ""} uploaded</p>
+        </div>
+        <Button size="sm" onClick={openUpload} className="rounded-xl gap-2" disabled={!studentProfile?.id}>
+          <Upload className="w-4 h-4" />
+          Upload Document
+        </Button>
+      </div>
+
+      {!studentProfile?.id && (
+        <div className="p-4 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+          Please complete your Student Info in the Student Info tab before uploading documents.
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-14 bg-secondary animate-pulse rounded-xl" />)}
+        </div>
+      ) : documents.length === 0 ? (
+        <div
+          className="p-16 text-center text-muted-foreground cursor-pointer hover:bg-secondary/30 transition-colors rounded-2xl border-2 border-dashed"
+          onClick={openUpload}
+        >
+          <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No documents yet</p>
+          <p className="text-xs mt-1">Upload your passport, diploma, transcript and other documents here</p>
+        </div>
+      ) : (
+        <div className="bg-card rounded-2xl border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/50">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Name</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Type</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Status</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Uploaded</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">File</th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents.map((doc: any) => (
+                <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors">
+                  <td className="px-4 py-3 font-medium">{doc.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground capitalize">{doc.type?.replace(/_/g, " ")}</td>
+                  <td className="px-4 py-3">
+                    <Badge className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full ${
+                      doc.status === "approved" ? "bg-green-500/10 text-green-600" :
+                      doc.status === "rejected" ? "bg-red-500/10 text-red-600" :
+                      "bg-secondary text-secondary-foreground"
+                    }`}>
+                      {doc.status}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {new Date(doc.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(doc.fileData || doc.fileUrl) && (
+                      <button
+                        onClick={() => {
+                          if (doc.fileUrl) {
+                            window.open(doc.fileUrl, "_blank");
+                          } else {
+                            const mimeType = doc.mimeType || "application/octet-stream";
+                            const filename = buildDownloadFilename(doc.type, user?.firstName ?? "", user?.lastName ?? "", mimeType);
+                            const link = document.createElement("a");
+                            link.href = `data:${mimeType};base64,${doc.fileData}`;
+                            link.download = filename;
+                            link.click();
+                          }
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {doc.fileUrl ? "Open" : "Download"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog open={uploadOpen} onOpenChange={o => { if (!uploading) setUploadOpen(o); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Document</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Document Type</Label>
+              <Select value={uploadType} onValueChange={v => {
+                setUploadType(v);
+                const type = (DOC_TYPES.find(d => d.key === v)?.label ?? "document").toLowerCase();
+                const first = (user?.firstName ?? "").toLowerCase();
+                const last = (user?.lastName ?? "").toLowerCase();
+                setUploadName(`${type}-${first}-${last}`);
+              }}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOC_TYPES.map(d => (
+                    <SelectItem key={d.key} value={d.key}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Document Name</Label>
+              <Input
+                className="mt-1"
+                value={uploadName}
+                onChange={e => setUploadName(e.target.value)}
+                placeholder={`passport-${(user?.firstName ?? "").toLowerCase()}-${(user?.lastName ?? "").toLowerCase()}`}
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">File</Label>
+              <div
+                className={`mt-1 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                  dragging ? "border-primary bg-primary/5" : uploadFile ? "border-primary/40 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-secondary/40"
+                }`}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragging(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleFileSelect(file);
+                }}
+              >
+                {uploadFile ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-foreground truncate max-w-[240px]">{uploadFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{Math.round(uploadFile.size / 1024)} KB</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      onClick={e => { e.stopPropagation(); setUploadFile(null); }}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                    <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG — max 10 MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
+            <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
+              {uploading ? "Uploading…" : "Upload"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
