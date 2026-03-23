@@ -207,7 +207,7 @@ export default function SettingsPage() {
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "", passportUrl: "", emergencyContactName: "", emergencyContactPhone: "" });
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -223,7 +223,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (user) {
       const parsed = parsePhoneCode((user as any).phone || "");
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "", startDate: (user as any).startDate || "", homeAddress: (user as any).homeAddress || "", passportNumber: (user as any).passportNumber || "", contractUrl: (user as any).contractUrl || "" });
+      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "", startDate: (user as any).startDate || "", homeAddress: (user as any).homeAddress || "", passportNumber: (user as any).passportNumber || "", contractUrl: (user as any).contractUrl || "", passportUrl: (user as any).passportUrl || "", emergencyContactName: (user as any).emergencyContactName || "", emergencyContactPhone: (user as any).emergencyContactPhone || "" });
     }
   }, [user]);
 
@@ -301,6 +301,28 @@ export default function SettingsPage() {
     } finally { setContractUploading(false); }
   }
 
+  const passportInputRef = useRef<HTMLInputElement>(null);
+  const [passportUploading, setPassportUploading] = useState(false);
+
+  async function handlePassportUpload(file: File) {
+    setPassportUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      const passportUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
+      setForm(f => ({ ...f, passportUrl }));
+      toast({ title: "Passport uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally { setPassportUploading(false); }
+  }
+
   async function handleRemoveAvatar() {
     try {
       setForm(f => ({ ...f, avatarUrl: "" }));
@@ -321,7 +343,7 @@ export default function SettingsPage() {
     try {
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined, startDate: form.startDate || null, homeAddress: form.homeAddress || null, passportNumber: form.passportNumber || null, contractUrl: form.contractUrl || null }),
+        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, phone: form.phone ? `${form.phoneCode}${form.phone}` : undefined, avatarUrl: form.avatarUrl || null, email: form.email || undefined, startDate: form.startDate || null, homeAddress: form.homeAddress || null, passportNumber: form.passportNumber || null, contractUrl: form.contractUrl || null, passportUrl: form.passportUrl || null, emergencyContactName: form.emergencyContactName || null, emergencyContactPhone: form.emergencyContactPhone || null }),
       });
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast({ title: "Profile updated" });
@@ -463,7 +485,7 @@ export default function SettingsPage() {
           <FieldGroup label="Home Address" className="sm:col-span-2">
             <Input value={form.homeAddress} onChange={e => setForm(f => ({ ...f, homeAddress: e.target.value }))} placeholder="Enter your home address" className="rounded-xl" />
           </FieldGroup>
-          <FieldGroup label="Employment Contract" className="sm:col-span-2">
+          <FieldGroup label="Employment Contract">
             <div className="flex items-center gap-3">
               {form.contractUrl ? (
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -481,6 +503,37 @@ export default function SettingsPage() {
               </Button>
               <input ref={contractInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleContractUpload(f); e.target.value = ""; }} />
             </div>
+          </FieldGroup>
+          <FieldGroup label="Passport Document">
+            <div className="flex items-center gap-3">
+              {form.passportUrl ? (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <a href={form.passportUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate">View Passport</a>
+                  <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, passportUrl: "" }))}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No passport uploaded</p>
+              )}
+              <Button variant="outline" size="sm" onClick={() => passportInputRef.current?.click()} disabled={passportUploading}>
+                {passportUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+                {form.passportUrl ? "Replace" : "Upload"}
+              </Button>
+              <input ref={passportInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handlePassportUpload(f); e.target.value = ""; }} />
+            </div>
+          </FieldGroup>
+        </div>
+        <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
+      </Card>
+      <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
+        <SectionHeader title="Emergency Contact" description="Contact information for a relative or emergency contact person." />
+        <div className="grid sm:grid-cols-3 gap-5">
+          <FieldGroup label="Full Name" className="sm:col-span-2">
+            <Input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Enter emergency contact name" className="rounded-xl" />
+          </FieldGroup>
+          <FieldGroup label="Phone Number">
+            <Input value={form.emergencyContactPhone} onChange={e => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} placeholder="+90 555 123 4567" className="rounded-xl" />
           </FieldGroup>
         </div>
         <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>

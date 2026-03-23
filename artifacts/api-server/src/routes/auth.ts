@@ -59,6 +59,9 @@ function buildSessionUser(user: any): SessionUser {
     homeAddress: user.homeAddress,
     passportNumber: user.passportNumber,
     contractUrl: user.contractUrl,
+    passportUrl: user.passportUrl,
+    emergencyContactName: user.emergencyContactName,
+    emergencyContactPhone: user.emergencyContactPhone,
   };
 }
 
