@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSeason } from "@/contexts/SeasonContext";
 import {
@@ -120,9 +120,13 @@ interface CommissionForm {
   programFee: string;
   universityCommissionRate: string;
   agentCommissionRate: string;
+  agentId: string;
+  subAgentCommissionRate: string;
+  subAgentId: string;
   status: string;
   universityCollected: string;
   agentPaid: string;
+  subAgentPaid: string;
   offsetAmount: string;
   notes: string;
 }
@@ -131,8 +135,9 @@ const EMPTY_COMM: CommissionForm = {
   studentName: "", universityName: "", programName: "",
   season: currentYear, currency: "USD", isStateUniversity: false,
   programFee: "", universityCommissionRate: "20", agentCommissionRate: "70",
+  agentId: "", subAgentCommissionRate: "", subAgentId: "",
   status: "potential",
-  universityCollected: "0", agentPaid: "0", offsetAmount: "0",
+  universityCollected: "0", agentPaid: "0", subAgentPaid: "0", offsetAmount: "0",
   notes: "",
 };
 
@@ -146,16 +151,58 @@ function CommissionModal({
   const [form, setForm] = useState<CommissionForm>(initial || EMPTY_COMM);
   const [saving, setSaving] = useState(false);
 
+  const { data: agentsResp } = useQuery({
+    queryKey: ["agents-list"],
+    queryFn: () => customFetch<any>(`${BASE}/api/agents?limit=500`),
+    enabled: open,
+  });
+  const allAgents = Array.isArray(agentsResp) ? agentsResp : (agentsResp?.data || []);
+  const parentAgents = allAgents.filter((a: any) => !a.parentAgentId);
+
+  const agentIdNum = form.agentId ? parseInt(form.agentId, 10) : 0;
+  const { data: subAgentsData } = useQuery({
+    queryKey: ["agent-sub-agents", agentIdNum],
+    queryFn: () => customFetch<any[]>(`${BASE}/api/agents/${agentIdNum}/sub-agents`),
+    enabled: agentIdNum > 0,
+  });
+  const subAgents: any[] = subAgentsData || [];
+
   const uRate = toNum(form.universityCommissionRate);
   const aRate = toNum(form.agentCommissionRate);
+  const saRate = toNum(form.subAgentCommissionRate);
   const fee   = toNum(form.programFee);
   const uAmt  = fee > 0 && uRate > 0 ? (fee * uRate) / 100 : 0;
   const aAmt  = uAmt > 0 && aRate > 0 ? (uAmt * aRate) / 100 : 0;
+  const saAmt = aAmt > 0 && saRate > 0 ? (aAmt * saRate) / 100 : 0;
   const netAgency = uAmt - aAmt;
   const maxOffset = form.status !== "potential" && uAmt > 0 ? uAmt * 0.7 : 0;
 
   const set = (k: keyof CommissionForm) => (e: any) =>
     setForm(f => ({ ...f, [k]: e?.target ? e.target.value : e }));
+
+  useEffect(() => {
+    if (subAgents.length === 1 && !form.subAgentId) {
+      const sa = subAgents[0];
+      setForm(f => ({
+        ...f,
+        subAgentId: String(sa.id),
+        subAgentCommissionRate: sa.commissionRate ? String(sa.commissionRate) : f.subAgentCommissionRate,
+      }));
+    }
+  }, [subAgents]);
+
+  function handleSubAgentChange(subAgentIdStr: string) {
+    if (subAgentIdStr === "none" || !subAgentIdStr) {
+      setForm(f => ({ ...f, subAgentId: "", subAgentCommissionRate: "" }));
+      return;
+    }
+    const sa = subAgents.find((a: any) => String(a.id) === subAgentIdStr);
+    setForm(f => ({
+      ...f,
+      subAgentId: subAgentIdStr,
+      subAgentCommissionRate: sa?.commissionRate ? String(sa.commissionRate) : f.subAgentCommissionRate,
+    }));
+  }
 
   async function save() {
     setSaving(true);
@@ -167,8 +214,13 @@ function CommissionModal({
         universityCommissionAmount: uAmt || null,
         agentCommissionRate: aRate || null,
         agentCommissionAmount: aAmt || null,
+        subAgentCommissionRate: saRate || null,
+        subAgentCommissionAmount: saAmt || null,
+        agentId: form.agentId ? parseInt(form.agentId, 10) : null,
+        subAgentId: form.subAgentId ? parseInt(form.subAgentId, 10) : null,
         universityCollected: toNum(form.universityCollected),
         agentPaid: toNum(form.agentPaid),
+        subAgentPaid: toNum(form.subAgentPaid),
         offsetAmount: toNum(form.offsetAmount),
         isStateUniversity: form.isStateUniversity,
       };
@@ -234,7 +286,28 @@ function CommissionModal({
             </Select>
           </div>
 
-          <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <Label>Agent</Label>
+            <Select value={form.agentId || "none"} onValueChange={(val) => {
+              if (val === "none") {
+                setForm(f => ({ ...f, agentId: "", subAgentId: "", subAgentCommissionRate: "" }));
+              } else {
+                setForm(f => ({ ...f, agentId: val, subAgentId: "", subAgentCommissionRate: "" }));
+              }
+            }}>
+              <SelectTrigger><SelectValue placeholder="Select agent..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No agent</SelectItem>
+                {parentAgents.map((a: any) => (
+                  <SelectItem key={a.id} value={String(a.id)}>
+                    {a.firstName} {a.lastName}{a.companyName ? ` (${a.companyName})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-4 gap-3">
             <div>
               <Label>Program Fee ({form.currency})</Label>
               <Input type="number" value={form.programFee} onChange={set("programFee")} placeholder="0" />
@@ -247,8 +320,30 @@ function CommissionModal({
               <Label>Agent Rate (%)</Label>
               <Input type="number" value={form.agentCommissionRate} onChange={set("agentCommissionRate")} placeholder="70" />
             </div>
+            {subAgents.length > 0 && (
+              <>
+                <div className="col-span-2">
+                  <Label>Sub Agent</Label>
+                  <Select value={form.subAgentId || "none"} onValueChange={handleSubAgentChange}>
+                    <SelectTrigger><SelectValue placeholder="Select sub agent..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No sub agent</SelectItem>
+                      {subAgents.map((sa: any) => (
+                        <SelectItem key={sa.id} value={String(sa.id)}>
+                          {sa.firstName} {sa.lastName}{sa.commissionRate ? ` (${sa.commissionRate}%)` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label>Sub Agent Rate (%)</Label>
+                  <Input type="number" value={form.subAgentCommissionRate} onChange={set("subAgentCommissionRate")} placeholder="0" />
+                </div>
+              </>
+            )}
             {uAmt > 0 && (
-              <div className="col-span-3 grid grid-cols-3 gap-2 pt-1 text-sm">
+              <div className={`col-span-4 grid ${saAmt > 0 ? "grid-cols-4" : "grid-cols-3"} gap-2 pt-1 text-sm`}>
                 <div className="rounded bg-blue-50 border border-blue-200 p-2 text-center">
                   <div className="text-xs text-blue-600 font-medium">University Pays Agency</div>
                   <div className="font-bold text-blue-700">{fmt(uAmt, form.currency)}</div>
@@ -257,6 +352,12 @@ function CommissionModal({
                   <div className="text-xs text-amber-600 font-medium">Agency Pays Agent</div>
                   <div className="font-bold text-amber-700">{fmt(aAmt, form.currency)}</div>
                 </div>
+                {saAmt > 0 && (
+                  <div className="rounded bg-purple-50 border border-purple-200 p-2 text-center">
+                    <div className="text-xs text-purple-600 font-medium">Agent Pays Sub Agent</div>
+                    <div className="font-bold text-purple-700">{fmt(saAmt, form.currency)}</div>
+                  </div>
+                )}
                 <div className="rounded bg-emerald-50 border border-emerald-200 p-2 text-center">
                   <div className="text-xs text-emerald-600 font-medium">Net Income</div>
                   <div className="font-bold text-emerald-700">{fmt(netAgency, form.currency)}</div>
@@ -273,6 +374,12 @@ function CommissionModal({
             <Label>Agent Paid Out</Label>
             <Input type="number" value={form.agentPaid} onChange={set("agentPaid")} placeholder="0" />
           </div>
+          {saAmt > 0 && (
+            <div>
+              <Label>Sub Agent Paid Out</Label>
+              <Input type="number" value={form.subAgentPaid} onChange={set("subAgentPaid")} placeholder="0" />
+            </div>
+          )}
 
           <div>
             <Label>State University</Label>
@@ -474,7 +581,7 @@ function TransactionModal({
   open, onClose, type, commissionId, commissionLabel, universityName,
 }: {
   open: boolean; onClose: () => void;
-  type: "collection" | "agent_payment";
+  type: "collection" | "agent_payment" | "sub_agent_payment";
   commissionId?: number;
   commissionLabel?: string;
   universityName?: string;
@@ -542,7 +649,7 @@ function TransactionModal({
           transactionDate: date,
           reference: reference || null,
           universityName: universityName || null,
-          agentName: type === "agent_payment" ? agentName || null : null,
+          agentName: (type === "agent_payment" || type === "sub_agent_payment") ? agentName || null : null,
           fileUrl, fileName,
           notes: notes || null,
         }),
@@ -551,20 +658,21 @@ function TransactionModal({
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["financial-transactions"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: type === "collection" ? "Collection recorded" : "Agent payment recorded" });
+      toast({ title: type === "collection" ? "Collection recorded" : type === "agent_payment" ? "Agent payment recorded" : "Sub agent payment recorded" });
       onClose();
     } catch { toast({ title: "Error saving transaction", variant: "destructive" }); }
     finally { setSaving(false); }
   }
 
   const isCollection = type === "collection";
+  const isSubAgentPayment = type === "sub_agent_payment";
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isCollection ? "Record University Collection" : "Record Agent Payment"}
+            {isCollection ? "Record University Collection" : isSubAgentPayment ? "Record Sub Agent Payment" : "Record Agent Payment"}
           </DialogTitle>
         </DialogHeader>
         {commissionLabel && (
@@ -585,8 +693,8 @@ function TransactionModal({
           </div>
           {!isCollection && (
             <div className="col-span-2">
-              <Label>Agent Name</Label>
-              <Input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder="Agent name" />
+              <Label>{isSubAgentPayment ? "Sub Agent Name" : "Agent Name"}</Label>
+              <Input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder={isSubAgentPayment ? "Sub agent name" : "Agent name"} />
             </div>
           )}
           <div className="col-span-2">
@@ -672,7 +780,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
             <div className="space-y-2">
               {transactions.map((tx: any) => (
                 <div key={tx.id} className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50">
-                  <div className={`p-1.5 rounded ${tx.type === "collection" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`}>
+                  <div className={`p-1.5 rounded ${tx.type === "collection" ? "bg-blue-100 text-blue-600" : tx.type === "sub_agent_payment" ? "bg-purple-100 text-purple-600" : "bg-amber-100 text-amber-600"}`}>
                     {tx.type === "collection" ? <Landmark className="w-3.5 h-3.5" /> : <CreditCard className="w-3.5 h-3.5" />}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -681,7 +789,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
                       <span className="text-xs text-slate-400">{tx.transactionDate}</span>
                     </div>
                     <p className="text-xs text-slate-500">
-                      {tx.type === "collection" ? "University Collection" : `Agent Payment${tx.agentName ? ` — ${tx.agentName}` : ""}`}
+                      {tx.type === "collection" ? "University Collection" : tx.type === "sub_agent_payment" ? `Sub Agent Payment${tx.agentName ? ` — ${tx.agentName}` : ""}` : `Agent Payment${tx.agentName ? ` — ${tx.agentName}` : ""}`}
                     </p>
                     {tx.reference && <p className="text-xs text-slate-400">Ref: {tx.reference}</p>}
                     {tx.fileName && (
@@ -719,7 +827,7 @@ export default function FinancePage() {
   const [commModal, setCommModal] = useState<{ open: boolean; id?: number; initial?: CommissionForm }>({ open: false });
   const [feeModal, setFeeModal] = useState<{ open: boolean; id?: number; initial?: ServiceFeeForm }>({ open: false });
   const [txModal, setTxModal] = useState<{
-    open: boolean; type: "collection" | "agent_payment";
+    open: boolean; type: "collection" | "agent_payment" | "sub_agent_payment";
     commissionId?: number; commissionLabel?: string; universityName?: string;
   }>({ open: false, type: "collection" });
   const [deleting, setDeleting] = useState<number | null>(null);
@@ -767,6 +875,7 @@ export default function FinancePage() {
         case "progFee": return dir * (toNum(a.programFee) - toNum(b.programFee));
         case "univComm": return dir * (toNum(a.universityCommissionAmount) - toNum(b.universityCommissionAmount));
         case "agentComm": return dir * (toNum(a.agentCommissionAmount) - toNum(b.agentCommissionAmount));
+        case "saComm": return dir * (toNum(a.subAgentCommissionAmount) - toNum(b.subAgentCommissionAmount));
         case "netIncome": {
           const netA = toNum(a.universityCommissionAmount) - toNum(a.agentCommissionAmount);
           const netB = toNum(b.universityCommissionAmount) - toNum(b.agentCommissionAmount);
@@ -1087,6 +1196,7 @@ export default function FinancePage() {
                         { key: "progFee", label: "Prog. Fee", align: "text-right" },
                         { key: "univComm", label: "Univ. Commission", align: "text-right" },
                         { key: "agentComm", label: "Agent Commission", align: "text-right" },
+                        { key: "saComm", label: "SA Commission", align: "text-right" },
                         { key: "netIncome", label: "Net Income", align: "text-right" },
                         { key: "collection", label: "Collection", align: "text-center" },
                         { key: "status", label: "Status", align: "text-center" },
@@ -1145,6 +1255,16 @@ export default function FinancePage() {
                             <div className="text-xs text-slate-400">{c.agentCommissionRate || "—"}% · {fmt(aPaid, c.currency)} paid</div>
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">
+                            {toNum(c.subAgentCommissionAmount) > 0 ? (
+                              <>
+                                <div className="font-medium text-purple-700">{fmt(c.subAgentCommissionAmount, c.currency)}</div>
+                                <div className="text-xs text-slate-400">{c.subAgentCommissionRate || "—"}% · {fmt(c.subAgentPaid, c.currency)} paid</div>
+                              </>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
                             <div className="font-semibold text-emerald-700">{fmt(net, c.currency)}</div>
                             {c.offsetAmount && toNum(c.offsetAmount) > 0 && (
                               <div className="text-xs text-violet-600">Offset: {fmt(c.offsetAmount, c.currency)}</div>
@@ -1195,6 +1315,20 @@ export default function FinancePage() {
                                   <CreditCard className="w-3 h-3 mr-1" /> Pay Agent
                                 </Button>
                               )}
+                              {c.status !== "potential" && toNum(c.subAgentCommissionAmount) > 0 && toNum(c.subAgentPaid) < toNum(c.subAgentCommissionAmount) && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  className="text-xs h-7"
+                                  onClick={() => setTxModal({
+                                    open: true, type: "sub_agent_payment",
+                                    commissionId: c.id,
+                                    commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
+                                    universityName: c.universityName,
+                                  })}
+                                >
+                                  <CreditCard className="w-3 h-3 mr-1" /> Pay Sub Agent
+                                </Button>
+                              )}
                               <TransactionHistory commissionId={c.id} />
                               <Button
                                 size="icon" variant="ghost"
@@ -1211,9 +1345,13 @@ export default function FinancePage() {
                                     programFee: c.programFee || "",
                                     universityCommissionRate: c.universityCommissionRate || "20",
                                     agentCommissionRate: c.agentCommissionRate || "70",
+                                    agentId: c.agentId ? String(c.agentId) : "",
+                                    subAgentCommissionRate: c.subAgentCommissionRate || "",
+                                    subAgentId: c.subAgentId ? String(c.subAgentId) : "",
                                     status: c.status,
                                     universityCollected: c.universityCollected || "0",
                                     agentPaid: c.agentPaid || "0",
+                                    subAgentPaid: c.subAgentPaid || "0",
                                     offsetAmount: c.offsetAmount || "0",
                                     notes: c.notes || "",
                                   },
@@ -1247,6 +1385,9 @@ export default function FinancePage() {
                       </td>
                       <td className="px-4 py-3 text-right text-amber-700 tabular-nums">
                         {fmt(commSummary.totalAgentCommission || 0)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-purple-700 tabular-nums">
+                        {fmt(commSummary.totalSubAgentCommission || 0)}
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-700 tabular-nums">
                         {fmt(commSummary.totalNetAgency || 0)}
@@ -1592,7 +1733,7 @@ export default function FinancePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className={`grid ${toNum(summary?.commissions?.totalSubAgentCommission) > 0 ? "grid-cols-3" : "grid-cols-2"} gap-3`}>
                       <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-center">
                         <p className="text-xs text-blue-600 font-medium uppercase">Inflow (Collected)</p>
                         <p className="text-lg font-bold text-blue-700">
@@ -1605,6 +1746,14 @@ export default function FinancePage() {
                           {fmt(summary?.commissions?.totalAgentPaid || 0)}
                         </p>
                       </div>
+                      {toNum(summary?.commissions?.totalSubAgentCommission) > 0 && (
+                        <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-center">
+                          <p className="text-xs text-purple-600 font-medium uppercase">Sub Agent Paid</p>
+                          <p className="text-lg font-bold text-purple-700">
+                            {fmt(summary?.commissions?.totalSubAgentPaid || 0)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
                       <p className="text-xs text-emerald-600 font-medium uppercase">Net Cash Position</p>
@@ -1623,6 +1772,12 @@ export default function FinancePage() {
                         <span className="text-slate-500">Agent Payable</span>
                         <span className="text-slate-700">{fmt(summary?.commissions?.totalAgentPending || 0)}</span>
                       </div>
+                      {toNum(summary?.commissions?.totalSubAgentCommission) > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">Sub Agent Payable</span>
+                          <span className="text-purple-700">{fmt(toNum(summary?.commissions?.totalSubAgentCommission) - toNum(summary?.commissions?.totalSubAgentPaid))}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">Service Fee Pending</span>
                         <span className="text-slate-700">{fmt(toNum(summary?.serviceFees?.total) - toNum(summary?.serviceFees?.collected))}</span>

@@ -49,6 +49,7 @@ export default function AgentCommissions() {
   });
 
   const commissions: any[] = commData?.data || [];
+  const isSubAgent: boolean = commData?.isSubAgent || false;
   const serviceFees: any[] = feeData?.data || [];
   const { paged: pagedComm, total: totalComm } = pgComm.paginate(commissions);
   const { paged: pagedFees, total: totalFees } = pgFee.paginate(serviceFees);
@@ -117,7 +118,7 @@ export default function AgentCommissions() {
                     <tr className="bg-secondary/50 text-left">
                       <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Student</th>
                       <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">University</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Program Fee</th>
+                      {!isSubAgent && <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Program Fee</th>}
                       <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Commission</th>
                       <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Paid</th>
                       <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</th>
@@ -135,18 +136,21 @@ export default function AgentCommissions() {
                       ))
                     ) : pagedComm.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-5 py-16 text-center">
+                        <td colSpan={isSubAgent ? 6 : 7} className="px-5 py-16 text-center">
                           <DollarSign className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
                           <p className="text-muted-foreground font-medium">No commissions recorded yet</p>
                         </td>
                       </tr>
-                    ) : pagedComm.map((c: any) => (
+                    ) : pagedComm.map((c: any) => {
+                      const commAmt = isSubAgent ? c.subAgentCommissionAmount : c.agentCommissionAmount;
+                      const commPaid = isSubAgent ? c.subAgentPaid : c.agentPaid;
+                      return (
                       <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-5 py-4 text-sm font-medium">{c.studentName || "—"}</td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">{c.universityName || "—"}</td>
-                        <td className="px-5 py-4 text-sm font-medium">{c.programFee ? `${c.currency || "USD"} ${Number(c.programFee).toLocaleString()}` : "—"}</td>
-                        <td className="px-5 py-4 text-sm font-bold text-primary">{c.agentCommissionAmount ? `${c.currency || "USD"} ${Number(c.agentCommissionAmount).toLocaleString()}` : "—"}</td>
-                        <td className="px-5 py-4 text-sm font-medium text-green-600">{c.agentPaid && Number(c.agentPaid) > 0 ? `${c.currency || "USD"} ${Number(c.agentPaid).toLocaleString()}` : "—"}</td>
+                        {!isSubAgent && <td className="px-5 py-4 text-sm font-medium">{c.programFee ? `${c.currency || "USD"} ${Number(c.programFee).toLocaleString()}` : "—"}</td>}
+                        <td className="px-5 py-4 text-sm font-bold text-primary">{commAmt ? `${c.currency || "USD"} ${Number(commAmt).toLocaleString()}` : "—"}</td>
+                        <td className="px-5 py-4 text-sm font-medium text-green-600">{commPaid && Number(commPaid) > 0 ? `${c.currency || "USD"} ${Number(commPaid).toLocaleString()}` : "—"}</td>
                         <td className="px-5 py-4">
                           <Badge className={
                             c.status === "potential" ? "bg-gray-100 text-gray-600 border-gray-200" :
@@ -162,7 +166,8 @@ export default function AgentCommissions() {
                           {new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

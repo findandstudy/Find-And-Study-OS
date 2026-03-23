@@ -20,13 +20,17 @@ function calcCommissionAmounts(body: any) {
   const programFee = toNum(body.programFee);
   const uRate = toNum(body.universityCommissionRate);
   const aRate = toNum(body.agentCommissionRate);
+  const saRate = toNum(body.subAgentCommissionRate);
   const uAmount = body.universityCommissionAmount !== undefined
     ? toNum(body.universityCommissionAmount)
     : programFee > 0 && uRate > 0 ? (programFee * uRate) / 100 : 0;
   const aAmount = body.agentCommissionAmount !== undefined
     ? toNum(body.agentCommissionAmount)
     : uAmount > 0 && aRate > 0 ? (uAmount * aRate) / 100 : 0;
-  return { uAmount, aAmount };
+  const saAmount = body.subAgentCommissionAmount !== undefined
+    ? toNum(body.subAgentCommissionAmount)
+    : aAmount > 0 && saRate > 0 ? (aAmount * saRate) / 100 : 0;
+  return { uAmount, aAmount, saAmount };
 }
 
 /* ─── COMMISSIONS ────────────────────────────────────────────── */
@@ -35,6 +39,7 @@ const COMMISSION_PATCH_FIELDS = [
   "status", "season", "currency", "studentName", "universityName", "programName",
   "isStateUniversity", "programFee", "universityCommissionRate", "universityCommissionAmount",
   "universityCollected", "agentCommissionRate", "agentCommissionAmount", "agentPaid",
+  "subAgentId", "subAgentCommissionRate", "subAgentCommissionAmount", "subAgentPaid",
   "confirmedAt", "offsetAmount", "studentId", "agentId", "applicationId", "notes",
 ];
 
@@ -74,6 +79,8 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
     totalUniversityCollected: activeOnly.reduce((s, c) => s + toNum(c.universityCollected), 0),
     totalAgentCommission: activeOnly.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
     totalAgentPaid: activeOnly.reduce((s, c) => s + toNum(c.agentPaid), 0),
+    totalSubAgentCommission: activeOnly.reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
+    totalSubAgentPaid: activeOnly.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
     totalNetAgency: activeOnly.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)), 0),
     totalOffsetAmount: activeOnly.reduce((s, c) => s + toNum(c.offsetAmount), 0),
   };
@@ -87,24 +94,27 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
 
 router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const {
-    applicationId, studentId, agentId,
+    applicationId, studentId, agentId, subAgentId,
     studentName, universityName, programName, isStateUniversity,
     season = String(new Date().getFullYear()),
     currency = "USD",
     programFee, universityCommissionRate, agentCommissionRate,
     universityCommissionAmount, agentCommissionAmount,
+    subAgentCommissionRate, subAgentCommissionAmount,
     status = "potential", notes,
   } = req.body;
 
-  const { uAmount, aAmount } = calcCommissionAmounts({
+  const { uAmount, aAmount, saAmount } = calcCommissionAmounts({
     programFee, universityCommissionRate, agentCommissionRate,
     universityCommissionAmount, agentCommissionAmount,
+    subAgentCommissionRate, subAgentCommissionAmount,
   });
 
   const [commission] = await db.insert(commissionsTable).values({
     applicationId: applicationId || null,
     studentId: studentId || null,
     agentId: agentId || null,
+    subAgentId: subAgentId || null,
     studentName: studentName || null,
     universityName: universityName || null,
     programName: programName || null,
@@ -118,6 +128,9 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
     agentCommissionRate: agentCommissionRate ? String(agentCommissionRate) : null,
     agentCommissionAmount: aAmount > 0 ? String(aAmount) : (agentCommissionAmount ? String(agentCommissionAmount) : null),
     agentPaid: "0",
+    subAgentCommissionRate: subAgentCommissionRate ? String(subAgentCommissionRate) : null,
+    subAgentCommissionAmount: saAmount > 0 ? String(saAmount) : (subAgentCommissionAmount ? String(subAgentCommissionAmount) : null),
+    subAgentPaid: "0",
     status,
     offsetAmount: "0",
     notes: notes || null,
@@ -144,13 +157,14 @@ router.patch("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), asy
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
 
-  if (req.body.universityCommissionRate !== undefined || req.body.programFee !== undefined || req.body.agentCommissionRate !== undefined) {
+  if (req.body.universityCommissionRate !== undefined || req.body.programFee !== undefined || req.body.agentCommissionRate !== undefined || req.body.subAgentCommissionRate !== undefined) {
     const existing = await db.select().from(commissionsTable).where(eq(commissionsTable.id, id));
     if (existing[0]) {
       const merged = { ...existing[0], ...req.body };
-      const { uAmount, aAmount } = calcCommissionAmounts(merged);
+      const { uAmount, aAmount, saAmount } = calcCommissionAmounts(merged);
       if (!req.body.universityCommissionAmount && uAmount > 0) updates.universityCommissionAmount = String(uAmount);
       if (!req.body.agentCommissionAmount && aAmount > 0) updates.agentCommissionAmount = String(aAmount);
+      if (!req.body.subAgentCommissionAmount && saAmount > 0) updates.subAgentCommissionAmount = String(saAmount);
     }
   }
 
@@ -346,8 +360,8 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
     return;
   }
 
-  if (!["collection", "agent_payment"].includes(type)) {
-    res.status(400).json({ error: "type must be 'collection' or 'agent_payment'" });
+  if (!["collection", "agent_payment", "sub_agent_payment"].includes(type)) {
+    res.status(400).json({ error: "type must be 'collection', 'agent_payment', or 'sub_agent_payment'" });
     return;
   }
 
@@ -385,11 +399,17 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
       const totalPaid = allTxForComm
         .filter(t => t.type === "agent_payment")
         .reduce((s, t) => s + toNum(t.amount), 0);
+      const totalSubAgentPaid = allTxForComm
+        .filter(t => t.type === "sub_agent_payment")
+        .reduce((s, t) => s + toNum(t.amount), 0);
       const uTotal = toNum(comm.universityCommissionAmount);
       const aTotal = toNum(comm.agentCommissionAmount);
+      const saTotal = toNum(comm.subAgentCommissionAmount);
 
       let newStatus = comm.status;
-      if (totalCollected >= uTotal && totalPaid >= aTotal && uTotal > 0) {
+      const agentFullyPaid = totalPaid >= aTotal;
+      const subAgentFullyPaid = saTotal <= 0 || totalSubAgentPaid >= saTotal;
+      if (totalCollected >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
         newStatus = "settled";
       } else if (totalCollected >= uTotal && uTotal > 0) {
         newStatus = "collected_full";
@@ -402,6 +422,7 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
       await db.update(commissionsTable).set({
         universityCollected: String(totalCollected),
         agentPaid: String(totalPaid),
+        subAgentPaid: String(totalSubAgentPaid),
         status: newStatus,
       }).where(eq(commissionsTable.id, parseInt(commissionId, 10)));
     }
@@ -426,12 +447,16 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
       .where(eq(financialTransactionsTable.commissionId, tx.commissionId));
     const totalCollected = remaining.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
     const totalPaid = remaining.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
+    const totalSubAgentPaid = remaining.filter(t => t.type === "sub_agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
 
     let newStatus = comm?.status || "confirmed";
     if (comm) {
       const uTotal = toNum(comm.universityCommissionAmount);
       const aTotal = toNum(comm.agentCommissionAmount);
-      if (totalCollected >= uTotal && totalPaid >= aTotal && uTotal > 0) {
+      const saTotal = toNum(comm.subAgentCommissionAmount);
+      const agentFullyPaid = totalPaid >= aTotal;
+      const subAgentFullyPaid = saTotal <= 0 || totalSubAgentPaid >= saTotal;
+      if (totalCollected >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
         newStatus = "settled";
       } else if (totalCollected >= uTotal && uTotal > 0) {
         newStatus = "collected_full";
@@ -445,6 +470,7 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
     await db.update(commissionsTable).set({
       universityCollected: String(totalCollected),
       agentPaid: String(totalPaid),
+      subAgentPaid: String(totalSubAgentPaid),
       status: newStatus,
     }).where(eq(commissionsTable.id, tx.commissionId));
   }
@@ -471,6 +497,8 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     totalAgentCommission: number;
     totalAgentPaid: number;
     totalAgentRemaining: number;
+    totalSubAgentCommission: number;
+    totalSubAgentPaid: number;
     netIncome: number;
     studentCount: number;
     commissionCount: number;
@@ -485,6 +513,7 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
         universityName: name,
         totalCommission: 0, totalCollected: 0, totalRemaining: 0,
         totalAgentCommission: 0, totalAgentPaid: 0, totalAgentRemaining: 0,
+        totalSubAgentCommission: 0, totalSubAgentPaid: 0,
         netIncome: 0, studentCount: 0, commissionCount: 0,
         statuses: {}, oldestUnpaid: null,
       };
@@ -494,6 +523,8 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     const uColl = toNum(c.universityCollected);
     const aAmt = toNum(c.agentCommissionAmount);
     const aPaid = toNum(c.agentPaid);
+    const saAmt = toNum(c.subAgentCommissionAmount);
+    const saPaid = toNum(c.subAgentPaid);
 
     u.totalCommission += uAmt;
     u.totalCollected += uColl;
@@ -501,6 +532,8 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     u.totalAgentCommission += aAmt;
     u.totalAgentPaid += aPaid;
     u.totalAgentRemaining += aAmt - aPaid;
+    u.totalSubAgentCommission += saAmt;
+    u.totalSubAgentPaid += saPaid;
     u.netIncome += uColl - aPaid;
     u.commissionCount++;
     u.statuses[c.status] = (u.statuses[c.status] || 0) + 1;
@@ -528,6 +561,8 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     totalRemaining: breakdown.reduce((s, u) => s + u.totalRemaining, 0),
     totalAgentCommission: breakdown.reduce((s, u) => s + u.totalAgentCommission, 0),
     totalAgentPaid: breakdown.reduce((s, u) => s + u.totalAgentPaid, 0),
+    totalSubAgentCommission: breakdown.reduce((s, u) => s + u.totalSubAgentCommission, 0),
+    totalSubAgentPaid: breakdown.reduce((s, u) => s + u.totalSubAgentPaid, 0),
     totalNetIncome: breakdown.reduce((s, u) => s + u.netIncome, 0),
     universityCount: breakdown.length,
   };
@@ -582,6 +617,9 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
       totalAgentCommission: commissions.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
       totalAgentPaid: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
       totalAgentPending: commissions.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
+      totalSubAgentCommission: commissions.reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
+      totalSubAgentPaid: commissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
+      totalSubAgentPending: commissions.reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
       totalNetAgency: commissions.reduce((s, c) => s + (toNum(c.universityCollected) - toNum(c.agentPaid)), 0),
       overdueCount: overdueItems.length,
       overdueAmount: overdueItems.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
@@ -590,9 +628,11 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
       confirmedUniversityCommission: confirmedComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
       confirmedAgentCommission: confirmedComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
       paidToAgents: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
+      paidToSubAgents: commissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
       collectedFromUniversities: commissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
       pendingToCollect: confirmedComms.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
       pendingToPay: confirmedComms.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
+      pendingToPaySubAgents: confirmedComms.reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
     },
     serviceFees: {
       total: fees.reduce((s, f) => s + toNum(f.totalAmount), 0),
@@ -659,9 +699,27 @@ router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async 
 
 router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
+  const userRole = req.user!.role;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   const agentId = agent.id;
+  const isSubAgent = userRole === "sub_agent" || !!agent.parentAgentId;
+
+  if (isSubAgent) {
+    const commissions = await db.select().from(commissionsTable).where(
+      and(eq(commissionsTable.subAgentId, agentId), sql`${commissionsTable.status} != 'excluded'`)
+    );
+
+    const commSummary = {
+      potential: commissions.filter(c => c.status === "potential").reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
+      confirmed: commissions.filter(c => ["confirmed", "collected_partial", "collected_full"].includes(c.status)).reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
+      paid: commissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
+      pending: commissions.filter(c => !["potential"].includes(c.status)).reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
+    };
+
+    res.json({ commissions: commSummary, serviceFees: { potential: 0, confirmed: 0, paid: 0, pending: 0 } });
+    return;
+  }
 
   const commissions = await db.select().from(commissionsTable).where(
     and(eq(commissionsTable.agentId, agentId), sql`${commissionsTable.status} != 'excluded'`)
@@ -692,20 +750,24 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), a
 
 router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
+  const userRole = req.user!.role;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  const isSubAgent = userRole === "sub_agent" || !!agent.parentAgentId;
 
   const { page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const whereClause = and(eq(commissionsTable.agentId, agent.id), sql`${commissionsTable.status} != 'excluded'`);
+  const whereClause = isSubAgent
+    ? and(eq(commissionsTable.subAgentId, agent.id), sql`${commissionsTable.status} != 'excluded'`)
+    : and(eq(commissionsTable.agentId, agent.id), sql`${commissionsTable.status} != 'excluded'`);
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(commissionsTable).where(whereClause);
   const data = await db.select().from(commissionsTable).where(whereClause)
     .orderBy(desc(commissionsTable.createdAt)).limit(limitNum).offset(offset);
 
-  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  res.json({ data, isSubAgent, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {

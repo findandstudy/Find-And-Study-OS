@@ -41,6 +41,11 @@ export const commissionsTable = pgTable("commissions", {
   agentCommissionAmount: numeric("agent_commission_amount", { precision: 12, scale: 2 }),
   agentPaid: numeric("agent_paid", { precision: 12, scale: 2 }).default("0"),
 
+  subAgentId: integer("sub_agent_id"),
+  subAgentCommissionRate: numeric("sub_agent_commission_rate", { precision: 5, scale: 2 }),
+  subAgentCommissionAmount: numeric("sub_agent_commission_amount", { precision: 12, scale: 2 }),
+  subAgentPaid: numeric("sub_agent_paid", { precision: 12, scale: 2 }).default("0"),
+
   status: text("status").notNull().default("potential"),
   confirmedAt: text("confirmed_at"),
 
