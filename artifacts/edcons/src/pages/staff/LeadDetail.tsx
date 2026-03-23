@@ -7,6 +7,7 @@ import {
   useConvertLead,
   useGetLeadNotes,
   useAddLeadNote,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus } from "lucide-react";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 const STATUS_OPTIONS = ["new", "contacted", "interested", "qualified", "converted", "lost"];
 
@@ -39,6 +41,7 @@ interface Props {
 export default function LeadDetail({ id }: Props) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth(true);
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
@@ -46,12 +49,52 @@ export default function LeadDetail({ id }: Props) {
   const [fuDate, setFuDate] = useState("");
   const [fuTime, setFuTime] = useState("10:00");
   const [fuNotes, setFuNotes] = useState("");
+  const [assigning, setAssigning] = useState(false);
+
+  const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
 
   const { data: lead, isLoading } = useGetLead(id);
   const { data: notes = [] } = useGetLeadNotes(id);
   const updateLead = useUpdateLead();
   const convertLead = useConvertLead();
   const addNote = useAddLeadNote();
+
+  const { data: staffUsersData } = useQuery<any>({
+    queryKey: ["/api/users"],
+    queryFn: () => customFetch("/api/users"),
+    enabled: !!isAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  function getAssignedUserName(assignedToId: number | null | undefined): string | null {
+    if (!assignedToId) return null;
+    if (user && assignedToId === user.id) return "You";
+    if (staffUsersData) {
+      const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
+      const found = list.find((u: any) => u.id === assignedToId);
+      if (found) return `${found.firstName || ''} ${found.lastName || ''}`.trim() || found.email;
+    }
+    return "Staff Member";
+  }
+
+  async function handleAssignToMe() {
+    if (!user) return;
+    setAssigning(true);
+    try {
+      await customFetch(`/api/leads/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedTo: user.id }),
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Lead assigned to you" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   const { data: followUps = [] } = useQuery<any[]>({
     queryKey: [`/api/leads/${id}/follow-ups`],
@@ -406,7 +449,35 @@ export default function LeadDetail({ id }: Props) {
               </div>
             </div>
 
-            {/* Upcoming Follow-ups summary in sidebar */}
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                <User className="w-4 h-4" />
+                Assigned To
+              </h2>
+              {isLoading ? (
+                <Skeleton className="h-8 w-32" />
+              ) : lead?.assignedToId ? (
+                <div className="flex items-center gap-2">
+                  <UserCheck2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-medium">{getAssignedUserName(lead.assignedToId)}</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Unassigned</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full rounded-full"
+                    onClick={handleAssignToMe}
+                    disabled={assigning}
+                  >
+                    <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                    {assigning ? "Assigning..." : "Assign to Me"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <CalendarClock className="w-4 h-4" />
