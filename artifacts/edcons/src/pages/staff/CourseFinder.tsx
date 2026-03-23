@@ -178,12 +178,12 @@ export default function CourseFinder() {
 
   const addWishlist = useMutation({
     mutationFn: (programId: number) => apiFetch(`${BASE_URL}/api/wishlists`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ programId }) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); toast({ title: "Added to wishlist" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); queryClient.invalidateQueries({ queryKey: ["wishlist-details"] }); toast({ title: "Added to wishlist" }); },
   });
 
   const removeWishlist = useMutation({
     mutationFn: (programId: number) => apiFetch(`${BASE_URL}/api/wishlists/${programId}`, { method: "DELETE" }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); toast({ title: "Removed from wishlist" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); queryClient.invalidateQueries({ queryKey: ["wishlist-details"] }); toast({ title: "Removed from wishlist" }); },
   });
 
   function toggleWishlist(programId: number) {
