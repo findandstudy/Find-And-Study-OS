@@ -712,12 +712,12 @@ export default function Programs() {
                   </label>
                   <div className="flex items-center gap-2">
                     <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
-                      placeholder={filters.feeRange ? `Min (${filters.feeRange.min})` : t("programs.feeMin")}
+                      placeholder={filters.feeRange?.min != null ? `Min (${filters.feeRange.min})` : t("programs.feeMin")}
                       className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                       max={filters.feeRange?.max} />
                     <span className="text-muted-foreground text-sm font-medium">–</span>
                     <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
-                      placeholder={filters.feeRange ? `Max (${filters.feeRange.max})` : t("programs.feeMax")}
+                      placeholder={filters.feeRange?.max != null ? `Max (${filters.feeRange.max})` : t("programs.feeMax")}
                       className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                       max={filters.feeRange?.max} />
                   </div>
