@@ -78,7 +78,7 @@
     "message": "Pesan",
     "namePlaceholder": "Budi Santoso",
     "emailPlaceholder": "budi@contoh.com",
-    "phonePlaceholder": "+62 812 0000 0000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "Bantuan aplikasi universitas",
     "messagePlaceholder": "Ceritakan tentang tujuan pendidikan Anda...",
     "send": "Kirim Pesan",
@@ -92,7 +92,13 @@
     "hoursLabel": "Jam Kerja",
     "hoursValue": "Sen-Jum: 09.00 – 19.00 | Sab: 10.00 – 16.00",
     "ourOffices": "Kantor Kami",
-    "required": "*"
+    "required": "*",
+    "firstName": "Nama Depan",
+    "lastName": "Nama Belakang",
+    "firstNamePlaceholder": "Budi",
+    "lastNamePlaceholder": "Santoso",
+    "nationality": "Kewarganegaraan",
+    "nationalityPlaceholder": "Pilih kewarganegaraan"
   },
   "blog": {
     "badge": "Blog",

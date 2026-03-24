@@ -78,7 +78,7 @@
     "message": "Сообщение",
     "namePlaceholder": "Иван Иванов",
     "emailPlaceholder": "ivan@example.com",
-    "phonePlaceholder": "+7 999 000 0000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "Помощь с поступлением в университет",
     "messagePlaceholder": "Расскажите о ваших образовательных целях...",
     "send": "Отправить сообщение",
@@ -92,7 +92,13 @@
     "hoursLabel": "Часы работы",
     "hoursValue": "Пн-Пт: 9:00 – 19:00 | Сб: 10:00 – 16:00",
     "ourOffices": "Наши офисы",
-    "required": "*"
+    "required": "*",
+    "firstName": "Имя",
+    "lastName": "Фамилия",
+    "firstNamePlaceholder": "Иван",
+    "lastNamePlaceholder": "Иванов",
+    "nationality": "Гражданство",
+    "nationalityPlaceholder": "Выберите гражданство"
   },
   "blog": {
     "badge": "Блог",

@@ -78,7 +78,7 @@
     "message": "संदेश",
     "namePlaceholder": "राज कुमार",
     "emailPlaceholder": "raj@example.com",
-    "phonePlaceholder": "+91 98000 00000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "विश्वविद्यालय आवेदन सहायता",
     "messagePlaceholder": "अपने शिक्षा लक्ष्यों के बारे में बताएं...",
     "send": "संदेश भेजें",
@@ -92,7 +92,13 @@
     "hoursLabel": "कार्य समय",
     "hoursValue": "सोम-शुक्र: सुबह 9 – शाम 7 | शनि: सुबह 10 – शाम 4",
     "ourOffices": "हमारे कार्यालय",
-    "required": "*"
+    "required": "*",
+    "firstName": "पहला नाम",
+    "lastName": "उपनाम",
+    "firstNamePlaceholder": "राज",
+    "lastNamePlaceholder": "शर्मा",
+    "nationality": "राष्ट्रीयता",
+    "nationalityPlaceholder": "राष्ट्रीयता चुनें"
   },
   "blog": {
     "badge": "ब्लॉग",

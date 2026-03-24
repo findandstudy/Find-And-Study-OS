@@ -78,7 +78,7 @@
     "message": "پیام",
     "namePlaceholder": "علی محمدی",
     "emailPlaceholder": "ali@example.com",
-    "phonePlaceholder": "+98 912 000 0000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "کمک در درخواست دانشگاه",
     "messagePlaceholder": "درباره اهداف تحصیلی خود بگویید...",
     "send": "ارسال پیام",
@@ -92,7 +92,13 @@
     "hoursLabel": "ساعات کاری",
     "hoursValue": "دوشنبه-جمعه: ۹ صبح – ۷ عصر | شنبه: ۱۰ صبح – ۴ عصر",
     "ourOffices": "دفاتر ما",
-    "required": "*"
+    "required": "*",
+    "firstName": "نام",
+    "lastName": "نام خانوادگی",
+    "firstNamePlaceholder": "علی",
+    "lastNamePlaceholder": "محمدی",
+    "nationality": "ملیت",
+    "nationalityPlaceholder": "ملیت را انتخاب کنید"
   },
   "blog": {
     "badge": "وبلاگ",

@@ -78,7 +78,7 @@
     "message": "Mensaje",
     "namePlaceholder": "Juan García",
     "emailPlaceholder": "juan@ejemplo.com",
-    "phonePlaceholder": "+34 600 000 000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "Ayuda con solicitud universitaria",
     "messagePlaceholder": "Cuéntanos sobre tus metas educativas...",
     "send": "Enviar mensaje",
@@ -92,7 +92,13 @@
     "hoursLabel": "Horario",
     "hoursValue": "Lun-Vie: 9:00 – 19:00 | Sáb: 10:00 – 16:00",
     "ourOffices": "Nuestras oficinas",
-    "required": "*"
+    "required": "*",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "firstNamePlaceholder": "Juan",
+    "lastNamePlaceholder": "García",
+    "nationality": "Nacionalidad",
+    "nationalityPlaceholder": "Seleccionar nacionalidad"
   },
   "blog": {
     "badge": "El Blog",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
@@ -6,6 +6,7 @@ import { useSeo } from "@/hooks/use-seo";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lucide-react";
+import { customFetch } from "@workspace/api-client-react";
 
 const offices = [
   { city: "Istanbul", address: "Levent Mahallesi, Büyükdere Cad. No:45, 34394", phone: "+90 212 555 0100", email: "istanbul@educons.com" },
@@ -13,31 +14,39 @@ const offices = [
   { city: "Dubai", address: "Dubai Internet City, Building 4, Office 220", phone: "+971 4 555 0200", email: "dubai@educons.com" },
 ];
 
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
 export default function Contact() {
   const { t, lang } = useI18n();
   useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
-  const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [countries, setCountries] = useState<string[]>([]);
+
+  useEffect(() => {
+    customFetch<{ countries: string[] }>("/api/course-finder/filters", { method: "GET" })
+      .then(data => { if (data?.countries) setCountries(data.countries); })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const [firstName, ...rest] = form.name.trim().split(" ");
-      const lastName = rest.join(" ") || firstName;
-      const res = await fetch(`${import.meta.env.BASE_URL}api/public/lead`, {
+      const fullPhone = form.phone ? `${form.phoneCode}${form.phone}` : undefined;
+      const res = await fetch(`${BASE_URL}/api/public/lead`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          firstName,
-          lastName,
+          firstName: form.firstName,
+          lastName: form.lastName,
           email: form.email,
-          phone: form.phone || undefined,
+          phone: fullPhone,
+          nationality: form.nationality || undefined,
           message: form.message,
-          interestedProgram: form.subject || undefined,
         }),
       });
       if (!res.ok) {
@@ -81,7 +90,7 @@ export default function Contact() {
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-xl font-display font-bold text-foreground mb-2">{t("contact.successTitle")}</h3>
                 <p className="text-muted-foreground">{t("contact.successMessage")}</p>
-                <Button onClick={() => { setSubmitted(false); setForm({ name: "", email: "", phone: "", subject: "", message: "" }); }} 
+                <Button onClick={() => { setSubmitted(false); setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" }); }} 
                   variant="outline" className="mt-6 rounded-full">
                   {t("contact.sendAnother")}
                 </Button>
@@ -90,30 +99,60 @@ export default function Contact() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.fullName")} {t("contact.required")}</label>
-                    <Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))}
-                      required placeholder={t("contact.namePlaceholder")} className="rounded-xl" />
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.firstName")} <span className="text-destructive">*</span>
+                    </label>
+                    <Input value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))}
+                      required placeholder={t("contact.firstNamePlaceholder")} className="rounded-xl" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.email")} {t("contact.required")}</label>
-                    <Input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))}
-                      required placeholder={t("contact.emailPlaceholder")} className="rounded-xl" />
-                  </div>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-5">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.phone")}</label>
-                    <Input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
-                      placeholder={t("contact.phonePlaceholder")} className="rounded-xl" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.subject")} {t("contact.required")}</label>
-                    <Input value={form.subject} onChange={e => setForm(f => ({...f, subject: e.target.value}))}
-                      required placeholder={t("contact.subjectPlaceholder")} className="rounded-xl" />
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.lastName")} <span className="text-destructive">*</span>
+                    </label>
+                    <Input value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))}
+                      required placeholder={t("contact.lastNamePlaceholder")} className="rounded-xl" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1.5 block">{t("contact.message")} {t("contact.required")}</label>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    {t("contact.email")} <span className="text-destructive">*</span>
+                  </label>
+                  <Input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))}
+                    required placeholder={t("contact.emailPlaceholder")} className="rounded-xl" />
+                </div>
+                <div className="grid sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.phone")} <span className="text-destructive">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Input value={form.phoneCode} onChange={e => setForm(f => ({...f, phoneCode: e.target.value}))}
+                        placeholder="+90" className="rounded-xl w-20" />
+                      <Input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
+                        required placeholder={t("contact.phonePlaceholder")} className="rounded-xl flex-1" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.nationality")} <span className="text-destructive">*</span>
+                    </label>
+                    {countries.length > 0 ? (
+                      <select value={form.nationality} onChange={e => setForm(f => ({...f, nationality: e.target.value}))}
+                        required
+                        className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+                        <option value="">{t("contact.nationalityPlaceholder")}</option>
+                        {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <Input value={form.nationality} onChange={e => setForm(f => ({...f, nationality: e.target.value}))}
+                        required placeholder={t("contact.nationalityPlaceholder")} className="rounded-xl" />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    {t("contact.message")} <span className="text-destructive">*</span>
+                  </label>
                   <textarea value={form.message} onChange={e => setForm(f => ({...f, message: e.target.value}))}
                     required rows={5} placeholder={t("contact.messagePlaceholder")}
                     className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />

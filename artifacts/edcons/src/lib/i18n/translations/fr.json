@@ -78,7 +78,7 @@
     "message": "Message",
     "namePlaceholder": "Jean Dupont",
     "emailPlaceholder": "jean@exemple.com",
-    "phonePlaceholder": "+33 6 00 00 00 00",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "Aide pour la candidature universitaire",
     "messagePlaceholder": "Parlez-nous de vos objectifs éducatifs...",
     "send": "Envoyer le message",
@@ -92,7 +92,13 @@
     "hoursLabel": "Horaires",
     "hoursValue": "Lun-Ven : 9h – 19h | Sam : 10h – 16h",
     "ourOffices": "Nos bureaux",
-    "required": "*"
+    "required": "*",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "firstNamePlaceholder": "Jean",
+    "lastNamePlaceholder": "Dupont",
+    "nationality": "Nationalité",
+    "nationalityPlaceholder": "Sélectionner la nationalité"
   },
   "blog": {
     "badge": "Le Blog",

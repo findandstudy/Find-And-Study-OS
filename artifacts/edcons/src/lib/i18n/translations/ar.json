@@ -78,7 +78,7 @@
     "message": "الرسالة",
     "namePlaceholder": "أحمد محمد",
     "emailPlaceholder": "ahmed@example.com",
-    "phonePlaceholder": "+966 55 000 0000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "مساعدة في التقديم الجامعي",
     "messagePlaceholder": "أخبرنا عن أهدافك التعليمية...",
     "send": "إرسال الرسالة",
@@ -92,7 +92,13 @@
     "hoursLabel": "ساعات العمل",
     "hoursValue": "الإثنين-الجمعة: 9ص – 7م | السبت: 10ص – 4م",
     "ourOffices": "مكاتبنا",
-    "required": "*"
+    "required": "*",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "firstNamePlaceholder": "أحمد",
+    "lastNamePlaceholder": "محمد",
+    "nationality": "الجنسية",
+    "nationalityPlaceholder": "اختر الجنسية"
   },
   "blog": {
     "badge": "المدونة",

@@ -78,7 +78,7 @@
     "message": "留言",
     "namePlaceholder": "张三",
     "emailPlaceholder": "zhang@example.com",
-    "phonePlaceholder": "+86 138 0000 0000",
+    "phonePlaceholder": "555 000 0000",
     "subjectPlaceholder": "大学申请帮助",
     "messagePlaceholder": "告诉我们您的教育目标...",
     "send": "发送消息",
@@ -92,7 +92,13 @@
     "hoursLabel": "工作时间",
     "hoursValue": "周一至周五：9:00 – 19:00 | 周六：10:00 – 16:00",
     "ourOffices": "我们的办公室",
-    "required": "*"
+    "required": "*",
+    "firstName": "名",
+    "lastName": "姓",
+    "firstNamePlaceholder": "明",
+    "lastNamePlaceholder": "王",
+    "nationality": "国籍",
+    "nationalityPlaceholder": "选择国籍"
   },
   "blog": {
     "badge": "博客",
