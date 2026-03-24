@@ -5,6 +5,7 @@ import { db, usersTable, emailVerificationCodesTable } from "@workspace/db";
 import { eq, and, gt, sql } from "drizzle-orm";
 import {
   clearSession,
+  getSession,
   getSessionId,
   createSession,
   SESSION_COOKIE,
@@ -75,11 +76,18 @@ router.get("/auth/me", async (req: Request, res: Response) => {
     return;
   }
   const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
-  if (freshUser) {
-    res.json(buildSessionUser(freshUser));
-  } else {
-    res.json(req.user);
+  const userData = freshUser ? buildSessionUser(freshUser) : req.user;
+
+  const sid = req.cookies?.sid;
+  let isImpersonating = false;
+  if (sid) {
+    const sess = await getSession(sid);
+    if (sess && (sess as any).originalSid) {
+      isImpersonating = true;
+    }
   }
+
+  res.json({ ...userData, isImpersonating });
 });
 
 router.post("/auth/login", async (req: Request, res: Response) => {

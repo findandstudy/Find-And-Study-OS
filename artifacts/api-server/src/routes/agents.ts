@@ -4,7 +4,7 @@ import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc } from "drizz
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
-import { createSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
+import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 
 const router: IRouter = Router();
 
@@ -246,6 +246,76 @@ router.patch("/agents/me/sub-agents/:id/status", requireAuth, requireRole("agent
     await db.update(usersTable).set({ isActive: status === "active" }).where(eq(usersTable.id, subAgent.userId));
   }
   res.json(updated);
+});
+
+router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const subAgentId = parseInt(req.params.id, 10);
+  const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
+  if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
+  if (!subAgent.userId) { res.status(400).json({ error: "Sub-agent has no login account" }); return; }
+
+  if (subAgent.status !== "active") { res.status(400).json({ error: "Sub-agent account is deactivated" }); return; }
+
+  const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, subAgent.userId));
+  if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
+
+  const currentSid = req.cookies[SESSION_COOKIE];
+  if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
+
+  const sessionData: SessionData = {
+    user: {
+      id: targetUser.id,
+      replitId: targetUser.replitId || `impersonated-${targetUser.id}`,
+      email: targetUser.email,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+      role: targetUser.role,
+      avatarUrl: targetUser.avatarUrl,
+      language: targetUser.language,
+      isActive: targetUser.isActive,
+    },
+    access_token: `agent-impersonation-${Date.now()}`,
+    originalSid: currentSid,
+  } as any;
+
+  const sid = await createSession(sessionData);
+  res.cookie("sid", sid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
+  res.json({ success: true, redirectTo: "/" });
+});
+
+router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise<void> => {
+  const currentSid = req.cookies[SESSION_COOKIE];
+  if (!currentSid) { res.status(400).json({ error: "No active session" }); return; }
+
+  const sessionData = await getSession(currentSid);
+  if (!sessionData) { res.status(400).json({ error: "Invalid session" }); return; }
+
+  const originalSid = (sessionData as any).originalSid;
+  if (!originalSid) { res.status(400).json({ error: "No parent session to return to" }); return; }
+
+  const originalSession = await getSession(originalSid);
+  if (!originalSession) { res.status(400).json({ error: "Original session expired. Please log in again." }); return; }
+
+  await deleteSession(currentSid);
+
+  res.cookie("sid", originalSid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
+  res.json({ success: true, redirectTo: "/" });
 });
 
 router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {

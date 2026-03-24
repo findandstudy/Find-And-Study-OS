@@ -55,6 +55,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  LogIn,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -294,6 +295,22 @@ export default function AgentSubAgents() {
     } finally { setSaving(false); }
   }
 
+  async function handleLoginAs(sa: SubAgent) {
+    if (!sa.email) {
+      toast({ title: "Error", description: "Sub-agent has no login account", variant: "destructive" });
+      return;
+    }
+    try {
+      await customFetch(`/api/agents/me/sub-agents/${sa.id}/impersonate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      window.location.href = `${BASE_URL}/`;
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleToggleStatus(sa: SubAgent) {
     const newStatus = sa.status === "active" ? "inactive" : "active";
     try {
@@ -452,6 +469,11 @@ export default function AgentSubAgents() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
+                              {sa.email && (
+                                <DropdownMenuItem onClick={() => handleLoginAs(sa)}>
+                                  <LogIn className="w-4 h-4 mr-2" /> Login As
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem onClick={() => openEdit(sa)}>
                                 <Edit className="w-4 h-4 mr-2" /> Edit Details
                               </DropdownMenuItem>

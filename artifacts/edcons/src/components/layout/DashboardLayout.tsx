@@ -45,6 +45,7 @@ import {
   Code2,
   Heart,
   MessageSquare,
+  ArrowLeftCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -408,6 +409,28 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               </Badge>
             </div>
           </header>
+
+          {(user as any).isImpersonating && (
+            <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-sm font-medium">
+              <span>You are viewing as: {user.firstName} {user.lastName} ({user.role})</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-white hover:bg-amber-600 h-7 gap-1.5"
+                onClick={async () => {
+                  try {
+                    await customFetch("/api/agents/me/return-to-agent", { method: "POST", headers: { "Content-Type": "application/json" } });
+                    window.location.href = `${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/`;
+                  } catch {
+                    window.location.href = `${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/login`;
+                  }
+                }}
+              >
+                <ArrowLeftCircle className="w-4 h-4" />
+                Return to Agent Account
+              </Button>
+            </div>
+          )}
 
           <main className="flex-1 overflow-y-auto p-5 lg:p-7">
             <div className="max-w-7xl mx-auto">
