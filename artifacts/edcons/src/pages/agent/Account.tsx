@@ -739,7 +739,7 @@ function WebToLeadTab() {
   const apiDomain = window.location.origin;
   const token = tokenData?.embedToken || "";
 
-  const formCode = `<form action="${apiDomain}${BASE_URL}/api/public/lead/${token}" method="POST" style="max-width:420px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:24px;border-radius:12px;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.1);border:1px solid #e5e7eb">
+  const formCode = `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:420px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:24px;border-radius:12px;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.1);border:1px solid #e5e7eb">
   <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#111827;text-align:center">Contact Us</h3>
   <div style="margin-bottom:12px">
     <input name="firstName" placeholder="First Name" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
