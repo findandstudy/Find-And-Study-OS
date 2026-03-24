@@ -680,6 +680,12 @@ function AddStudentModal({
       return;
     }
 
+    const missingDocs = currentDocs.filter(dt => dt.required && !docs[dt.key]).map(dt => dt.label);
+    if (missingDocs.length > 0) {
+      toast({ title: "Required documents missing", description: missingDocs.join(", "), variant: "destructive" });
+      return;
+    }
+
     const fullPhone = form.phone ? `${form.phoneCode} ${form.phone}` : null;
 
     createStudent.mutate(
@@ -997,6 +1003,32 @@ function AddStudentModal({
                   <div className="col-span-2">
                     <FormField label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" aiExtracted={ef.has("languageScore")} />
                   </div>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+                  <FileUp className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">Documents</h3>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {Object.keys(docs).length}/{currentDocs.length} uploaded
+                  </p>
+                </div>
+                <div className={cn(
+                  "grid gap-2",
+                  currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
+                )}>
+                  {currentDocs.map((dt) => (
+                    <DropZone
+                      key={dt.key}
+                      docType={dt}
+                      uploaded={docs[dt.key]}
+                      onUpload={(doc) => setDocs((d) => ({ ...d, [dt.key]: doc }))}
+                      onRemove={() => setDocs((d) => { const n = { ...d }; delete n[dt.key]; return n; })}
+                    />
+                  ))}
                 </div>
               </section>
 
