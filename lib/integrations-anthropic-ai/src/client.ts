@@ -79,13 +79,3 @@ export function clearConfigCache(): void {
   cachedConfig = null;
   cachedClient = null;
 }
-
-export const anthropic = new Proxy({} as Anthropic, {
-  get(_target, prop) {
-    console.warn(
-      `[DEPRECATION] Direct access to 'anthropic.${String(prop)}' is deprecated. Use 'await getAnthropicClient()' instead.`
-    );
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || "" });
-    return (client as any)[prop];
-  },
-});

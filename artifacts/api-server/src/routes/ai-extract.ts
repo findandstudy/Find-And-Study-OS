@@ -23,7 +23,8 @@ function aiRateLimit(maxRequests: number, windowMs: number) {
   };
 }
 
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_VISION_MODEL = "claude-sonnet-4-6";
+const DEFAULT_CSV_MODEL = "claude-haiku-4-5";
 
 const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 
 Analyze the provided document image(s) and extract student information.
@@ -120,7 +121,7 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       }
     }
 
-    const model = claudeConfig.model || DEFAULT_MODEL;
+    const model = claudeConfig.model || DEFAULT_VISION_MODEL;
     const message = await anthropic.messages.create({
       model,
       max_tokens: 8192,
@@ -170,7 +171,7 @@ router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000),
     }
 
     const message = await anthropic.messages.create({
-      model: claudeConfig.model || DEFAULT_MODEL,
+      model: claudeConfig.model || DEFAULT_CSV_MODEL,
       max_tokens: 8192,
       messages: [{
         role: "user",
