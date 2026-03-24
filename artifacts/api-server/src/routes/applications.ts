@@ -84,6 +84,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
       studentLastName: studentsTable.lastName,
       studentEmail: studentsTable.email,
       commissionAmount: commissionsTable.universityCommissionAmount,
+      agentCommissionAmount: commissionsTable.agentCommissionAmount,
     })
     .from(applicationsTable)
     .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
@@ -93,8 +94,17 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
     .offset(offset)
     .orderBy(desc(applicationsTable.createdAt));
 
+  const isAgentUser = req.user && (req.user.role === "agent" || req.user.role === "sub_agent");
+  const mappedRows = rows.map(r => {
+    const { agentCommissionAmount, ...rest } = r;
+    if (isAgentUser) {
+      return { ...rest, commissionAmount: agentCommissionAmount };
+    }
+    return rest;
+  });
+
   res.json({
-    data: rows,
+    data: mappedRows,
     meta: {
       total: Number(count),
       page: pageNum,
@@ -297,6 +307,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
       studentEmail: studentsTable.email,
       studentPhone: studentsTable.phone,
       commissionAmount: commissionsTable.universityCommissionAmount,
+      agentCommissionAmount: commissionsTable.agentCommissionAmount,
       commissionStatus: commissionsTable.status,
     })
     .from(applicationsTable)
@@ -307,6 +318,10 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  if (user.role === "agent" || user.role === "sub_agent") {
+    (row as any).commissionAmount = row.agentCommissionAmount;
+  }
+  delete (row as any).agentCommissionAmount;
   if (!isStaff) {
     if (user.role === "student") {
       const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
