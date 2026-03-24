@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, quickLinksTable } from "@workspace/db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 
@@ -18,7 +18,10 @@ router.get("/quick-links", requireAuth, async (req, res): Promise<void> => {
   const links = await db
     .select()
     .from(quickLinksTable)
-    .where(and(eq(quickLinksTable.target, target), eq(quickLinksTable.isActive, true)))
+    .where(and(
+      sql`(${quickLinksTable.target} = ${target} OR ${quickLinksTable.target} LIKE '%' || ${target} || '%')`,
+      eq(quickLinksTable.isActive, true),
+    ))
     .orderBy(asc(quickLinksTable.sortOrder), asc(quickLinksTable.id));
 
   res.json({ data: links });
@@ -40,17 +43,19 @@ router.post("/quick-links", requireAuth, requireRole(...MANAGER_ROLES), async (r
     return;
   }
   const validTargets = ["agent", "sub_agent", "staff", "student"];
-  if (!validTargets.includes(target)) {
-    res.status(400).json({ error: "target must be agent, sub_agent, staff or student" });
+  const targets = String(target).split(",").map(t => t.trim()).filter(Boolean);
+  if (targets.length === 0 || !targets.every(t => validTargets.includes(t))) {
+    res.status(400).json({ error: "target must be one or more of: agent, sub_agent, staff, student" });
     return;
   }
+  const normalizedTarget = targets.join(",");
   const [link] = await db.insert(quickLinksTable).values({
     title,
     url,
     icon: icon || null,
     logoUrl: logoUrl || null,
     color: color || null,
-    target,
+    target: normalizedTarget,
     sortOrder: sortOrder ?? 0,
   }).returning();
   res.status(201).json(link);
@@ -60,8 +65,17 @@ router.patch("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), asy
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
-  for (const key of ["title", "url", "icon", "logoUrl", "color", "target", "sortOrder", "isActive"]) {
+  for (const key of ["title", "url", "icon", "logoUrl", "color", "sortOrder", "isActive"]) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
+  }
+  if (req.body.target !== undefined) {
+    const validTargets = ["agent", "sub_agent", "staff", "student"];
+    const targets = String(req.body.target).split(",").map((t: string) => t.trim()).filter(Boolean);
+    if (targets.length === 0 || !targets.every((t: string) => validTargets.includes(t))) {
+      res.status(400).json({ error: "target must be one or more of: agent, sub_agent, staff, student" });
+      return;
+    }
+    updates.target = targets.join(",");
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
   const [updated] = await db.update(quickLinksTable).set(updates).where(eq(quickLinksTable.id, id)).returning();

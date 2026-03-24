@@ -1634,7 +1634,7 @@ function QuickLinksTab() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+  const [form, setForm] = useState({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent" as string, sortOrder: 0 });
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
@@ -1806,16 +1806,29 @@ function QuickLinksTab() {
               </div>
               <div>
                 <Label className="text-xs font-medium mb-1.5">Target</Label>
-                <select
-                  value={form.target}
-                  onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                >
-                  <option value="agent">Agent</option>
-                  <option value="sub_agent">Sub Agent</option>
-                  <option value="staff">Staff</option>
-                  <option value="student">Student</option>
-                </select>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {[
+                    { value: "agent", label: "Agent" },
+                    { value: "sub_agent", label: "Sub Agent" },
+                    { value: "staff", label: "Staff" },
+                    { value: "student", label: "Student" },
+                  ].map(opt => {
+                    const targets = form.target.split(",").filter(Boolean);
+                    const checked = targets.includes(opt.value);
+                    return (
+                      <label key={opt.value} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${checked ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
+                        <input type="checkbox" checked={checked} onChange={() => {
+                          setForm(f => {
+                            const ts = f.target.split(",").filter(Boolean);
+                            const next = checked ? ts.filter(t => t !== opt.value) : [...ts, opt.value];
+                            return { ...f, target: next.length > 0 ? next.join(",") : "" };
+                          });
+                        }} className="sr-only" />
+                        {opt.label}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <Label className="text-xs font-medium mb-1.5">Sort Order</Label>
@@ -1882,9 +1895,11 @@ function QuickLinksTab() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-sm text-foreground">{link.title}</p>
-                    <Badge className={`text-[10px] ${TARGET_COLORS[link.target] || "bg-gray-100 text-gray-600"}`}>
-                      {TARGET_LABELS[link.target] || link.target}
-                    </Badge>
+                    {(link.target || "").split(",").map((t: string) => (
+                      <Badge key={t} className={`text-[10px] ${TARGET_COLORS[t] || "bg-gray-100 text-gray-600"}`}>
+                        {TARGET_LABELS[t] || t}
+                      </Badge>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{link.url}</p>
                 </div>
