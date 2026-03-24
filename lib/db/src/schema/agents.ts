@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -31,12 +31,14 @@ export const agentsTable = pgTable("agents", {
   assignedStaffId: integer("assigned_staff_id").references(() => usersTable.id, { onDelete: "set null" }),
   pointOfContact: text("point_of_contact"),
   notes: text("notes"),
+  embedToken: text("embed_token"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   index("agents_user_id_idx").on(table.userId),
   index("agents_parent_agent_id_idx").on(table.parentAgentId),
   index("agents_status_idx").on(table.status),
+  uniqueIndex("agents_embed_token_idx").on(table.embedToken),
 ]);
 
 export const insertAgentSchema = createInsertSchema(agentsTable).omit({ id: true, createdAt: true, updatedAt: true });

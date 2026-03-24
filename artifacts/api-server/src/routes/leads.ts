@@ -54,6 +54,44 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
   res.status(201).json({ success: true, message: "Inquiry submitted successfully" });
 });
 
+router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<void> => {
+  const { token } = req.params;
+  const [agent] = await db.select({ id: agentsTable.id, status: agentsTable.status })
+    .from(agentsTable).where(eq(agentsTable.embedToken, token));
+  if (!agent || agent.status !== "active") {
+    res.status(404).json({ error: "Invalid or inactive form" });
+    return;
+  }
+
+  const { firstName, lastName, email, phone } = req.body;
+  if (!firstName || !lastName || !email) {
+    res.status(400).json({ error: "firstName, lastName, and email are required" });
+    return;
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    res.status(400).json({ error: "Invalid email address" });
+    return;
+  }
+
+  await db.insert(leadsTable).values({
+    firstName: String(firstName).slice(0, 100),
+    lastName: String(lastName).slice(0, 100),
+    email: String(email).slice(0, 255),
+    phone: phone ? String(phone).slice(0, 30) : null,
+    source: "web_form",
+    status: "new",
+    agentId: agent.id,
+  });
+
+  const accept = req.headers.accept || "";
+  if (accept.includes("application/json")) {
+    res.status(201).json({ success: true, message: "Thank you! Your information has been submitted." });
+  } else {
+    res.status(200).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb}div{text-align:center;padding:40px;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1);max-width:400px}h2{color:#059669;margin:0 0 8px}p{color:#6b7280;margin:0}</style></head><body><div><h2>&#10003; Success!</h2><p>Thank you! Your information has been submitted successfully.</p></div></body></html>`);
+  }
+});
+
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
   const user = req.user!;
   const { status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;

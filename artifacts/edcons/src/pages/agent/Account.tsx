@@ -16,7 +16,7 @@ import {
   User, Globe, Shield, Save, Check, Briefcase,
   Loader2, Phone, Mail, TrendingUp, MapPin,
   Upload, X, FileText, Download, Image as ImageIcon, Eye,
-  Camera, Lock, KeyRound, LogOut,
+  Camera, Lock, KeyRound, LogOut, Code, Copy, ExternalLink,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 
@@ -237,6 +237,7 @@ export default function AgentAccount() {
             {[
               { value: "profile", label: "Profile", icon: User },
               { value: "agency", label: "Agency", icon: Briefcase },
+              { value: "web-to-lead", label: "Web to Lead", icon: Code },
               { value: "language", label: "Language", icon: Globe },
               { value: "security", label: "Security", icon: Shield },
             ].map(tab => (
@@ -377,6 +378,11 @@ export default function AgentAccount() {
           {/* ── Agency Tab ── */}
           <TabsContent value="agency" className="pt-6">
             <AgencyTab agentProfile={agentProfile} agentLoading={agentLoading} />
+          </TabsContent>
+
+          {/* ── Web to Lead Tab ── */}
+          <TabsContent value="web-to-lead" className="pt-6">
+            <WebToLeadTab />
           </TabsContent>
 
           {/* ── Language Tab ── */}
@@ -717,6 +723,107 @@ function DocumentViewer({ label, value }: { label: string; value?: string | null
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function WebToLeadTab() {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const { data: tokenData, isLoading } = useQuery<{ embedToken: string }>({
+    queryKey: ["embed-token"],
+    queryFn: () => customFetch(`/api/agents/me/embed-token`) as Promise<{ embedToken: string }>,
+  });
+
+  const apiDomain = window.location.origin;
+  const token = tokenData?.embedToken || "";
+
+  const formCode = `<form action="${apiDomain}${BASE_URL}/api/public/lead/${token}" method="POST" style="max-width:420px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:24px;border-radius:12px;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.1);border:1px solid #e5e7eb">
+  <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#111827;text-align:center">Contact Us</h3>
+  <div style="margin-bottom:12px">
+    <input name="firstName" placeholder="First Name" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  </div>
+  <div style="margin-bottom:12px">
+    <input name="lastName" placeholder="Last Name" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  </div>
+  <div style="margin-bottom:12px">
+    <input name="phone" type="tel" placeholder="Phone Number" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  </div>
+  <div style="margin-bottom:16px">
+    <input name="email" type="email" placeholder="Email Address" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  </div>
+  <button type="submit" style="width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Submit</button>
+</form>`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(formCode);
+    setCopied(true);
+    toast({ title: "Copied!", description: "Form code copied to clipboard." });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (isLoading) {
+    return (
+      <Card className="border shadow-sm p-8 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <Code className="w-4 h-4 text-blue-600" />
+          </div>
+          <h3 className="font-display font-semibold text-base">Web to Lead Form</h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">
+          Copy the HTML code below and paste it into your website. When someone fills out the form, their information will automatically appear as a new lead in your Leads page.
+        </p>
+
+        <div className="relative">
+          <div className="absolute top-3 right-3 z-10">
+            <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? "Copied" : "Copy Code"}
+            </Button>
+          </div>
+          <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
+            {formCode}
+          </pre>
+        </div>
+      </Card>
+
+      <Card className="border shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+            <Eye className="w-4 h-4 text-green-600" />
+          </div>
+          <h3 className="font-display font-semibold text-base">Form Preview</h3>
+        </div>
+        <div className="bg-secondary/30 rounded-xl p-8 flex justify-center">
+          <div dangerouslySetInnerHTML={{ __html: formCode }} />
+        </div>
+      </Card>
+
+      <Card className="border shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+            <ExternalLink className="w-4 h-4 text-amber-600" />
+          </div>
+          <h3 className="font-display font-semibold text-base">How to Use</h3>
+        </div>
+        <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+          <li>Click <strong>"Copy Code"</strong> to copy the form HTML</li>
+          <li>Open your website's HTML editor or CMS</li>
+          <li>Paste the code where you want the form to appear</li>
+          <li>Save and publish your website</li>
+          <li>Submissions will appear in your <strong>Leads</strong> page automatically</li>
+        </ol>
+      </Card>
     </div>
   );
 }

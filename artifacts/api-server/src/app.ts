@@ -52,7 +52,7 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api/public/embed/")) {
+  if (req.path.startsWith("/api/public/embed/") || req.path.startsWith("/api/public/lead")) {
     cors({ origin: true, credentials: false })(req, res, next);
   } else {
     cors({

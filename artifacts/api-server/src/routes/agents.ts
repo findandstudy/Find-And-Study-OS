@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import crypto from "crypto";
 import { db, agentsTable, usersTable, commissionsTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
@@ -73,6 +74,19 @@ router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
   }
   const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, agent.id)).returning();
   res.json(updated);
+});
+
+router.get("/agents/me/embed-token", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (!agent.embedToken) {
+    const token = crypto.randomUUID();
+    await db.update(agentsTable).set({ embedToken: token }).where(eq(agentsTable.id, agent.id));
+    res.json({ embedToken: token });
+    return;
+  }
+  res.json({ embedToken: agent.embedToken });
 });
 
 router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
@@ -159,6 +173,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     businessName: parentAgent.businessName || null,
     logoUrl: logoUrl || null,
     hideServiceFees: hideServiceFees === true,
+    embedToken: crypto.randomUUID(),
   }).returning();
 
   res.status(201).json(subAgent);
@@ -450,6 +465,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,
     subAgentCommissionRate: subAgentCommissionRate ? parseFloat(subAgentCommissionRate) : null,
     hideServiceFees: hideServiceFees === true || hideServiceFees === "true" ? true : false,
+    embedToken: crypto.randomUUID(),
   }).returning();
 
   res.status(201).json(agent);
