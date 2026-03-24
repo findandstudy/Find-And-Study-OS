@@ -9,6 +9,15 @@ import { fileURLToPath } from "url";
 
 const isProd = process.env.NODE_ENV === "production";
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[fatal] Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[fatal] Uncaught exception:", err);
+  process.exit(1);
+});
+
 function getSeedDir(): string {
   try {
     if (typeof __dirname !== "undefined") return __dirname;
@@ -22,11 +31,13 @@ const seedDir = getSeedDir();
 
 async function ensureSuperAdmin() {
   if (isProd) return;
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedPassword) return;
   try {
     const email = "en@findandstudy.com";
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (!existing) {
-      const hash = await bcrypt.hash("En9881274!", 10);
+      const hash = await bcrypt.hash(seedPassword, 10);
       await db.insert(usersTable).values({
         replitId: "local-admin",
         email,
@@ -46,11 +57,13 @@ async function ensureSuperAdmin() {
 
 async function ensureAgentUser() {
   if (isProd) return;
+  const seedPassword = process.env.SEED_AGENT_PASSWORD;
+  if (!seedPassword) return;
   try {
     const email = "omar@agent.com";
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (!existing) {
-      const hash = await bcrypt.hash("findandstudy123", 10);
+      const hash = await bcrypt.hash(seedPassword, 10);
       await db.insert(usersTable).values({
         replitId: "local-agent",
         email,

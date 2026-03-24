@@ -724,27 +724,27 @@ function renderFilters(){
 
   if(!hidden.includes('country')&&!pf.country){
     h+='<div class="ew-filter-group"><label>Country</label><select id="ew-f-country"'+(locked.includes('country')?' disabled':'')+'><option value="">All Countries</option>';
-    (filters.countries||[]).forEach(function(c){h+='<option value="'+c+'"'+(userFilters.country===c?' selected':'')+'>'+c+'</option>'});
+    (filters.countries||[]).forEach(function(c){h+='<option value="'+esc(c)+'"'+(userFilters.country===c?' selected':'')+'>'+esc(c)+'</option>'});
     h+='</select></div>';
   }
   if(!hidden.includes('universityType')&&!pf.universityType){
     h+='<div class="ew-filter-group"><label>Type</label><select id="ew-f-universityType"'+(locked.includes('universityType')?' disabled':'')+'><option value="">All Types</option>';
-    (filters.universityTypes||[]).forEach(function(t){h+='<option value="'+t+'"'+(userFilters.universityType===t?' selected':'')+'>'+t+'</option>'});
+    (filters.universityTypes||[]).forEach(function(t){h+='<option value="'+esc(t)+'"'+(userFilters.universityType===t?' selected':'')+'>'+esc(t)+'</option>'});
     h+='</select></div>';
   }
   if(!hidden.includes('universityId')&&!pf.universityId){
     h+='<div class="ew-filter-group"><label>University</label><select id="ew-f-universityId"'+(locked.includes('universityId')?' disabled':'')+'><option value="">All Universities</option>';
-    (filters.universities||[]).forEach(function(u){h+='<option value="'+u.id+'"'+(userFilters.universityId==u.id?' selected':'')+'>'+u.name+'</option>'});
+    (filters.universities||[]).forEach(function(u){h+='<option value="'+esc(String(u.id))+'"'+(userFilters.universityId==u.id?' selected':'')+'>'+esc(u.name)+'</option>'});
     h+='</select></div>';
   }
   if(!hidden.includes('level')&&!pf.level){
     h+='<div class="ew-filter-group"><label>Level</label><select id="ew-f-level"'+(locked.includes('level')?' disabled':'')+'><option value="">All Levels</option>';
-    (filters.degrees||[]).forEach(function(d){h+='<option value="'+d+'"'+(userFilters.level===d?' selected':'')+'>'+d+'</option>'});
+    (filters.degrees||[]).forEach(function(d){h+='<option value="'+esc(d)+'"'+(userFilters.level===d?' selected':'')+'>'+esc(d)+'</option>'});
     h+='</select></div>';
   }
   if(!hidden.includes('language')&&!pf.language){
     h+='<div class="ew-filter-group"><label>Language</label><select id="ew-f-language"'+(locked.includes('language')?' disabled':'')+'><option value="">All Languages</option>';
-    (filters.languages||[]).forEach(function(l){h+='<option value="'+l+'"'+(userFilters.language===l?' selected':'')+'>'+l+'</option>'});
+    (filters.languages||[]).forEach(function(l){h+='<option value="'+esc(l)+'"'+(userFilters.language===l?' selected':'')+'>'+esc(l)+'</option>'});
     h+='</select></div>';
   }
 
@@ -755,7 +755,7 @@ function renderFilters(){
 function renderCard(p){
   var fee=p.discountedFee||p.tuitionFee;
   var cur=p.currency||'USD';
-  var logo=p.universityLogoUrl?'<img class="ew-card-logo" src="'+p.universityLogoUrl+'" alt="">':'<div class="ew-card-logo-placeholder">'+(p.universityName||'U').charAt(0)+'</div>';
+  var logo=p.universityLogoUrl?'<img class="ew-card-logo" src="'+esc(p.universityLogoUrl)+'" alt="">':'<div class="ew-card-logo-placeholder">'+esc((p.universityName||'U').charAt(0))+'</div>';
   var h='<div class="ew-card">';
   h+='<div class="ew-card-header">'+logo+'<div><div class="ew-card-title">'+esc(p.name)+'</div><div class="ew-card-uni">'+esc(p.universityName||'')+'</div></div></div>';
   h+='<div class="ew-card-details">';

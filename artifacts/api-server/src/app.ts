@@ -54,16 +54,24 @@ app.use((req, res, next) => {
   }
 });
 
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 app.use(cookieParser());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(authMiddleware);
 
 app.use("/api", router);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   const status = (err as any).status || (err as any).statusCode || 500;
-  const message = process.env.NODE_ENV === "production" ? "Internal server error" : err.message;
+  const isSafe = status < 500;
+  const message = isSafe ? err.message : "Internal server error";
   console.error("[error]", err.message, err.stack?.split("\n")[1]);
   res.status(status).json({ error: message });
 });

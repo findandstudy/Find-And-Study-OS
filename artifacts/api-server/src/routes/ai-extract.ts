@@ -1,8 +1,27 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { requireAuth } from "../lib/auth";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router: IRouter = Router();
+
+const aiRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function aiRateLimit(maxRequests: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = `ai:${(req as any).user?.id || req.ip}`;
+    const now = Date.now();
+    const entry = aiRateLimitMap.get(key);
+    if (!entry || now > entry.resetAt) {
+      aiRateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (entry.count >= maxRequests) {
+      res.status(429).json({ error: "Too many requests. Please try again later." });
+      return;
+    }
+    entry.count++;
+    next();
+  };
+}
 
 const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 
 Analyze the provided document image(s) and extract student information.
@@ -40,7 +59,7 @@ Rules:
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
-router.post("/ai/extract-document", requireAuth, async (req, res): Promise<void> => {
+router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), async (req, res): Promise<void> => {
   try {
     const { documents } = req.body as {
       documents: Array<{
@@ -115,11 +134,11 @@ router.post("/ai/extract-document", requireAuth, async (req, res): Promise<void>
     res.json({ extracted });
   } catch (err: any) {
     console.error("AI extraction error:", err);
-    res.status(500).json({ error: err.message || "AI extraction failed" });
+    res.status(500).json({ error: "AI extraction failed" });
   }
 });
 
-router.post("/ai/extract-bulk-csv", requireAuth, async (req, res): Promise<void> => {
+router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000), async (req, res): Promise<void> => {
   try {
     const { csvData } = req.body as { csvData: string };
     if (!csvData) {
@@ -163,7 +182,7 @@ ${csvData.slice(0, 10000)}`,
     res.json({ students });
   } catch (err: any) {
     console.error("CSV parse error:", err);
-    res.status(500).json({ error: err.message || "CSV parsing failed" });
+    res.status(500).json({ error: "CSV parsing failed" });
   }
 });
 

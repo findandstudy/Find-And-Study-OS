@@ -27,3 +27,9 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.development]
+SEED_ADMIN_PASSWORD = "En9881274!"
+SEED_AGENT_PASSWORD = "findandstudy123"

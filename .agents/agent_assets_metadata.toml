@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "mSFZeCCdhnkK6uyrNXahU"
+uri = "file://AUDIT_REPORT.md"
+type = "text"
+title = "EduConsult OS - Production Readiness Audit Report"
