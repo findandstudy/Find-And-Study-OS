@@ -1968,6 +1968,7 @@ function WebToLeadTab() {
 
   const apiDomain = window.location.origin;
   const token = tokenData?.embedToken || "";
+  const selectedAgent = agents.find((a: any) => String(a.id) === selectedAgentId);
 
   const formCode = selectedAgentId && token ? `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:#ffffff;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e5e7eb" onsubmit="var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
   <h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;text-align:center">Get in Touch</h3>
@@ -2008,83 +2009,79 @@ function WebToLeadTab() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const selectedAgent = agents.find((a: any) => String(a.id) === selectedAgentId);
+  if (agentsLoading) {
+    return (
+      <Card className="border shadow-sm p-8 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
+      <Card className="border shadow-sm p-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-            <ExternalLink className="w-4 h-4 text-blue-600" />
+            <Code className="w-4 h-4 text-blue-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">Web to Lead Form Generator</h3>
+          <h3 className="font-display font-semibold text-base">Web to Lead Form</h3>
         </div>
         <p className="text-sm text-muted-foreground mb-5">
-          Generate a web-to-lead embed form for any agent. Leads submitted via this form will automatically be linked to the selected agent.
+          Select an agent below to generate their unique web-to-lead form. Copy the HTML code and paste it into the agent's website. Submitted leads will automatically be linked to the selected agent.
         </p>
 
         <div className="mb-5">
           <Label className="text-sm font-semibold mb-2 block">Select Agent</Label>
-          {agentsLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading agents...
-            </div>
-          ) : (
-            <select
-              value={selectedAgentId}
-              onChange={e => { setSelectedAgentId(e.target.value); setCopied(false); }}
-              className="w-full max-w-md px-3 py-2.5 border border-input rounded-xl bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">-- Choose an agent --</option>
-              {agents.map((a: any) => (
-                <option key={a.id} value={String(a.id)}>
-                  {a.firstName} {a.lastName} ({a.email}) {a.parentAgentId ? " [Sub-Agent]" : ""}
-                </option>
-              ))}
-            </select>
-          )}
+          <select
+            value={selectedAgentId}
+            onChange={e => { setSelectedAgentId(e.target.value); setCopied(false); }}
+            className="w-full max-w-md px-3 py-2.5 border border-input rounded-xl bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="">-- Choose an agent --</option>
+            {agents.map((a: any) => (
+              <option key={a.id} value={String(a.id)}>
+                {a.firstName} {a.lastName} ({a.email}){a.parentAgentId ? " [Sub-Agent]" : ""}
+              </option>
+            ))}
+          </select>
         </div>
 
         {selectedAgent && (
-          <div className="p-3 rounded-xl bg-primary/5 border border-primary/10 mb-5 flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
               {selectedAgent.firstName?.[0]}{selectedAgent.lastName?.[0]}
             </div>
             <div>
               <p className="text-sm font-semibold">{selectedAgent.firstName} {selectedAgent.lastName}</p>
-              <p className="text-xs text-muted-foreground">{selectedAgent.email} {selectedAgent.parentAgentId ? " (Sub-Agent)" : " (Agent)"}</p>
+              <p className="text-xs text-muted-foreground">{selectedAgent.email}{selectedAgent.parentAgentId ? " (Sub-Agent)" : " (Agent)"}</p>
             </div>
           </div>
         )}
-      </Card>
 
-      {selectedAgentId && tokenLoading && (
-        <Card className="border-none shadow-lg shadow-black/5 p-8 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </Card>
-      )}
+        {selectedAgentId && tokenLoading && (
+          <div className="mt-5 flex items-center justify-center py-6">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
 
-      {formCode && (
-        <>
-          <Card className="border-none shadow-lg shadow-black/5 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                  <Code className="w-4 h-4 text-violet-600" />
-                </div>
-                <h3 className="font-display font-semibold text-base">Embed Code</h3>
-              </div>
+        {formCode && (
+          <div className="relative mt-5">
+            <div className="absolute top-3 right-3 z-10">
               <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? "Copied" : "Copy Code"}
               </Button>
             </div>
-            <pre className="bg-secondary/50 border rounded-xl p-4 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
+            <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
               {formCode}
             </pre>
-          </Card>
+          </div>
+        )}
+      </Card>
 
-          <Card className="border-none shadow-lg shadow-black/5 p-6">
+      {formCode && (
+        <>
+          <Card className="border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                 <Eye className="w-4 h-4 text-green-600" />
@@ -2096,19 +2093,19 @@ function WebToLeadTab() {
             </div>
           </Card>
 
-          <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <Card className="border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Info className="w-4 h-4 text-amber-600" />
+                <ExternalLink className="w-4 h-4 text-amber-600" />
               </div>
               <h3 className="font-display font-semibold text-base">How to Use</h3>
             </div>
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-              <li>Select the agent whose leads should receive the form submissions</li>
+              <li>Select the agent from the dropdown above</li>
               <li>Click <strong>"Copy Code"</strong> to copy the form HTML</li>
-              <li>Open the target website's HTML editor or CMS</li>
+              <li>Open the agent's website HTML editor or CMS</li>
               <li>Paste the code where you want the form to appear</li>
-              <li>Submissions will appear as leads linked to the selected agent</li>
+              <li>Save and publish — submissions will appear in the agent's <strong>Leads</strong> page automatically</li>
             </ol>
           </Card>
         </>
