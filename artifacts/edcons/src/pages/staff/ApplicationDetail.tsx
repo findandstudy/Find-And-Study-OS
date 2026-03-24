@@ -65,6 +65,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isAgent = basePath === "/agent";
   const [noteText, setNoteText] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const { user: authUser } = useAuth();
@@ -278,6 +279,8 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   phone={app.studentPhone}
                   entityType="application"
                   entityId={id}
+                  hideEmail={isAgent}
+                  hideWhatsApp={isAgent}
                 />
               </div>
             )}

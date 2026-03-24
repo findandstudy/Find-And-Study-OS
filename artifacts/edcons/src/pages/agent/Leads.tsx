@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead } from "@workspace/api-client-react";
+import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -780,7 +780,7 @@ export default function AgentLeadsPage() {
 
   const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
@@ -800,13 +800,36 @@ export default function AgentLeadsPage() {
     const lead = allLeads.find((l: any) => l.id === leadId);
     if (!lead || lead.status === targetStatus) return;
 
+    const targetCol = columns.find(c => c.id === targetStatus);
+    const isWonColumn = targetCol?.variant === "won";
+
+    if (isWonColumn) {
+      try {
+        const result = await customFetch(`/api/leads/${leadId}/convert`, { method: "POST" }) as any;
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+        const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
+        toast({
+          title: "Lead converted to student",
+          description: result.merged
+            ? `Merged with existing student: ${studentName}`
+            : `New student created: ${studentName}`,
+        });
+      } catch (err: any) {
+        toast({ title: "Conversion failed", description: err.message || "Failed to convert lead", variant: "destructive" });
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      }
+      return;
+    }
+
     updateLead.mutate(
       { id: leadId, data: { status: targetStatus } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
-          const colLabel = columns.find(c => c.id === targetStatus)?.title ?? targetStatus;
+          const colLabel = targetCol?.title ?? targetStatus;
           toast({ title: `Lead moved to ${colLabel}` });
         },
         onError: () => {

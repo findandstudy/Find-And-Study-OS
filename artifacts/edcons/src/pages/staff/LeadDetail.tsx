@@ -53,6 +53,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [assigning, setAssigning] = useState(false);
 
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
+  const isAgent = basePath === "/agent";
 
   const { data: lead, isLoading } = useGetLead(id);
   const { data: notes = [] } = useGetLeadNotes(id);
@@ -214,6 +215,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 phone={lead.phone}
                 entityType="lead"
                 entityId={id}
+                hideEmail={isAgent}
+                hideWhatsApp={isAgent}
               />
               {lead.status !== "converted" && (
                 <Button
@@ -449,6 +452,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               </div>
             </div>
 
+            {!isAgent && (
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <User className="w-4 h-4" />
@@ -501,6 +505,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 </div>
               )}
             </div>
+            )}
 
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">

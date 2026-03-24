@@ -24,9 +24,11 @@ interface QuickContactProps {
   phone?: string | null;
   entityType: "lead" | "student" | "agent" | "application";
   entityId: number;
+  hideEmail?: boolean;
+  hideWhatsApp?: boolean;
 }
 
-export function QuickContactButtons({ name, email, phone, entityType, entityId }: QuickContactProps) {
+export function QuickContactButtons({ name, email, phone, entityType, entityId, hideEmail, hideWhatsApp }: QuickContactProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [channel, setChannel] = useState<Channel>("internal");
 
@@ -47,7 +49,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId }
           <MessageSquare className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Message</span>
         </Button>
-        {email && (
+        {email && !hideEmail && (
           <Button
             size="sm"
             variant="outline"
@@ -58,7 +60,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId }
             <span className="hidden sm:inline">Email</span>
           </Button>
         )}
-        {phone && (
+        {phone && !hideWhatsApp && (
           <Button
             size="sm"
             variant="outline"
@@ -80,6 +82,8 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId }
         phone={phone}
         entityType={entityType}
         entityId={entityId}
+        hideEmail={hideEmail}
+        hideWhatsApp={hideWhatsApp}
       />
     </>
   );
@@ -95,6 +99,8 @@ export function QuickContactDialog({
   phone,
   entityType,
   entityId,
+  hideEmail,
+  hideWhatsApp,
 }: {
   open: boolean;
   onClose: () => void;
@@ -105,6 +111,8 @@ export function QuickContactDialog({
   phone?: string | null;
   entityType: string;
   entityId: number;
+  hideEmail?: boolean;
+  hideWhatsApp?: boolean;
 }) {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
@@ -161,7 +169,7 @@ export function QuickContactDialog({
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Channel</Label>
             <div className="flex gap-2">
-              {CHANNELS.map(ch => {
+              {CHANNELS.filter(ch => !(ch.key === "email" && hideEmail) && !(ch.key === "whatsapp" && hideWhatsApp)).map(ch => {
                 const disabled = (ch.key === "email" && !email) || (ch.key === "whatsapp" && !phone);
                 return (
                   <Badge

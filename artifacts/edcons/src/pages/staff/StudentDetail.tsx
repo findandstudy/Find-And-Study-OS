@@ -68,6 +68,7 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
 export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
+  const isAgent = basePath === "/agent";
 
   const { data: student, isLoading } = useGetStudent(id);
   const { data: applicationsResp } = useListApplications({ studentId: id });
@@ -267,6 +268,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 phone={student.phone}
                 entityType="student"
                 entityId={id}
+                hideEmail={isAgent}
+                hideWhatsApp={isAgent}
               />
               <Badge
                 className={`capitalize px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[student.status ?? "active"]}`}
