@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -84,13 +85,13 @@ type FilterOptions = {
 };
 
 type Filters = {
-  country: string;
-  city: string;
-  universityType: string;
-  universityId: string;
-  level: string;
-  language: string;
-  field: string;
+  country: string[];
+  city: string[];
+  universityType: string[];
+  universityId: string[];
+  level: string[];
+  language: string[];
+  field: string[];
   search: string;
   feeMin: string;
   feeMax: string;
@@ -128,8 +129,8 @@ export default function CourseFinder() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>({
-    country: "", city: "", universityType: "", universityId: "",
-    level: "", language: "", field: "", search: "", feeMin: "", feeMax: "",
+    country: [], city: [], universityType: [], universityId: [],
+    level: [], language: [], field: [], search: "", feeMin: "", feeMax: "",
   });
   const [hideServiceFee, setHideServiceFee] = useState(false);
   const [page, setPage] = useState(1);
@@ -160,13 +161,13 @@ export default function CourseFinder() {
     const p = new URLSearchParams();
     p.set("page", String(page));
     p.set("limit", "24");
-    if (filters.country) p.set("country", filters.country);
-    if (filters.city) p.set("city", filters.city);
-    if (filters.universityType) p.set("universityType", filters.universityType);
-    if (filters.universityId) p.set("universityId", filters.universityId);
-    if (filters.level) p.set("level", filters.level);
-    if (filters.language) p.set("language", filters.language);
-    if (filters.field) p.set("field", filters.field);
+    if (filters.country.length) p.set("country", filters.country.join(","));
+    if (filters.city.length) p.set("city", filters.city.join(","));
+    if (filters.universityType.length) p.set("universityType", filters.universityType.join(","));
+    if (filters.universityId.length) p.set("universityId", filters.universityId.join(","));
+    if (filters.level.length) p.set("level", filters.level.join(","));
+    if (filters.language.length) p.set("language", filters.language.join(","));
+    if (filters.field.length) p.set("field", filters.field.join(","));
     if (filters.search) p.set("search", filters.search);
     if (filters.feeMin) p.set("feeMin", filters.feeMin);
     if (filters.feeMax) p.set("feeMax", filters.feeMax);
@@ -219,13 +220,13 @@ export default function CourseFinder() {
         const allParams = new URLSearchParams();
         allParams.set("page", "1");
         allParams.set("limit", "1000");
-        if (filters.country) allParams.set("country", filters.country);
-        if (filters.city) allParams.set("city", filters.city);
-        if (filters.universityType) allParams.set("universityType", filters.universityType);
-        if (filters.universityId) allParams.set("universityId", filters.universityId);
-        if (filters.level) allParams.set("level", filters.level);
-        if (filters.language) allParams.set("language", filters.language);
-        if (filters.field) allParams.set("field", filters.field);
+        if (filters.country.length) allParams.set("country", filters.country.join(","));
+        if (filters.city.length) allParams.set("city", filters.city.join(","));
+        if (filters.universityType.length) allParams.set("universityType", filters.universityType.join(","));
+        if (filters.universityId.length) allParams.set("universityId", filters.universityId.join(","));
+        if (filters.level.length) allParams.set("level", filters.level.join(","));
+        if (filters.language.length) allParams.set("language", filters.language.join(","));
+        if (filters.field.length) allParams.set("field", filters.field.join(","));
         if (filters.search) allParams.set("search", filters.search);
         if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
         if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
@@ -266,13 +267,13 @@ export default function CourseFinder() {
         const allParams = new URLSearchParams();
         allParams.set("page", "1");
         allParams.set("limit", "1000");
-        if (filters.country) allParams.set("country", filters.country);
-        if (filters.city) allParams.set("city", filters.city);
-        if (filters.universityType) allParams.set("universityType", filters.universityType);
-        if (filters.universityId) allParams.set("universityId", filters.universityId);
-        if (filters.level) allParams.set("level", filters.level);
-        if (filters.language) allParams.set("language", filters.language);
-        if (filters.field) allParams.set("field", filters.field);
+        if (filters.country.length) allParams.set("country", filters.country.join(","));
+        if (filters.city.length) allParams.set("city", filters.city.join(","));
+        if (filters.universityType.length) allParams.set("universityType", filters.universityType.join(","));
+        if (filters.universityId.length) allParams.set("universityId", filters.universityId.join(","));
+        if (filters.level.length) allParams.set("level", filters.level.join(","));
+        if (filters.language.length) allParams.set("language", filters.language.join(","));
+        if (filters.field.length) allParams.set("field", filters.field.join(","));
         if (filters.search) allParams.set("search", filters.search);
         if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
         if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
@@ -316,7 +317,7 @@ export default function CourseFinder() {
     }
   }
 
-  function handleFilterChange(key: keyof Filters, value: string) {
+  function handleFilterChange(key: keyof Filters, value: any) {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1);
     setSelectedIds(new Set());
@@ -324,13 +325,13 @@ export default function CourseFinder() {
   }
 
   function clearFilters() {
-    setFilters({ country: "", city: "", universityType: "", universityId: "", level: "", language: "", field: "", search: "", feeMin: "", feeMax: "" });
+    setFilters({ country: [], city: [], universityType: [], universityId: [], level: [], language: [], field: [], search: "", feeMin: "", feeMax: "" });
     setPage(1);
     setSelectedIds(new Set());
     setPdfMarkup(0);
   }
 
-  const hasActiveFilters = filters.country || filters.city || filters.universityType || filters.universityId || filters.level || filters.language || filters.field || filters.search || filters.feeMin || filters.feeMax;
+  const hasActiveFilters = filters.country.length || filters.city.length || filters.universityType.length || filters.universityId.length || filters.level.length || filters.language.length || filters.field.length || filters.search || filters.feeMin || filters.feeMax;
 
   function handleSort(field: string) {
     if (sortField === field) {
@@ -368,13 +369,13 @@ export default function CourseFinder() {
         const allParams = new URLSearchParams();
         allParams.set("page", "1");
         allParams.set("limit", "1000");
-        if (filters.country) allParams.set("country", filters.country);
-        if (filters.city) allParams.set("city", filters.city);
-        if (filters.universityType) allParams.set("universityType", filters.universityType);
-        if (filters.universityId) allParams.set("universityId", filters.universityId);
-        if (filters.level) allParams.set("level", filters.level);
-        if (filters.language) allParams.set("language", filters.language);
-        if (filters.field) allParams.set("field", filters.field);
+        if (filters.country.length) allParams.set("country", filters.country.join(","));
+        if (filters.city.length) allParams.set("city", filters.city.join(","));
+        if (filters.universityType.length) allParams.set("universityType", filters.universityType.join(","));
+        if (filters.universityId.length) allParams.set("universityId", filters.universityId.join(","));
+        if (filters.level.length) allParams.set("level", filters.level.join(","));
+        if (filters.language.length) allParams.set("language", filters.language.join(","));
+        if (filters.field.length) allParams.set("field", filters.field.join(","));
         if (filters.search) allParams.set("search", filters.search);
         if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
         if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
@@ -434,79 +435,72 @@ export default function CourseFinder() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Country</Label>
-              <Select value={filters.country} onValueChange={v => handleFilterChange("country", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Countries" /></SelectTrigger>
-                <SelectContent className="max-h-60">
-                  <SelectItem value="_all">All Countries</SelectItem>
-                  {filterOptions?.countries?.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.country}
+                onChange={v => handleFilterChange("country", v)}
+                options={filterOptions?.countries?.map(c => ({ value: c, label: c })) || []}
+                placeholder="All Countries"
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">City</Label>
-              <Select value={filters.city} onValueChange={v => handleFilterChange("city", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Cities" /></SelectTrigger>
-                <SelectContent className="max-h-60">
-                  <SelectItem value="_all">All Cities</SelectItem>
-                  {filterOptions?.cities?.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.city}
+                onChange={v => handleFilterChange("city", v)}
+                options={filterOptions?.cities?.map(c => ({ value: c, label: c })) || []}
+                placeholder="All Cities"
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">University Type</Label>
-              <Select value={filters.universityType} onValueChange={v => handleFilterChange("universityType", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Types" /></SelectTrigger>
-                <SelectContent className="max-h-60">
-                  <SelectItem value="_all">All Types</SelectItem>
-                  {filterOptions?.universityTypes?.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.universityType}
+                onChange={v => handleFilterChange("universityType", v)}
+                options={filterOptions?.universityTypes?.map(t => ({ value: t, label: t })) || []}
+                placeholder="All Types"
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">University</Label>
-              <Select value={filters.universityId} onValueChange={v => handleFilterChange("universityId", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Universities" /></SelectTrigger>
-                <SelectContent className="max-h-60">
-                  <SelectItem value="_all">All Universities</SelectItem>
-                  {filterOptions?.universities?.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.universityId}
+                onChange={v => handleFilterChange("universityId", v)}
+                options={filterOptions?.universities?.map(u => ({ value: String(u.id), label: u.name })) || []}
+                placeholder="All Universities"
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Study Level</Label>
-              <Select value={filters.level} onValueChange={v => handleFilterChange("level", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Levels" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_all">All Levels</SelectItem>
-                  {filterOptions?.degrees?.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.level}
+                onChange={v => handleFilterChange("level", v)}
+                options={filterOptions?.degrees?.map(d => ({ value: d, label: d })) || []}
+                placeholder="All Levels"
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Language</Label>
-              <Select value={filters.language} onValueChange={v => handleFilterChange("language", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Languages" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_all">All Languages</SelectItem>
-                  {filterOptions?.languages?.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.language}
+                onChange={v => handleFilterChange("language", v)}
+                options={filterOptions?.languages?.map(l => ({ value: l, label: l })) || []}
+                placeholder="All Languages"
+              />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Field</Label>
-              <Select value={filters.field} onValueChange={v => handleFilterChange("field", v === "_all" ? "" : v)}>
-                <SelectTrigger className="h-9 rounded-lg text-sm"><SelectValue placeholder="All Fields" /></SelectTrigger>
-                <SelectContent className="max-h-60">
-                  <SelectItem value="_all">All Fields</SelectItem>
-                  {filterOptions?.fields?.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                values={filters.field}
+                onChange={v => handleFilterChange("field", v)}
+                options={filterOptions?.fields?.map(f => ({ value: f, label: f })) || []}
+                placeholder="All Fields"
+              />
             </div>
 
             <div className="space-y-1">

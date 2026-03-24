@@ -4,6 +4,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -741,13 +742,13 @@ export default function Programs() {
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [country, setCountry] = useState("");
-  const [city, setCity] = useState("");
-  const [universityType, setUniversityType] = useState("");
-  const [universityId, setUniversityId] = useState("");
-  const [level, setLevel] = useState("");
-  const [language, setLanguage] = useState("");
-  const [field, setField] = useState("");
+  const [country, setCountry] = useState<string[]>([]);
+  const [city, setCity] = useState<string[]>([]);
+  const [universityType, setUniversityType] = useState<string[]>([]);
+  const [universityId, setUniversityId] = useState<string[]>([]);
+  const [level, setLevel] = useState<string[]>([]);
+  const [language, setLanguage] = useState<string[]>([]);
+  const [field, setField] = useState<string[]>([]);
   const [feeMin, setFeeMin] = useState("");
   const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -771,7 +772,7 @@ export default function Programs() {
   }, []);
 
   useEffect(() => {
-    setCity("");
+    setCity([]);
   }, [country]);
 
   const debouncedFeeMin = useDebounce(feeMin, 500);
@@ -782,13 +783,13 @@ export default function Programs() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: "24" });
       if (debouncedSearch) params.set("search", debouncedSearch);
-      if (country) params.set("country", country);
-      if (city) params.set("city", city);
-      if (universityType) params.set("universityType", universityType);
-      if (universityId) params.set("universityId", universityId);
-      if (level) params.set("level", level);
-      if (language) params.set("language", language);
-      if (field) params.set("field", field);
+      if (country.length) params.set("country", country.join(","));
+      if (city.length) params.set("city", city.join(","));
+      if (universityType.length) params.set("universityType", universityType.join(","));
+      if (universityId.length) params.set("universityId", universityId.join(","));
+      if (level.length) params.set("level", level.join(","));
+      if (language.length) params.set("language", language.join(","));
+      if (field.length) params.set("field", field.join(","));
       if (debouncedFeeMin) params.set("feeMin", debouncedFeeMin);
       if (debouncedFeeMax) params.set("feeMax", debouncedFeeMax);
 
@@ -811,22 +812,22 @@ export default function Programs() {
 
   const filteredCities = filters.cities;
 
-  const hasActiveFilters = country || city || universityType || universityId || level || language || field || feeMin || feeMax;
+  const hasActiveFilters = country.length || city.length || universityType.length || universityId.length || level.length || language.length || field.length || feeMin || feeMax;
 
   function clearAllFilters() {
-    setCountry("");
-    setCity("");
-    setUniversityType("");
-    setUniversityId("");
-    setLevel("");
-    setLanguage("");
-    setField("");
+    setCountry([]);
+    setCity([]);
+    setUniversityType([]);
+    setUniversityId([]);
+    setLevel([]);
+    setLanguage([]);
+    setField([]);
     setFeeMin("");
     setFeeMax("");
     setSearch("");
   }
 
-  const activeFilterCount = [country, city, universityType, universityId, level, language, field, feeMin, feeMax].filter(Boolean).length;
+  const activeFilterCount = [country.length, city.length, universityType.length, universityId.length, level.length, language.length, field.length, feeMin, feeMax].filter(Boolean).length;
 
   const pageNumbers = (() => {
     const pages: (number | "...")[] = [];
@@ -912,44 +913,48 @@ export default function Programs() {
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <Globe2 className="w-3 h-3" /> {t("programs.filterCountry")}
                           </label>
-                          <select value={country} onChange={e => setCountry(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allCountries")}</option>
-                            {filters.countries.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={country}
+                            onChange={setCountry}
+                            options={filters.countries.map(c => ({ value: c, label: c }))}
+                            placeholder={t("programs.allCountries")}
+                          />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <MapPin className="w-3 h-3" /> {t("programs.filterCity")}
                           </label>
-                          <select value={city} onChange={e => setCity(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allCities")}</option>
-                            {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={city}
+                            onChange={setCity}
+                            options={filteredCities.map(c => ({ value: c, label: c }))}
+                            placeholder={t("programs.allCities")}
+                          />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <Building2 className="w-3 h-3" /> {t("programs.filterUniversityType")}
                           </label>
-                          <select value={universityType} onChange={e => setUniversityType(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allTypes")}</option>
-                            {filters.universityTypes.map(ut => <option key={ut} value={ut}>{ut}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={universityType}
+                            onChange={setUniversityType}
+                            options={filters.universityTypes.map(ut => ({ value: ut, label: ut }))}
+                            placeholder={t("programs.allTypes")}
+                          />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <GraduationCap className="w-3 h-3" /> {t("programs.filterUniversity")}
                           </label>
-                          <select value={universityId} onChange={e => setUniversityId(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allUniversities")}</option>
-                            {filters.universities.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={universityId}
+                            onChange={setUniversityId}
+                            options={filters.universities.map(u => ({ value: String(u.id), label: u.name }))}
+                            placeholder={t("programs.allUniversities")}
+                          />
                         </div>
                       </div>
 
@@ -958,33 +963,36 @@ export default function Programs() {
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <BookOpen className="w-3 h-3" /> {t("programs.filterLevel")}
                           </label>
-                          <select value={level} onChange={e => setLevel(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allLevels")}</option>
-                            {filters.degrees.map(d => <option key={d} value={d}>{d}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={level}
+                            onChange={setLevel}
+                            options={filters.degrees.map(d => ({ value: d, label: d }))}
+                            placeholder={t("programs.allLevels")}
+                          />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <Languages className="w-3 h-3" /> {t("programs.filterLanguage")}
                           </label>
-                          <select value={language} onChange={e => setLanguage(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allLanguages")}</option>
-                            {filters.languages.map(lg => <option key={lg} value={lg}>{lg}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={language}
+                            onChange={setLanguage}
+                            options={filters.languages.map(lg => ({ value: lg, label: lg }))}
+                            placeholder={t("programs.allLanguages")}
+                          />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                             <Award className="w-3 h-3" /> {t("programs.filterField")}
                           </label>
-                          <select value={field} onChange={e => setField(e.target.value)}
-                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                            <option value="">{t("programs.allFields")}</option>
-                            {filters.fields.map(f => <option key={f} value={f}>{f}</option>)}
-                          </select>
+                          <MultiSelectFilter
+                            values={field}
+                            onChange={setField}
+                            options={filters.fields.map(f => ({ value: f, label: f }))}
+                            placeholder={t("programs.allFields")}
+                          />
                         </div>
 
                         <div className="space-y-1.5">

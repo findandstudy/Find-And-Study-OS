@@ -15,13 +15,42 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [eq(programsTable.isActive, true)];
-  if (country) conditions.push(eq(universitiesTable.country, country));
-  if (city) conditions.push(eq(universitiesTable.city, city));
-  if (universityType) conditions.push(eq(universitiesTable.universityType, universityType));
-  if (universityId) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
-  if (level) conditions.push(ilike(programsTable.degree, `%${level}%`));
-  if (language) conditions.push(ilike(programsTable.language, language));
-  if ((req.query as Record<string, string>).field) conditions.push(ilike(programsTable.field, (req.query as Record<string, string>).field));
+  if (country) {
+    const vals = country.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(eq(universitiesTable.country, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(universitiesTable.country, vals));
+  }
+  if (city) {
+    const vals = city.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(eq(universitiesTable.city, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(universitiesTable.city, vals));
+  }
+  if (universityType) {
+    const vals = universityType.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(eq(universitiesTable.universityType, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(universitiesTable.universityType, vals));
+  }
+  if (universityId) {
+    const vals = universityId.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    if (vals.length === 1) conditions.push(eq(programsTable.universityId, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(programsTable.universityId, vals));
+  }
+  if (level) {
+    const vals = level.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.degree, `%${vals[0]}%`));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.degree, `%${v}%`)))!);
+  }
+  if (language) {
+    const vals = language.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.language, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(programsTable.language, vals));
+  }
+  if ((req.query as Record<string, string>).field) {
+    const fieldVal = (req.query as Record<string, string>).field;
+    const vals = fieldVal.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.field, v)))!);
+  }
   if (intake) conditions.push(ilike(programsTable.intakes, `%${intake}%`));
   if (feeMin) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${parseInt(feeMin, 10)}`);
   if (feeMax) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${parseInt(feeMax, 10)}`);
