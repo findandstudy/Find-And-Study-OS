@@ -1945,11 +1945,13 @@ export default function StudentsPage() {
       body: JSON.stringify({ status: targetStatus }),
     }).then(() => {
       invalidate();
+      queryClient.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
       const colLabel = pipelineStages.find(s => s.key === targetStatus)?.label ?? targetStatus;
       toast({ title: `Student moved → ${colLabel}` });
     }).catch(() => {
       toast({ title: "Error", description: "Could not move student", variant: "destructive" });
       invalidate();
+      queryClient.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
     });
   };
 

@@ -894,6 +894,7 @@ export default function LeadsPage() {
       try {
         const result = await customFetch(`/api/leads/${leadId}/convert`, { method: "POST" }) as any;
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
         queryClient.invalidateQueries({ queryKey: ["/api/students"] });
         const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
         toast({
@@ -914,12 +915,14 @@ export default function LeadsPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
           const colLabel = targetCol?.title ?? targetStatus;
           toast({ title: `Lead moved to ${colLabel}` });
         },
         onError: () => {
           toast({ title: "Error", description: "Failed to move lead", variant: "destructive" });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
         },
       }
     );

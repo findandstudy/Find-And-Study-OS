@@ -805,12 +805,14 @@ export default function AgentLeadsPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
           const colLabel = columns.find(c => c.id === targetStatus)?.title ?? targetStatus;
           toast({ title: `Lead moved to ${colLabel}` });
         },
         onError: () => {
           toast({ title: "Error", description: "Failed to move lead", variant: "destructive" });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
         },
       }
     );

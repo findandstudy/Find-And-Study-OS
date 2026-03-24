@@ -894,11 +894,13 @@ export default function ApplicationsPage() {
       body: JSON.stringify({ stage: targetStage }),
     }).then(() => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
       const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
       toast({ title: `Application moved → ${colLabel}` });
     }).catch(() => {
       toast({ title: "Error", description: "Could not move application", variant: "destructive" });
       queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
     });
   };
 
