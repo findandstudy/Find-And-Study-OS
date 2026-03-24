@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, leadsTable, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
@@ -183,23 +183,6 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const [lead] = await db.insert(leadsTable).values({
-    firstName: s(firstName, 100)!,
-    lastName: s(lastName, 100)!,
-    email: s(normalizedEmail, 255),
-    phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
-    nationality: s(nationality, 100),
-    source: "website",
-    status: "new",
-    interestedProgram: s(programName, 255),
-    interestedCountry: null,
-    notes: [
-      universityName ? `University: ${universityName}` : null,
-      programId ? `Program ID: ${programId}` : null,
-      notes ? notes : null,
-    ].filter(Boolean).join("\n") || null,
-  }).returning();
-
   const baseUrl = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
     : "http://localhost:5000";
@@ -221,7 +204,6 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           fatherName: s(fatherName, 100),
         }).returning();
       }
-      await db.update(leadsTable).set({ convertedStudentId: existingStudent.id }).where(eq(leadsTable.id, lead.id));
 
       await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
 
@@ -232,6 +214,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         universityName: universityName || undefined,
       });
       await sendEmail(normalizedEmail, emailContent);
+
+      console.log(`[PUBLIC-APPLY] Existing user ${normalizedEmail}, created application for student #${existingStudent.id}`);
     } else {
       const passwordToken = generateSecureToken();
       const verificationToken = generateSecureToken();
@@ -262,8 +246,6 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         fatherName: s(fatherName, 100),
       }).returning();
 
-      await db.update(leadsTable).set({ convertedStudentId: newStudent.id }).where(eq(leadsTable.id, lead.id));
-
       await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
@@ -280,12 +262,12 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       });
       await sendEmail(normalizedEmail, emailContent);
 
-      console.log(`[AUTO-ACCOUNT] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id}) from public apply`);
+      console.log(`[PUBLIC-APPLY] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id})`);
     }
-    res.status(201).json({ success: true, leadId: lead.id });
+    res.status(201).json({ success: true });
   } catch (err) {
-    console.error("[AUTO-ACCOUNT] Error during auto account creation:", err);
-    res.status(201).json({ success: true, leadId: lead.id, accountSetupPending: true });
+    console.error("[PUBLIC-APPLY] Error during student/application creation:", err);
+    res.status(500).json({ error: "An error occurred while processing your application. Please try again." });
   }
 });
 

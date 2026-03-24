@@ -151,7 +151,7 @@ const DEFAULT_DOC_TYPES: DocType[] = [
 
 function getDocTypesForDegree(degree: string | null | undefined): DocType[] {
   if (!degree) return DEFAULT_DOC_TYPES;
-  const normalized = degree.toLowerCase().replace(/['''`\s]/g, "");
+  const normalized = degree.toLowerCase().replace(/['''`\s.]/g, "");
   if (normalized.includes("associate")) return DEGREE_DOC_MAP.associate;
   if (normalized.includes("bachelor")) return DEGREE_DOC_MAP.bachelors;
   if (normalized.includes("master")) return DEGREE_DOC_MAP.masters;
