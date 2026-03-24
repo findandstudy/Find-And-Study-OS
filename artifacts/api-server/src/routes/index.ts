@@ -27,6 +27,7 @@ import applicationStageDocumentsRouter from "./applicationStageDocuments";
 import embedRouter from "./embed";
 import publicApplyRouter from "./public-apply";
 import destinationsRouter from "./destinations";
+import quickLinksRouter from "./quickLinks";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(applicationStageDocumentsRouter);
 router.use(embedRouter);
 router.use(publicApplyRouter);
 router.use(destinationsRouter);
+router.use(quickLinksRouter);
 
 export default router;

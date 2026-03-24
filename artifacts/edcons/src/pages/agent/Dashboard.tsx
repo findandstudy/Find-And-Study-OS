@@ -1,11 +1,18 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useListApplications } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell, UserPlus, FileText, FileCheck, DollarSign, CreditCard, CalendarClock, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
+import { useLocation } from "wouter";
+import {
+  Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell,
+  UserPlus, FileText, FileCheck, DollarSign, CreditCard, CalendarClock,
+  MessageCircle, Megaphone, AlertCircle, Shield, Mail, Phone,
+  ExternalLink, UserPlus as AddStudent, Plus,
+} from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -58,21 +65,17 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
   "message.mention": MessageCircle,
 };
 
-const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
-  inquiry:             { label: "Inquiry",        color: "bg-slate-100 text-slate-700 border-slate-200" },
-  documents_collected: { label: "Docs Collected", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  submitted:           { label: "Submitted",      color: "bg-violet-100 text-violet-700 border-violet-200" },
-  offer_received:      { label: "Offer Received", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  visa_applied:        { label: "Visa Applied",   color: "bg-orange-100 text-orange-700 border-orange-200" },
-  visa_approved:       { label: "Visa Approved",  color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  enrolled:            { label: "Enrolled",       color: "bg-green-100 text-green-700 border-green-200" },
-  rejected:            { label: "Rejected",       color: "bg-rose-100 text-rose-700 border-rose-200" },
-};
-
 export default function AgentDashboard() {
   const { user } = useAuth(true);
-  const { data: appsResp, isLoading } = useListApplications({ query: { queryKey: ["agent-dash-apps"] } });
+  const [, setLocation] = useLocation();
+  const { data: appsResp } = useListApplications({ query: { queryKey: ["agent-dash-apps"] } });
   const applications: any[] = (appsResp as any)?.data || appsResp || [];
+
+  const { data: agentProfile } = useQuery<any>({
+    queryKey: ["/api/agents/me"],
+    queryFn: () => fetch(`${BASE}/api/agents/me`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!user,
+  });
 
   const { data: latestStudentsData } = useQuery<any>({
     queryKey: ["/api/students", "agent-dashboard-latest"],
@@ -92,13 +95,20 @@ export default function AgentDashboard() {
   });
   const latestNotifications: any[] = notificationsData?.data || [];
 
+  const { data: quickLinksData } = useQuery<any>({
+    queryKey: ["/api/quick-links"],
+    queryFn: () => fetch(`${BASE}/api/quick-links`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!user,
+  });
+  const quickLinks: any[] = quickLinksData?.data || [];
+
   const enrolled = applications.filter(a => a.stage === "enrolled").length;
   const inProgress = applications.filter(a => !["enrolled", "rejected"].includes(a.stage)).length;
+  const assignedStaff = agentProfile?.assignedStaff;
 
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Agent Portal</h1>
@@ -106,7 +116,6 @@ export default function AgentDashboard() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: "Total Referrals", value: applications.length, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
@@ -124,6 +133,113 @@ export default function AgentDashboard() {
           ))}
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {assignedStaff && (
+            <Card className="p-6 border-none shadow-lg shadow-black/5">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-blue-500" />
+                </div>
+                <h3 className="font-display font-bold text-base">Your Contact Person</h3>
+              </div>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
+                  {assignedStaff.avatarUrl ? (
+                    <img src={assignedStaff.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    getInitials(assignedStaff.firstName, assignedStaff.lastName)
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">{assignedStaff.firstName} {assignedStaff.lastName}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{(assignedStaff.role || "").replace(/_/g, " ")}</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-4">
+                {assignedStaff.email && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="w-3.5 h-3.5 shrink-0" />
+                    <a href={`mailto:${assignedStaff.email}`} className="hover:text-primary truncate">{assignedStaff.email}</a>
+                  </div>
+                )}
+                {assignedStaff.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="w-3.5 h-3.5 shrink-0" />
+                    <a href={`tel:${assignedStaff.phone}`} className="hover:text-primary">{assignedStaff.phone}</a>
+                  </div>
+                )}
+              </div>
+              <Button
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => setLocation("/agent/messages")}
+              >
+                <MessageCircle className="w-4 h-4" /> Send Message
+              </Button>
+            </Card>
+          )}
+
+          <Card className={`p-6 border-none shadow-lg shadow-black/5 ${!assignedStaff ? "lg:col-span-1" : ""}`}>
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <Plus className="w-4 h-4 text-emerald-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Quick Actions</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-primary/5 hover:border-primary/30"
+                onClick={() => setLocation("/agent/leads")}
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5 text-blue-500" />
+                </div>
+                <span className="text-xs font-medium">Add Lead</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-primary/5 hover:border-primary/30"
+                onClick={() => setLocation("/agent/students")}
+              >
+                <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                  <GraduationCap className="w-5 h-5 text-green-500" />
+                </div>
+                <span className="text-xs font-medium">Add Student</span>
+              </Button>
+            </div>
+          </Card>
+
+          {quickLinks.length > 0 && (
+            <Card className="p-6 border-none shadow-lg shadow-black/5">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                  <ExternalLink className="w-4 h-4 text-violet-500" />
+                </div>
+                <h3 className="font-display font-bold text-base">Quick Links</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {quickLinks.map((link: any) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:bg-primary/5 hover:border-primary/30 transition-all group"
+                  >
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
+                      style={{ backgroundColor: link.color || "#6366f1" }}
+                    >
+                      {link.icon || link.title.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{link.title}</span>
+                  </a>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-6 border-none shadow-lg shadow-black/5">

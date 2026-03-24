@@ -30,7 +30,22 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  res.json(agent);
+
+  let assignedStaff = null;
+  if (agent.assignedStaffId) {
+    const [staff] = await db.select({
+      id: usersTable.id,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      avatarUrl: usersTable.avatarUrl,
+      role: usersTable.role,
+    }).from(usersTable).where(eq(usersTable.id, agent.assignedStaffId));
+    assignedStaff = staff || null;
+  }
+
+  res.json({ ...agent, assignedStaff });
 });
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {

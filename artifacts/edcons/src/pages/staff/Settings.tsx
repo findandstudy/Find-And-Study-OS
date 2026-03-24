@@ -19,7 +19,7 @@ import {
   Building2, Search as SearchIcon, FileText, Code, ChevronRight,
   ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
   Youtube, Facebook, Twitter, Camera, Kanban, Pencil, ChevronDown,
-  CalendarDays, Plus, Trash2, GripVertical, Power,
+  CalendarDays, Plus, Trash2, GripVertical, Power, Link as LinkIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -179,7 +179,7 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
   );
 }
 
-type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "advanced";
+type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "advanced";
 
 interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean }
 
@@ -196,6 +196,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "email", label: "Email Branding", icon: Mail, group: "organization", managerOnly: true },
   { id: "documents", label: "Documents / PDF", icon: FileText, group: "organization", managerOnly: true },
   { id: "integrations", label: "Integrations", icon: Plug, group: "organization", managerOnly: true },
+  { id: "quicklinks", label: "Quick Links", icon: LinkIcon, group: "organization", managerOnly: true },
   { id: "advanced", label: "Advanced", icon: Code, group: "organization", managerOnly: true },
 ];
 
@@ -408,6 +409,7 @@ export default function SettingsPage() {
       case "email": return isManager ? EmailBrandingTab() : null;
       case "documents": return isManager ? DocumentsTab() : null;
       case "integrations": return isManager ? IntegrationsTab() : null;
+      case "quicklinks": return isManager ? <QuickLinksTab /> : null;
       case "advanced": return isManager ? AdvancedTab() : null;
       default: return null;
     }
@@ -1589,6 +1591,308 @@ function SeasonsTab() {
             <p className="font-medium text-foreground text-sm">How seasons are used</p>
             <p>Seasons appear as intake period options in applications, the embed widget apply form, course finder filters, and program configuration.</p>
             <p>Deactivating a season hides it from new selections but preserves existing records that reference it.</p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+const TARGET_LABELS: Record<string, string> = {
+  agent: "Agent",
+  sub_agent: "Sub Agent",
+  staff: "Staff",
+  student: "Student",
+};
+
+const TARGET_COLORS: Record<string, string> = {
+  agent: "bg-blue-500/10 text-blue-700",
+  sub_agent: "bg-purple-500/10 text-purple-700",
+  staff: "bg-emerald-500/10 text-emerald-700",
+  student: "bg-amber-500/10 text-amber-700",
+};
+
+const PRESET_COLORS = [
+  "#6366f1", "#8b5cf6", "#ec4899", "#ef4444",
+  "#f97316", "#eab308", "#22c55e", "#06b6d4",
+  "#3b82f6", "#64748b",
+];
+
+function QuickLinksTab() {
+  const { toast } = useToast();
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+  const [links, setLinks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState({ title: "", url: "", icon: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  const fetchLinks = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/quick-links/admin`, { credentials: "include" });
+      const data = await res.json();
+      setLinks(data.data || []);
+    } catch {} finally {
+      setLoading(false);
+    }
+  }, [BASE]);
+
+  useEffect(() => { fetchLinks(); }, [fetchLinks]);
+
+  const handleSave = async () => {
+    if (!form.title.trim() || !form.url.trim()) {
+      toast({ title: "Error", description: "Title and URL are required.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const method = editingId ? "PATCH" : "POST";
+      const url = editingId ? `${BASE}/api/quick-links/${editingId}` : `${BASE}/api/quick-links`;
+      await customFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          url: form.url.trim(),
+          icon: form.icon.trim() || null,
+          color: form.color || null,
+          target: form.target,
+          sortOrder: form.sortOrder,
+        }),
+      });
+      toast({ title: editingId ? "Updated" : "Created", description: `Quick link "${form.title}" has been ${editingId ? "updated" : "created"}.` });
+      setShowForm(false);
+      setEditingId(null);
+      setForm({ title: "", url: "", icon: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+      fetchLinks();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to save quick link.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await customFetch(`${BASE}/api/quick-links/${id}`, { method: "DELETE" });
+      toast({ title: "Deleted", description: "Quick link has been removed." });
+      fetchLinks();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to delete.", variant: "destructive" });
+    }
+    setDeleteConfirm(null);
+  };
+
+  const handleToggle = async (id: number, currentActive: boolean) => {
+    try {
+      await customFetch(`${BASE}/api/quick-links/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !currentActive }),
+      });
+      fetchLinks();
+    } catch {}
+  };
+
+  const openEdit = (link: any) => {
+    setForm({
+      title: link.title,
+      url: link.url,
+      icon: link.icon || "",
+      color: link.color || "#6366f1",
+      target: link.target,
+      sortOrder: link.sortOrder ?? 0,
+    });
+    setEditingId(link.id);
+    setShowForm(true);
+  };
+
+  const openNew = () => {
+    setForm({ title: "", url: "", icon: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+    setEditingId(null);
+    setShowForm(true);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="font-display font-bold text-lg">Quick Links</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage custom shortcut buttons that appear on user dashboards.
+            </p>
+          </div>
+          <Button onClick={openNew} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Link
+          </Button>
+        </div>
+
+        {showForm && (
+          <Card className="p-5 mb-6 border-2 border-primary/20 bg-primary/[0.02]">
+            <h4 className="font-semibold text-sm mb-4">{editingId ? "Edit Quick Link" : "New Quick Link"}</h4>
+            <div className="grid sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Title</Label>
+                <Input
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Dorm Booking"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">URL</Label>
+                <Input
+                  value={form.url}
+                  onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                  placeholder="https://dormbooking.com"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Icon (emoji or letter)</Label>
+                <Input
+                  value={form.icon}
+                  onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
+                  placeholder="🏠 or D"
+                  maxLength={4}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Target</Label>
+                <select
+                  value={form.target}
+                  onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                >
+                  <option value="agent">Agent</option>
+                  <option value="sub_agent">Sub Agent</option>
+                  <option value="staff">Staff</option>
+                  <option value="student">Student</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Sort Order</Label>
+                <Input
+                  type="number"
+                  value={form.sortOrder}
+                  onChange={e => setForm(f => ({ ...f, sortOrder: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Color</Label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {PRESET_COLORS.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, color: c }))}
+                      className={`w-7 h-7 rounded-lg border-2 transition-all ${form.color === c ? "border-foreground scale-110" : "border-transparent"}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <Button variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); }}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving} className="gap-2">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {editingId ? "Update" : "Create"}
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <div key={i} className="h-14 bg-secondary animate-pulse rounded-xl" />)}
+          </div>
+        ) : links.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <LinkIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p className="font-medium">No quick links yet</p>
+            <p className="text-xs mt-1">Add links to external sites like dorm booking, insurance portals, etc.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {links.map(link => (
+              <div
+                key={link.id}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                  link.isActive ? "bg-background border-border" : "bg-muted/50 border-border/50 opacity-60"
+                }`}
+              >
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
+                  style={{ backgroundColor: link.color || "#6366f1" }}
+                >
+                  {link.icon || link.title.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm text-foreground">{link.title}</p>
+                    <Badge className={`text-[10px] ${TARGET_COLORS[link.target] || "bg-gray-100 text-gray-600"}`}>
+                      {TARGET_LABELS[link.target] || link.target}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{link.url}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 rounded-lg"
+                    onClick={() => openEdit(link)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 rounded-lg"
+                    onClick={() => handleToggle(link.id, link.isActive)}
+                    title={link.isActive ? "Deactivate" : "Activate"}
+                  >
+                    <Power className={`w-3.5 h-3.5 ${link.isActive ? "text-emerald-600" : "text-muted-foreground"}`} />
+                  </Button>
+                  {deleteConfirm === link.id ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-destructive font-medium">Delete?</span>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(link.id)}>
+                        <Check className="w-3 h-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setDeleteConfirm(null)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteConfirm(link.id)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="border-none shadow-lg shadow-black/5 p-5">
+        <div className="flex items-start gap-3">
+          <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p className="font-medium text-foreground text-sm">How quick links work</p>
+            <p>Quick links appear as shortcut buttons on user dashboards. Each link opens in a new tab.</p>
+            <p>Choose a target to control which users see each link: Agent, Sub Agent, Staff, or Student.</p>
+            <p>Changes are reflected immediately on user dashboards — no restart needed.</p>
           </div>
         </div>
       </Card>

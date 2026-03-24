@@ -4,7 +4,7 @@ import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
+import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, Shield, Link as LinkIcon } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
 
@@ -96,6 +96,12 @@ export default function StaffDashboard() {
     queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()),
   });
   const latestNotifications: any[] = notificationsData?.data || [];
+
+  const { data: quickLinksData } = useQuery<any>({
+    queryKey: ["/api/quick-links"],
+    queryFn: () => fetch(`${BASE}/api/quick-links`, { credentials: "include" }).then(r => r.json()),
+  });
+  const quickLinks: any[] = quickLinksData?.data || [];
 
   if (isLoading) {
     return (
@@ -200,6 +206,36 @@ export default function StaffDashboard() {
             </div>
           </Card>
         </div>
+
+        {quickLinks.length > 0 && (
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                <LinkIcon className="w-4 h-4 text-violet-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">Quick Links</h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {quickLinks.map((link: any) => (
+                <a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:bg-primary/5 hover:border-primary/30 transition-all group"
+                >
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
+                    style={{ backgroundColor: link.color || "#6366f1" }}
+                  >
+                    {link.icon || link.title.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{link.title}</span>
+                </a>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-6 border-none shadow-lg shadow-black/5">
