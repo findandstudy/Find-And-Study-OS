@@ -346,7 +346,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, "agen
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
-  const AGENT_PATCH_FIELDS = ["stage"];
+  const AGENT_PATCH_FIELDS: string[] = [];
   const allowedFields = isStaff ? APP_PATCH_FIELDS : AGENT_PATCH_FIELDS;
 
   const updates: Record<string, unknown> = {};

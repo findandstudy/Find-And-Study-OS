@@ -870,9 +870,7 @@ export default function AgentAppsPage() {
     setActiveId(null);
     if (!over) return;
 
-    const appId = active.id as number;
     const overId = over.id;
-
     let targetStage: string;
     if (allColumnIds.has(overId as string)) {
       targetStage = overId as string;
@@ -882,20 +880,13 @@ export default function AgentAppsPage() {
       targetStage = overApp.stage;
     }
 
-    const app = allApps.find((a: any) => a.id === appId);
+    const app = allApps.find((a: any) => a.id === active.id);
     if (!app || app.stage === targetStage) return;
 
-    apiFetch(`${BASE_URL}/api/applications/${appId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage: targetStage }),
-    }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
-      const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
-      toast({ title: `Application moved → ${colLabel}` });
-    }).catch(() => {
-      toast({ title: "Error", description: "Could not move application", variant: "destructive" });
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
+    toast({
+      title: "Action not allowed",
+      description: "Only staff members can change application status. Please contact your advisor.",
+      variant: "destructive",
     });
   };
 
