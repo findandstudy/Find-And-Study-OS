@@ -1,13 +1,11 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useListApplications } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Users, FileText, DollarSign, TrendingUp, Link2, Copy, Star, Clock, CheckCircle, ArrowRight, GraduationCap, Activity, Bell, UserPlus, FileCheck, CreditCard, CalendarClock, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell, UserPlus, FileCheck, CreditCard, CalendarClock, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -96,19 +94,6 @@ export default function AgentDashboard() {
 
   const enrolled = applications.filter(a => a.stage === "enrolled").length;
   const inProgress = applications.filter(a => !["enrolled", "rejected"].includes(a.stage)).length;
-  const referralLink = `${window.location.origin}/apply?ref=${user?.id || "AGENT"}`;
-
-  const copyLink = () => navigator.clipboard.writeText(referralLink);
-
-  const commissionData = [
-    { month: "Jan", amount: 0 },
-    { month: "Feb", amount: 0 },
-    { month: "Mar", amount: 0 },
-    { month: "Apr", amount: 0 },
-    { month: "May", amount: 0 },
-    { month: "Jun", amount: 0 },
-    { month: "Jul", amount: 0 },
-  ];
 
   return (
     <DashboardLayout>
@@ -119,11 +104,6 @@ export default function AgentDashboard() {
             <h1 className="text-3xl font-display font-bold text-foreground">Agent Portal</h1>
             <p className="text-muted-foreground mt-1">Track your referrals, commissions, and student progress</p>
           </div>
-          <Link href="/agent/applications">
-            <Button className="rounded-xl gap-2">
-              <FileText className="w-4 h-4" /> View All Referrals
-            </Button>
-          </Link>
         </div>
 
         {/* Stats */}
@@ -144,69 +124,6 @@ export default function AgentDashboard() {
           ))}
         </div>
 
-        {/* Commission Chart + Referral */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-display font-bold text-lg">Commission History</h3>
-              <Link href="/agent/commissions">
-                <Button variant="ghost" size="sm" className="text-primary gap-1 text-xs">
-                  View All <ArrowRight className="w-3 h-3" />
-                </Button>
-              </Link>
-            </div>
-            <div className="h-[240px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={commissionData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                    tickFormatter={v => `$${v}`} />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderRadius: "12px", border: "1px solid hsl(var(--border))" }}
-                    formatter={(v: number) => [`$${v}`, "Commission"]} />
-                  <Bar dataKey="amount" radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <div className="space-y-4">
-            {/* Referral Link */}
-            <Card className="p-5 border-none shadow-md shadow-black/5">
-              <div className="flex items-center gap-2 mb-4">
-                <Link2 className="w-5 h-5 text-primary" />
-                <h3 className="font-bold text-foreground">Your Referral Link</h3>
-              </div>
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-secondary/50 border border-border/50 mb-4">
-                <p className="text-xs text-muted-foreground flex-1 truncate font-mono">{referralLink}</p>
-              </div>
-              <Button onClick={copyLink} variant="outline" className="w-full rounded-xl gap-2">
-                <Copy className="w-4 h-4" /> Copy Link
-              </Button>
-            </Card>
-
-            {/* Quick Links */}
-            <Card className="p-5 border-none shadow-md shadow-black/5">
-              <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
-                <Star className="w-5 h-5 text-amber-500" /> Quick Access
-              </h3>
-              <div className="space-y-2">
-                <Link href="/agent/applications">
-                  <div className="flex items-center justify-between p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
-                    <span className="text-sm font-medium text-foreground">My Referrals</span>
-                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </Link>
-                <Link href="/agent/commissions">
-                  <div className="flex items-center justify-between p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
-                    <span className="text-sm font-medium text-foreground">Commission Tracker</span>
-                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </Link>
-              </div>
-            </Card>
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-6 border-none shadow-lg shadow-black/5">
