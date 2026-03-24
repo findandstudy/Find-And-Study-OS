@@ -1,7 +1,7 @@
 import express from "express";
 import app from "./app";
-import { db, pool, usersTable, integrationsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable } from "@workspace/db";
+import { eq, isNull, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
@@ -176,6 +176,106 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+async function backfillMissingCommissions() {
+  try {
+    const { resolveAgentCommission } = await import("./lib/agentCommission");
+    const { getCommissionFinanceStatus, getServiceFeeFinanceStatus } = await import("./lib/stageFinance");
+
+    const appsWithoutComm = await db
+      .select({
+        id: applicationsTable.id,
+        studentId: applicationsTable.studentId,
+        agentId: applicationsTable.agentId,
+        stage: applicationsTable.stage,
+        tuitionFee: applicationsTable.tuitionFee,
+        discountedFee: applicationsTable.discountedFee,
+        commissionRate: applicationsTable.commissionRate,
+        serviceFeeAmount: applicationsTable.serviceFeeAmount,
+        universityName: applicationsTable.universityName,
+        programName: applicationsTable.programName,
+        season: applicationsTable.season,
+        currency: applicationsTable.currency,
+      })
+      .from(applicationsTable)
+      .where(
+        and(
+          isNull(applicationsTable.deletedAt),
+          sql`NOT EXISTS (SELECT 1 FROM commissions WHERE commissions.application_id = ${applicationsTable.id})`
+        )
+      );
+
+    let created = 0;
+    for (const app of appsWithoutComm) {
+      const commStatus = getCommissionFinanceStatus(app.stage);
+      if (commStatus === "excluded") continue;
+
+      const baseFee = (app.discountedFee != null && !isNaN(app.discountedFee))
+        ? app.discountedFee : app.tuitionFee;
+      const uCommAmt = baseFee && app.commissionRate
+        ? (baseFee * app.commissionRate) / 100 : 0;
+
+      const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+        .from(studentsTable).where(eq(studentsTable.id, app.studentId));
+      const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
+
+      const agentComm = await resolveAgentCommission(app.agentId, uCommAmt);
+
+      await db.insert(commissionsTable).values({
+        applicationId: app.id,
+        studentId: app.studentId,
+        agentId: agentComm.agentId,
+        studentName: sName,
+        universityName: app.universityName || null,
+        programName: app.programName || null,
+        season: app.season || String(new Date().getFullYear()),
+        currency: app.currency || "USD",
+        status: commStatus,
+        programFee: baseFee ? String(baseFee) : null,
+        universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
+        universityCommissionAmount: uCommAmt > 0 ? String(uCommAmt) : null,
+        agentCommissionRate: agentComm.agentCommissionRate,
+        agentCommissionAmount: agentComm.agentCommissionAmount,
+        subAgentId: agentComm.subAgentId,
+        subAgentCommissionRate: agentComm.subAgentCommissionRate,
+        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
+      });
+      created++;
+    }
+
+    const commsWithoutAgent = await db.select().from(commissionsTable)
+      .where(
+        and(
+          sql`${commissionsTable.agentId} IS NOT NULL`,
+          sql`(${commissionsTable.agentCommissionRate} IS NULL OR CAST(${commissionsTable.agentCommissionRate} AS numeric) = 0 OR ${commissionsTable.agentCommissionAmount} IS NULL OR CAST(${commissionsTable.agentCommissionAmount} AS numeric) = 0)`,
+          sql`${commissionsTable.universityCommissionAmount} IS NOT NULL`,
+          sql`CAST(${commissionsTable.universityCommissionAmount} AS numeric) > 0`
+        )
+      );
+
+    let updated = 0;
+    for (const comm of commsWithoutAgent) {
+      const uAmount = parseFloat(String(comm.universityCommissionAmount ?? "0")) || 0;
+      if (uAmount <= 0) continue;
+      const agentComm = await resolveAgentCommission(comm.agentId, uAmount);
+      await db.update(commissionsTable).set({
+        agentId: agentComm.agentId,
+        agentCommissionRate: agentComm.agentCommissionRate,
+        agentCommissionAmount: agentComm.agentCommissionAmount,
+        subAgentId: agentComm.subAgentId,
+        subAgentCommissionRate: agentComm.subAgentCommissionRate,
+        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
+      }).where(eq(commissionsTable.id, comm.id));
+      updated++;
+    }
+
+    if (created > 0 || updated > 0) {
+      console.log(`[backfill] Created ${created} missing commission records, updated ${updated} existing records with agent rates`);
+    }
+  } catch (err) {
+    console.error("[backfill] backfillMissingCommissions error:", err);
+  }
+}
+
 async function seedClaudeIntegration() {
   const envKey = process.env.ANTHROPIC_API_KEY;
   if (!envKey) return;
@@ -202,6 +302,7 @@ async function seedClaudeIntegration() {
   await runSeedSQL();
   await linkAgentUser();
   await seedClaudeIntegration();
+  await backfillMissingCommissions();
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);

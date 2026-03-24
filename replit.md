@@ -29,7 +29,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
     - **Student Management (Staff):** Pipeline and list views, AI-powered student creation, and bulk CSV import.
     - **Application Management (Staff):** Pipeline and list views with cascading selects and auto-fill for program details. Includes stage-specific document management with upload permissions.
     - **Lead Management (Staff):** Kanban pipeline and list views.
-    - **Finance Management (Staff):** Stage-based finance automation for commission and service fees, with dual-status tracking and configurable exclusion criteria. Price snapshots are taken at application creation to ensure financial data immutability.
+    - **Finance Management (Staff):** Stage-based finance automation for commission and service fees, with dual-status tracking and configurable exclusion criteria. Price snapshots are taken at application creation to ensure financial data immutability. Agent commission amounts are auto-calculated from the agent's `commissionRate` at application creation time, including sub-agent waterfall calculations.
     - **Agent Portal:** Dedicated portal with Leads, Students, and Applications pages mirroring staff functionality (with agent-scoped visibility), sub-agent management (CRUD), and self-service account settings.
     - **Course Finder (Staff/Agent):** Program search, filtering, PDF proposal generation, and direct application creation.
     - **Communication Hub:** Internal messaging system supporting direct and group conversations across various channels (internal, WhatsApp, Telegram, email, SMS), broadcast messaging, message templates, and in-app notifications with configurable rules.

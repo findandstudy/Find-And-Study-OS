@@ -5,6 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
+import { resolveAgentCommission } from "../lib/agentCommission";
 
 const router: IRouter = Router();
 
@@ -155,7 +156,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
     const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, parseInt(String(programId), 10)));
     if (prog) {
       snapshotTuitionFee = snapshotTuitionFee ?? prog.tuitionFee ?? null;
-      snapshotDiscountedFee = prog.discountedFee ?? null;
+      snapshotDiscountedFee = (prog.discountedFee != null && !isNaN(Number(prog.discountedFee))) ? Number(prog.discountedFee) : null;
       snapshotScholarship = snapshotScholarship ?? prog.scholarship ?? null;
       snapshotCommissionRate = prog.commissionRate ?? null;
       snapshotServiceFeeAmount = prog.serviceFeeAmount ?? null;
@@ -206,7 +207,9 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
     notes: notes || null,
   }).returning();
 
-  const commissionBaseFee = snapshotDiscountedFee ?? snapshotTuitionFee;
+  const commissionBaseFee = (snapshotDiscountedFee != null && !isNaN(snapshotDiscountedFee))
+    ? snapshotDiscountedFee
+    : snapshotTuitionFee;
 
   const commFinStatus = getCommissionFinanceStatus(stage);
   if (commFinStatus !== "excluded") {
@@ -214,10 +217,11 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
     if (existingComm.length === 0) {
       const uCommAmount = commissionBaseFee && snapshotCommissionRate
         ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
+      const agentComm = await resolveAgentCommission(resolvedAgentId, uCommAmount);
       await db.insert(commissionsTable).values({
         applicationId: app.id,
         studentId: parseInt(studentId, 10),
-        agentId: resolvedAgentId,
+        agentId: agentComm.agentId,
         studentName: studentFullName,
         universityName: snapshotUniversityName,
         programName: snapshotProgramName,
@@ -228,6 +232,11 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
         programFee: commissionBaseFee ? String(commissionBaseFee) : null,
         universityCommissionRate: snapshotCommissionRate ? String(snapshotCommissionRate) : null,
         universityCommissionAmount: uCommAmount > 0 ? String(uCommAmount) : null,
+        agentCommissionRate: agentComm.agentCommissionRate,
+        agentCommissionAmount: agentComm.agentCommissionAmount,
+        subAgentId: agentComm.subAgentId,
+        subAgentCommissionRate: agentComm.subAgentCommissionRate,
+        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
       });
     }
   }
@@ -341,16 +350,23 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
     if (existingComms.length === 0 && commStatus !== "excluded") {
       const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
       const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
-      const baseFee = app.discountedFee ?? app.tuitionFee;
+      const baseFee = (app.discountedFee != null && !isNaN(app.discountedFee))
+        ? app.discountedFee : app.tuitionFee;
       const uCommAmt = baseFee && app.commissionRate ? (baseFee * app.commissionRate) / 100 : 0;
+      const agentComm = await resolveAgentCommission(app.agentId, uCommAmt);
       await db.insert(commissionsTable).values({
-        applicationId: id, studentId: app.studentId, agentId: app.agentId,
+        applicationId: id, studentId: app.studentId, agentId: agentComm.agentId,
         studentName: sName, universityName: app.universityName || null,
         programName: app.programName || null, season: app.season || String(new Date().getFullYear()),
         currency: app.currency || "USD", status: commStatus,
         programFee: baseFee ? String(baseFee) : null,
         universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
         universityCommissionAmount: uCommAmt > 0 ? String(uCommAmt) : null,
+        agentCommissionRate: agentComm.agentCommissionRate,
+        agentCommissionAmount: agentComm.agentCommissionAmount,
+        subAgentId: agentComm.subAgentId,
+        subAgentCommissionRate: agentComm.subAgentCommissionRate,
+        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
         ...(commStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
       });
     }

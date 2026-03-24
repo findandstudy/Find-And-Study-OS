@@ -4,6 +4,7 @@ import { eq, ilike, sql, and, inArray, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { usersTable } from "@workspace/db";
+import { resolveAgentCommission } from "../lib/agentCommission";
 
 const router: IRouter = Router();
 
@@ -298,10 +299,11 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
   let commission = null;
   if (program.commissionRate && program.commissionRate > 0 && effectiveFee && effectiveFee > 0) {
     const universityCommAmount = Math.round((effectiveFee * program.commissionRate) / 100);
+    const agentComm = await resolveAgentCommission(student.agentId, universityCommAmount);
     [commission] = await db.insert(commissionsTable).values({
       applicationId: application.id,
       studentId: student.id,
-      agentId: student.agentId || null,
+      agentId: agentComm.agentId,
       studentName,
       universityName: program.universityName,
       programName: program.name,
@@ -312,9 +314,12 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
       universityCommissionRate: String(program.commissionRate),
       universityCommissionAmount: String(universityCommAmount),
       universityCollected: "0",
-      agentCommissionRate: "0",
-      agentCommissionAmount: "0",
+      agentCommissionRate: agentComm.agentCommissionRate || "0",
+      agentCommissionAmount: agentComm.agentCommissionAmount || "0",
       agentPaid: "0",
+      subAgentId: agentComm.subAgentId,
+      subAgentCommissionRate: agentComm.subAgentCommissionRate,
+      subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
       status: "potential",
       offsetAmount: "0",
     }).returning();
