@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   User, Globe, Shield, Save, Check, Briefcase,
-  Loader2, Phone, Mail, TrendingUp, Link2, Copy, MapPin,
+  Loader2, Phone, Mail, TrendingUp, MapPin,
   Upload, X, FileText, Download, Image as ImageIcon, Eye,
   Camera, Lock, KeyRound, LogOut,
 } from "lucide-react";
@@ -222,12 +222,6 @@ export default function AgentAccount() {
     } catch {}
   }
 
-  const referralLink = `${window.location.origin}/apply?ref=${agentProfile?.id || user?.id || "AGENT"}`;
-  const copyLink = () => {
-    navigator.clipboard.writeText(referralLink);
-    toast({ title: "Copied!", description: "Referral link copied to clipboard." });
-  };
-
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
 
   return (
@@ -243,7 +237,6 @@ export default function AgentAccount() {
             {[
               { value: "profile", label: "Profile", icon: User },
               { value: "agency", label: "Agency", icon: Briefcase },
-              { value: "referral", label: "Referral", icon: Link2 },
               { value: "language", label: "Language", icon: Globe },
               { value: "security", label: "Security", icon: Shield },
             ].map(tab => (
@@ -384,33 +377,6 @@ export default function AgentAccount() {
           {/* ── Agency Tab ── */}
           <TabsContent value="agency" className="pt-6">
             <AgencyTab agentProfile={agentProfile} agentLoading={agentLoading} />
-          </TabsContent>
-
-          {/* ── Referral Tab ── */}
-          <TabsContent value="referral" className="pt-6">
-            <div className="grid lg:grid-cols-[1fr_300px] gap-6">
-              <Card className="border shadow-sm p-6">
-                <h3 className="font-display font-semibold text-base mb-4">Your Referral Link</h3>
-                <p className="text-sm text-muted-foreground mb-4">Share this link with prospective students to track your referrals and earn commissions.</p>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border/50 mb-4">
-                  <Link2 className="w-4 h-4 text-primary shrink-0" />
-                  <p className="text-sm font-mono text-foreground flex-1 truncate select-all">{referralLink}</p>
-                </div>
-                <Button onClick={copyLink} className="w-full gap-2">
-                  <Copy className="w-4 h-4" /> Copy Referral Link
-                </Button>
-              </Card>
-              <div className="space-y-4">
-                <Card className="border shadow-sm p-5 text-center">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Agent ID</p>
-                  <p className="font-mono font-bold text-xl text-foreground">#{agentProfile?.id || user?.id}</p>
-                </Card>
-                <Card className="border shadow-sm p-5 text-center">
-                  <p className="text-xs text-muted-foreground font-medium mb-1">Commission Rate</p>
-                  <p className="font-bold text-xl text-foreground">{agentProfile?.commissionRate ? `${agentProfile.commissionRate}%` : "—"}</p>
-                </Card>
-              </div>
-            </div>
           </TabsContent>
 
           {/* ── Language Tab ── */}
