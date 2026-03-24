@@ -34,7 +34,7 @@ export function requireRole(...roles: string[]) {
       return;
     }
     if (!roles.includes(req.user.role)) {
-      res.status(403).json({ error: "Insufficient permissions" });
+      res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
       return;
     }
     next();

@@ -892,7 +892,13 @@ export default function ApplicationsPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stage: targetStage }),
-    }).then(() => {
+    }).then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: "Error", description: data.error || "Could not move application", variant: "destructive" });
+        queryClient.invalidateQueries({ queryKey: ["applications"] });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
       toast({ title: `Application moved → ${colLabel}` });
