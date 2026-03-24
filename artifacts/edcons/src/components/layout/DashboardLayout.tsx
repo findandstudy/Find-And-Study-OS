@@ -165,6 +165,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
       { title: "Students",     icon: GraduationCap,   url: '/agent/students' },
       { title: "Applications", icon: FileText,        url: '/agent/applications' },
       { title: "Course Finder", icon: Search,         url: '/staff/course-finder' },
+      { title: "Messages",     icon: MessageSquare,   url: '/agent/messages' },
       { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
     ];
     const accountItems: MenuItem[] = [

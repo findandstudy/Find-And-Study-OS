@@ -866,4 +866,171 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
   res.status(201).json(message);
 });
 
+const AGENT_ROLE_LIST = ["agent", "sub_agent"];
+
+router.get("/agent/conversations", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
+
+  const myParticipations = await db
+    .select({ conversationId: conversationParticipantsTable.conversationId })
+    .from(conversationParticipantsTable)
+    .where(eq(conversationParticipantsTable.userId, userId));
+
+  if (myParticipations.length === 0) { res.json({ data: [] }); return; }
+
+  const convIds = myParticipations.map(p => p.conversationId);
+  const conversations = await db
+    .select()
+    .from(conversationsTable)
+    .where(inArray(conversationsTable.id, convIds))
+    .orderBy(desc(conversationsTable.lastMessageAt));
+
+  const result = [];
+  for (const conv of conversations) {
+    const participants = await db
+      .select({ userId: conversationParticipantsTable.userId, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl })
+      .from(conversationParticipantsTable)
+      .innerJoin(usersTable, eq(conversationParticipantsTable.userId, usersTable.id))
+      .where(eq(conversationParticipantsTable.conversationId, conv.id));
+
+    const lastMsg = await db.select().from(messagesTable)
+      .where(eq(messagesTable.conversationId, conv.id))
+      .orderBy(desc(messagesTable.createdAt)).limit(1);
+
+    const unread = await db.select({ count: sql<number>`count(*)::int` }).from(messagesTable)
+      .where(and(eq(messagesTable.conversationId, conv.id), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+
+    result.push({ ...conv, participants, lastMessage: lastMsg[0] || null, unreadCount: unread[0]?.count || 0 });
+  }
+  res.json({ data: result });
+});
+
+router.get("/agent/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+  if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
+  const userId = req.user!.id;
+  const conversationId = parseInt(req.params.id, 10);
+  if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
+
+  const participation = await db.select().from(conversationParticipantsTable)
+    .where(and(eq(conversationParticipantsTable.conversationId, conversationId), eq(conversationParticipantsTable.userId, userId)));
+  if (participation.length === 0) { res.status(403).json({ error: "Not a participant" }); return; }
+
+  const messages = await db.select({
+    id: messagesTable.id, conversationId: messagesTable.conversationId, content: messagesTable.content,
+    channel: messagesTable.channel, status: messagesTable.status, createdAt: messagesTable.createdAt,
+    metadata: messagesTable.metadata,
+    senderId: messagesTable.senderId, senderFirstName: usersTable.firstName, senderLastName: usersTable.lastName,
+    senderRole: usersTable.role, senderAvatarUrl: usersTable.avatarUrl,
+  })
+    .from(messagesTable)
+    .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
+    .where(eq(messagesTable.conversationId, conversationId))
+    .orderBy(desc(messagesTable.createdAt));
+
+  await db.update(messagesTable)
+    .set({ status: "read" })
+    .where(and(eq(messagesTable.conversationId, conversationId), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+
+  res.json({ data: messages });
+});
+
+router.get("/agent/staff-contacts", requireAuth, async (req, res): Promise<void> => {
+  if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
+
+  const staffMembers = await db
+    .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl })
+    .from(usersTable)
+    .where(and(eq(usersTable.isActive, true), inArray(usersTable.role, STAFF_ROLE_LIST)));
+
+  res.json({ data: staffMembers });
+});
+
+router.post("/agent/conversations", requireAuth, async (req, res): Promise<void> => {
+  if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
+  const userId = req.user!.id;
+  const { staffUserId } = req.body;
+  if (!staffUserId || typeof staffUserId !== "number") { res.status(400).json({ error: "staffUserId is required" }); return; }
+
+  const [staffUser] = await db.select().from(usersTable).where(and(eq(usersTable.id, staffUserId), eq(usersTable.isActive, true), inArray(usersTable.role, STAFF_ROLE_LIST)));
+  if (!staffUser) { res.status(400).json({ error: "Invalid staff member" }); return; }
+
+  const myConvs = await db.select({ conversationId: conversationParticipantsTable.conversationId })
+    .from(conversationParticipantsTable).where(eq(conversationParticipantsTable.userId, userId));
+
+  for (const mc of myConvs) {
+    const [conv] = await db.select().from(conversationsTable)
+      .where(and(eq(conversationsTable.id, mc.conversationId), eq(conversationsTable.type, "direct")));
+    if (conv) {
+      const staffP = await db.select().from(conversationParticipantsTable)
+        .where(and(eq(conversationParticipantsTable.conversationId, conv.id), eq(conversationParticipantsTable.userId, staffUserId)));
+      if (staffP.length > 0) {
+        res.json(conv);
+        return;
+      }
+    }
+  }
+
+  const [conv] = await db.insert(conversationsTable).values({ type: "direct", createdById: userId }).returning();
+  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId });
+  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId: staffUserId });
+  res.status(201).json(conv);
+});
+
+router.post("/agent/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+  if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
+  const userId = req.user!.id;
+  const conversationId = parseInt(req.params.id, 10);
+  if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
+  const { content, metadata } = req.body;
+
+  const hasAttachment = metadata?.attachment?.fileName;
+  if ((!content || !content.trim()) && !hasAttachment) { res.status(400).json({ error: "Message content or attachment is required" }); return; }
+
+  if (hasAttachment) {
+    const att = metadata.attachment;
+    if (!att.fileUrl || typeof att.fileUrl !== "string" || !att.fileUrl.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: "Invalid attachment URL" }); return;
+    }
+    if (typeof att.fileSize !== "number" || att.fileSize <= 0 || att.fileSize > 25 * 1024 * 1024) {
+      res.status(400).json({ error: "Invalid attachment size" }); return;
+    }
+  }
+
+  const participation = await db.select().from(conversationParticipantsTable)
+    .where(and(eq(conversationParticipantsTable.conversationId, conversationId), eq(conversationParticipantsTable.userId, userId)));
+  if (participation.length === 0) { res.status(403).json({ error: "Not a participant" }); return; }
+
+  const messageContent = content?.trim() || (hasAttachment ? `📎 ${metadata.attachment.fileName}` : "");
+
+  const [message] = await db.insert(messagesTable).values({
+    conversationId, senderId: userId, content: messageContent, channel: "internal", status: "sent", metadata: metadata || {},
+  }).returning();
+
+  const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
+  await db.update(conversationsTable).set({ lastMessageAt: new Date(), lastMessagePreview: preview }).where(eq(conversationsTable.id, conversationId));
+
+  const otherParticipants = await db
+    .select({ odUserId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable)
+    .where(and(eq(conversationParticipantsTable.conversationId, conversationId), sql`${conversationParticipantsTable.userId} != ${userId}`));
+
+  const senderUser = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, userId));
+  const senderName = senderUser[0] ? `${senderUser[0].firstName} ${senderUser[0].lastName}` : "Agent";
+  for (const p of otherParticipants) {
+    await db.insert(notificationsTable).values({
+      userId: p.odUserId,
+      type: "message.new",
+      title: `New message from ${senderName}`,
+      body: messageContent.substring(0, 150),
+      icon: "message-circle",
+      actionUrl: `/staff/messages`,
+      channel: "in_app",
+      data: { conversationId, messageId: message.id },
+    });
+  }
+
+  res.status(201).json(message);
+});
+
 export default router;

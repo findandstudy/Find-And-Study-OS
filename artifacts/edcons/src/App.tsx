@@ -57,6 +57,7 @@ const AgentStudents = lazy(() => import("@/pages/agent/Students"));
 const AgentCommissions = lazy(() => import("@/pages/agent/Commissions"));
 const AgentAccount = lazy(() => import("@/pages/agent/Account"));
 const AgentSubAgents = lazy(() => import("@/pages/agent/SubAgents"));
+const AgentMessages = lazy(() => import("@/pages/agent/Messages"));
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -241,6 +242,9 @@ function Router() {
         </Route>
         <Route path="/agent/applications/:id">
           {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><ApplicationDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+        </Route>
+        <Route path="/agent/messages">
+          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentMessages /></ProtectedRoute>
         </Route>
         <Route path="/agent/commissions">
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>
