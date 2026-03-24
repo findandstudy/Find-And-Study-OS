@@ -739,21 +739,35 @@ function WebToLeadTab() {
   const apiDomain = window.location.origin;
   const token = tokenData?.embedToken || "";
 
-  const formCode = `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:420px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:24px;border-radius:12px;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.1);border:1px solid #e5e7eb">
-  <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#111827;text-align:center">Contact Us</h3>
-  <div style="margin-bottom:12px">
-    <input name="firstName" placeholder="First Name" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  const formCode = `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:#ffffff;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e5e7eb" onsubmit="var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
+  <h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;text-align:center">Get in Touch</h3>
+  <p style="margin:0 0 20px;font-size:13px;color:#6b7280;text-align:center">Fill in your details and we'll contact you shortly.</p>
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <div style="flex:1">
+      <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">First Name <span style="color:#ef4444">*</span></label>
+      <input name="firstName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+    </div>
+    <div style="flex:1">
+      <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Last Name <span style="color:#ef4444">*</span></label>
+      <input name="lastName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+    </div>
   </div>
-  <div style="margin-bottom:12px">
-    <input name="lastName" placeholder="Last Name" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  <div style="margin-bottom:14px">
+    <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Phone <span style="color:#ef4444">*</span></label>
+    <div style="display:flex;gap:6px">
+      <select name="phoneCode" style="width:90px;padding:10px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;outline:none;cursor:pointer">
+        <option value="+90">🇹🇷 +90</option><option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option><option value="+49">🇩🇪 +49</option><option value="+33">🇫🇷 +33</option><option value="+39">🇮🇹 +39</option><option value="+34">🇪🇸 +34</option><option value="+31">🇳🇱 +31</option><option value="+46">🇸🇪 +46</option><option value="+41">🇨🇭 +41</option><option value="+7">🇷🇺 +7</option><option value="+380">🇺🇦 +380</option><option value="+86">🇨🇳 +86</option><option value="+91">🇮🇳 +91</option><option value="+92">🇵🇰 +92</option><option value="+93">🇦🇫 +93</option><option value="+966">🇸🇦 +966</option><option value="+971">🇦🇪 +971</option><option value="+964">🇮🇶 +964</option><option value="+98">🇮🇷 +98</option><option value="+962">🇯🇴 +962</option><option value="+961">🇱🇧 +961</option><option value="+20">🇪🇬 +20</option><option value="+212">🇲🇦 +212</option><option value="+234">🇳🇬 +234</option><option value="+55">🇧🇷 +55</option><option value="+61">🇦🇺 +61</option><option value="+81">🇯🇵 +81</option><option value="+82">🇰🇷 +82</option><option value="+60">🇲🇾 +60</option><option value="+65">🇸🇬 +65</option><option value="+880">🇧🇩 +880</option>
+      </select>
+      <input name="phoneNumber" type="tel" required placeholder="555 000 0000" style="flex:1;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+      <input type="hidden" name="phone" />
+    </div>
   </div>
-  <div style="margin-bottom:12px">
-    <input name="phone" type="tel" placeholder="Phone Number" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+  <div style="margin-bottom:20px">
+    <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Email <span style="color:#ef4444">*</span></label>
+    <input name="email" type="email" required placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
   </div>
-  <div style="margin-bottom:16px">
-    <input name="email" type="email" placeholder="Email Address" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
-  </div>
-  <button type="submit" style="width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Submit</button>
+  <button type="submit" style="width:100%;padding:12px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="var f=this.closest('form');f.phone.value=f.phoneCode.value+f.phoneNumber.value;">Submit</button>
+  <p style="margin:12px 0 0;font-size:11px;color:#9ca3af;text-align:center">Your information is secure and will not be shared.</p>
 </form>`;
 
   const handleCopy = () => {

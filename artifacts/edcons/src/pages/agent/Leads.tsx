@@ -430,18 +430,18 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
             <Label>First Name *</Label>
-            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
+            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
             <Label>Last Name *</Label>
-            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
+            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Email</Label>
+            <Label>Email *</Label>
             <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Phone</Label>
+            <Label>Phone *</Label>
             <div className="flex gap-1">
               <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
                 <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
@@ -1103,11 +1103,11 @@ export default function AgentLeadsPage() {
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
               <Label>First Name *</Label>
-              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="First name" />
+              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} placeholder="First name" className="uppercase" />
             </div>
             <div className="space-y-1.5">
               <Label>Last Name *</Label>
-              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="Last name" />
+              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} placeholder="Last name" className="uppercase" />
             </div>
             <div className="space-y-1.5">
               <Label>Email *</Label>

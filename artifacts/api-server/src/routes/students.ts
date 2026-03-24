@@ -5,6 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isNull } from "drizzle-orm";
+import { normalizeAndValidateNames } from "../lib/textNormalize";
 
 const router: IRouter = Router();
 
@@ -188,6 +189,13 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
     res.status(400).json({ error: "firstName and lastName are required" });
     return;
   }
+  const nameFields = ["firstName", "lastName"];
+  if (motherName) nameFields.push("motherName");
+  if (fatherName) nameFields.push("fatherName");
+  const { error: nameErr, normalized: normBody } = normalizeAndValidateNames(
+    { firstName, lastName, motherName, fatherName }, nameFields
+  );
+  if (nameErr) { res.status(400).json({ error: nameErr }); return; }
 
   let resolvedAgentId = agentId || null;
   if (req.user!.role === "agent" || req.user!.role === "sub_agent") {
@@ -200,7 +208,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
   }
 
   const [student] = await db.insert(studentsTable).values({
-    firstName, lastName, status,
+    firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
     email: email || null,
     phone: phone || null,
     nationality: nationality || null,
@@ -208,8 +216,8 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
     passportNumber: passportNumber || null,
     passportIssueDate: passportIssueDate || null,
     passportExpiry: passportExpiry || null,
-    motherName: motherName || null,
-    fatherName: fatherName || null,
+    motherName: normBody.motherName ? (normBody.motherName as string) : null,
+    fatherName: normBody.fatherName ? (normBody.fatherName as string) : null,
     address: address || null,
     agentId: resolvedAgentId,
     userId: userId || null,
@@ -241,10 +249,18 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
       errors.push({ index: i, error: "firstName and lastName are required", row: s });
       continue;
     }
+    const bulkNameFields = ["firstName", "lastName"];
+    if (s.motherName) bulkNameFields.push("motherName");
+    if (s.fatherName) bulkNameFields.push("fatherName");
+    const { error: bNameErr, normalized: ns } = normalizeAndValidateNames(s, bulkNameFields);
+    if (bNameErr) {
+      errors.push({ index: i, error: bNameErr, row: s });
+      continue;
+    }
     try {
       const [student] = await db.insert(studentsTable).values({
-        firstName: s.firstName,
-        lastName: s.lastName,
+        firstName: ns.firstName as string,
+        lastName: ns.lastName as string,
         status: s.status || "active",
         email: s.email || null,
         phone: s.phone || null,
@@ -253,8 +269,8 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
         passportNumber: s.passportNumber || null,
         passportIssueDate: s.passportIssueDate || null,
         passportExpiry: s.passportExpiry || null,
-        motherName: s.motherName || null,
-        fatherName: s.fatherName || null,
+        motherName: ns.motherName ? (ns.motherName as string) : null,
+        fatherName: ns.fatherName ? (ns.fatherName as string) : null,
         address: s.address || null,
         notes: s.notes || null,
         highSchool: s.highSchool || null,
@@ -361,7 +377,11 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
-  const [student] = await db.update(studentsTable).set(updates).where(eq(studentsTable.id, id)).returning();
+  const { error: nameErr, normalized: normUpdates } = normalizeAndValidateNames(
+    updates, ["firstName", "lastName", "motherName", "fatherName"]
+  );
+  if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+  const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "update_student", "student", id, updates, req.ip);
   res.json(student);

@@ -271,11 +271,11 @@ export default function StudentAccount() {
               <div className="grid sm:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <Label>First Name</Label>
-                  <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="rounded-xl" />
+                  <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} className="rounded-xl uppercase" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Last Name</Label>
-                  <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="rounded-xl" />
+                  <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} className="rounded-xl uppercase" />
                 </div>
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
@@ -325,11 +325,11 @@ export default function StudentAccount() {
                       </div>
                       <div className="space-y-1.5">
                         <Label>Mother's Name</Label>
-                        <Input value={studentForm.motherName} onChange={e => setStudentForm(f => ({ ...f, motherName: e.target.value }))} placeholder="Mother's full name" className="rounded-xl" />
+                        <Input value={studentForm.motherName} onChange={e => setStudentForm(f => ({ ...f, motherName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} placeholder="Mother's full name" className="rounded-xl uppercase" />
                       </div>
                       <div className="space-y-1.5">
                         <Label>Father's Name</Label>
-                        <Input value={studentForm.fatherName} onChange={e => setStudentForm(f => ({ ...f, fatherName: e.target.value }))} placeholder="Father's full name" className="rounded-xl" />
+                        <Input value={studentForm.fatherName} onChange={e => setStudentForm(f => ({ ...f, fatherName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} placeholder="Father's full name" className="rounded-xl uppercase" />
                       </div>
                       <div className="sm:col-span-2 space-y-1.5">
                         <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Address</Label>

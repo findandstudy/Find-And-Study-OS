@@ -362,10 +362,17 @@ function AiBadge() {
 }
 
 function FormField({
-  label, value, onChange, placeholder, type = "text", aiExtracted, required,
+  label, value, onChange, placeholder, type = "text", aiExtracted, required, latinUppercase,
 }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; aiExtracted?: boolean; required?: boolean;
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; aiExtracted?: boolean; required?: boolean; latinUppercase?: boolean;
 }) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let v = e.target.value;
+    if (latinUppercase) {
+      v = v.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "");
+    }
+    onChange(v);
+  };
   return (
     <div className="space-y-1.5">
       <Label className="font-semibold text-sm flex items-center">
@@ -376,10 +383,11 @@ function FormField({
       <Input
         type={type}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={handleChange}
         placeholder={placeholder}
         className={cn(
           "rounded-xl",
+          latinUppercase && "uppercase",
           aiExtracted && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400"
         )}
       />
@@ -869,8 +877,8 @@ function AddStudentModal({
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" aiExtracted={ef.has("firstName")} />
-                  <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" aiExtracted={ef.has("lastName")} />
+                  <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" aiExtracted={ef.has("firstName")} latinUppercase />
+                  <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" aiExtracted={ef.has("lastName")} latinUppercase />
                   <FormField required label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">
@@ -908,8 +916,8 @@ function AddStudentModal({
                       <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
                     </div>
                   </div>
-                  <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" aiExtracted={ef.has("motherName")} />
-                  <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" aiExtracted={ef.has("fatherName")} />
+                  <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" aiExtracted={ef.has("motherName")} latinUppercase />
+                  <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" aiExtracted={ef.has("fatherName")} latinUppercase />
                   <div className="col-span-2">
                     <FormField label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" aiExtracted={ef.has("address")} />
                   </div>
@@ -1305,12 +1313,12 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     } finally { setSaving(false); }
   }
 
-  const F = ({ label, value, onChange, type = "text", placeholder = "", required = false, className = "" }: {
-    label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean; className?: string;
+  const F = ({ label, value, onChange, type = "text", placeholder = "", required = false, className = "", latinUppercase = false }: {
+    label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean; className?: string; latinUppercase?: boolean;
   }) => (
     <div className={cn("space-y-1.5", className)}>
       <Label className="font-semibold text-sm">{label}{required && <span className="text-destructive ml-0.5">*</span>}</Label>
-      <Input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="rounded-xl h-9" />
+      <Input type={type} value={value} onChange={e => { let v = e.target.value; if (latinUppercase) v = v.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, ""); onChange(v); }} placeholder={placeholder} className={cn("rounded-xl h-9", latinUppercase && "uppercase")} />
     </div>
   );
 
@@ -1325,8 +1333,8 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" />
-              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" />
+              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" latinUppercase />
+              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" latinUppercase />
               <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Phone</Label>
@@ -1351,8 +1359,8 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 <Label className="font-semibold text-sm">Nationality</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
               </div>
-              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" />
-              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" />
+              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" latinUppercase />
+              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" latinUppercase />
               <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Status</Label>

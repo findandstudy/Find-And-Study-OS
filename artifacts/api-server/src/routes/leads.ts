@@ -5,6 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { normalizeAndValidateNames } from "../lib/textNormalize";
 
 const router: IRouter = Router();
 
@@ -34,14 +35,16 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
+  const { error: nameErr } = normalizeAndValidateNames({ firstName, lastName }, ["firstName", "lastName"]);
+  if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     res.status(400).json({ error: "Invalid email address" });
     return;
   }
   await db.insert(leadsTable).values({
-    firstName: String(firstName).slice(0, 100),
-    lastName: String(lastName).slice(0, 100),
+    firstName: String(firstName).trim().toUpperCase().slice(0, 100),
+    lastName: String(lastName).trim().toUpperCase().slice(0, 100),
     email: String(email).slice(0, 255),
     phone: phone ? String(phone).slice(0, 30) : null,
     nationality: nationality ? String(nationality).slice(0, 100) : null,
@@ -68,6 +71,8 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
+  const { error: nameErr } = normalizeAndValidateNames({ firstName, lastName }, ["firstName", "lastName"]);
+  if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     res.status(400).json({ error: "Invalid email address" });
@@ -75,8 +80,8 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   }
 
   await db.insert(leadsTable).values({
-    firstName: String(firstName).slice(0, 100),
-    lastName: String(lastName).slice(0, 100),
+    firstName: String(firstName).trim().toUpperCase().slice(0, 100),
+    lastName: String(lastName).trim().toUpperCase().slice(0, 100),
     email: String(email).slice(0, 255),
     phone: String(phone).slice(0, 30),
     source: "web_form",
@@ -144,6 +149,10 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
+  const { error: nameErr, normalized: normBody } = normalizeAndValidateNames(
+    { firstName, lastName }, ["firstName", "lastName"]
+  );
+  if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const currentYear = String(new Date().getFullYear());
   let resolvedAgentId = agentId || null;
   if (user.role === "agent" || user.role === "sub_agent") {
@@ -151,7 +160,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "
     resolvedAgentId = agentRec?.id || null;
   }
   const [lead] = await db.insert(leadsTable).values({
-    firstName, lastName, status, email,
+    firstName: normBody.firstName as string, lastName: normBody.lastName as string, status, email,
     phone, nationality: nationality || null,
     interestedProgram: interestedProgram || null,
     interestedCountry: interestedCountry || null,
@@ -239,7 +248,9 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as a
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
-  const [lead] = await db.update(leadsTable).set(updates).where(eq(leadsTable.id, id)).returning();
+  const { error: nameErr, normalized: normUpdates } = normalizeAndValidateNames(updates, ["firstName", "lastName"]);
+  if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+  const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   await logAudit(user.id, "update_lead", "lead", id, updates, req.ip);
   res.json(lead);
