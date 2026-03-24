@@ -211,11 +211,29 @@ export default function CourseFinder() {
     });
   }
 
-  function toggleSelectAll() {
-    if (selectedIds.size === programs.length) {
+  async function toggleSelectAll() {
+    if (selectedIds.size > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(programs.map(p => p.id)));
+      try {
+        const allParams = new URLSearchParams();
+        allParams.set("page", "1");
+        allParams.set("limit", "1000");
+        if (filters.country) allParams.set("country", filters.country);
+        if (filters.city) allParams.set("city", filters.city);
+        if (filters.universityType) allParams.set("universityType", filters.universityType);
+        if (filters.universityId) allParams.set("universityId", filters.universityId);
+        if (filters.level) allParams.set("level", filters.level);
+        if (filters.language) allParams.set("language", filters.language);
+        if (filters.field) allParams.set("field", filters.field);
+        if (filters.search) allParams.set("search", filters.search);
+        if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
+        if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
+        const allData = await apiFetch(`${BASE_URL}/api/course-finder?${allParams.toString()}`) as { data: Program[] };
+        setSelectedIds(new Set(allData.data.map(p => p.id)));
+      } catch {
+        setSelectedIds(new Set(programs.map(p => p.id)));
+      }
     }
   }
 
@@ -237,13 +255,30 @@ export default function CourseFinder() {
     : null;
 
   async function handleGeneratePdf() {
-    const selected = programs.filter(p => selectedIds.has(p.id));
-    if (selected.length === 0) {
+    if (selectedIds.size === 0) {
       toast({ title: "No programs selected", description: "Select one or more programs to generate a proposal.", variant: "destructive" });
       return;
     }
     setGeneratingPdf(true);
     try {
+      let selected = programs.filter(p => selectedIds.has(p.id));
+      if (selected.length < selectedIds.size) {
+        const allParams = new URLSearchParams();
+        allParams.set("page", "1");
+        allParams.set("limit", "1000");
+        if (filters.country) allParams.set("country", filters.country);
+        if (filters.city) allParams.set("city", filters.city);
+        if (filters.universityType) allParams.set("universityType", filters.universityType);
+        if (filters.universityId) allParams.set("universityId", filters.universityId);
+        if (filters.level) allParams.set("level", filters.level);
+        if (filters.language) allParams.set("language", filters.language);
+        if (filters.field) allParams.set("field", filters.field);
+        if (filters.search) allParams.set("search", filters.search);
+        if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
+        if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
+        const allData = await apiFetch(`${BASE_URL}/api/course-finder?${allParams.toString()}`) as { data: Program[] };
+        selected = allData.data.filter(p => selectedIds.has(p.id));
+      }
       let logoDataUrl: string | null = null;
       const logoSrc = isAgent && agentProfile?.logoUrl ? agentProfile.logoUrl : settings?.logoUrl;
       if (logoSrc) {
@@ -325,9 +360,30 @@ export default function CourseFinder() {
     return sorted;
   }, [programs, sortField, sortDir]);
 
-  function exportToExcel() {
-    if (!sortedPrograms.length) return;
-    const rows = sortedPrograms.map(p => ({
+  async function exportToExcel() {
+    let exportPrograms = sortedPrograms;
+    const total = meta?.total ?? 0;
+    if (total > programs.length) {
+      try {
+        const allParams = new URLSearchParams();
+        allParams.set("page", "1");
+        allParams.set("limit", "1000");
+        if (filters.country) allParams.set("country", filters.country);
+        if (filters.city) allParams.set("city", filters.city);
+        if (filters.universityType) allParams.set("universityType", filters.universityType);
+        if (filters.universityId) allParams.set("universityId", filters.universityId);
+        if (filters.level) allParams.set("level", filters.level);
+        if (filters.language) allParams.set("language", filters.language);
+        if (filters.field) allParams.set("field", filters.field);
+        if (filters.search) allParams.set("search", filters.search);
+        if (filters.feeMin) allParams.set("feeMin", filters.feeMin);
+        if (filters.feeMax) allParams.set("feeMax", filters.feeMax);
+        const allData = await apiFetch(`${BASE_URL}/api/course-finder?${allParams.toString()}`) as { data: Program[] };
+        exportPrograms = allData.data;
+      } catch {}
+    }
+    if (!exportPrograms.length) return;
+    const rows = exportPrograms.map(p => ({
       "Program Name": p.name,
       "University": p.universityName,
       "Country": p.universityCountry || "",
@@ -498,12 +554,12 @@ export default function CourseFinder() {
                     onClick={toggleSelectAll}
                     className="h-8 text-xs gap-1.5"
                   >
-                    {selectedIds.size === programs.length ? (
+                    {selectedIds.size > 0 ? (
                       <CheckSquare className="w-3.5 h-3.5 text-primary" />
                     ) : (
                       <Square className="w-3.5 h-3.5" />
                     )}
-                    {selectedIds.size === programs.length ? "Deselect All" : "Select All"}
+                    {selectedIds.size > 0 ? "Deselect All" : "Select All"}
                   </Button>
                   {selectedIds.size > 0 && (
                     <>
