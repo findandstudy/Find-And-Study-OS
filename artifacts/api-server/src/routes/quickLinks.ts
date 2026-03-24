@@ -34,7 +34,7 @@ router.get("/quick-links/admin", requireAuth, requireRole(...MANAGER_ROLES), asy
 });
 
 router.post("/quick-links", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { title, url, icon, color, target, sortOrder } = req.body;
+  const { title, url, icon, logoUrl, color, target, sortOrder } = req.body;
   if (!title || !url || !target) {
     res.status(400).json({ error: "title, url and target are required" });
     return;
@@ -48,6 +48,7 @@ router.post("/quick-links", requireAuth, requireRole(...MANAGER_ROLES), async (r
     title,
     url,
     icon: icon || null,
+    logoUrl: logoUrl || null,
     color: color || null,
     target,
     sortOrder: sortOrder ?? 0,
@@ -59,7 +60,7 @@ router.patch("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), asy
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
-  for (const key of ["title", "url", "icon", "color", "target", "sortOrder", "isActive"]) {
+  for (const key of ["title", "url", "icon", "logoUrl", "color", "target", "sortOrder", "isActive"]) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }

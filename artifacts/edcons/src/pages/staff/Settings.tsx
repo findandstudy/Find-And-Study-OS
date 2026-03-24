@@ -1627,7 +1627,9 @@ function QuickLinksTab() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ title: "", url: "", icon: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+  const [form, setForm] = useState({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const fetchLinks = useCallback(async () => {
@@ -1657,7 +1659,7 @@ function QuickLinksTab() {
         body: JSON.stringify({
           title: form.title.trim(),
           url: form.url.trim(),
-          icon: form.icon.trim() || null,
+          logoUrl: form.logoUrl || null,
           color: form.color || null,
           target: form.target,
           sortOrder: form.sortOrder,
@@ -1666,7 +1668,7 @@ function QuickLinksTab() {
       toast({ title: editingId ? "Updated" : "Created", description: `Quick link "${form.title}" has been ${editingId ? "updated" : "created"}.` });
       setShowForm(false);
       setEditingId(null);
-      setForm({ title: "", url: "", icon: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+      setForm({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent", sortOrder: 0 });
       fetchLinks();
     } catch (e: any) {
       toast({ title: "Error", description: e.message || "Failed to save quick link.", variant: "destructive" });
@@ -1697,11 +1699,33 @@ function QuickLinksTab() {
     } catch {}
   };
 
+  const uploadLogo = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      const logoPath = `${BASE}/api/storage/objects${strippedPath}`;
+      setForm(f => ({ ...f, logoUrl: logoPath }));
+      toast({ title: "Logo uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   const openEdit = (link: any) => {
     setForm({
       title: link.title,
       url: link.url,
-      icon: link.icon || "",
+      logoUrl: link.logoUrl || "",
       color: link.color || "#6366f1",
       target: link.target,
       sortOrder: link.sortOrder ?? 0,
@@ -1711,7 +1735,7 @@ function QuickLinksTab() {
   };
 
   const openNew = () => {
-    setForm({ title: "", url: "", icon: "", color: "#6366f1", target: "agent", sortOrder: 0 });
+    setForm({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent", sortOrder: 0 });
     setEditingId(null);
     setShowForm(true);
   };
@@ -1752,13 +1776,26 @@ function QuickLinksTab() {
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Icon (emoji or letter)</Label>
-                <Input
-                  value={form.icon}
-                  onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
-                  placeholder="🏠 or D"
-                  maxLength={4}
-                />
+                <Label className="text-xs font-medium mb-1.5">Logo</Label>
+                <div className="relative w-full h-[72px] rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
+                  {form.logoUrl ? (
+                    <>
+                      <img src={form.logoUrl} alt="Logo" className="max-h-14 max-w-full object-contain" />
+                      <button onClick={() => setForm(f => ({ ...f, logoUrl: "" }))}
+                        className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-destructive/90 text-white flex items-center justify-center hover:bg-destructive">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
+                      className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-xs">
+                      {logoUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="font-medium">{logoUploading ? "Uploading..." : "Upload Logo"}</span>
+                    </button>
+                  )}
+                </div>
+                <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }} />
               </div>
               <div>
                 <Label className="text-xs font-medium mb-1.5">Target</Label>
@@ -1826,10 +1863,14 @@ function QuickLinksTab() {
                 }`}
               >
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
-                  style={{ backgroundColor: link.color || "#6366f1" }}
+                  className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold overflow-hidden"
+                  style={{ backgroundColor: link.logoUrl ? "transparent" : (link.color || "#6366f1") }}
                 >
-                  {link.icon || link.title.charAt(0).toUpperCase()}
+                  {link.logoUrl ? (
+                    <img src={link.logoUrl} alt={link.title} className="w-full h-full object-contain" />
+                  ) : (
+                    link.icon || link.title.charAt(0).toUpperCase()
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

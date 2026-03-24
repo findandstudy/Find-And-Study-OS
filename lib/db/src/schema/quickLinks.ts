@@ -5,6 +5,7 @@ export const quickLinksTable = pgTable("quick_links", {
   title: text("title").notNull(),
   url: text("url").notNull(),
   icon: text("icon"),
+  logoUrl: text("logo_url"),
   color: text("color"),
   target: text("target").notNull().default("agent"),
   sortOrder: integer("sort_order").notNull().default(0),

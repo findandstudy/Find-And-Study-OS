@@ -165,10 +165,14 @@ export default function StudentDashboard() {
                   className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:bg-primary/5 hover:border-primary/30 transition-all group"
                 >
                   <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
-                    style={{ backgroundColor: link.color || "#6366f1" }}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold overflow-hidden"
+                    style={{ backgroundColor: link.logoUrl ? "transparent" : (link.color || "#6366f1") }}
                   >
-                    {link.icon || link.title.charAt(0).toUpperCase()}
+                    {link.logoUrl ? (
+                      <img src={link.logoUrl} alt={link.title} className="w-full h-full object-contain" />
+                    ) : (
+                      link.icon || link.title.charAt(0).toUpperCase()
+                    )}
                   </div>
                   <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{link.title}</span>
                 </a>
