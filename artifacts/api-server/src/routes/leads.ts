@@ -30,8 +30,8 @@ router.get("/nationalities", requireAuth, requireRole(...STAFF_ROLES), async (_r
 
 router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> => {
   const { firstName, lastName, email, phone, nationality, interestedProgram, interestedCountry, message } = req.body;
-  if (!firstName || !lastName || !email) {
-    res.status(400).json({ error: "firstName, lastName, and email are required" });
+  if (!firstName || !lastName || !email || !phone) {
+    res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -140,8 +140,8 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "s
 router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
   const user = req.user!;
   const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo, season, agentId } = req.body;
-  if (!firstName || !lastName) {
-    res.status(400).json({ error: "firstName and lastName are required" });
+  if (!firstName || !lastName || !email || !phone) {
+    res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
   const currentYear = String(new Date().getFullYear());
@@ -151,8 +151,8 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "
     resolvedAgentId = agentRec?.id || null;
   }
   const [lead] = await db.insert(leadsTable).values({
-    firstName, lastName, status, email: email || null,
-    phone: phone || null, nationality: nationality || null,
+    firstName, lastName, status, email,
+    phone, nationality: nationality || null,
     interestedProgram: interestedProgram || null,
     interestedCountry: interestedCountry || null,
     source: source || null, notes: notes || null,

@@ -926,10 +926,10 @@ export default function LeadsPage() {
   };
 
   function handleCreate() {
-    if (!form.firstName || !form.lastName) return;
+    if (!form.firstName || !form.lastName || !form.email || !form.phone) return;
     const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
     const { phoneCode, ...formRest } = form;
-    const payload: any = { ...formRest, phone: form.phone ? `${phoneCode}${form.phone}` : "", status: defaultStatus, season };
+    const payload: any = { ...formRest, phone: `${phoneCode}${form.phone}`, status: defaultStatus, season };
     const parsedCreate = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
     else delete payload.estimatedValue;
@@ -1241,11 +1241,11 @@ export default function LeadsPage() {
               <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="Last name" />
             </div>
             <div className="space-y-1.5">
-              <Label>Email</Label>
+              <Label>Email *</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
             </div>
             <div className="space-y-1.5">
-              <Label>Phone</Label>
+              <Label>Phone *</Label>
               <div className="flex gap-1">
                 <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
                   <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
@@ -1295,7 +1295,7 @@ export default function LeadsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName}>
+            <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName || !form.email || !form.phone}>
               {createLead.isPending ? "Creating…" : "Create Lead"}
             </Button>
           </DialogFooter>
