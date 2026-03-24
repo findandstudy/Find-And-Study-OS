@@ -98,7 +98,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
   const { data: followUps = [] } = useQuery<any[]>({
     queryKey: [`/api/leads/${id}/follow-ups`],
-    queryFn: () => fetch(`${BASE}/api/leads/${id}/follow-ups`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/follow-ups`, { credentials: "include" }).then(r => r.json()).then(d => Array.isArray(d) ? d : []),
   });
 
   const createFollowUp = useMutation({
