@@ -12,7 +12,7 @@ import { customFetch } from "@workspace/api-client-react";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
-  SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp,
+  SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -40,11 +40,23 @@ interface Program {
   discountedFee: number | null;
   scholarship: number | null;
   intakes: string | null;
+  requirements: string | null;
+  applicationFee: number | null;
+  advancedFee: number | null;
+  depositFee: number | null;
+  languageFee: number | null;
+  feeType: string | null;
   universityName: string;
   universityCountry: string | null;
   universityType: string | null;
   universityCity: string | null;
   universityLogoUrl: string | null;
+  universityWebsite: string | null;
+  universityDescription: string | null;
+  universityRanking: string | null;
+  universityQsRanking: string | null;
+  universityTimesRanking: string | null;
+  universityAddress: string | null;
 }
 
 interface Filters {
@@ -493,6 +505,127 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   );
 }
 
+function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClose: () => void; program: Program | null }) {
+  if (!program) return null;
+  const effectiveFee = program.discountedFee ?? program.tuitionFee;
+  const hasDiscount = program.discountedFee && program.tuitionFee && program.discountedFee < program.tuitionFee;
+  const logoSrc = fixStorageUrl(program.universityLogoUrl);
+
+  const detailRows: { icon: React.ReactNode; label: string; value: string }[] = [];
+  if (program.degree) detailRows.push({ icon: <GraduationCap className="w-4 h-4 text-primary" />, label: "Degree", value: program.degree });
+  if (program.field) detailRows.push({ icon: <Award className="w-4 h-4 text-violet-500" />, label: "Field", value: program.field });
+  if (program.language) detailRows.push({ icon: <Languages className="w-4 h-4 text-blue-500" />, label: "Language", value: program.language });
+  if (program.duration) detailRows.push({ icon: <Clock className="w-4 h-4 text-green-500" />, label: "Duration", value: program.duration });
+  if (program.intakes) detailRows.push({ icon: <BookOpen className="w-4 h-4 text-orange-500" />, label: "Intakes", value: program.intakes });
+  if (program.feeType) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-emerald-500" />, label: "Fee Type", value: program.feeType });
+  if (program.applicationFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-amber-500" />, label: "Application Fee", value: formatFee(program.applicationFee, program.currency) });
+  if (program.depositFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-cyan-500" />, label: "Deposit Fee", value: formatFee(program.depositFee, program.currency) });
+  if (program.advancedFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-sky-500" />, label: "Advanced Fee", value: formatFee(program.advancedFee, program.currency) });
+  if (program.languageFee) detailRows.push({ icon: <Languages className="w-4 h-4 text-indigo-500" />, label: "Language Fee", value: formatFee(program.languageFee, program.currency) });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-primary/20">
+              {logoSrc ? (
+                <img src={logoSrc} alt={program.universityName} className="w-9 h-9 object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }} />
+              ) : null}
+              <GraduationCap className={`w-6 h-6 text-primary ${logoSrc ? "hidden" : ""}`} />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-lg leading-tight">{program.name}</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">{program.universityName}</p>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-2">
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="w-4 h-4 text-primary/60 shrink-0" />
+            <span>{[program.universityCity, program.universityCountry].filter(Boolean).join(", ")}</span>
+          </div>
+
+          {(effectiveFee || program.scholarship) && (
+            <div className="bg-gradient-to-r from-primary/5 to-emerald-500/5 rounded-xl p-4 border border-primary/10">
+              {effectiveFee ? (
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-2xl font-bold text-foreground">{formatFee(effectiveFee, program.currency)}</span>
+                  {hasDiscount && (
+                    <span className="text-sm line-through text-muted-foreground/50">{formatFee(program.tuitionFee, program.currency)}</span>
+                  )}
+                  {hasDiscount && (
+                    <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0">
+                      {Math.round(((program.tuitionFee! - program.discountedFee!) / program.tuitionFee!) * 100)}% OFF
+                    </Badge>
+                  )}
+                </div>
+              ) : null}
+              {program.scholarship && program.scholarship > 0 ? (
+                <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+                  <Award className="w-4 h-4" />
+                  <span className="font-medium">Scholarship: {formatFee(program.scholarship, program.currency)}</span>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {detailRows.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {detailRows.map((row, idx) => (
+                <div key={idx} className="flex items-center gap-2.5 bg-secondary/30 rounded-lg px-3 py-2.5">
+                  {row.icon}
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{row.label}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{row.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {program.requirements && (
+            <div className="space-y-1.5">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Requirements</p>
+              <p className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{program.requirements}</p>
+            </div>
+          )}
+
+          {program.universityDescription && (
+            <div className="space-y-1.5 pt-2 border-t border-border/30">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">About {program.universityName}</p>
+              <p className="text-sm text-foreground/80 leading-relaxed line-clamp-4">{program.universityDescription}</p>
+            </div>
+          )}
+
+          {(program.universityRanking || program.universityQsRanking || program.universityTimesRanking) && (
+            <div className="flex flex-wrap gap-2">
+              {program.universityRanking && (
+                <Badge variant="outline" className="text-xs gap-1"><Award className="w-3 h-3" /> Ranking: {program.universityRanking}</Badge>
+              )}
+              {program.universityQsRanking && (
+                <Badge variant="outline" className="text-xs gap-1">QS: {program.universityQsRanking}</Badge>
+              )}
+              {program.universityTimesRanking && (
+                <Badge variant="outline" className="text-xs gap-1">Times: {program.universityTimesRanking}</Badge>
+              )}
+            </div>
+          )}
+
+          {program.universityWebsite && (
+            <a href={program.universityWebsite} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" /> Visit University Website
+            </a>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Programs() {
   const { t, lang } = useI18n();
   useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
@@ -515,6 +648,7 @@ export default function Programs() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [applyProgram, setApplyProgram] = useState<Program | null>(null);
+  const [detailProgram, setDetailProgram] = useState<Program | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -851,14 +985,27 @@ export default function Programs() {
                       className="group bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
                       <div className={`h-20 bg-gradient-to-r ${gradient} relative flex items-center px-5 gap-3`}>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)]" />
-                        <div className="w-11 h-11 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden relative z-10 ring-2 ring-white/50">
-                          {logoSrc ? (
-                            <img src={logoSrc} alt={prog.universityName} className="w-8 h-8 object-contain" loading="lazy"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
-                            />
-                          ) : null}
-                          <GraduationCap className={`w-5 h-5 text-primary ${logoSrc ? "hidden" : ""}`} />
-                        </div>
+                        {prog.universityWebsite ? (
+                          <a href={prog.universityWebsite} target="_blank" rel="noopener noreferrer"
+                            className="w-11 h-11 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden relative z-10 ring-2 ring-white/50 hover:ring-primary/50 hover:scale-105 transition-all cursor-pointer"
+                            onClick={(e) => e.stopPropagation()}>
+                            {logoSrc ? (
+                              <img src={logoSrc} alt={prog.universityName} className="w-8 h-8 object-contain" loading="lazy"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
+                              />
+                            ) : null}
+                            <GraduationCap className={`w-5 h-5 text-primary ${logoSrc ? "hidden" : ""}`} />
+                          </a>
+                        ) : (
+                          <div className="w-11 h-11 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden relative z-10 ring-2 ring-white/50">
+                            {logoSrc ? (
+                              <img src={logoSrc} alt={prog.universityName} className="w-8 h-8 object-contain" loading="lazy"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
+                              />
+                            ) : null}
+                            <GraduationCap className={`w-5 h-5 text-primary ${logoSrc ? "hidden" : ""}`} />
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1 relative z-10">
                           <p className="text-xs text-foreground/70 truncate font-semibold">{prog.universityName}</p>
                         </div>
@@ -904,27 +1051,37 @@ export default function Programs() {
                             <span className="flex items-center gap-1.5">
                               <DollarSign className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                               <span className="truncate text-xs font-medium">
-                                {hasDiscount && (
-                                  <span className="line-through text-muted-foreground/40 mr-1">
-                                    {formatFee(prog.tuitionFee, prog.currency)}
-                                  </span>
-                                )}
                                 {formatFee(effectiveFee, prog.currency)}
                               </span>
                             </span>
                           ) : null}
                         </div>
 
+                        {hasDiscount && (
+                          <div className="mb-2">
+                            <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs gap-1">
+                              <DollarSign className="w-3 h-3" />
+                              <span className="line-through text-muted-foreground/50 mr-0.5">{formatFee(prog.tuitionFee, prog.currency)}</span>
+                              {formatFee(prog.discountedFee, prog.currency)}
+                              <span className="ml-0.5 font-bold">({Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}% OFF)</span>
+                            </Badge>
+                          </div>
+                        )}
+
                         {prog.scholarship && prog.scholarship > 0 ? (
-                          <div className="mb-4">
+                          <div className="mb-3">
                             <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1">
                               <Award className="w-3 h-3" /> Scholarship: {formatFee(prog.scholarship, prog.currency)}
                             </Badge>
                           </div>
                         ) : null}
 
-                        <div className="mt-auto">
-                          <Button onClick={() => setApplyProgram(prog)} className="w-full rounded-xl shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
+                        <div className="mt-auto flex gap-2">
+                          <Button variant="outline" size="icon" onClick={() => setDetailProgram(prog)}
+                            className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5" title="Program Details">
+                            <Info className="w-4 h-4" />
+                          </Button>
+                          <Button onClick={() => setApplyProgram(prog)} className="flex-1 rounded-xl shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
                             Apply Now
                           </Button>
                         </div>
@@ -975,6 +1132,7 @@ export default function Programs() {
       </section>
 
       <ApplyDialog open={!!applyProgram} onClose={() => setApplyProgram(null)} program={applyProgram} countries={filters.countries} />
+      <ProgramDetailDialog open={!!detailProgram} onClose={() => setDetailProgram(null)} program={detailProgram} />
     </PublicLayout>
   );
 }
