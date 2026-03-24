@@ -64,8 +64,8 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   }
 
   const { firstName, lastName, email, phone } = req.body;
-  if (!firstName || !lastName || !email) {
-    res.status(400).json({ error: "firstName, lastName, and email are required" });
+  if (!firstName || !lastName || !email || !phone) {
+    res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -78,7 +78,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     firstName: String(firstName).slice(0, 100),
     lastName: String(lastName).slice(0, 100),
     email: String(email).slice(0, 255),
-    phone: phone ? String(phone).slice(0, 30) : null,
+    phone: String(phone).slice(0, 30),
     source: "web_form",
     status: "new",
     agentId: agent.id,

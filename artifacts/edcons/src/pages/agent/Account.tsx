@@ -748,7 +748,7 @@ function WebToLeadTab() {
     <input name="lastName" placeholder="Last Name" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
   </div>
   <div style="margin-bottom:12px">
-    <input name="phone" type="tel" placeholder="Phone Number" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+    <input name="phone" type="tel" placeholder="Phone Number" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
   </div>
   <div style="margin-bottom:16px">
     <input name="email" type="email" placeholder="Email Address" required style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
