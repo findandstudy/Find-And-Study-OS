@@ -45,7 +45,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 ## External Dependencies
 
 -   **bcryptjs:** For password hashing.
--   **Anthropic Claude:** AI integration for document OCR and CSV parsing.
+-   **Anthropic Claude:** AI integration for document OCR and CSV parsing. API key is admin-managed via Settings → Integrations (DB-backed with 60s cache, env var fallback).
 -   **PostgreSQL:** Primary database.
 -   **Object Storage:** For uploaded files (invoices, receipts, branding assets).
 -   **Stripe:** Implied payment processing (common in SaaS with finance systems).

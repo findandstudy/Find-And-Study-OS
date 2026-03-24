@@ -3,6 +3,8 @@ import { db, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
+import Anthropic from "@anthropic-ai/sdk";
+import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
 
 const router: IRouter = Router();
 
@@ -71,6 +73,7 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
       .returning();
   }
 
+  if (key === "claude") clearConfigCache();
   await logAudit(req.user!.id, "update_integration", "integration", result.id, { key, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(result.config as Record<string, any>) });
 });
@@ -92,6 +95,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
     .where(eq(integrationsTable.key, req.params.key))
     .returning();
 
+  if (req.params.key === "claude") clearConfigCache();
   await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: req.params.key, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(result.config as Record<string, any>) });
 });
@@ -104,6 +108,33 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
 
   if (!integration) {
     res.status(404).json({ error: "Integration not found" });
+    return;
+  }
+
+  const config = integration.config as Record<string, any>;
+
+  if (req.params.key === "claude") {
+    if (!config.apiKey) {
+      res.json({ success: false, message: "API key is not configured" });
+      return;
+    }
+    try {
+      const client = new Anthropic({ apiKey: config.apiKey });
+      await client.messages.create({
+        model: config.model || "claude-sonnet-4-6",
+        max_tokens: 5,
+        messages: [{ role: "user", content: "Hi" }],
+      });
+      res.json({ success: true, message: "Connection test passed — Anthropic API key is valid" });
+    } catch (err: any) {
+      const msg = err?.status === 401
+        ? "Invalid API key"
+        : err?.status === 429
+          ? "Rate limited — but API key is valid"
+          : `Connection failed: ${err?.message || "Unknown error"}`;
+      const success = err?.status === 429;
+      res.json({ success, message: msg });
+    }
     return;
   }
 

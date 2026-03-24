@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { requireAuth } from "../lib/auth";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 
 const router: IRouter = Router();
 
@@ -22,6 +22,8 @@ function aiRateLimit(maxRequests: number, windowMs: number) {
     next();
   };
 }
+
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 
 Analyze the provided document image(s) and extract student information.
@@ -75,6 +77,16 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       return;
     }
 
+    let anthropic;
+    let claudeConfig;
+    try {
+      anthropic = await getAnthropicClient();
+      claudeConfig = await getClaudeConfig();
+    } catch (err: any) {
+      res.status(503).json({ error: err.message || "AI integration not configured" });
+      return;
+    }
+
     const contentBlocks: any[] = [
       { type: "text", text: EXTRACT_PROMPT },
     ];
@@ -108,8 +120,9 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       }
     }
 
+    const model = claudeConfig.model || DEFAULT_MODEL;
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model,
       max_tokens: 8192,
       messages: [{ role: "user", content: contentBlocks }],
     });
@@ -143,6 +156,14 @@ router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000),
     const { csvData } = req.body as { csvData: string };
     if (!csvData) {
       res.status(400).json({ error: "No CSV data provided" });
+      return;
+    }
+
+    let anthropic;
+    try {
+      anthropic = await getAnthropicClient();
+    } catch (err: any) {
+      res.status(503).json({ error: err.message || "AI integration not configured" });
       return;
     }
 

@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
 import { db, leadsTable, usersTable, studentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
 
@@ -204,6 +204,16 @@ router.post("/public/ai/extract-document", aiExtractLimiter, async (req: Request
       return;
     }
 
+    let anthropic;
+    let claudeConfig;
+    try {
+      anthropic = await getAnthropicClient();
+      claudeConfig = await getClaudeConfig();
+    } catch (err: any) {
+      res.status(503).json({ error: err.message || "AI integration not configured" });
+      return;
+    }
+
     const contentBlocks: any[] = [
       { type: "text", text: EXTRACT_PROMPT },
     ];
@@ -237,8 +247,9 @@ router.post("/public/ai/extract-document", aiExtractLimiter, async (req: Request
       }
     }
 
+    const model = claudeConfig.model || "claude-sonnet-4-6";
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model,
       max_tokens: 4096,
       messages: [{ role: "user", content: contentBlocks }],
     });

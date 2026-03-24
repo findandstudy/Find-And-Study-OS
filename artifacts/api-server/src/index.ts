@@ -1,6 +1,6 @@
 import express from "express";
 import app from "./app";
-import { db, pool, usersTable } from "@workspace/db";
+import { db, pool, usersTable, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
@@ -176,11 +176,32 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+async function seedClaudeIntegration() {
+  const envKey = process.env.ANTHROPIC_API_KEY;
+  if (!envKey) return;
+  try {
+    const [existing] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "claude"));
+    if (!existing) {
+      await db.insert(integrationsTable).values({
+        key: "claude",
+        name: "Anthropic Claude",
+        category: "ai",
+        isEnabled: true,
+        config: { apiKey: envKey },
+      });
+      console.log("[seed] Anthropic Claude integration seeded from ANTHROPIC_API_KEY env var");
+    }
+  } catch (err) {
+    console.error("[seed] seedClaudeIntegration error:", err);
+  }
+}
+
 (async () => {
   await ensureSuperAdmin();
   await ensureAgentUser();
   await runSeedSQL();
   await linkAgentUser();
+  await seedClaudeIntegration();
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
