@@ -511,169 +511,113 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
   const hasDiscount = program.discountedFee && program.tuitionFee && program.discountedFee < program.tuitionFee;
   const logoSrc = fixStorageUrl(program.universityLogoUrl);
 
-  const programInfoRows: { icon: React.ReactNode; label: string; value: string }[] = [];
-  if (program.degree) programInfoRows.push({ icon: <GraduationCap className="w-4 h-4" />, label: "Degree", value: program.degree });
-  if (program.field) programInfoRows.push({ icon: <Award className="w-4 h-4" />, label: "Field", value: program.field });
-  if (program.language) programInfoRows.push({ icon: <Languages className="w-4 h-4" />, label: "Language", value: program.language });
-  if (program.duration) programInfoRows.push({ icon: <Clock className="w-4 h-4" />, label: "Duration", value: program.duration });
-  if (program.intakes) programInfoRows.push({ icon: <BookOpen className="w-4 h-4" />, label: "Intakes", value: program.intakes });
-  if (program.feeType) programInfoRows.push({ icon: <DollarSign className="w-4 h-4" />, label: "Fee Type", value: program.feeType });
-
-  const feeRows: { label: string; value: string }[] = [];
-  if (program.applicationFee) feeRows.push({ label: "Application Fee", value: formatFee(program.applicationFee, program.currency) });
-  if (program.depositFee) feeRows.push({ label: "Deposit Fee", value: formatFee(program.depositFee, program.currency) });
-  if (program.advancedFee) feeRows.push({ label: "Advanced Fee", value: formatFee(program.advancedFee, program.currency) });
-  if (program.languageFee) feeRows.push({ label: "Language Fee", value: formatFee(program.languageFee, program.currency) });
+  const detailRows: { icon: React.ReactNode; label: string; value: string }[] = [];
+  if (program.degree) detailRows.push({ icon: <GraduationCap className="w-4 h-4 text-primary" />, label: "Degree", value: program.degree });
+  if (program.field) detailRows.push({ icon: <Award className="w-4 h-4 text-violet-500" />, label: "Field", value: program.field });
+  if (program.language) detailRows.push({ icon: <Languages className="w-4 h-4 text-blue-500" />, label: "Language", value: program.language });
+  if (program.duration) detailRows.push({ icon: <Clock className="w-4 h-4 text-green-500" />, label: "Duration", value: program.duration });
+  if (program.intakes) detailRows.push({ icon: <BookOpen className="w-4 h-4 text-orange-500" />, label: "Intakes", value: program.intakes });
+  if (program.feeType) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-emerald-500" />, label: "Fee Type", value: program.feeType });
+  if (program.applicationFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-amber-500" />, label: "Application Fee", value: formatFee(program.applicationFee, program.currency) });
+  if (program.depositFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-cyan-500" />, label: "Deposit Fee", value: formatFee(program.depositFee, program.currency) });
+  if (program.advancedFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-sky-500" />, label: "Advanced Fee", value: formatFee(program.advancedFee, program.currency) });
+  if (program.languageFee) detailRows.push({ icon: <Languages className="w-4 h-4 text-indigo-500" />, label: "Language Fee", value: formatFee(program.languageFee, program.currency) });
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0 gap-0">
-        <div className="relative bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 px-6 pt-6 pb-5">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.5),transparent_70%)]" />
-          <DialogHeader className="relative z-10">
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white dark:bg-card shadow-lg shadow-primary/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/80 dark:ring-border/50">
-                {logoSrc ? (
-                  <img src={logoSrc} alt={program.universityName} className="w-10 h-10 object-contain"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }} />
-                ) : null}
-                <GraduationCap className={`w-7 h-7 text-primary ${logoSrc ? "hidden" : ""}`} />
-              </div>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <DialogTitle className="text-lg font-display font-bold leading-tight text-foreground">{program.name}</DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1 font-medium">{program.universityName}</p>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-primary/50 shrink-0" />
-                  <span>{[program.universityCity, program.universityCountry].filter(Boolean).join(", ")}</span>
-                </div>
-              </div>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-primary/20">
+              {logoSrc ? (
+                <img src={logoSrc} alt={program.universityName} className="w-9 h-9 object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }} />
+              ) : null}
+              <GraduationCap className={`w-6 h-6 text-primary ${logoSrc ? "hidden" : ""}`} />
             </div>
-          </DialogHeader>
-        </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-lg leading-tight">{program.name}</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">{program.universityName}</p>
+            </div>
+          </div>
+        </DialogHeader>
 
-        <div className="px-6 py-5 space-y-5">
-          {(effectiveFee || (program.scholarship && program.scholarship > 0)) && (
-            <div className="rounded-2xl overflow-hidden border border-emerald-200/50 dark:border-emerald-800/30">
+        <div className="space-y-4 mt-2">
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="w-4 h-4 text-primary/60 shrink-0" />
+            <span>{[program.universityCity, program.universityCountry].filter(Boolean).join(", ")}</span>
+          </div>
+
+          {(effectiveFee || program.scholarship) && (
+            <div className="bg-gradient-to-r from-primary/5 to-emerald-500/5 rounded-xl p-4 border border-primary/10">
               {effectiveFee ? (
-                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/20 px-5 py-4">
-                  <div className="flex items-baseline gap-2.5 flex-wrap">
-                    <span className="text-3xl font-display font-bold text-emerald-700 dark:text-emerald-400">{formatFee(effectiveFee, program.currency)}</span>
-                    {hasDiscount && (
-                      <span className="text-base line-through text-muted-foreground/40 font-medium">{formatFee(program.tuitionFee, program.currency)}</span>
-                    )}
-                    {hasDiscount && (
-                      <span className="text-[11px] font-bold text-white bg-emerald-500 rounded-full px-2.5 py-0.5 shadow-sm">
-                        {Math.round(((program.tuitionFee! - program.discountedFee!) / program.tuitionFee!) * 100)}% OFF
-                      </span>
-                    )}
-                  </div>
-                  {program.feeType && (
-                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/60 mt-1 font-medium">{program.feeType}</p>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-2xl font-bold text-foreground">{formatFee(effectiveFee, program.currency)}</span>
+                  {hasDiscount && (
+                    <span className="text-sm line-through text-muted-foreground/50">{formatFee(program.tuitionFee, program.currency)}</span>
+                  )}
+                  {hasDiscount && (
+                    <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0">
+                      {Math.round(((program.tuitionFee! - program.discountedFee!) / program.tuitionFee!) * 100)}% OFF
+                    </Badge>
                   )}
                 </div>
               ) : null}
               {program.scholarship && program.scholarship > 0 ? (
-                <div className="bg-emerald-500/5 px-5 py-3 border-t border-emerald-200/30 dark:border-emerald-800/20 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
-                    <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">Scholarship</p>
-                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatFee(program.scholarship, program.currency)}</p>
-                  </div>
+                <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+                  <Award className="w-4 h-4" />
+                  <span className="font-medium">Scholarship: {formatFee(program.scholarship, program.currency)}</span>
                 </div>
               ) : null}
             </div>
           )}
 
-          {programInfoRows.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-4 rounded-full bg-primary" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Program Details</h4>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {programInfoRows.map((row, idx) => (
-                  <div key={idx} className="flex items-center gap-2.5 rounded-xl px-3.5 py-3 bg-secondary/40 dark:bg-secondary/20 border border-border/20">
-                    <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center shrink-0 text-primary/70">
-                      {row.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold leading-none mb-0.5">{row.label}</p>
-                      <p className="text-sm font-semibold text-foreground truncate">{row.value}</p>
-                    </div>
+          {detailRows.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {detailRows.map((row, idx) => (
+                <div key={idx} className="flex items-center gap-2.5 bg-secondary/30 rounded-lg px-3 py-2.5">
+                  {row.icon}
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{row.label}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{row.value}</p>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {feeRows.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-4 rounded-full bg-amber-500" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Additional Fees</h4>
-              </div>
-              <div className="rounded-xl border border-border/30 overflow-hidden divide-y divide-border/20">
-                {feeRows.map((row, idx) => (
-                  <div key={idx} className="flex items-center justify-between px-4 py-2.5 bg-secondary/20 dark:bg-secondary/10">
-                    <span className="text-sm text-muted-foreground">{row.label}</span>
-                    <span className="text-sm font-bold text-foreground">{row.value}</span>
-                  </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           )}
 
           {program.requirements && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-4 rounded-full bg-violet-500" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Requirements</h4>
-              </div>
-              <div className="bg-violet-50/50 dark:bg-violet-950/20 rounded-xl p-4 border border-violet-200/30 dark:border-violet-800/20">
-                <p className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{program.requirements}</p>
-              </div>
+            <div className="space-y-1.5">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Requirements</p>
+              <p className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{program.requirements}</p>
             </div>
           )}
 
-          {(program.universityDescription || program.universityRanking || program.universityQsRanking || program.universityTimesRanking) && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-4 rounded-full bg-sky-500" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">About {program.universityName}</h4>
-              </div>
-              <div className="bg-sky-50/50 dark:bg-sky-950/20 rounded-xl p-4 border border-sky-200/30 dark:border-sky-800/20 space-y-3">
-                {program.universityDescription && (
-                  <p className="text-sm text-foreground/80 leading-relaxed line-clamp-4">{program.universityDescription}</p>
-                )}
-                {(program.universityRanking || program.universityQsRanking || program.universityTimesRanking) && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {program.universityRanking && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/80 dark:bg-card/50 text-sky-700 dark:text-sky-300 rounded-lg px-2.5 py-1 border border-sky-200/40 dark:border-sky-800/30">
-                        <Award className="w-3 h-3" /> #{program.universityRanking}
-                      </span>
-                    )}
-                    {program.universityQsRanking && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/80 dark:bg-card/50 text-sky-700 dark:text-sky-300 rounded-lg px-2.5 py-1 border border-sky-200/40 dark:border-sky-800/30">
-                        QS #{program.universityQsRanking}
-                      </span>
-                    )}
-                    {program.universityTimesRanking && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/80 dark:bg-card/50 text-sky-700 dark:text-sky-300 rounded-lg px-2.5 py-1 border border-sky-200/40 dark:border-sky-800/30">
-                        Times #{program.universityTimesRanking}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
+          {program.universityDescription && (
+            <div className="space-y-1.5 pt-2 border-t border-border/30">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">About {program.universityName}</p>
+              <p className="text-sm text-foreground/80 leading-relaxed line-clamp-4">{program.universityDescription}</p>
+            </div>
+          )}
+
+          {(program.universityRanking || program.universityQsRanking || program.universityTimesRanking) && (
+            <div className="flex flex-wrap gap-2">
+              {program.universityRanking && (
+                <Badge variant="outline" className="text-xs gap-1"><Award className="w-3 h-3" /> Ranking: {program.universityRanking}</Badge>
+              )}
+              {program.universityQsRanking && (
+                <Badge variant="outline" className="text-xs gap-1">QS: {program.universityQsRanking}</Badge>
+              )}
+              {program.universityTimesRanking && (
+                <Badge variant="outline" className="text-xs gap-1">Times: {program.universityTimesRanking}</Badge>
+              )}
             </div>
           )}
 
           {program.universityWebsite && (
             <a href={program.universityWebsite} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 w-full text-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/30 rounded-xl px-4 py-2.5 transition-all duration-200">
-              <ExternalLink className="w-4 h-4" /> Visit University Website
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" /> Visit University Website
             </a>
           )}
         </div>
