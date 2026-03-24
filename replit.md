@@ -49,3 +49,11 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **PostgreSQL:** Primary database.
 -   **Object Storage:** For uploaded files (invoices, receipts, branding assets).
 -   **Stripe:** Implied payment processing (common in SaaS with finance systems).
+
+## Security Audit (2026-03-24)
+
+A comprehensive security audit was performed. Key fixes applied:
+- **Critical:** Hardcoded seed passwords moved to env vars, AI route error messages sanitized, `isActive` removed from user self-patch fields (admin-only now)
+- **High:** XSS in embeddable widget fixed, AI routes rate-limited, body size reduced 50→10MB, security headers added, university contact info restricted to staff/agent roles, path traversal protection on storage endpoints
+- **Reports:** `AUDIT_REPORT.md` (full findings), `AUTHORIZATION_AUDIT.md` (endpoint-by-endpoint auth matrix)
+- **Remaining (Medium):** CSRF tokens, CSP enable, DB foreign keys/indexes, async route wrappers, storage upload rate limiting, per-object ACL

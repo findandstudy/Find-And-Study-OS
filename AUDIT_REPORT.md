@@ -31,6 +31,19 @@ The EduConsult OS platform demonstrates solid foundational security with session
 | H4 | **Global error handler leaks details in non-production** - Any environment besides explicit "production" exposed `err.message` | `artifacts/api-server/src/app.ts` | Changed to only expose messages for client errors (4xx); all 5xx errors now return generic message regardless of environment |
 | H5 | **Excessive request body size (50MB)** - Could be exploited for memory exhaustion | `artifacts/api-server/src/app.ts` | Reduced `express.json` and `express.urlencoded` limit from 50MB to 10MB |
 
+### CRITICAL - Fixed (Authorization)
+
+| # | Issue | File(s) | Fix Applied |
+|---|-------|---------|-------------|
+| C3 | **`isActive` field in user self-patch** - Regular users could activate/deactivate their own account by including `isActive` in PATCH body | `artifacts/api-server/src/routes/users.ts` | Moved `isActive` from `ALLOWED_PATCH_FIELDS` to `ADMIN_PATCH_FIELDS` |
+
+### HIGH - Fixed (Data Leakage & Path Traversal)
+
+| # | Issue | File(s) | Fix Applied |
+|---|-------|---------|-------------|
+| H7 | **University contact info exposed on public endpoint** - `contactPersonName`, `contactPersonPhone`, `contactPersonEmail` sent to unauthenticated users via `/api/course-finder` | `artifacts/api-server/src/routes/course-finder.ts` | Contact fields restricted to staff and agent roles only; stripped for unauthenticated users and students |
+| H8 | **Path traversal on storage endpoints** - `..` sequences in object path could traverse directory tree | `artifacts/api-server/src/routes/storage.ts` | Added `..` and `\` rejection on both `/storage/objects/*` and `/storage/public-objects/*` |
+
 ### HIGH - Fixed (Security Headers)
 
 | # | Issue | File(s) | Fix Applied |
@@ -86,6 +99,9 @@ The EduConsult OS platform demonstrates solid foundational security with session
 | `artifacts/api-server/src/app.ts` | Added security headers, reduced body size limit, hardened error handler |
 | `artifacts/api-server/src/routes/ai-extract.ts` | Added rate limiting, removed error message leakage |
 | `artifacts/api-server/src/routes/embed.ts` | Escaped all dynamic values in widget HTML to prevent XSS |
+| `artifacts/api-server/src/routes/users.ts` | Moved `isActive` to admin-only patch fields |
+| `artifacts/api-server/src/routes/course-finder.ts` | Stripped contact info for unauthenticated requests |
+| `artifacts/api-server/src/routes/storage.ts` | Added path traversal protection on both storage endpoints |
 
 ---
 

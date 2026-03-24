@@ -54,6 +54,12 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
   try {
     const raw = req.params.filePath;
     const filePath = Array.isArray(raw) ? raw.join("/") : raw;
+
+    if (filePath.includes("..") || filePath.includes("\\")) {
+      res.status(400).json({ error: "Invalid path" });
+      return;
+    }
+
     const file = await objectStorageService.searchPublicObject(filePath);
     if (!file) {
       res.status(404).json({ error: "File not found" });
@@ -81,6 +87,12 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
   try {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
+
+    if (wildcardPath.includes("..") || wildcardPath.includes("\\")) {
+      res.status(400).json({ error: "Invalid path" });
+      return;
+    }
+
     const objectPath = `/objects/${wildcardPath}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 

@@ -85,8 +85,12 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     .limit(limitNum)
     .offset(offset);
 
+  const user = (req as any).user;
+  const canSeeContacts = user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
+  const sanitizedRows = canSeeContacts ? rows : rows.map(({ universityContactName, universityContactPhone, universityContactEmail, ...rest }) => rest);
+
   res.json({
-    data: rows,
+    data: sanitizedRows,
     meta: {
       total: Number(count),
       page: pageNum,
