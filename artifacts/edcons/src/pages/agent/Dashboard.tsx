@@ -112,13 +112,13 @@ export default function AgentDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Agent Portal</h1>
-            <p className="text-muted-foreground mt-1">Track your referrals, commissions, and student progress</p>
+            <p className="text-muted-foreground mt-1">Track your students, commissions, and application progress</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "Total Referrals", value: applications.length, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+            { label: "Total Students", value: applications.length, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
             { label: "In Progress", value: inProgress, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
             { label: "Enrolled", value: enrolled, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10" },
             { label: "Conversion Rate", value: applications.length > 0 ? `${Math.round((enrolled / applications.length) * 100)}%` : "—", icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10" },
