@@ -329,49 +329,6 @@ export default function AgentDashboard() {
           </Card>
         </div>
 
-        {/* Recent Applications */}
-        <Card className="border-none shadow-lg shadow-black/5">
-          <div className="p-6 border-b border-border/50 flex items-center justify-between">
-            <h3 className="font-display font-bold text-lg">Recent Referral Applications</h3>
-            <Link href="/agent/applications">
-              <Button variant="ghost" size="sm" className="text-primary gap-1 text-xs">
-                See All <ArrowRight className="w-3 h-3" />
-              </Button>
-            </Link>
-          </div>
-          <div className="divide-y divide-border/50">
-            {isLoading ? (
-              [...Array(3)].map((_, i) => (
-                <div key={i} className="px-6 py-4">
-                  <div className="h-10 bg-secondary animate-pulse rounded-xl" />
-                </div>
-              ))
-            ) : applications.slice(0, 5).map((app: any) => {
-              const stageCfg = STAGE_CONFIG[app.stage] || STAGE_CONFIG.inquiry;
-              return (
-                <div key={app.id} className="flex items-center justify-between px-6 py-4 hover:bg-secondary/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary/20 to-accent/20 flex items-center justify-center font-bold text-sm text-primary">
-                      {String(app.studentId)[0]}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground text-sm">Student #{app.studentId}</p>
-                      <p className="text-xs text-muted-foreground">App #{app.id} · {new Date(app.createdAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <Badge className={`text-xs border ${stageCfg.color}`}>{stageCfg.label}</Badge>
-                </div>
-              );
-            })}
-            {!isLoading && applications.length === 0 && (
-              <div className="px-6 py-12 text-center text-muted-foreground">
-                <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
-                <p className="font-medium">No referral applications yet</p>
-                <p className="text-sm mt-1">Share your referral link to get started</p>
-              </div>
-            )}
-          </div>
-        </Card>
       </div>
     </DashboardLayout>
   );
