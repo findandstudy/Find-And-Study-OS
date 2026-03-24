@@ -160,15 +160,17 @@ router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000),
     }
 
     let anthropic;
+    let claudeConfig;
     try {
       anthropic = await getAnthropicClient();
+      claudeConfig = await getClaudeConfig();
     } catch (err: any) {
       res.status(503).json({ error: err.message || "AI integration not configured" });
       return;
     }
 
     const message = await anthropic.messages.create({
-      model: "claude-haiku-4-5",
+      model: claudeConfig.model || DEFAULT_MODEL,
       max_tokens: 8192,
       messages: [{
         role: "user",
