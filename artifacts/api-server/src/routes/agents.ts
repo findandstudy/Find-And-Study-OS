@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, agentsTable, usersTable } from "@workspace/db";
+import { db, agentsTable, usersTable, commissionsTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
@@ -465,8 +465,51 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
+  const [oldAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
+  if (!oldAgent) { res.status(404).json({ error: "Agent not found" }); return; }
+
   const [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
-  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const commissionRateChanged = updates.commissionRate !== undefined && updates.commissionRate !== oldAgent.commissionRate;
+  if (commissionRateChanged) {
+    const newRate = agent.commissionRate ?? 0;
+    const currentSeason = new Date().getFullYear().toString();
+
+    const agentComms = await db.select().from(commissionsTable)
+      .where(and(
+        eq(commissionsTable.agentId, id),
+        eq(commissionsTable.season, currentSeason),
+        sql`${commissionsTable.universityCommissionAmount} IS NOT NULL`,
+        sql`CAST(${commissionsTable.universityCommissionAmount} AS numeric) > 0`
+      ));
+
+    let recalculated = 0;
+    for (const comm of agentComms) {
+      const uAmount = parseFloat(String(comm.universityCommissionAmount ?? "0")) || 0;
+      const agentAmount = (uAmount * newRate) / 100;
+      const commUpdates: Record<string, unknown> = {
+        agentCommissionRate: String(newRate),
+        agentCommissionAmount: String(Math.round(agentAmount * 100) / 100),
+      };
+
+      if (comm.subAgentId) {
+        const [subAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, comm.subAgentId));
+        if (subAgent && subAgent.commissionRate) {
+          const subAmount = (agentAmount * subAgent.commissionRate) / 100;
+          commUpdates.subAgentCommissionRate = String(subAgent.commissionRate);
+          commUpdates.subAgentCommissionAmount = String(Math.round(subAmount * 100) / 100);
+        }
+      }
+
+      await db.update(commissionsTable).set(commUpdates).where(eq(commissionsTable.id, comm.id));
+      recalculated++;
+    }
+
+    if (recalculated > 0) {
+      console.log(`[Commission Recalc] Agent ${id} rate changed to ${newRate}% → recalculated ${recalculated} commission(s) for season ${currentSeason}`);
+    }
+  }
+
   res.json(agent);
 });
 
