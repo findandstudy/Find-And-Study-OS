@@ -215,10 +215,10 @@ export default function Contact() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1.5 block">
-                    {t("contact.message")} <span className="text-destructive">*</span>
+                    {t("contact.message")}
                   </label>
                   <textarea value={form.message} onChange={e => handleMessageChange(e.target.value)}
-                    required rows={5} placeholder={t("contact.messagePlaceholder")} maxLength={MSG_MAX}
+                    rows={5} placeholder={t("contact.messagePlaceholder")} maxLength={MSG_MAX}
                     className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all uppercase" />
                   <p className="text-xs text-muted-foreground mt-1 text-right">
                     {form.message.length}/{MSG_MAX}
