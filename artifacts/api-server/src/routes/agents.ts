@@ -14,7 +14,7 @@ const AGENT_PATCH_FIELDS = [
   "agencyCode", "state", "city", "address", "businessName",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
   "contractUrl", "branch", "pointOfContact", "parentAgentId",
-  "subAgentCommissionRate", "hideServiceFees",
+  "subAgentCommissionRate", "hideServiceFees", "assignedStaffId",
 ];
 
 const AGENT_SELF_PATCH_FIELDS = [
@@ -389,6 +389,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     state, city, address, businessName, category,
     logoUrl, agentIdProofUrl, businessCertUrl, contractUrl, branch,
     pointOfContact, parentAgentId, subAgentCommissionRate, hideServiceFees,
+    assignedStaffId,
   } = req.body;
 
   if (!firstName || !lastName) {
@@ -430,6 +431,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     contractUrl: contractUrl || null,
     branch: branch || null,
     pointOfContact: pointOfContact || null,
+    assignedStaffId: assignedStaffId ? parseInt(assignedStaffId, 10) : null,
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,
     subAgentCommissionRate: subAgentCommissionRate ? parseFloat(subAgentCommissionRate) : null,
     hideServiceFees: hideServiceFees === true || hideServiceFees === "true" ? true : false,
@@ -454,7 +456,7 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
         updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
       } else if (key === "hideServiceFees") {
         updates[key] = req.body[key] === true || req.body[key] === "true";
-      } else if (key === "parentAgentId") {
+      } else if (key === "parentAgentId" || key === "assignedStaffId") {
         updates[key] = req.body[key] ? parseInt(req.body[key], 10) : null;
       } else {
         updates[key] = req.body[key];

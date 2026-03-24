@@ -28,6 +28,7 @@ export const agentsTable = pgTable("agents", {
   businessCertUrl: text("business_cert_url"),
   contractUrl: text("contract_url"),
   branch: text("branch"),
+  assignedStaffId: integer("assigned_staff_id").references(() => usersTable.id, { onDelete: "set null" }),
   pointOfContact: text("point_of_contact"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -112,6 +112,7 @@ const emptyForm = {
   logoUrl: "", agentIdProofUrl: "", businessCertUrl: "",
   branch: "", pointOfContact: "", notes: "",
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
+  assignedStaffId: "",
 };
 
 function splitPhone(phone: string | null) {
@@ -156,6 +157,7 @@ export default function AgentsPage() {
   const certRef = useRef<HTMLInputElement>(null);
 
   const [parentAgents, setParentAgents] = useState<Agent[]>([]);
+  const [staffMembers, setStaffMembers] = useState<{ id: number; firstName: string; lastName: string; role: string }[]>([]);
   const [countries, setCountries] = useState<{ id: number; name: string; code: string }[]>([]);
   const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -205,9 +207,19 @@ export default function AgentsPage() {
     } catch {}
   }
 
+  async function fetchStaffMembers() {
+    try {
+      const res = await customFetch(`/api/users?limit=100`);
+      const staff = (res.data || []).filter((u: any) =>
+        ["super_admin", "admin", "manager", "staff", "consultant"].includes(u.role) && u.isActive !== false
+      );
+      setStaffMembers(staff);
+    } catch {}
+  }
+
   useEffect(() => { fetchAgents(); }, [page, search]);
   useEffect(() => { fetchSubAgents(); }, [subPage, subSearch]);
-  useEffect(() => { fetchParentAgents(); fetchCountries(); }, []);
+  useEffect(() => { fetchParentAgents(); fetchCountries(); fetchStaffMembers(); }, []);
 
   function openCreate(isSub: boolean) {
     setEditingAgent(null);
@@ -244,6 +256,7 @@ export default function AgentsPage() {
       parentAgentId: agent.parentAgentId?.toString() || "",
       subAgentCommissionRate: agent.subAgentCommissionRate?.toString() || "",
       hideServiceFees: agent.hideServiceFees,
+      assignedStaffId: (agent as any).assignedStaffId?.toString() || "",
     });
     if (agent.country) {
       const c = countries.find(ct => ct.name === agent.country);
@@ -315,6 +328,7 @@ export default function AgentsPage() {
       parentAgentId: isSubAgent && form.parentAgentId ? parseInt(form.parentAgentId) : null,
       subAgentCommissionRate: form.subAgentCommissionRate ? parseFloat(form.subAgentCommissionRate) : null,
       hideServiceFees: form.hideServiceFees,
+      assignedStaffId: !isSubAgent && form.assignedStaffId ? parseInt(form.assignedStaffId) : null,
     };
 
     try {
@@ -887,6 +901,27 @@ export default function AgentsPage() {
                   </div>
                 )}
               </div>
+
+              {/* Assigned Staff */}
+              {!isSubAgent && (
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Assigned Staff</Label>
+                  <Select value={form.assignedStaffId} onValueChange={v => setForm(f => ({ ...f, assignedStaffId: v === "__none__" ? "" : v }))}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Select staff member" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      <SelectItem value="__none__">No staff assigned</SelectItem>
+                      {staffMembers.map(s => (
+                        <SelectItem key={s.id} value={s.id.toString()}>
+                          {s.firstName} {s.lastName} ({s.role.replace(/_/g, " ")})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Staff member responsible for this agent</p>
+                </div>
+              )}
 
               {/* Sub-agent settings for parent agents */}
               {!isSubAgent && (
