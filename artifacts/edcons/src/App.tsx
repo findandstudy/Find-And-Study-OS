@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, Component, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, useRoute } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,6 +15,32 @@ import NotFound from "@/pages/not-found";
 
 import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
+
+class LazyErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+          <p className="text-lg font-semibold">Something went wrong loading this page.</p>
+          <button
+            className="px-6 py-2 bg-primary text-white rounded-xl hover:opacity-90"
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const About = lazy(() => import("@/pages/public/About"));
 const Countries = lazy(() => import("@/pages/public/Countries"));
@@ -125,6 +151,7 @@ function PublicRoutes({ lang }: { lang: string }) {
 
 function Router() {
   return (
+    <LazyErrorBoundary>
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/">
@@ -277,6 +304,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </Suspense>
+    </LazyErrorBoundary>
   );
 }
 
