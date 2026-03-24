@@ -341,17 +341,31 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
   res.json(row);
 });
 
-router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  const user = req.user!;
+  const isStaff = STAFF_ROLES.includes(user.role as any);
+
+  const AGENT_PATCH_FIELDS = ["stage"];
+  const allowedFields = isStaff ? APP_PATCH_FIELDS : AGENT_PATCH_FIELDS;
+
   const updates: Record<string, unknown> = {};
-  for (const key of APP_PATCH_FIELDS) {
+  for (const key of allowedFields) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
-  const [app] = await db.update(applicationsTable).set(updates).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt))).returning();
+
+  const conditions = [eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)];
+  if (!isStaff) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (visibleIds.length === 0) { res.status(403).json({ error: "No agent record found" }); return; }
+    conditions.push(inArray(applicationsTable.agentId, visibleIds));
+  }
+
+  const [app] = await db.update(applicationsTable).set(updates).where(and(...conditions)).returning();
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
 
   if (updates.stage !== undefined) {
