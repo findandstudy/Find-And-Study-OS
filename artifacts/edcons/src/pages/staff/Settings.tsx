@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   User, Globe, Bell, Shield, Save, Check, Loader2, Phone, Mail,
   Palette, Upload, X, Sun, Moon, Monitor, Image as ImageIcon, Plug,
-  Building2, Search as SearchIcon, FileText, Code, ChevronRight,
+  Building2, Search as SearchIcon, FileText, Code, ChevronRight, Copy,
   ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
   Youtube, Facebook, Twitter, Camera, Kanban, Pencil, ChevronDown,
   CalendarDays, Plus, Trash2, GripVertical, Power, Link as LinkIcon,
@@ -179,9 +179,9 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
   );
 }
 
-type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "advanced";
+type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "webtolead" | "advanced";
 
-interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean }
+interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
 
 const NAV_ITEMS: NavItem[] = [
   { id: "profile", label: "Profile", icon: User, group: "personal" },
@@ -197,6 +197,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "documents", label: "Documents / PDF", icon: FileText, group: "organization", managerOnly: true },
   { id: "integrations", label: "Integrations", icon: Plug, group: "organization", managerOnly: true },
   { id: "quicklinks", label: "Quick Links", icon: LinkIcon, group: "organization", managerOnly: true },
+  { id: "webtolead", label: "Web to Lead", icon: ExternalLink, group: "organization", superAdminOnly: true },
   { id: "advanced", label: "Advanced", icon: Code, group: "organization", managerOnly: true },
 ];
 
@@ -393,7 +394,12 @@ export default function SettingsPage() {
   }
 
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
-  const visibleNav = NAV_ITEMS.filter(n => !n.managerOnly || isManager);
+  const isSuperAdmin = user?.role === "super_admin";
+  const visibleNav = NAV_ITEMS.filter(n => {
+    if (n.superAdminOnly) return isSuperAdmin;
+    if (n.managerOnly) return isManager;
+    return true;
+  });
 
   function renderContent() {
     switch (activeTab) {
@@ -410,6 +416,7 @@ export default function SettingsPage() {
       case "documents": return isManager ? DocumentsTab() : null;
       case "integrations": return isManager ? IntegrationsTab() : null;
       case "quicklinks": return isManager ? <QuickLinksTab /> : null;
+      case "webtolead": return isSuperAdmin ? <WebToLeadTab /> : null;
       case "advanced": return isManager ? AdvancedTab() : null;
       default: return null;
     }
@@ -1937,6 +1944,175 @@ function QuickLinksTab() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function WebToLeadTab() {
+  const { toast } = useToast();
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+  const { data: agentsResp, isLoading: agentsLoading } = useQuery<{ agents: any[] }>({
+    queryKey: ["agents-list-for-embed"],
+    queryFn: () => customFetch("/api/agents?limit=100&status=active") as Promise<{ agents: any[] }>,
+  });
+
+  const agents = agentsResp?.agents || [];
+
+  const { data: tokenData, isLoading: tokenLoading } = useQuery<{ embedToken: string }>({
+    queryKey: ["agent-embed-token", selectedAgentId],
+    queryFn: () => customFetch(`/api/agents/${selectedAgentId}/embed-token`) as Promise<{ embedToken: string }>,
+    enabled: !!selectedAgentId,
+  });
+
+  const apiDomain = window.location.origin;
+  const token = tokenData?.embedToken || "";
+
+  const formCode = selectedAgentId && token ? `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:#ffffff;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e5e7eb" onsubmit="var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
+  <h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;text-align:center">Get in Touch</h3>
+  <p style="margin:0 0 20px;font-size:13px;color:#6b7280;text-align:center">Fill in your details and we'll contact you shortly.</p>
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <div style="flex:1">
+      <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">First Name <span style="color:#ef4444">*</span></label>
+      <input name="firstName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+    </div>
+    <div style="flex:1">
+      <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Last Name <span style="color:#ef4444">*</span></label>
+      <input name="lastName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+    </div>
+  </div>
+  <div style="margin-bottom:14px">
+    <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Phone <span style="color:#ef4444">*</span></label>
+    <div style="display:flex;gap:6px">
+      <select name="phoneCode" style="width:90px;padding:10px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;outline:none;cursor:pointer">
+        <option value="+90">🇹🇷 +90</option><option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option><option value="+49">🇩🇪 +49</option><option value="+33">🇫🇷 +33</option><option value="+39">🇮🇹 +39</option><option value="+34">🇪🇸 +34</option><option value="+31">🇳🇱 +31</option><option value="+46">🇸🇪 +46</option><option value="+41">🇨🇭 +41</option><option value="+7">🇷🇺 +7</option><option value="+380">🇺🇦 +380</option><option value="+86">🇨🇳 +86</option><option value="+91">🇮🇳 +91</option><option value="+92">🇵🇰 +92</option><option value="+93">🇦🇫 +93</option><option value="+966">🇸🇦 +966</option><option value="+971">🇦🇪 +971</option><option value="+964">🇮🇶 +964</option><option value="+98">🇮🇷 +98</option><option value="+962">🇯🇴 +962</option><option value="+961">🇱🇧 +961</option><option value="+20">🇪🇬 +20</option><option value="+212">🇲🇦 +212</option><option value="+234">🇳🇬 +234</option><option value="+55">🇧🇷 +55</option><option value="+61">🇦🇺 +61</option><option value="+81">🇯🇵 +81</option><option value="+82">🇰🇷 +82</option><option value="+60">🇲🇾 +60</option><option value="+65">🇸🇬 +65</option><option value="+880">🇧🇩 +880</option>
+      </select>
+      <input name="phoneNumber" type="tel" required placeholder="555 000 0000" style="flex:1;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+      <input type="hidden" name="phone" />
+    </div>
+  </div>
+  <div style="margin-bottom:20px">
+    <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Email <span style="color:#ef4444">*</span></label>
+    <input name="email" type="email" required placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+  </div>
+  <button type="submit" style="width:100%;padding:12px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="var f=this.closest('form');f.phone.value=f.phoneCode.value+f.phoneNumber.value;">Submit</button>
+  <p style="margin:12px 0 0;font-size:11px;color:#9ca3af;text-align:center">Your information is secure and will not be shared.</p>
+</form>` : "";
+
+  const handleCopy = () => {
+    if (!formCode) return;
+    navigator.clipboard.writeText(formCode);
+    setCopied(true);
+    toast({ title: "Copied!", description: "Form code copied to clipboard." });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const selectedAgent = agents.find((a: any) => String(a.id) === selectedAgentId);
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <ExternalLink className="w-4 h-4 text-blue-600" />
+          </div>
+          <h3 className="font-display font-semibold text-base">Web to Lead Form Generator</h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">
+          Generate a web-to-lead embed form for any agent. Leads submitted via this form will automatically be linked to the selected agent.
+        </p>
+
+        <div className="mb-5">
+          <Label className="text-sm font-semibold mb-2 block">Select Agent</Label>
+          {agentsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading agents...
+            </div>
+          ) : (
+            <select
+              value={selectedAgentId}
+              onChange={e => { setSelectedAgentId(e.target.value); setCopied(false); }}
+              className="w-full max-w-md px-3 py-2.5 border border-input rounded-xl bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">-- Choose an agent --</option>
+              {agents.map((a: any) => (
+                <option key={a.id} value={String(a.id)}>
+                  {a.firstName} {a.lastName} ({a.email}) {a.parentAgentId ? " [Sub-Agent]" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {selectedAgent && (
+          <div className="p-3 rounded-xl bg-primary/5 border border-primary/10 mb-5 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+              {selectedAgent.firstName?.[0]}{selectedAgent.lastName?.[0]}
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{selectedAgent.firstName} {selectedAgent.lastName}</p>
+              <p className="text-xs text-muted-foreground">{selectedAgent.email} {selectedAgent.parentAgentId ? " (Sub-Agent)" : " (Agent)"}</p>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {selectedAgentId && tokenLoading && (
+        <Card className="border-none shadow-lg shadow-black/5 p-8 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </Card>
+      )}
+
+      {formCode && (
+        <>
+          <Card className="border-none shadow-lg shadow-black/5 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                  <Code className="w-4 h-4 text-violet-600" />
+                </div>
+                <h3 className="font-display font-semibold text-base">Embed Code</h3>
+              </div>
+              <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? "Copied" : "Copy Code"}
+              </Button>
+            </div>
+            <pre className="bg-secondary/50 border rounded-xl p-4 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
+              {formCode}
+            </pre>
+          </Card>
+
+          <Card className="border-none shadow-lg shadow-black/5 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <Eye className="w-4 h-4 text-green-600" />
+              </div>
+              <h3 className="font-display font-semibold text-base">Form Preview</h3>
+            </div>
+            <div className="bg-secondary/30 rounded-xl p-8 flex justify-center">
+              <div dangerouslySetInnerHTML={{ __html: formCode }} />
+            </div>
+          </Card>
+
+          <Card className="border-none shadow-lg shadow-black/5 p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Info className="w-4 h-4 text-amber-600" />
+              </div>
+              <h3 className="font-display font-semibold text-base">How to Use</h3>
+            </div>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+              <li>Select the agent whose leads should receive the form submissions</li>
+              <li>Click <strong>"Copy Code"</strong> to copy the form HTML</li>
+              <li>Open the target website's HTML editor or CMS</li>
+              <li>Paste the code where you want the form to appear</li>
+              <li>Submissions will appear as leads linked to the selected agent</li>
+            </ol>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

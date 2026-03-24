@@ -89,6 +89,20 @@ router.get("/agents/me/embed-token", requireAuth, async (req, res): Promise<void
   res.json({ embedToken: agent.embedToken });
 });
 
+router.get("/agents/:agentId/embed-token", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const agentId = parseInt(req.params.agentId, 10);
+  if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!agent.embedToken) {
+    const token = crypto.randomUUID();
+    await db.update(agentsTable).set({ embedToken: token }).where(eq(agentsTable.id, agentId));
+    res.json({ embedToken: token });
+    return;
+  }
+  res.json({ embedToken: agent.embedToken });
+});
+
 router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
