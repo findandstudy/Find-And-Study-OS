@@ -1,10 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, leadsTable, usersTable, studentsTable } from "@workspace/db";
+import { db, leadsTable, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
+import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
+import { resolveAgentCommission } from "../lib/agentCommission";
 
 const router: IRouter = Router();
 
@@ -23,6 +25,145 @@ const aiExtractLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null) {
+  try {
+    let snapshotTuitionFee: number | null = null;
+    let snapshotDiscountedFee: number | null = null;
+    let snapshotScholarship: number | null = null;
+    let snapshotCommissionRate: number | null = null;
+    let snapshotServiceFeeAmount: number | null = null;
+    let snapshotApplicationFee: number | null = null;
+    let snapshotDepositFee: number | null = null;
+    let snapshotAdvancedFee: number | null = null;
+    let snapshotLanguageFee: number | null = null;
+    let snapshotCurrency = "USD";
+    let snapshotProgramName = programName || null;
+    let snapshotUniversityName = universityName || null;
+    let snapshotCountry: string | null = null;
+    let snapshotLevel: string | null = null;
+    let snapshotLanguage: string | null = null;
+    let snapshotUniversityId: number | null = null;
+    let isStateUniversity = false;
+
+    if (programId) {
+      const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
+      if (prog) {
+        snapshotTuitionFee = prog.tuitionFee ?? null;
+        snapshotDiscountedFee = (prog.discountedFee != null && !isNaN(Number(prog.discountedFee))) ? Number(prog.discountedFee) : null;
+        snapshotScholarship = prog.scholarship ?? null;
+        snapshotCommissionRate = prog.commissionRate ?? null;
+        snapshotServiceFeeAmount = prog.serviceFeeAmount ?? null;
+        snapshotApplicationFee = prog.applicationFee ?? null;
+        snapshotDepositFee = prog.depositFee ?? null;
+        snapshotAdvancedFee = prog.advancedFee ?? null;
+        snapshotLanguageFee = prog.languageFee ?? null;
+        snapshotCurrency = prog.currency || "USD";
+        snapshotProgramName = snapshotProgramName || prog.name;
+        snapshotLevel = prog.degree || null;
+        snapshotLanguage = prog.language || null;
+        snapshotUniversityId = prog.universityId;
+
+        if (prog.universityId) {
+          const [uni] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, prog.universityId));
+          if (uni) {
+            snapshotUniversityName = snapshotUniversityName || uni.name;
+            snapshotCountry = uni.country || null;
+            isStateUniversity = uni.universityType === "state";
+          }
+        }
+      }
+    }
+
+    const currentYear = String(new Date().getFullYear());
+    const stage = "inquiry";
+
+    const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, studentId));
+    const studentFullName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
+
+    const [app] = await db.insert(applicationsTable).values({
+      studentId,
+      stage,
+      season: currentYear,
+      universityId: snapshotUniversityId,
+      programId: programId || null,
+      agentId: null,
+      universityName: snapshotUniversityName,
+      country: snapshotCountry,
+      programName: snapshotProgramName,
+      level: snapshotLevel,
+      instructionLanguage: snapshotLanguage,
+      tuitionFee: snapshotTuitionFee,
+      discountedFee: snapshotDiscountedFee,
+      scholarship: snapshotScholarship,
+      commissionRate: snapshotCommissionRate,
+      serviceFeeAmount: snapshotServiceFeeAmount,
+      applicationFee: snapshotApplicationFee,
+      depositFee: snapshotDepositFee,
+      advancedFee: snapshotAdvancedFee,
+      languageFee: snapshotLanguageFee,
+      currency: snapshotCurrency,
+    }).returning();
+
+    const commissionBaseFee = (snapshotDiscountedFee != null && !isNaN(snapshotDiscountedFee))
+      ? snapshotDiscountedFee
+      : snapshotTuitionFee;
+
+    const commFinStatus = getCommissionFinanceStatus(stage);
+    if (commFinStatus !== "excluded") {
+      const uCommAmount = commissionBaseFee && snapshotCommissionRate
+        ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
+      const agentComm = await resolveAgentCommission(null, uCommAmount);
+      await db.insert(commissionsTable).values({
+        applicationId: app.id,
+        studentId,
+        agentId: null,
+        studentName: studentFullName,
+        universityName: snapshotUniversityName,
+        programName: snapshotProgramName,
+        isStateUniversity,
+        season: currentYear,
+        currency: snapshotCurrency,
+        status: commFinStatus,
+        programFee: commissionBaseFee ? String(commissionBaseFee) : null,
+        universityCommissionRate: snapshotCommissionRate ? String(snapshotCommissionRate) : null,
+        universityCommissionAmount: uCommAmount > 0 ? String(uCommAmount) : null,
+        agentCommissionRate: agentComm.agentCommissionRate,
+        agentCommissionAmount: agentComm.agentCommissionAmount,
+        subAgentId: agentComm.subAgentId,
+        subAgentCommissionRate: agentComm.subAgentCommissionRate,
+        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
+      });
+    }
+
+    const sfFinStatus = getServiceFeeFinanceStatus(stage);
+    if (sfFinStatus !== "excluded") {
+      const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
+      const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;
+      await db.insert(serviceFeesTable).values({
+        applicationId: app.id,
+        studentId,
+        agentId: null,
+        studentName: studentFullName,
+        universityName: snapshotUniversityName,
+        isStateUniversity,
+        season: currentYear,
+        currency: snapshotCurrency,
+        totalAmount: sfTotal,
+        firstInstallmentAmount: sfHalf,
+        secondInstallmentAmount: sfHalf,
+        financeStatus: sfFinStatus,
+        status: "pending",
+      });
+    }
+
+    console.log(`[AUTO-APPLICATION] Created application #${app.id} for student #${studentId}, program: ${snapshotProgramName}`);
+    return app.id;
+  } catch (err) {
+    console.error("[AUTO-APPLICATION] Error creating application:", err);
+    return null;
+  }
+}
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
   const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName } = req.body;
@@ -82,6 +223,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }
       await db.update(leadsTable).set({ convertedStudentId: existingStudent.id }).where(eq(leadsTable.id, lead.id));
 
+      await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
+
       const emailContent = buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
         loginUrl,
@@ -120,6 +263,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }).returning();
 
       await db.update(leadsTable).set({ convertedStudentId: newStudent.id }).where(eq(leadsTable.id, lead.id));
+
+      await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;

@@ -89,14 +89,77 @@ function fixStorageUrl(url: string | null | undefined): string | null {
   return fixed;
 }
 
-type DocKey = "passport" | "diploma" | "transcript" | "photo";
+type DocKey = "passport" | "hs_diploma" | "hs_transcript" | "photo" | "language_proof" | "bachelor_diploma" | "bachelor_transcript" | "equivalency_letter" | "cv" | "sop" | "master_diploma" | "master_transcript";
 
-const DOC_TYPES: Array<{ key: DocKey; label: string; icon: string; accept: string; required: boolean }> = [
+interface DocType { key: DocKey; label: string; icon: string; accept: string; required: boolean; subtitle?: string }
+
+const DEGREE_DOC_MAP: Record<string, DocType[]> = {
+  associate: [
+    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: "image/*,.pdf", required: false, subtitle: "If available" },
+  ],
+  bachelors: [
+    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: "image/*,.pdf", required: false, subtitle: "If available" },
+  ],
+  masters: [
+    { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "equivalency_letter", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: false, subtitle: "Recognition" },
+    { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, subtitle: "If required" },
+    { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, subtitle: "If required" },
+  ],
+  doctorate: [
+    { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "master_diploma", label: "Master Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
+    { key: "master_transcript", label: "Master Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "equivalency_letter", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: false, subtitle: "Recognition" },
+    { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, subtitle: "If required" },
+    { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, subtitle: "If required" },
+  ],
+  language: [
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: false },
+    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: false },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: false },
+  ],
+  foundation: [
+    { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
+    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: false },
+    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: false },
+    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: false },
+  ],
+};
+
+const DEFAULT_DOC_TYPES: DocType[] = [
   { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
-  { key: "diploma", label: "Diploma", icon: "🎓", accept: "image/*,.pdf", required: false },
-  { key: "transcript", label: "Transcript", icon: "📋", accept: "image/*,.pdf", required: false },
-  { key: "photo", label: "Photo", icon: "📷", accept: "image/*", required: false },
+  { key: "hs_diploma", label: "Diploma", icon: "🎓", accept: "image/*,.pdf", required: false },
+  { key: "hs_transcript", label: "Transcript", icon: "📋", accept: "image/*,.pdf", required: false },
+  { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: false },
 ];
+
+function getDocTypesForDegree(degree: string | null | undefined): DocType[] {
+  if (!degree) return DEFAULT_DOC_TYPES;
+  const normalized = degree.toLowerCase().replace(/['''`\s]/g, "");
+  if (normalized.includes("associate")) return DEGREE_DOC_MAP.associate;
+  if (normalized.includes("bachelor")) return DEGREE_DOC_MAP.bachelors;
+  if (normalized.includes("master")) return DEGREE_DOC_MAP.masters;
+  if (normalized.includes("doctor") || normalized.includes("phd") || normalized.includes("doctorate")) return DEGREE_DOC_MAP.doctorate;
+  if (normalized.includes("language")) return DEGREE_DOC_MAP.language;
+  if (normalized.includes("foundation")) return DEGREE_DOC_MAP.foundation;
+  return DEFAULT_DOC_TYPES;
+}
 
 type UploadedDoc = { key: string; label: string; file: File; base64: string; mediaType: string; isImage: boolean };
 
@@ -138,7 +201,7 @@ async function prepareDoc(file: File): Promise<{ base64: string; mediaType: stri
 }
 
 function DropZone({ docType, uploaded, onUpload, onRemove }: {
-  docType: typeof DOC_TYPES[0]; uploaded?: UploadedDoc; onUpload: (d: UploadedDoc) => void; onRemove: () => void;
+  docType: DocType; uploaded?: UploadedDoc; onUpload: (d: UploadedDoc) => void; onRemove: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -150,7 +213,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
 
   if (uploaded) {
     return (
-      <div className="relative flex flex-col items-center gap-1.5 p-3 border-2 border-green-300 bg-green-50 dark:bg-green-950/30 rounded-2xl text-center min-h-[100px] justify-center">
+      <div className="relative flex flex-col items-center gap-1.5 p-3 border-2 border-green-300 bg-green-50 dark:bg-green-950/30 rounded-2xl text-center min-h-[110px] justify-center">
         <button type="button" onClick={onRemove} className="absolute top-2 right-2 w-5 h-5 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-full flex items-center justify-center">
           <X className="w-3 h-3" />
         </button>
@@ -163,8 +226,11 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
 
   return (
     <div
-      className={`flex flex-col items-center gap-1.5 p-3 border-2 border-dashed rounded-2xl text-center cursor-pointer min-h-[100px] justify-center transition-all
-        ${dragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-secondary/50"}`}
+      className={`flex flex-col items-center gap-1.5 p-3 border-2 border-dashed rounded-2xl text-center cursor-pointer min-h-[110px] justify-center transition-all
+        ${docType.required
+          ? (dragging ? "border-primary bg-primary/10" : "border-rose-200 hover:border-primary/50 hover:bg-secondary/50")
+          : (dragging ? "border-primary bg-primary/10" : "border-blue-200 border-dashed hover:border-primary/50 hover:bg-secondary/50")
+        }`}
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
@@ -172,7 +238,11 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
     >
       <span className="text-2xl">{docType.icon}</span>
       <p className="text-xs font-semibold text-foreground">{docType.label}</p>
-      {docType.required && <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">Required</span>}
+      {docType.subtitle && <span className="text-[10px] text-muted-foreground">{docType.subtitle}</span>}
+      {docType.required
+        ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">Required</span>
+        : <span className="text-[10px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 px-1.5 py-0.5 rounded-full font-medium">Optional</span>
+      }
       <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
     </div>
@@ -199,6 +269,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const [extracted, setExtracted] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const docTypes = getDocTypesForDegree(program?.degree);
+  const requiredDocs = docTypes.filter(d => d.required);
+  const uploadedCount = Object.keys(docs).length;
+  const totalCount = docTypes.length;
+  const missingRequired = requiredDocs.filter(d => !docs[d.key]);
 
   function reset() {
     setStep("upload");
@@ -275,6 +351,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
     setSubmitting(true);
     try {
+      const uploadedDocKeys = Object.keys(docs);
       const resp = await fetch(`${BASE_URL}/api/public/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,6 +360,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           programId: program?.id,
           programName: program?.name,
           universityName: program?.universityName,
+          programDegree: program?.degree || null,
+          uploadedDocuments: uploadedDocKeys,
         }),
       });
 
@@ -325,8 +404,13 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </p>
             </div>
 
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm text-foreground">Required Documents</h3>
+              <span className="text-xs text-muted-foreground">{uploadedCount}/{totalCount} uploaded</span>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {DOC_TYPES.map((dt) => (
+              {docTypes.map((dt) => (
                 <DropZone
                   key={dt.key}
                   docType={dt}
@@ -337,11 +421,23 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               ))}
             </div>
 
+            {missingRequired.length > 0 && uploadedCount > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
+                Missing required: {missingRequired.map(d => d.label).join(", ")}
+              </div>
+            )}
+
             <div className="flex gap-3">
-              <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={Object.keys(docs).length === 0}>
+              <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0}>
                 <Sparkles className="w-4 h-4" /> Analyze with AI & Continue
               </Button>
-              <Button variant="ghost" onClick={() => { setStep("form"); }} className="rounded-xl">
+              <Button variant="ghost" onClick={() => {
+                if (missingRequired.length > 0) {
+                  toast({ title: `Please upload all required documents: ${missingRequired.map(d => d.label).join(", ")}`, variant: "destructive" });
+                  return;
+                }
+                setStep("form");
+              }} className="rounded-xl">
                 Skip, fill manually
               </Button>
             </div>

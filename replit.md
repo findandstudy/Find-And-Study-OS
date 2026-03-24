@@ -24,7 +24,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 - **Dynamic Pipeline Management:** Lead, application, and student pipeline stages are database-driven and fully configurable via API.
 - **UI/UX:** Utilizes TailwindCSS and shadcn/ui for a consistent design system. Features role-based dashboards, navigation, customizable branding, and dark mode.
 - **Key Features:**
-    - **Public Site:** Informational pages (Home, About, Programs, Blog, Contact), DB-driven destination and program listings, and a multi-step public application flow with AI document extraction.
+    - **Public Site:** Informational pages (Home, About, Programs, Blog, Contact), DB-driven destination and program listings, and a multi-step public application flow with AI document extraction. The Apply dialog enforces degree-level-based document requirements (Associate/Bachelor: HS Diploma, HS Transcript, Passport, Photo required + Language Proof optional; Master: Bachelor Diploma/Transcript, Passport, Photo required + Equivalency Letter, CV, SOP optional; Doctorate: adds Master Diploma/Transcript; Language/Foundation: only Passport required). Public applications auto-create Application records (stage: inquiry) with commission and service fee snapshots.
     - **User Management (Admin):** Comprehensive user, role, and permission management.
     - **Student Management (Staff):** Pipeline and list views, AI-powered student creation, and bulk CSV import.
     - **Application Management (Staff):** Pipeline and list views with cascading selects and auto-fill for program details. Includes stage-specific document management with upload permissions.
