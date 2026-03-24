@@ -104,12 +104,12 @@ export default function AgentMessages() {
     },
   });
 
-  async function startConversation(staffUserId: number) {
+  async function startConversation(targetUserId: number) {
     try {
       const conv = await customFetch("/api/agent/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staffUserId }),
+        body: JSON.stringify({ targetUserId }),
       });
       setConversationId((conv as any).id);
       setShowNewChat(false);
@@ -395,13 +395,13 @@ export default function AgentMessages() {
               <Input
                 value={staffSearch}
                 onChange={e => setStaffSearch(e.target.value)}
-                placeholder="Search staff members..."
+                placeholder="Search contacts..."
                 className="pl-9 rounded-xl"
               />
             </div>
             <div className="max-h-64 overflow-y-auto space-y-1">
               {filteredStaff.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No staff members found</p>
+                <p className="text-sm text-muted-foreground text-center py-4">No contacts found</p>
               ) : (
                 filteredStaff.map((s: any) => (
                   <button

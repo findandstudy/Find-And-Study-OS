@@ -24,7 +24,10 @@ async function getVisibleUserIdsForStaff(staffUserId: number): Promise<number[]>
   const visibleStudents = await db
     .select({ userId: studentsTable.userId, agentId: studentsTable.agentId })
     .from(studentsTable)
-    .where(or(eq(studentsTable.assignedToId, staffUserId), isNull(studentsTable.assignedToId)));
+    .where(and(
+      or(eq(studentsTable.assignedToId, staffUserId), isNull(studentsTable.assignedToId)),
+      isNull(studentsTable.deletedAt)
+    ));
 
   const visibleLeads = await db
     .select({ agentId: leadsTable.agentId })
@@ -35,6 +38,12 @@ async function getVisibleUserIdsForStaff(staffUserId: number): Promise<number[]>
   const agentIds = new Set<number>();
   for (const s of visibleStudents) { if (s.agentId) agentIds.add(s.agentId); }
   for (const l of visibleLeads) { if (l.agentId) agentIds.add(l.agentId); }
+
+  const assignedAgents = await db
+    .select({ id: agentsTable.id, userId: agentsTable.userId })
+    .from(agentsTable)
+    .where(eq(agentsTable.assignedStaffId, staffUserId));
+  for (const a of assignedAgents) { agentIds.add(a.id); }
 
   let agentUserIds: number[] = [];
   if (agentIds.size > 0) {
@@ -868,6 +877,41 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
 
 const AGENT_ROLE_LIST = ["agent", "sub_agent"];
 
+async function getAgentContactUserIds(userId: number, userRole: string): Promise<Set<number>> {
+  const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (!agentRec) return new Set();
+
+  const contactUserIds = new Set<number>();
+
+  if (userRole === "sub_agent") {
+    if (agentRec.parentAgentId) {
+      const [parentAgent] = await db.select({ userId: agentsTable.userId }).from(agentsTable).where(eq(agentsTable.id, agentRec.parentAgentId));
+      if (parentAgent?.userId) contactUserIds.add(parentAgent.userId);
+    }
+    const myStudents = await db
+      .select({ userId: studentsTable.userId })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.agentId, agentRec.id), isNull(studentsTable.deletedAt)));
+    for (const s of myStudents) { if (s.userId) contactUserIds.add(s.userId); }
+  } else {
+    if (agentRec.assignedStaffId) {
+      contactUserIds.add(agentRec.assignedStaffId);
+    }
+    const agentIds = [agentRec.id];
+    const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, agentRec.id));
+    for (const sa of subAgents) agentIds.push(sa.id);
+
+    const myStudents = await db
+      .select({ userId: studentsTable.userId })
+      .from(studentsTable)
+      .where(and(inArray(studentsTable.agentId, agentIds), isNull(studentsTable.deletedAt)));
+    for (const s of myStudents) { if (s.userId) contactUserIds.add(s.userId); }
+  }
+
+  contactUserIds.delete(userId);
+  return contactUserIds;
+}
+
 router.get("/agent/conversations", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
@@ -937,23 +981,34 @@ router.get("/agent/conversations/:id/messages", requireAuth, async (req, res): P
 
 router.get("/agent/staff-contacts", requireAuth, async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
 
-  const staffMembers = await db
-    .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl })
+  const contactUserIds = await getAgentContactUserIds(userId, userRole);
+
+  if (contactUserIds.size === 0) { res.json({ data: [] }); return; }
+
+  const contacts = await db
+    .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl, email: usersTable.email })
     .from(usersTable)
-    .where(and(eq(usersTable.isActive, true), inArray(usersTable.role, STAFF_ROLE_LIST)));
+    .where(and(eq(usersTable.isActive, true), inArray(usersTable.id, Array.from(contactUserIds))))
+    .orderBy(usersTable.firstName);
 
-  res.json({ data: staffMembers });
+  res.json({ data: contacts });
 });
 
 router.post("/agent/conversations", requireAuth, async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
-  const { staffUserId } = req.body;
-  if (!staffUserId || typeof staffUserId !== "number") { res.status(400).json({ error: "staffUserId is required" }); return; }
+  const userRole = req.user!.role;
+  const targetUserId = req.body.staffUserId || req.body.targetUserId;
+  if (!targetUserId || typeof targetUserId !== "number") { res.status(400).json({ error: "targetUserId is required" }); return; }
 
-  const [staffUser] = await db.select().from(usersTable).where(and(eq(usersTable.id, staffUserId), eq(usersTable.isActive, true), inArray(usersTable.role, STAFF_ROLE_LIST)));
-  if (!staffUser) { res.status(400).json({ error: "Invalid staff member" }); return; }
+  const [targetUser] = await db.select().from(usersTable).where(and(eq(usersTable.id, targetUserId), eq(usersTable.isActive, true)));
+  if (!targetUser) { res.status(400).json({ error: "Invalid user" }); return; }
+
+  const allowedContacts = await getAgentContactUserIds(userId, userRole);
+  if (!allowedContacts.has(targetUserId)) { res.status(403).json({ error: "You cannot start a conversation with this user" }); return; }
 
   const myConvs = await db.select({ conversationId: conversationParticipantsTable.conversationId })
     .from(conversationParticipantsTable).where(eq(conversationParticipantsTable.userId, userId));
@@ -962,9 +1017,9 @@ router.post("/agent/conversations", requireAuth, async (req, res): Promise<void>
     const [conv] = await db.select().from(conversationsTable)
       .where(and(eq(conversationsTable.id, mc.conversationId), eq(conversationsTable.type, "direct")));
     if (conv) {
-      const staffP = await db.select().from(conversationParticipantsTable)
-        .where(and(eq(conversationParticipantsTable.conversationId, conv.id), eq(conversationParticipantsTable.userId, staffUserId)));
-      if (staffP.length > 0) {
+      const targetP = await db.select().from(conversationParticipantsTable)
+        .where(and(eq(conversationParticipantsTable.conversationId, conv.id), eq(conversationParticipantsTable.userId, targetUserId)));
+      if (targetP.length > 0) {
         res.json(conv);
         return;
       }
@@ -973,7 +1028,7 @@ router.post("/agent/conversations", requireAuth, async (req, res): Promise<void>
 
   const [conv] = await db.insert(conversationsTable).values({ type: "direct", createdById: userId }).returning();
   await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId });
-  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId: staffUserId });
+  await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId: targetUserId });
   res.status(201).json(conv);
 });
 
