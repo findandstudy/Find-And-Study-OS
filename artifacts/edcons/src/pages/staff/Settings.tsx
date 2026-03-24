@@ -1952,6 +1952,13 @@ function WebToLeadTab() {
   const { toast } = useToast();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [formTitle, setFormTitle] = useState("Get in Touch");
+  const [formSubtitle, setFormSubtitle] = useState("Fill in your details and we'll contact you shortly.");
+  const [btnText, setBtnText] = useState("Submit");
+  const [btnColor, setBtnColor] = useState("#2563eb");
+  const [bgColor, setBgColor] = useState("#ffffff");
+  const [borderColor, setBorderColor] = useState("#e5e7eb");
+  const [footerText, setFooterText] = useState("Your information is secure and will not be shared.");
 
   const { data: agentsResp, isLoading: agentsLoading } = useQuery<{ agents: any[] }>({
     queryKey: ["agents-list-for-embed"],
@@ -1970,17 +1977,19 @@ function WebToLeadTab() {
   const token = tokenData?.embedToken || "";
   const selectedAgent = agents.find((a: any) => String(a.id) === selectedAgentId);
 
-  const formCode = selectedAgentId && token ? `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:#ffffff;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e5e7eb" onsubmit="var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
-  <h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;text-align:center">Get in Touch</h3>
-  <p style="margin:0 0 20px;font-size:13px;color:#6b7280;text-align:center">Fill in your details and we'll contact you shortly.</p>
+  const btnColorDark = btnColor + "cc";
+
+  const formCode = selectedAgentId && token ? `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:${bgColor};box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid ${borderColor}" onsubmit="var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
+  <h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;text-align:center">${formTitle}</h3>
+  <p style="margin:0 0 20px;font-size:13px;color:#6b7280;text-align:center">${formSubtitle}</p>
   <div style="display:flex;gap:10px;margin-bottom:14px">
     <div style="flex:1">
       <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">First Name <span style="color:#ef4444">*</span></label>
-      <input name="firstName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+      <input name="firstName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='${btnColor}'" onblur="this.style.borderColor='#d1d5db'" />
     </div>
     <div style="flex:1">
       <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Last Name <span style="color:#ef4444">*</span></label>
-      <input name="lastName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+      <input name="lastName" type="text" required pattern="[A-Za-z\\u00C0-\\u017F\\s'-]+" title="Latin characters only" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-transform:uppercase;transition:border-color 0.2s" onfocus="this.style.borderColor='${btnColor}'" onblur="this.style.borderColor='#d1d5db'" />
     </div>
   </div>
   <div style="margin-bottom:14px">
@@ -1989,16 +1998,16 @@ function WebToLeadTab() {
       <select name="phoneCode" style="width:90px;padding:10px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;outline:none;cursor:pointer">
         <option value="+90">🇹🇷 +90</option><option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option><option value="+49">🇩🇪 +49</option><option value="+33">🇫🇷 +33</option><option value="+39">🇮🇹 +39</option><option value="+34">🇪🇸 +34</option><option value="+31">🇳🇱 +31</option><option value="+46">🇸🇪 +46</option><option value="+41">🇨🇭 +41</option><option value="+7">🇷🇺 +7</option><option value="+380">🇺🇦 +380</option><option value="+86">🇨🇳 +86</option><option value="+91">🇮🇳 +91</option><option value="+92">🇵🇰 +92</option><option value="+93">🇦🇫 +93</option><option value="+966">🇸🇦 +966</option><option value="+971">🇦🇪 +971</option><option value="+964">🇮🇶 +964</option><option value="+98">🇮🇷 +98</option><option value="+962">🇯🇴 +962</option><option value="+961">🇱🇧 +961</option><option value="+20">🇪🇬 +20</option><option value="+212">🇲🇦 +212</option><option value="+234">🇳🇬 +234</option><option value="+55">🇧🇷 +55</option><option value="+61">🇦🇺 +61</option><option value="+81">🇯🇵 +81</option><option value="+82">🇰🇷 +82</option><option value="+60">🇲🇾 +60</option><option value="+65">🇸🇬 +65</option><option value="+880">🇧🇩 +880</option>
       </select>
-      <input name="phoneNumber" type="tel" required placeholder="555 000 0000" style="flex:1;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+      <input name="phoneNumber" type="tel" required placeholder="555 000 0000" style="flex:1;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='${btnColor}'" onblur="this.style.borderColor='#d1d5db'" />
       <input type="hidden" name="phone" />
     </div>
   </div>
   <div style="margin-bottom:20px">
     <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Email <span style="color:#ef4444">*</span></label>
-    <input name="email" type="email" required placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
+    <input name="email" type="email" required placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='${btnColor}'" onblur="this.style.borderColor='#d1d5db'" />
   </div>
-  <button type="submit" style="width:100%;padding:12px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="var f=this.closest('form');f.phone.value=f.phoneCode.value+f.phoneNumber.value;">Submit</button>
-  <p style="margin:12px 0 0;font-size:11px;color:#9ca3af;text-align:center">Your information is secure and will not be shared.</p>
+  <button type="submit" style="width:100%;padding:12px;background:linear-gradient(135deg,${btnColor},${btnColorDark});color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="var f=this.closest('form');f.phone.value=f.phoneCode.value+f.phoneNumber.value;">${btnText}</button>
+  <p style="margin:12px 0 0;font-size:11px;color:#9ca3af;text-align:center">${footerText}</p>
 </form>` : "";
 
   const handleCopy = () => {
@@ -2027,7 +2036,7 @@ function WebToLeadTab() {
           <h3 className="font-display font-semibold text-base">Web to Lead Form</h3>
         </div>
         <p className="text-sm text-muted-foreground mb-5">
-          Select an agent below to generate their unique web-to-lead form. Copy the HTML code and paste it into the agent's website. Submitted leads will automatically be linked to the selected agent.
+          Select an agent and customize the form appearance. The generated HTML code can be pasted into any website.
         </p>
 
         <div className="mb-5">
@@ -2047,7 +2056,7 @@ function WebToLeadTab() {
         </div>
 
         {selectedAgent && (
-          <div className="p-3 rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-3 mb-5">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
               {selectedAgent.firstName?.[0]}{selectedAgent.lastName?.[0]}
             </div>
@@ -2057,27 +2066,64 @@ function WebToLeadTab() {
             </div>
           </div>
         )}
-
-        {selectedAgentId && tokenLoading && (
-          <div className="mt-5 flex items-center justify-center py-6">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          </div>
-        )}
-
-        {formCode && (
-          <div className="relative mt-5">
-            <div className="absolute top-3 right-3 z-10">
-              <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? "Copied" : "Copy Code"}
-              </Button>
-            </div>
-            <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
-              {formCode}
-            </pre>
-          </div>
-        )}
       </Card>
+
+      {selectedAgentId && (
+        <Card className="border shadow-sm p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+              <Palette className="w-4 h-4 text-violet-600" />
+            </div>
+            <h3 className="font-display font-semibold text-base">Customize Form</h3>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Form Title</Label>
+              <Input value={formTitle} onChange={e => { setFormTitle(e.target.value); setCopied(false); }} className="rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Subtitle</Label>
+              <Input value={formSubtitle} onChange={e => { setFormSubtitle(e.target.value); setCopied(false); }} className="rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Button Text</Label>
+              <Input value={btnText} onChange={e => { setBtnText(e.target.value); setCopied(false); }} className="rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Footer Text</Label>
+              <Input value={footerText} onChange={e => { setFooterText(e.target.value); setCopied(false); }} className="rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Button Color</Label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={btnColor} onChange={e => { setBtnColor(e.target.value); setCopied(false); }} className="w-9 h-9 rounded-lg border cursor-pointer" />
+                <Input value={btnColor} onChange={e => { setBtnColor(e.target.value); setCopied(false); }} className="rounded-xl font-mono text-xs flex-1" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Background Color</Label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={bgColor} onChange={e => { setBgColor(e.target.value); setCopied(false); }} className="w-9 h-9 rounded-lg border cursor-pointer" />
+                <Input value={bgColor} onChange={e => { setBgColor(e.target.value); setCopied(false); }} className="rounded-xl font-mono text-xs flex-1" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Border Color</Label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={borderColor} onChange={e => { setBorderColor(e.target.value); setCopied(false); }} className="w-9 h-9 rounded-lg border cursor-pointer" />
+                <Input value={borderColor} onChange={e => { setBorderColor(e.target.value); setCopied(false); }} className="rounded-xl font-mono text-xs flex-1" />
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {selectedAgentId && tokenLoading && (
+        <Card className="border shadow-sm p-8 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </Card>
+      )}
 
       {formCode && (
         <>
@@ -2094,6 +2140,27 @@ function WebToLeadTab() {
           </Card>
 
           <Card className="border shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Code className="w-4 h-4 text-blue-600" />
+              </div>
+              <h3 className="font-display font-semibold text-base">Generated Code</h3>
+            </div>
+
+            <div className="relative">
+              <div className="absolute top-3 right-3 z-10">
+                <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? "Copied" : "Copy Code"}
+                </Button>
+              </div>
+              <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
+                {formCode}
+              </pre>
+            </div>
+          </Card>
+
+          <Card className="border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <ExternalLink className="w-4 h-4 text-amber-600" />
@@ -2102,6 +2169,7 @@ function WebToLeadTab() {
             </div>
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
               <li>Select the agent from the dropdown above</li>
+              <li>Customize the form title, colors, and button text as needed</li>
               <li>Click <strong>"Copy Code"</strong> to copy the form HTML</li>
               <li>Open the agent's website HTML editor or CMS</li>
               <li>Paste the code where you want the form to appear</li>
