@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -21,6 +22,20 @@ function getAllowedOrigins(): string[] {
   return origins;
 }
 
+const cspDirectives = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'", "'unsafe-inline'"],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  imgSrc: ["'self'", "data:", "https:"],
+  fontSrc: ["'self'", "data:"],
+  connectSrc: ["'self'", "https:"],
+  frameSrc: ["'self'"],
+  frameAncestors: ["'self'"],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  formAction: ["'self'"],
+};
+
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/public/embed/") && req.path.endsWith("/widget")) {
     helmet({
@@ -30,7 +45,7 @@ app.use((req, res, next) => {
     })(req, res, next);
   } else {
     helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: { directives: cspDirectives },
       crossOriginEmbedderPolicy: false,
     })(req, res, next);
   }
@@ -65,6 +80,42 @@ app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(authMiddleware);
+
+const CSRF_COOKIE = "csrf_token";
+const CSRF_HEADER = "x-csrf-token";
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (
+    req.path.startsWith("/api/public/") ||
+    req.path.startsWith("/api/course-finder") ||
+    req.path.startsWith("/api/auth/")
+  ) {
+    return next();
+  }
+
+  if (!req.cookies[CSRF_COOKIE]) {
+    const token = crypto.randomBytes(32).toString("hex");
+    res.cookie(CSRF_COOKIE, token, {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  if (!CSRF_SAFE_METHODS.has(req.method)) {
+    const cookieToken = req.cookies[CSRF_COOKIE];
+    const headerToken = req.headers[CSRF_HEADER];
+    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+      res.status(403).json({ error: "CSRF token missing or invalid" });
+      return;
+    }
+  }
+
+  next();
+});
 
 app.use("/api", router);
 

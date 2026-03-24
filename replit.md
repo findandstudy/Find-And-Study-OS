@@ -55,5 +55,8 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 A comprehensive security audit was performed. Key fixes applied:
 - **Critical:** Hardcoded seed passwords moved to env vars, AI route error messages sanitized, `isActive` removed from user self-patch fields (admin-only now)
 - **High:** XSS in embeddable widget fixed, AI routes rate-limited, body size reduced 50→10MB, security headers added, university contact info restricted to staff/agent roles, path traversal protection on storage endpoints
+- **Medium (Fixed):** CSRF double-submit cookie protection, CSP enabled in Helmet, DB foreign keys + indexes + unique constraints added, Express 5.2.1 handles async errors natively, storage upload rate limiting (30 req/15min)
+- **Low (Fixed):** Sub-resource pagination on notes, follow-ups, stage documents, sub-agents
+- **Soft Delete:** `deletedAt` columns added to students, applications, documents; DELETE endpoints set timestamp instead of hard-deleting; GET queries filter out deleted records
 - **Reports:** `AUDIT_REPORT.md` (full findings), `AUTHORIZATION_AUDIT.md` (endpoint-by-endpoint auth matrix)
-- **Remaining (Medium):** CSRF tokens, CSP enable, DB foreign keys/indexes, async route wrappers, storage upload rate limiting, per-object ACL
+- **Remaining:** `dangerouslySetInnerHTML` in chart (low risk), sequential DB queries in POST /applications (perf), synchronous audit log writes (perf)

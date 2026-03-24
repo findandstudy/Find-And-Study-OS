@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
@@ -19,7 +19,7 @@ const ADMIN_ONLY_UPLOAD_STAGES = [
 const ALL_DOC_STAGES = [...EVERYONE_UPLOAD_STAGES, ...ADMIN_ONLY_UPLOAD_STAGES];
 
 async function verifyApplicationAccess(userId: number, role: string, applicationId: number): Promise<boolean> {
-  const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, applicationId));
+  const [app] = await db.select().from(applicationsTable).where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
   if (!app) return false;
 
   if (STAFF_ROLES.includes(role as any)) return true;
@@ -44,7 +44,10 @@ router.get("/applications/:id/stage-documents", requireAuth, async (req, res): P
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { stage } = req.query as Record<string, string>;
+  const { stage, page = "1", limit = "100" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
   const conditions = [eq(applicationStageDocumentsTable.applicationId, applicationId)];
   if (stage) conditions.push(eq(applicationStageDocumentsTable.stage, stage));
 
@@ -66,7 +69,9 @@ router.get("/applications/:id/stage-documents", requireAuth, async (req, res): P
     })
     .from(applicationStageDocumentsTable)
     .where(and(...conditions))
-    .orderBy(desc(applicationStageDocumentsTable.createdAt));
+    .orderBy(desc(applicationStageDocumentsTable.createdAt))
+    .limit(limitNum)
+    .offset(offset);
 
   res.json(docs);
 });
@@ -176,6 +181,11 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, async (req, res):
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
   const notes = await db
     .select()
     .from(applicationStageDocumentsTable)
@@ -184,7 +194,9 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, async (req, res):
       eq(applicationStageDocumentsTable.stage, "missing_docs"),
       eq(applicationStageDocumentsTable.isMissingDocNote, true),
     ))
-    .orderBy(desc(applicationStageDocumentsTable.createdAt));
+    .orderBy(desc(applicationStageDocumentsTable.createdAt))
+    .limit(limitNum)
+    .offset(offset);
 
   res.json(notes);
 });

@@ -1,6 +1,8 @@
 import { pgTable, text, serial, timestamp, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { programsTable } from "./universities";
+import { leadsTable } from "./leads";
 
 export const embedWidgetsTable = pgTable("embed_widgets", {
   id: serial("id").primaryKey(),
@@ -20,7 +22,7 @@ export const embedWidgetsTable = pgTable("embed_widgets", {
 
 export const embedSubmissionsTable = pgTable("embed_submissions", {
   id: serial("id").primaryKey(),
-  widgetId: integer("widget_id").notNull(),
+  widgetId: integer("widget_id").notNull().references(() => embedWidgetsTable.id, { onDelete: "cascade" }),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
@@ -31,7 +33,7 @@ export const embedSubmissionsTable = pgTable("embed_submissions", {
   desiredProgram: text("desired_program"),
   preferredUniversity: text("preferred_university"),
   message: text("message"),
-  programId: integer("program_id"),
+  programId: integer("program_id").references(() => programsTable.id, { onDelete: "set null" }),
   programName: text("program_name"),
   universityName: text("university_name"),
   sourceWebsite: text("source_website"),
@@ -41,7 +43,7 @@ export const embedSubmissionsTable = pgTable("embed_submissions", {
   utmCampaign: text("utm_campaign"),
   utmTerm: text("utm_term"),
   utmContent: text("utm_content"),
-  leadId: integer("lead_id"),
+  leadId: integer("lead_id").references(() => leadsTable.id, { onDelete: "set null" }),
   aiExtractedData: jsonb("ai_extracted_data"),
   documentCount: integer("document_count").default(0),
   status: text("status").notNull().default("new"),

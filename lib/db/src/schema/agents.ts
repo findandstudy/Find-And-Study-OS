@@ -1,10 +1,11 @@
-import { pgTable, text, serial, timestamp, integer, real, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./users";
 
 export const agentsTable = pgTable("agents", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id"),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "set null" }),
   parentAgentId: integer("parent_agent_id"),
   agencyCode: text("agency_code"),
   firstName: text("first_name").notNull(),
@@ -31,7 +32,11 @@ export const agentsTable = pgTable("agents", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("agents_user_id_idx").on(table.userId),
+  index("agents_parent_agent_id_idx").on(table.parentAgentId),
+  index("agents_status_idx").on(table.status),
+]);
 
 export const insertAgentSchema = createInsertSchema(agentsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertAgent = z.infer<typeof insertAgentSchema>;

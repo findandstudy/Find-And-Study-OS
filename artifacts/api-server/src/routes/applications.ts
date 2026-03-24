@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
-import { eq, sql, and, inArray, desc } from "drizzle-orm";
+import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -26,7 +26,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
-  const conditions = [];
+  const conditions = [isNull(applicationsTable.deletedAt)];
 
   if (season) conditions.push(eq(applicationsTable.season, season));
 
@@ -293,7 +293,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
     .from(applicationsTable)
     .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
     .leftJoin(commissionsTable, eq(applicationsTable.id, commissionsTable.applicationId))
-    .where(eq(applicationsTable.id, id));
+    .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!row) { res.status(404).json({ error: "Application not found" }); return; }
 
   const user = req.user!;
@@ -327,7 +327,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
-  const [app] = await db.update(applicationsTable).set(updates).where(eq(applicationsTable.id, id)).returning();
+  const [app] = await db.update(applicationsTable).set(updates).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt))).returning();
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
 
   if (updates.stage !== undefined) {
@@ -412,13 +412,22 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asyn
 
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  await db.delete(applicationsTable).where(eq(applicationsTable.id, id));
+  const [deleted] = await db.update(applicationsTable)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)))
+    .returning();
+  if (!deleted) { res.status(404).json({ error: "Application not found" }); return; }
   await logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
   res.sendStatus(204);
 });
 
 router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
   const notes = await db
     .select({
       id: notesTable.id,
@@ -430,7 +439,9 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), 
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")))
-    .orderBy(desc(notesTable.createdAt));
+    .orderBy(desc(notesTable.createdAt))
+    .limit(limitNum)
+    .offset(offset);
   res.json(notes);
 });
 

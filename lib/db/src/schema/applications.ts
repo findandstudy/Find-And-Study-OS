@@ -1,13 +1,16 @@
-import { pgTable, text, serial, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { studentsTable } from "./students";
+import { programsTable, universitiesTable } from "./universities";
+import { agentsTable } from "./agents";
 
 export const applicationsTable = pgTable("applications", {
   id: serial("id").primaryKey(),
-  studentId: integer("student_id").notNull(),
-  programId: integer("program_id"),
-  universityId: integer("university_id"),
-  agentId: integer("agent_id"),
+  studentId: integer("student_id").notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
+  programId: integer("program_id").references(() => programsTable.id, { onDelete: "set null" }),
+  universityId: integer("university_id").references(() => universitiesTable.id, { onDelete: "set null" }),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   season: text("season").notNull().default("2026"),
   stage: text("stage").notNull().default("inquiry"),
   intake: text("intake"),
@@ -28,10 +31,18 @@ export const applicationsTable = pgTable("applications", {
   languageFee: real("language_fee"),
   currency: text("currency").default("USD"),
   notes: text("notes"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("applications_student_id_idx").on(table.studentId),
+  index("applications_program_id_idx").on(table.programId),
+  index("applications_university_id_idx").on(table.universityId),
+  index("applications_agent_id_idx").on(table.agentId),
+  index("applications_stage_idx").on(table.stage),
+  index("applications_season_idx").on(table.season),
+]);
 
-export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export type InsertApplication = z.infer<typeof insertApplicationSchema>;
 export type Application = typeof applicationsTable.$inferSelect;

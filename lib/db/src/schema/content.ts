@@ -1,6 +1,7 @@
-import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./users";
 
 export const blogPostsTable = pgTable("blog_posts", {
   id: serial("id").primaryKey(),
@@ -11,7 +12,7 @@ export const blogPostsTable = pgTable("blog_posts", {
   locale: text("locale").notNull().default("en"),
   category: text("category"),
   published: boolean("published").notNull().default(false),
-  authorId: integer("author_id"),
+  authorId: integer("author_id").references(() => usersTable.id, { onDelete: "set null" }),
   featuredImageUrl: text("featured_image_url"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
@@ -19,7 +20,10 @@ export const blogPostsTable = pgTable("blog_posts", {
   publishedAt: text("published_at"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("blog_posts_published_idx").on(table.published),
+  index("blog_posts_locale_idx").on(table.locale),
+]);
 
 export const announcementsTable = pgTable("announcements", {
   id: serial("id").primaryKey(),

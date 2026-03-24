@@ -24,7 +24,24 @@ const RequestUploadUrlResponse = z.object({
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
+const uploadLimiter = new Map<number, { count: number; resetAt: number }>();
+const UPLOAD_LIMIT = 30;
+const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
+
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
+  const userId = req.user!.id;
+  const now = Date.now();
+  const entry = uploadLimiter.get(userId);
+  if (entry && now < entry.resetAt) {
+    if (entry.count >= UPLOAD_LIMIT) {
+      res.status(429).json({ error: "Too many upload requests. Try again later." });
+      return;
+    }
+    entry.count++;
+  } else {
+    uploadLimiter.set(userId, { count: 1, resetAt: now + UPLOAD_WINDOW_MS });
+  }
+
   const parsed = RequestUploadUrlBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Missing or invalid required fields" });

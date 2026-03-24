@@ -350,6 +350,11 @@ async function createApplicationFromSubmission(studentId: number, submission: an
 router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
   const notes = await db
     .select({
       id: notesTable.id,
@@ -361,7 +366,9 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "lead")))
-    .orderBy(desc(notesTable.createdAt));
+    .orderBy(desc(notesTable.createdAt))
+    .limit(limitNum)
+    .offset(offset);
   res.json(notes);
 });
 
@@ -382,6 +389,11 @@ router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async 
 router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
   const data = await db
     .select({
       id: followUpsTable.id,
@@ -398,7 +410,9 @@ router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), as
     .from(followUpsTable)
     .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
     .where(eq(followUpsTable.leadId, id))
-    .orderBy(asc(followUpsTable.scheduledAt));
+    .orderBy(asc(followUpsTable.scheduledAt))
+    .limit(limitNum)
+    .offset(offset);
   res.json(data);
 });
 

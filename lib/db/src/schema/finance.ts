@@ -1,12 +1,15 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { studentsTable } from "./students";
+import { applicationsTable } from "./applications";
+import { agentsTable } from "./agents";
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
   invoiceNumber: text("invoice_number").notNull().unique(),
-  studentId: integer("student_id").notNull(),
-  applicationId: integer("application_id"),
+  studentId: integer("student_id").notNull().references(() => studentsTable.id, { onDelete: "restrict" }),
+  applicationId: integer("application_id").references(() => applicationsTable.id, { onDelete: "set null" }),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("USD"),
   status: text("status").notNull().default("draft"),
@@ -19,9 +22,9 @@ export const invoicesTable = pgTable("invoices", {
 
 export const commissionsTable = pgTable("commissions", {
   id: serial("id").primaryKey(),
-  applicationId: integer("application_id"),
-  studentId: integer("student_id"),
-  agentId: integer("agent_id"),
+  applicationId: integer("application_id").references(() => applicationsTable.id, { onDelete: "set null" }),
+  studentId: integer("student_id").references(() => studentsTable.id, { onDelete: "set null" }),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
 
   studentName: text("student_name"),
   universityName: text("university_name"),
@@ -41,7 +44,7 @@ export const commissionsTable = pgTable("commissions", {
   agentCommissionAmount: numeric("agent_commission_amount", { precision: 12, scale: 2 }),
   agentPaid: numeric("agent_paid", { precision: 12, scale: 2 }).default("0"),
 
-  subAgentId: integer("sub_agent_id"),
+  subAgentId: integer("sub_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   subAgentCommissionRate: numeric("sub_agent_commission_rate", { precision: 5, scale: 2 }),
   subAgentCommissionAmount: numeric("sub_agent_commission_amount", { precision: 12, scale: 2 }),
   subAgentPaid: numeric("sub_agent_paid", { precision: 12, scale: 2 }).default("0"),
@@ -54,13 +57,18 @@ export const commissionsTable = pgTable("commissions", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("commissions_application_id_idx").on(table.applicationId),
+  index("commissions_agent_id_idx").on(table.agentId),
+  index("commissions_season_idx").on(table.season),
+  index("commissions_status_idx").on(table.status),
+]);
 
 export const serviceFeesTable = pgTable("service_fees", {
   id: serial("id").primaryKey(),
-  applicationId: integer("application_id"),
-  studentId: integer("student_id"),
-  agentId: integer("agent_id"),
+  applicationId: integer("application_id").references(() => applicationsTable.id, { onDelete: "set null" }),
+  studentId: integer("student_id").references(() => studentsTable.id, { onDelete: "set null" }),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
 
   studentName: text("student_name"),
   universityName: text("university_name"),
@@ -83,18 +91,23 @@ export const serviceFeesTable = pgTable("service_fees", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("service_fees_application_id_idx").on(table.applicationId),
+  index("service_fees_agent_id_idx").on(table.agentId),
+  index("service_fees_season_idx").on(table.season),
+  index("service_fees_status_idx").on(table.status),
+]);
 
 export const financialTransactionsTable = pgTable("financial_transactions", {
   id: serial("id").primaryKey(),
-  commissionId: integer("commission_id"),
+  commissionId: integer("commission_id").references(() => commissionsTable.id, { onDelete: "set null" }),
   type: text("type").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("USD"),
   transactionDate: text("transaction_date").notNull(),
   reference: text("reference"),
   universityName: text("university_name"),
-  agentId: integer("agent_id"),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   agentName: text("agent_name"),
   studentName: text("student_name"),
   fileUrl: text("file_url"),

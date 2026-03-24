@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,11 +15,13 @@ export const countriesTable = pgTable("countries", {
 export const citiesTable = pgTable("cities", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  countryId: integer("country_id").notNull(),
+  countryId: integer("country_id").notNull().references(() => countriesTable.id, { onDelete: "cascade" }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("cities_country_id_idx").on(table.countryId),
+]);
 
 export const insertCountrySchema = createInsertSchema(countriesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCountry = z.infer<typeof insertCountrySchema>;
@@ -37,6 +39,8 @@ export const catalogOptionsTable = pgTable("catalog_options", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("catalog_options_category_idx").on(table.category),
+]);
 
 export type CatalogOption = typeof catalogOptionsTable.$inferSelect;

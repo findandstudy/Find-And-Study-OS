@@ -20,14 +20,14 @@ const STUDENT_PATCH_FIELDS = [
 
 router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), isNull(studentsTable.deletedAt)));
   if (!student) { res.status(404).json({ error: "Student profile not found" }); return; }
   res.json(student);
 });
 
 router.get("/students/my-advisor", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), isNull(studentsTable.deletedAt)));
   if (!student) { res.status(404).json({ error: "Student profile not found" }); return; }
   if (!student.assignedToId) { res.json(null); return; }
   const [advisor] = await db
@@ -83,7 +83,7 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
   const studentId = parseInt(req.params.id, 10);
   const [photoDoc] = await db.select({ fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
     .from(documentsTable)
-    .where(and(eq(documentsTable.studentId, studentId), eq(documentsTable.type, "photo")))
+    .where(and(eq(documentsTable.studentId, studentId), eq(documentsTable.type, "photo"), isNull(documentsTable.deletedAt)))
     .orderBy(desc(documentsTable.createdAt))
     .limit(1);
   if (!photoDoc?.fileData) { res.status(404).json({ error: "No photo" }); return; }
@@ -100,7 +100,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions = [];
+  const conditions = [isNull(studentsTable.deletedAt)];
 
   if (season) conditions.push(eq(studentsTable.season, season));
   if (status) conditions.push(eq(studentsTable.status, status));
@@ -276,7 +276,7 @@ router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const user = req.user!;
 
-  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
   const isStaff = STAFF_ROLES.includes(user.role as any);
@@ -311,7 +311,7 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const isStudent = role === "student";
   if (!isStaff && !isAgent && !isStudent) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
+  const [existing] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Student not found" }); return; }
 
   if (isStudent) {
@@ -369,7 +369,10 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [deleted] = await db.delete(studentsTable).where(eq(studentsTable.id, id)).returning();
+  const [deleted] = await db.update(studentsTable)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)))
+    .returning();
   if (!deleted) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
   res.status(204).end();

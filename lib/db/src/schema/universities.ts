@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, real, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -34,11 +34,14 @@ export const universitiesTable = pgTable("universities", {
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("universities_country_idx").on(table.country),
+  index("universities_is_active_idx").on(table.isActive),
+]);
 
 export const programsTable = pgTable("programs", {
   id: serial("id").primaryKey(),
-  universityId: integer("university_id").notNull(),
+  universityId: integer("university_id").notNull().references(() => universitiesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   degree: text("degree"),
   field: text("field"),
@@ -60,7 +63,12 @@ export const programsTable = pgTable("programs", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("programs_university_id_idx").on(table.universityId),
+  index("programs_degree_idx").on(table.degree),
+  index("programs_field_idx").on(table.field),
+  index("programs_is_active_idx").on(table.isActive),
+]);
 
 export const insertUniversitySchema = createInsertSchema(universitiesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertUniversity = z.infer<typeof insertUniversitySchema>;

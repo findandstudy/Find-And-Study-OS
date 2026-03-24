@@ -1,6 +1,9 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./users";
+import { agentsTable } from "./agents";
+import { studentsTable } from "./students";
 
 export const leadsTable = pgTable("leads", {
   id: serial("id").primaryKey(),
@@ -13,32 +16,41 @@ export const leadsTable = pgTable("leads", {
   source: text("source"),
   status: text("status").notNull().default("new"),
   season: text("season").notNull().default("2026"),
-  agentId: integer("agent_id"),
-  assignedToId: integer("assigned_to_id"),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   interestedProgram: text("interested_program"),
   interestedCountry: text("interested_country"),
   notes: text("notes"),
   estimatedValue: numeric("estimated_value", { precision: 12, scale: 2 }),
-  convertedStudentId: integer("converted_student_id"),
+  convertedStudentId: integer("converted_student_id").references(() => studentsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("leads_agent_id_idx").on(table.agentId),
+  index("leads_assigned_to_id_idx").on(table.assignedToId),
+  index("leads_status_idx").on(table.status),
+  index("leads_season_idx").on(table.season),
+]);
 
 export const followUpsTable = pgTable("follow_ups", {
   id: serial("id").primaryKey(),
-  leadId: integer("lead_id"),
-  studentId: integer("student_id"),
+  leadId: integer("lead_id").references(() => leadsTable.id, { onDelete: "set null" }),
+  studentId: integer("student_id").references(() => studentsTable.id, { onDelete: "set null" }),
   resourceType: text("resource_type").notNull().default("lead"),
   title: text("title").notNull(),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   completed: boolean("completed").notNull().default(false),
   completedAt: timestamp("completed_at", { withTimezone: true }),
-  assignedToId: integer("assigned_to_id"),
+  assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   notes: text("notes"),
-  createdById: integer("created_by_id"),
+  createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("follow_ups_lead_id_idx").on(table.leadId),
+  index("follow_ups_student_id_idx").on(table.studentId),
+  index("follow_ups_assigned_to_id_idx").on(table.assignedToId),
+]);
 
 export const insertLeadSchema = createInsertSchema(leadsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertLead = z.infer<typeof insertLeadSchema>;

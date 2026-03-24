@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, documentsTable, studentsTable } from "@workspace/db";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 
@@ -20,7 +20,7 @@ function isValidHttpUrl(value: string): boolean {
 router.get("/documents", requireAuth, async (req, res): Promise<void> => {
   const { studentId, applicationId, type, status } = req.query as Record<string, string>;
 
-  const conditions = [];
+  const conditions = [isNull(documentsTable.deletedAt)];
   if (studentId) conditions.push(eq(documentsTable.studentId, parseInt(studentId, 10)));
   if (applicationId) conditions.push(eq(documentsTable.applicationId, parseInt(applicationId, 10)));
   if (type) conditions.push(eq(documentsTable.type, type));
@@ -89,7 +89,7 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
 router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
+  const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
   const user = req.user!;
@@ -129,7 +129,7 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
-  const [doc] = await db.update(documentsTable).set(updates).where(eq(documentsTable.id, id)).returning();
+  const [doc] = await db.update(documentsTable).set(updates).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt))).returning();
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
   await logAudit(req.user!.id, "update_document", "document", id, updates, req.ip);
   res.json(doc);
@@ -146,12 +146,13 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
     res.status(400).json({ error: "No valid ids provided" });
     return;
   }
-  const docs = await db.select().from(documentsTable).where(inArray(documentsTable.id, numericIds));
+  const docs = await db.select().from(documentsTable).where(and(inArray(documentsTable.id, numericIds), isNull(documentsTable.deletedAt)));
   if (docs.length === 0) {
     res.status(404).json({ error: "No documents found" });
     return;
   }
-  await db.delete(documentsTable).where(inArray(documentsTable.id, numericIds));
+  const activeIds = docs.map(d => d.id);
+  await db.update(documentsTable).set({ deletedAt: new Date() }).where(inArray(documentsTable.id, activeIds));
   await logAudit(req.user!.id, "bulk_delete_documents", "document", null as any, { count: docs.length, ids: numericIds }, req.ip);
   res.json({ deleted: docs.length });
 });
@@ -159,9 +160,9 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
 router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
+  const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
-  await db.delete(documentsTable).where(eq(documentsTable.id, id));
+  await db.update(documentsTable).set({ deletedAt: new Date() }).where(eq(documentsTable.id, id));
   await logAudit(req.user!.id, "delete_document", "document", id, { name: doc.name }, req.ip);
   res.sendStatus(204);
 });
@@ -169,7 +170,7 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async 
 router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, id));
+  const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
   if (!doc.fileUrl) {

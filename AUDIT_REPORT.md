@@ -52,29 +52,47 @@ The EduConsult OS platform demonstrates solid foundational security with session
 
 ---
 
-### MEDIUM - Checklist (Safe to address incrementally)
+### MEDIUM - Fixed
+
+| # | Issue | Fix Applied |
+|---|-------|-------------|
+| M1 | **No CSRF protection** | Double-submit cookie CSRF pattern added. `csrf_token` cookie + `x-csrf-token` header validated on POST/PATCH/DELETE. Excluded paths: `/api/public/`, `/api/course-finder`, `/api/auth/`. Frontend global fetch interceptor in `csrfSetup.ts`. |
+| M2 | **Content Security Policy disabled** | CSP enabled in Helmet with `script-src 'self' 'unsafe-inline'`, `style-src 'self' 'unsafe-inline'` (required for shadcn/Tailwind), `object-src 'none'`, `frame-ancestors 'self'`. |
+| M3 | **Missing database foreign key constraints** | FK references added to all schema files with appropriate ON DELETE actions (SET NULL for nullable FKs, CASCADE for child records, RESTRICT for required FKs). |
+| M4 | **Missing unique constraint on `students.email`** | Unique index added on `students.email`. |
+| M5 | **Missing database indexes** | Indexes added on frequently filtered columns (`agentId`, `studentId`, `status`, `season`, `assignedToId`, etc.) across students, applications, leads, documents, finance schemas. |
+| M6 | **Async routes without try-catch** | Express 5.2.1 natively propagates async errors to the error handler — no wrapper needed. |
+| M8 | **Rate limiting on storage upload endpoint** | In-memory rate limiter added: 30 uploads per 15 minutes per user on `POST /storage/uploads/request-url`. |
+
+### MEDIUM - Remaining
 
 | # | Issue | Details | Priority |
 |---|-------|---------|----------|
-| M1 | **No CSRF protection** | Server accepts session cookies on state-changing requests without CSRF tokens. `SameSite: lax` provides partial mitigation. Consider adding CSRF tokens for sensitive operations (password change, role changes). | Medium |
-| M2 | **Content Security Policy disabled** | `contentSecurityPolicy: false` in Helmet. A strict CSP would add significant XSS protection. Requires careful tuning for inline styles/scripts. | Medium |
-| M3 | **Missing database foreign key constraints** | No `references()` in Drizzle schema. Deleting a student leaves orphaned applications, documents, notes. | Medium |
-| M4 | **Missing unique constraint on `students.email`** | Could allow duplicate student profiles with same email. | Medium |
-| M5 | **Missing database indexes** | No indexes on frequently filtered columns (`agent_id`, `student_id`, `status`, `season` in applications/leads). Will cause slow queries as data grows. | Medium |
-| M6 | **Async routes without try-catch** | Many Express 4.x async routes lack error handling wrappers. Unhandled rejections won't reach the global error handler. Consider an `asyncHandler` wrapper or upgrade to Express 5. | Medium |
 | M7 | **`dangerouslySetInnerHTML` in chart component** | `ChartStyle` component in `chart.tsx` injects CSS via `dangerouslySetInnerHTML`. Low risk if chart config is developer-controlled. | Low-Medium |
-| M8 | **Rate limiting on storage upload endpoint** | `/api/storage/uploads/request-url` lacks rate limiting. Could be abused for excessive file upload URL generation. | Medium |
 | M9 | **Sequential DB queries in POST /applications** | Multiple `await` calls (student, program, university lookups) could be parallelized with `Promise.all` for better latency. | Low-Medium |
 | M10 | **Audit log writes are synchronous** | `logAudit()` is awaited inline in request handlers. Should be fire-and-forget or queued to avoid adding latency. | Low |
 
-### LOW - Checklist
+### LOW - Fixed
+
+| # | Issue | Fix Applied |
+|---|-------|-------------|
+| L1 | **No pagination on sub-resource endpoints** | Pagination (page/limit with defaults and max caps) added to: application notes, lead notes, lead follow-ups, stage documents, missing-doc notes, sub-agents. |
+
+### LOW - Remaining
 
 | # | Issue | Details |
 |---|-------|---------|
-| L1 | **No pagination on sub-resource endpoints** | Routes like `GET /applications/:id/notes` don't implement pagination. |
 | L2 | **In-memory rate limiter for auth routes** | Uses a `Map` that resets on server restart. Acceptable for single-instance deployments, but consider Redis-backed limiter for multi-instance. |
 | L3 | **`students.userId` and `agents.userId` are nullable** | Allows orphaned entities. Consider making non-null with migration for existing data. |
 | L4 | **Missing HSTS header** | Helmet enables it by default, but verify it's present in production responses. |
+
+### NEW - Soft Delete
+
+| # | Feature | Details |
+|---|---------|---------|
+| S1 | **Soft delete for students** | `deletedAt` column added. DELETE sets timestamp instead of hard-deleting. GET queries filter `WHERE deletedAt IS NULL`. |
+| S2 | **Soft delete for applications** | `deletedAt` column added. DELETE sets timestamp instead of hard-deleting. GET queries filter `WHERE deletedAt IS NULL`. |
+| S3 | **Soft delete for documents** | `deletedAt` column added. Single and bulk DELETE set timestamp instead of hard-deleting. GET queries filter `WHERE deletedAt IS NULL`. |
 
 ---
 
@@ -96,12 +114,24 @@ The EduConsult OS platform demonstrates solid foundational security with session
 | File | Changes |
 |------|---------|
 | `artifacts/api-server/src/index.ts` | Removed hardcoded passwords, added env var references, added crash handlers |
-| `artifacts/api-server/src/app.ts` | Added security headers, reduced body size limit, hardened error handler |
+| `artifacts/api-server/src/app.ts` | Added security headers, reduced body size limit, hardened error handler, CSP enabled, CSRF double-submit cookie middleware |
 | `artifacts/api-server/src/routes/ai-extract.ts` | Added rate limiting, removed error message leakage |
 | `artifacts/api-server/src/routes/embed.ts` | Escaped all dynamic values in widget HTML to prevent XSS |
 | `artifacts/api-server/src/routes/users.ts` | Moved `isActive` to admin-only patch fields |
 | `artifacts/api-server/src/routes/course-finder.ts` | Stripped contact info for unauthenticated requests |
-| `artifacts/api-server/src/routes/storage.ts` | Added path traversal protection on both storage endpoints |
+| `artifacts/api-server/src/routes/storage.ts` | Added path traversal protection, upload rate limiting (30 req/15min) |
+| `artifacts/api-server/src/routes/students.ts` | Soft-delete logic (DELETE sets `deletedAt`, GET filters `deletedAt IS NULL`) |
+| `artifacts/api-server/src/routes/applications.ts` | Soft-delete logic, notes pagination |
+| `artifacts/api-server/src/routes/documents.ts` | Soft-delete logic (single + bulk delete) |
+| `artifacts/api-server/src/routes/leads.ts` | Notes and follow-ups pagination |
+| `artifacts/api-server/src/routes/agents.ts` | Sub-agents pagination |
+| `artifacts/api-server/src/routes/applicationStageDocuments.ts` | Stage documents and missing-doc notes pagination |
+| `artifacts/edcons/src/lib/csrfSetup.ts` | Global fetch interceptor for CSRF token handling |
+| `artifacts/edcons/src/main.tsx` | Import csrfSetup |
+| `lib/db/src/schema/students.ts` | FK references, indexes, unique email constraint, `deletedAt` column |
+| `lib/db/src/schema/applications.ts` | FK references, indexes, `deletedAt` column |
+| `lib/db/src/schema/documents.ts` | FK references, indexes, `deletedAt` column |
+| `lib/db/src/schema/*.ts` | FK references and indexes across all schema files |
 
 ---
 
@@ -109,7 +139,5 @@ The EduConsult OS platform demonstrates solid foundational security with session
 
 1. **Set strong, unique values** for `SEED_ADMIN_PASSWORD` and `SEED_AGENT_PASSWORD` in development only
 2. **Change default admin password** before going to production
-3. **Enable CSP** with a strict policy once all inline styles/scripts are addressed
-4. **Add database indexes and foreign keys** via a planned migration
-5. **Consider CSRF tokens** for sensitive state-changing operations
-6. **Set up monitoring/alerting** for the unhandled rejection and uncaught exception handlers
+3. **Set up monitoring/alerting** for the unhandled rejection and uncaught exception handlers
+4. **Consider Redis-backed rate limiting** for multi-instance deployments
