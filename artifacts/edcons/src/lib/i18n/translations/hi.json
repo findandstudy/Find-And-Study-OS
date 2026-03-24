@@ -157,7 +157,11 @@
     "allUniversities": "सभी विश्वविद्यालय",
     "allLanguages": "सभी भाषाएं",
     "showingResults": "{count} कार्यक्रम दिखा रहे हैं",
-    "clearFilters": "सभी फ़िल्टर साफ़ करें"
+    "clearFilters": "सभी फ़िल्टर साफ़ करें",
+    "moreFilters": "और फ़िल्टर",
+    "lessFilters": "कम फ़िल्टर",
+    "filterField": "क्षेत्र",
+    "allFields": "सभी क्षेत्र"
   },
   "login": {
     "signIn": "साइन इन",

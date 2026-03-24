@@ -157,7 +157,11 @@
     "allUniversities": "所有大学",
     "allLanguages": "所有语言",
     "showingResults": "显示 {count} 个项目",
-    "clearFilters": "清除所有筛选"
+    "clearFilters": "清除所有筛选",
+    "moreFilters": "更多筛选",
+    "lessFilters": "收起筛选",
+    "filterField": "专业领域",
+    "allFields": "所有领域"
   },
   "login": {
     "signIn": "登录",

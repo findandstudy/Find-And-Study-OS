@@ -157,7 +157,11 @@
     "allUniversities": "Все университеты",
     "allLanguages": "Все языки",
     "showingResults": "Показано {count} программ",
-    "clearFilters": "Очистить все фильтры"
+    "clearFilters": "Очистить все фильтры",
+    "moreFilters": "Больше фильтров",
+    "lessFilters": "Меньше фильтров",
+    "filterField": "Направление",
+    "allFields": "Все направления"
   },
   "login": {
     "signIn": "Войти",

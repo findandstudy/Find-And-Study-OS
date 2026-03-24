@@ -157,7 +157,11 @@
     "allUniversities": "Tüm Üniversiteler",
     "allLanguages": "Tüm Diller",
     "showingResults": "{count} program gösteriliyor",
-    "clearFilters": "Tüm Filtreleri Temizle"
+    "clearFilters": "Tüm Filtreleri Temizle",
+    "moreFilters": "Daha Fazla Filtre",
+    "lessFilters": "Daha Az Filtre",
+    "filterField": "Alan",
+    "allFields": "Tüm Alanlar"
   },
   "login": {
     "signIn": "Giriş Yap",

@@ -157,7 +157,11 @@
     "allUniversities": "جميع الجامعات",
     "allLanguages": "جميع اللغات",
     "showingResults": "عرض {count} برنامج",
-    "clearFilters": "مسح جميع الفلاتر"
+    "clearFilters": "مسح جميع الفلاتر",
+    "moreFilters": "المزيد من الفلاتر",
+    "lessFilters": "فلاتر أقل",
+    "filterField": "التخصص",
+    "allFields": "جميع التخصصات"
   },
   "login": {
     "signIn": "تسجيل الدخول",

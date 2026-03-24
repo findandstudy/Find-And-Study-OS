@@ -157,7 +157,11 @@
     "allUniversities": "همه دانشگاه‌ها",
     "allLanguages": "همه زبان‌ها",
     "showingResults": "نمایش {count} برنامه",
-    "clearFilters": "پاک کردن همه فیلترها"
+    "clearFilters": "پاک کردن همه فیلترها",
+    "moreFilters": "فیلترهای بیشتر",
+    "lessFilters": "فیلترهای کمتر",
+    "filterField": "رشته",
+    "allFields": "همه رشته‌ها"
   },
   "login": {
     "signIn": "ورود",

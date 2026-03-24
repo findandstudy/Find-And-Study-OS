@@ -157,7 +157,11 @@
     "allUniversities": "Semua Universitas",
     "allLanguages": "Semua Bahasa",
     "showingResults": "Menampilkan {count} program",
-    "clearFilters": "Hapus Semua Filter"
+    "clearFilters": "Hapus Semua Filter",
+    "moreFilters": "Filter Lainnya",
+    "lessFilters": "Lebih Sedikit Filter",
+    "filterField": "Bidang",
+    "allFields": "Semua Bidang"
   },
   "login": {
     "signIn": "Masuk",

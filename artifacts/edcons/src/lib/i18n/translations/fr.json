@@ -157,7 +157,11 @@
     "allUniversities": "Toutes les universités",
     "allLanguages": "Toutes les langues",
     "showingResults": "Affichage de {count} programmes",
-    "clearFilters": "Effacer tous les filtres"
+    "clearFilters": "Effacer tous les filtres",
+    "moreFilters": "Plus de filtres",
+    "lessFilters": "Moins de filtres",
+    "filterField": "Domaine",
+    "allFields": "Tous les domaines"
   },
   "login": {
     "signIn": "Se connecter",
