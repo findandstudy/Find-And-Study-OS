@@ -15,6 +15,26 @@ const offices = [
 ];
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" }, { code: "+27", country: "ZA" }, { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" }, { code: "+54", country: "AR" }, { code: "+61", country: "AU" },
+  { code: "+64", country: "NZ" }, { code: "+60", country: "MY" }, { code: "+65", country: "SG" },
+  { code: "+63", country: "PH" }, { code: "+66", country: "TH" }, { code: "+84", country: "VN" },
+  { code: "+62", country: "ID" }, { code: "+994", country: "AZ" }, { code: "+995", country: "GE" },
+  { code: "+998", country: "UZ" }, { code: "+996", country: "KG" }, { code: "+993", country: "TM" },
+  { code: "+77", country: "KZ" },
+];
 const LATIN_RE = /^[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ\s'-]*$/;
 const LATIN_MSG_RE = /^[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ0-9\s.,;:!?'"\-()@#&/]*$/;
 const HTML_RE = /<[^>]*>/;
@@ -166,8 +186,12 @@ export default function Contact() {
                       {t("contact.phone")} <span className="text-destructive">*</span>
                     </label>
                     <div className="flex gap-2">
-                      <Input value={form.phoneCode} onChange={e => setField("phoneCode", e.target.value)}
-                        placeholder="+90" className="rounded-xl w-20" />
+                      <select value={form.phoneCode} onChange={e => setField("phoneCode", e.target.value)}
+                        className="h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-24">
+                        {PHONE_CODES.map(pc => (
+                          <option key={pc.code} value={pc.code}>{pc.country} {pc.code}</option>
+                        ))}
+                      </select>
                       <Input value={form.phone} onChange={e => setField("phone", e.target.value.replace(/[^0-9]/g, ""))}
                         required placeholder={t("contact.phonePlaceholder")} className="rounded-xl flex-1" />
                     </div>
