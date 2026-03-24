@@ -14,7 +14,7 @@ import {
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -619,149 +619,166 @@ export default function Programs() {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.15 }}>
-            <div className="glass-card rounded-2xl p-6 pb-8 space-y-5 -mb-8 relative z-20">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
-                <Input value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder={t("programs.searchPlaceholder")}
-                  className="pl-12 pr-4 h-12 text-base rounded-xl border-border/50 focus:border-primary bg-background/80 backdrop-blur-sm shadow-sm" />
+            <div className="glass-card rounded-2xl p-6 pb-6 -mb-8 relative z-20 shadow-lg shadow-primary/[0.03]">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
+                  <Input value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder={t("programs.searchPlaceholder")}
+                    className="pl-12 pr-4 h-12 text-base rounded-xl border-border/50 focus:border-primary bg-background/80 backdrop-blur-sm shadow-sm w-full" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(prev => !prev)}
+                  aria-expanded={showFilters}
+                  aria-controls="programs-filter-panel"
+                  aria-label={showFilters ? t("programs.lessFilters") : t("programs.moreFilters")}
+                  className={`inline-flex items-center gap-2 h-12 px-5 rounded-xl text-sm font-semibold transition-all duration-200 border shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
+                    ${showFilters
+                      ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20 hover:bg-primary/90"
+                      : "bg-background/80 text-foreground border-border/50 hover:border-primary/40 hover:bg-primary/5 shadow-sm"
+                    }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  <span className="hidden sm:inline">{showFilters ? t("programs.lessFilters") : t("programs.moreFilters")}</span>
+                  {activeFilterCount > 0 && (
+                    <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold
+                      ${showFilters ? "bg-white/25 text-primary-foreground" : "bg-primary text-primary-foreground"}`}>
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowFilters(prev => !prev)}
-                className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-                {showFilters ? t("programs.lessFilters") : t("programs.moreFilters")}
-                {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                {activeFilterCount > 0 && (
-                  <Badge variant="secondary" className="text-xs rounded-full px-2 ml-1">{activeFilterCount}</Badge>
+              <AnimatePresence initial={false}>
+                {showFilters && (
+                  <motion.div
+                    key="filter-panel"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div id="programs-filter-panel" className="pt-5 space-y-4">
+                      <div className="h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Globe2 className="w-3 h-3" /> {t("programs.filterCountry")}
+                          </label>
+                          <select value={country} onChange={e => setCountry(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allCountries")}</option>
+                            {filters.countries.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <MapPin className="w-3 h-3" /> {t("programs.filterCity")}
+                          </label>
+                          <select value={city} onChange={e => setCity(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allCities")}</option>
+                            {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Building2 className="w-3 h-3" /> {t("programs.filterUniversityType")}
+                          </label>
+                          <select value={universityType} onChange={e => setUniversityType(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allTypes")}</option>
+                            {filters.universityTypes.map(ut => <option key={ut} value={ut}>{ut}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <GraduationCap className="w-3 h-3" /> {t("programs.filterUniversity")}
+                          </label>
+                          <select value={universityId} onChange={e => setUniversityId(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allUniversities")}</option>
+                            {filters.universities.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <BookOpen className="w-3 h-3" /> {t("programs.filterLevel")}
+                          </label>
+                          <select value={level} onChange={e => setLevel(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allLevels")}</option>
+                            {filters.degrees.map(d => <option key={d} value={d}>{d}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Languages className="w-3 h-3" /> {t("programs.filterLanguage")}
+                          </label>
+                          <select value={language} onChange={e => setLanguage(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allLanguages")}</option>
+                            {filters.languages.map(lg => <option key={lg} value={lg}>{lg}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Award className="w-3 h-3" /> {t("programs.filterField")}
+                          </label>
+                          <select value={field} onChange={e => setField(e.target.value)}
+                            className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
+                            <option value="">{t("programs.allFields")}</option>
+                            {filters.fields.map(f => <option key={f} value={f}>{f}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <DollarSign className="w-3 h-3" /> {t("programs.filterTuitionFee")}
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
+                              placeholder={filters.feeRange?.min != null ? `Min (${filters.feeRange.min})` : t("programs.feeMin")}
+                              className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
+                              max={filters.feeRange?.max} />
+                            <span className="text-muted-foreground text-sm font-medium">–</span>
+                            <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
+                              placeholder={filters.feeRange?.max != null ? `Max (${filters.feeRange.max})` : t("programs.feeMax")}
+                              className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
+                              max={filters.feeRange?.max} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {hasActiveFilters && (
+                        <div className="flex items-center justify-between pt-3 mt-1 border-t border-border/30">
+                          <div className="flex items-center gap-2">
+                            <SlidersHorizontal className="w-4 h-4 text-primary" />
+                            <p className="text-sm text-muted-foreground">
+                              {t("programs.showingResults", { count: String(total) })}
+                            </p>
+                          </div>
+                          <button onClick={clearAllFilters} className="inline-flex items-center gap-1.5 text-sm text-destructive/80 hover:text-destructive font-semibold transition-colors bg-destructive/5 hover:bg-destructive/10 px-3 py-1.5 rounded-lg">
+                            <X className="w-3.5 h-3.5" /> {t("programs.clearFilters")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
                 )}
-              </button>
-
-              {showFilters && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-5"
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Globe2 className="w-3 h-3" /> {t("programs.filterCountry")}
-                      </label>
-                      <select value={country} onChange={e => setCountry(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allCountries")}</option>
-                        {filters.countries.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <MapPin className="w-3 h-3" /> {t("programs.filterCity")}
-                      </label>
-                      <select value={city} onChange={e => setCity(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allCities")}</option>
-                        {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Building2 className="w-3 h-3" /> {t("programs.filterUniversityType")}
-                      </label>
-                      <select value={universityType} onChange={e => setUniversityType(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allTypes")}</option>
-                        {filters.universityTypes.map(ut => <option key={ut} value={ut}>{ut}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <GraduationCap className="w-3 h-3" /> {t("programs.filterUniversity")}
-                      </label>
-                      <select value={universityId} onChange={e => setUniversityId(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allUniversities")}</option>
-                        {filters.universities.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <BookOpen className="w-3 h-3" /> {t("programs.filterLevel")}
-                      </label>
-                      <select value={level} onChange={e => setLevel(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allLevels")}</option>
-                        {filters.degrees.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Languages className="w-3 h-3" /> {t("programs.filterLanguage")}
-                      </label>
-                      <select value={language} onChange={e => setLanguage(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allLanguages")}</option>
-                        {filters.languages.map(lg => <option key={lg} value={lg}>{lg}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Award className="w-3 h-3" /> {t("programs.filterField")}
-                      </label>
-                      <select value={field} onChange={e => setField(e.target.value)}
-                        className="w-full h-10 px-3 rounded-xl border border-border/50 bg-background/80 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer hover:border-primary/40 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-8">
-                        <option value="">{t("programs.allFields")}</option>
-                        {filters.fields.map(f => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <DollarSign className="w-3 h-3" /> {t("programs.filterTuitionFee")}
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
-                          placeholder={filters.feeRange?.min != null ? `Min (${filters.feeRange.min})` : t("programs.feeMin")}
-                          className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
-                          max={filters.feeRange?.max} />
-                        <span className="text-muted-foreground text-sm font-medium">–</span>
-                        <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
-                          placeholder={filters.feeRange?.max != null ? `Max (${filters.feeRange.max})` : t("programs.feeMax")}
-                          className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
-                          max={filters.feeRange?.max} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {hasActiveFilters && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border/30">
-                      <div className="flex items-center gap-2">
-                        <SlidersHorizontal className="w-4 h-4 text-primary" />
-                        <p className="text-sm text-muted-foreground">
-                          {t("programs.showingResults", { count: String(total) })}
-                        </p>
-                        <Badge variant="secondary" className="text-xs rounded-full px-2">{activeFilterCount}</Badge>
-                      </div>
-                      <button onClick={clearAllFilters} className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors flex items-center gap-1.5 hover:gap-2">
-                        <X className="w-3.5 h-3.5" /> {t("programs.clearFilters")}
-                      </button>
-                    </div>
-                  )}
-                </motion.div>
-              )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </div>
