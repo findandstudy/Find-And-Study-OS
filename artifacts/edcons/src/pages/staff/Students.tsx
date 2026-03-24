@@ -529,7 +529,17 @@ function AddStudentModal({
         throw new Error(err.error || "AI extraction failed");
       }
 
-      const { extracted }: { extracted: ExtractedData } = await res.json();
+      const { extracted, warnings: serverWarnings }: { extracted: ExtractedData; warnings?: string[] } = await res.json();
+
+      if ((extracted as any).passportExpired === true) {
+        setAnalysisError(`Passport has expired (${extracted.passportExpiry}). Expired passports cannot be used for applications. Please upload a valid passport.`);
+        setStep("review");
+        return;
+      }
+
+      if (serverWarnings?.length) {
+        setAnalysisError(serverWarnings.join(" "));
+      }
 
       const newForm = { ...EMPTY_FORM };
       const newExtracted = new Set<string>();

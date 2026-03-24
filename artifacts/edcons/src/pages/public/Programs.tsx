@@ -317,7 +317,18 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         throw new Error(err.error || "AI extraction failed");
       }
 
-      const { extracted: data } = await resp.json();
+      const { extracted: data, warnings: serverWarnings } = await resp.json();
+
+      if (data.passportExpired === true) {
+        setAiError(`Passport has expired (${data.passportExpiry}). Please upload a valid, non-expired passport to continue.`);
+        setStep("form");
+        return;
+      }
+
+      if (serverWarnings?.length) {
+        setAiError(serverWarnings.join(" "));
+      }
+
       const newForm = { ...EMPTY_FORM };
       const newExtracted = new Set<string>();
 

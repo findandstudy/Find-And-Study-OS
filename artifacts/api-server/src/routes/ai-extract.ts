@@ -31,15 +31,16 @@ Analyze the provided document image(s) and extract student information.
 
 Extract ALL of the following fields if visible in the document. Return a JSON object with these exact keys:
 {
-  "firstName": "string or null",
-  "lastName": "string or null",
+  "firstName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
+  "lastName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
   "dateOfBirth": "YYYY-MM-DD format or null",
   "nationality": "full country name string (e.g. 'Afghanistan' not 'Afghan', 'Turkey' not 'Turkish') or null",
   "passportNumber": "string or null",
   "passportIssueDate": "YYYY-MM-DD format or null",
   "passportExpiry": "YYYY-MM-DD format or null",
-  "motherName": "string or null",
-  "fatherName": "string or null",
+  "passportExpired": "boolean - true if passport expiry date has passed, false otherwise, null if no expiry date found",
+  "motherName": "string or null - EXACTLY as printed on the document",
+  "fatherName": "string or null - EXACTLY as printed on the document",
   "email": "string or null",
   "phone": "string or null",
   "address": "string or null",
@@ -53,6 +54,15 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
 }
 
 Rules:
+- CRITICAL - Names: Extract names EXACTLY as they appear on the passport or official document. The passport is the authoritative source for the person's legal name. Do NOT modify, translate, or reformat names. Copy them character by character as printed.
+- CRITICAL - Date format awareness: Different countries use different date formats on passports:
+  * Most countries (Europe, Asia, Middle East, Africa): DD/MM/YYYY or DD.MM.YYYY (day first)
+  * USA, Philippines, some others: MM/DD/YYYY (month first)
+  * East Asian countries (Japan, China, Korea): YYYY/MM/DD (year first)
+  * Look at the passport's issuing country to determine the likely date format
+  * When a date is ambiguous (e.g. 03/04/2025 could be March 4 or April 3), use the issuing country's convention
+  * Always output dates in YYYY-MM-DD format after correctly interpreting the source format
+- CRITICAL - Passport expiry: Check if the passport expiry date has passed relative to today's date. Set passportExpired to true if expired, false if still valid.
 - For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
 - For diplomas: extract school name, graduation year, GPA, student name, parent names if visible
 - For transcripts: extract school name, GPA, graduation year, student name, courses if relevant
@@ -145,7 +155,22 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       return;
     }
 
-    res.json({ extracted });
+    const warnings: string[] = [];
+
+    if (extracted.passportExpiry) {
+      const parts = String(extracted.passportExpiry).split("-").map(Number);
+      const expiryDate = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date(NaN);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (!isNaN(expiryDate.getTime()) && expiryDate < today) {
+        extracted.passportExpired = true;
+        warnings.push(`Passport has expired on ${extracted.passportExpiry}. This passport cannot be used for applications.`);
+      } else if (!isNaN(expiryDate.getTime())) {
+        extracted.passportExpired = false;
+      }
+    }
+
+    res.json({ extracted, warnings });
   } catch (err: any) {
     console.error("AI extraction error:", err);
     res.status(500).json({ error: "AI extraction failed" });

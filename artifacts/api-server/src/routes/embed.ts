@@ -986,6 +986,12 @@ function handleAnalyze(){
   }).then(function(data){
     aiResult=data.extracted||null;
     if(aiResult){
+      if(aiResult.passportExpired===true){
+        alert('Warning: This passport has expired ('+aiResult.passportExpiry+'). Expired passports cannot be used for applications. Please upload a valid passport.');
+        aiResult=null;
+        formStep='upload';renderForm();
+        return;
+      }
       extractedFields={};
       var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth',motherName:'motherName',fatherName:'fatherName',passportNumber:'passportNumber',address:'address',highSchool:'highSchool'};
       var mKeys=Object.keys(mapping);
