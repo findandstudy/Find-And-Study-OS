@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "علی",
     "lastNamePlaceholder": "محمدی",
     "nationality": "ملیت",
-    "nationalityPlaceholder": "ملیت را انتخاب کنید"
+    "nationalityPlaceholder": "ملیت را انتخاب کنید",
+    "latinOnly": "فقط حروف لاتین مجاز است",
+    "messageTooLong": "پیام نمی‌تواند بیش از 400 کاراکتر باشد"
   },
   "blog": {
     "badge": "وبلاگ",

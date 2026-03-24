@@ -50,7 +50,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     nationality: nationality ? String(nationality).slice(0, 100) : null,
     interestedProgram: interestedProgram ? String(interestedProgram).slice(0, 255) : null,
     interestedCountry: interestedCountry ? String(interestedCountry).slice(0, 100) : null,
-    notes: message ? String(message).slice(0, 2000) : null,
+    notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
     source: "website",
     status: "new",
   });

@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "Jean",
     "lastNamePlaceholder": "Dupont",
     "nationality": "Nationalité",
-    "nationalityPlaceholder": "Sélectionner la nationalité"
+    "nationalityPlaceholder": "Sélectionner la nationalité",
+    "latinOnly": "Seuls les caractères latins sont autorisés",
+    "messageTooLong": "Le message ne peut pas dépasser 400 caractères"
   },
   "blog": {
     "badge": "Le Blog",

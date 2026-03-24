@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "Budi",
     "lastNamePlaceholder": "Santoso",
     "nationality": "Kewarganegaraan",
-    "nationalityPlaceholder": "Pilih kewarganegaraan"
+    "nationalityPlaceholder": "Pilih kewarganegaraan",
+    "latinOnly": "Hanya karakter Latin yang diizinkan",
+    "messageTooLong": "Pesan tidak boleh melebihi 400 karakter"
   },
   "blog": {
     "badge": "Blog",

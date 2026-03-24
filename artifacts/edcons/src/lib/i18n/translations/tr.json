@@ -98,7 +98,9 @@
     "hoursLabel": "Çalışma Saatleri",
     "hoursValue": "Pzt-Cum: 9:00 – 19:00 | Cmt: 10:00 – 16:00",
     "ourOffices": "Ofislerimiz",
-    "required": "*"
+    "required": "*",
+    "latinOnly": "Yalnızca Latin harfleri kullanılabilir",
+    "messageTooLong": "Mesaj 400 karakteri geçemez"
   },
   "blog": {
     "badge": "Blog",

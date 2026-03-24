@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "أحمد",
     "lastNamePlaceholder": "محمد",
     "nationality": "الجنسية",
-    "nationalityPlaceholder": "اختر الجنسية"
+    "nationalityPlaceholder": "اختر الجنسية",
+    "latinOnly": "يسمح فقط بالأحرف اللاتينية",
+    "messageTooLong": "لا يمكن أن تتجاوز الرسالة 400 حرف"
   },
   "blog": {
     "badge": "المدونة",

@@ -15,6 +15,24 @@ const offices = [
 ];
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+const LATIN_RE = /^[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ\s'-]*$/;
+const LATIN_MSG_RE = /^[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ0-9\s.,;:!?'"\-()@#&/]*$/;
+const HTML_RE = /<[^>]*>/;
+const MSG_MAX = 400;
+
+function stripHtml(val: string): string {
+  return val.replace(/<[^>]*>/g, "");
+}
+
+function latinOnly(val: string): string {
+  return stripHtml(val).replace(/[^A-Za-zÀ-ÖØ-öø-ÿĀ-ſ\s'-]/g, "").toUpperCase();
+}
+
+function latinMsgOnly(val: string): string {
+  return stripHtml(val).replace(/[^A-Za-zÀ-ÖØ-öø-ÿĀ-ſ0-9\s.,;:!?'"\-()@#&/]/g, "").toUpperCase();
+}
+
+type CountryRow = { id: number; name: string; code: string; flagEmoji?: string | null; isActive: boolean };
 
 export default function Contact() {
   const { t, lang } = useI18n();
@@ -26,13 +44,35 @@ export default function Contact() {
   const [countries, setCountries] = useState<string[]>([]);
 
   useEffect(() => {
-    customFetch<{ countries: string[] }>("/api/course-finder/filters", { method: "GET" })
-      .then(data => { if (data?.countries) setCountries(data.countries); })
+    customFetch<{ data: CountryRow[] }>("/api/countries?limit=500", { method: "GET" })
+      .then(res => {
+        if (res?.data) setCountries(res.data.filter(c => c.isActive).map(c => c.name).sort());
+      })
       .catch(() => {});
   }, []);
 
+  const setField = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }));
+
+  const handleNameChange = (field: "firstName" | "lastName", raw: string) => {
+    setField(field, latinOnly(raw));
+  };
+
+  const handleMessageChange = (raw: string) => {
+    const cleaned = latinMsgOnly(raw);
+    if (cleaned.length <= MSG_MAX) setField("message", cleaned);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!LATIN_RE.test(form.firstName) || !LATIN_RE.test(form.lastName)) {
+      setError(t("contact.latinOnly")); return;
+    }
+    if (HTML_RE.test(form.message) || !LATIN_MSG_RE.test(form.message)) {
+      setError(t("contact.latinOnly")); return;
+    }
+    if (form.message.length > MSG_MAX) {
+      setError(t("contact.messageTooLong")); return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -102,22 +142,22 @@ export default function Contact() {
                     <label className="text-sm font-medium text-foreground mb-1.5 block">
                       {t("contact.firstName")} <span className="text-destructive">*</span>
                     </label>
-                    <Input value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))}
-                      required placeholder={t("contact.firstNamePlaceholder")} className="rounded-xl" />
+                    <Input value={form.firstName} onChange={e => handleNameChange("firstName", e.target.value)}
+                      required placeholder={t("contact.firstNamePlaceholder")} className="rounded-xl uppercase" />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-foreground mb-1.5 block">
                       {t("contact.lastName")} <span className="text-destructive">*</span>
                     </label>
-                    <Input value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))}
-                      required placeholder={t("contact.lastNamePlaceholder")} className="rounded-xl" />
+                    <Input value={form.lastName} onChange={e => handleNameChange("lastName", e.target.value)}
+                      required placeholder={t("contact.lastNamePlaceholder")} className="rounded-xl uppercase" />
                   </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1.5 block">
                     {t("contact.email")} <span className="text-destructive">*</span>
                   </label>
-                  <Input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))}
+                  <Input type="email" value={form.email} onChange={e => setField("email", e.target.value)}
                     required placeholder={t("contact.emailPlaceholder")} className="rounded-xl" />
                 </div>
                 <div className="grid sm:grid-cols-2 gap-5">
@@ -126,9 +166,9 @@ export default function Contact() {
                       {t("contact.phone")} <span className="text-destructive">*</span>
                     </label>
                     <div className="flex gap-2">
-                      <Input value={form.phoneCode} onChange={e => setForm(f => ({...f, phoneCode: e.target.value}))}
+                      <Input value={form.phoneCode} onChange={e => setField("phoneCode", e.target.value)}
                         placeholder="+90" className="rounded-xl w-20" />
-                      <Input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
+                      <Input value={form.phone} onChange={e => setField("phone", e.target.value.replace(/[^0-9]/g, ""))}
                         required placeholder={t("contact.phonePlaceholder")} className="rounded-xl flex-1" />
                     </div>
                   </div>
@@ -137,14 +177,14 @@ export default function Contact() {
                       {t("contact.nationality")} <span className="text-destructive">*</span>
                     </label>
                     {countries.length > 0 ? (
-                      <select value={form.nationality} onChange={e => setForm(f => ({...f, nationality: e.target.value}))}
+                      <select value={form.nationality} onChange={e => setField("nationality", e.target.value)}
                         required
                         className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
                         <option value="">{t("contact.nationalityPlaceholder")}</option>
                         {countries.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     ) : (
-                      <Input value={form.nationality} onChange={e => setForm(f => ({...f, nationality: e.target.value}))}
+                      <Input value={form.nationality} onChange={e => setField("nationality", e.target.value)}
                         required placeholder={t("contact.nationalityPlaceholder")} className="rounded-xl" />
                     )}
                   </div>
@@ -153,9 +193,12 @@ export default function Contact() {
                   <label className="text-sm font-medium text-foreground mb-1.5 block">
                     {t("contact.message")} <span className="text-destructive">*</span>
                   </label>
-                  <textarea value={form.message} onChange={e => setForm(f => ({...f, message: e.target.value}))}
-                    required rows={5} placeholder={t("contact.messagePlaceholder")}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
+                  <textarea value={form.message} onChange={e => handleMessageChange(e.target.value)}
+                    required rows={5} placeholder={t("contact.messagePlaceholder")} maxLength={MSG_MAX}
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all uppercase" />
+                  <p className="text-xs text-muted-foreground mt-1 text-right">
+                    {form.message.length}/{MSG_MAX}
+                  </p>
                 </div>
                 {error && (
                   <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl p-3">

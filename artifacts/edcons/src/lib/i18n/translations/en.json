@@ -98,7 +98,9 @@
     "hoursLabel": "Hours",
     "hoursValue": "Mon-Fri: 9am – 7pm | Sat: 10am – 4pm",
     "ourOffices": "Our Offices",
-    "required": "*"
+    "required": "*",
+    "latinOnly": "Only Latin characters are allowed",
+    "messageTooLong": "Message cannot exceed 400 characters"
   },
   "blog": {
     "badge": "The Blog",

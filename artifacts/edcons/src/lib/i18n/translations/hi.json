@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "राज",
     "lastNamePlaceholder": "शर्मा",
     "nationality": "राष्ट्रीयता",
-    "nationalityPlaceholder": "राष्ट्रीयता चुनें"
+    "nationalityPlaceholder": "राष्ट्रीयता चुनें",
+    "latinOnly": "केवल लैटिन अक्षर अनुमत हैं",
+    "messageTooLong": "संदेश 400 अक्षरों से अधिक नहीं हो सकता"
   },
   "blog": {
     "badge": "ब्लॉग",

@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "Иван",
     "lastNamePlaceholder": "Иванов",
     "nationality": "Гражданство",
-    "nationalityPlaceholder": "Выберите гражданство"
+    "nationalityPlaceholder": "Выберите гражданство",
+    "latinOnly": "Допускаются только латинские символы",
+    "messageTooLong": "Сообщение не может превышать 400 символов"
   },
   "blog": {
     "badge": "Блог",

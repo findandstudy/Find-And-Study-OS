@@ -98,7 +98,9 @@
     "firstNamePlaceholder": "明",
     "lastNamePlaceholder": "王",
     "nationality": "国籍",
-    "nationalityPlaceholder": "选择国籍"
+    "nationalityPlaceholder": "选择国籍",
+    "latinOnly": "只允许使用拉丁字符",
+    "messageTooLong": "消息不能超过400个字符"
   },
   "blog": {
     "badge": "博客",
