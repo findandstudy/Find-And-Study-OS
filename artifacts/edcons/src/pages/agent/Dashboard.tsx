@@ -5,7 +5,7 @@ import { useListApplications } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell, UserPlus, FileCheck, CreditCard, CalendarClock, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
+import { Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell, UserPlus, FileText, FileCheck, CreditCard, CalendarClock, MessageCircle, Megaphone, AlertCircle, Shield } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
