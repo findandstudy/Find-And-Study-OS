@@ -658,6 +658,8 @@ function AddStudentModal({
     if (!form.motherName.trim()) missing.push("Mother's Name");
     if (!form.fatherName.trim()) missing.push("Father's Name");
     if (!form.passportNumber.trim()) missing.push("Passport Number");
+    if (!form.passportIssueDate.trim()) missing.push("Issue Date");
+    if (!form.passportExpiry.trim()) missing.push("Expiry Date");
     if (missing.length > 0) {
       toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" });
       return;
@@ -917,8 +919,8 @@ function AddStudentModal({
                   <div className="col-span-2">
                     <FormField required label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" aiExtracted={ef.has("passportNumber")} />
                   </div>
-                  <FormField label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
-                  <FormField label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" aiExtracted={ef.has("passportExpiry")} />
+                  <FormField required label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" aiExtracted={ef.has("passportIssueDate")} />
+                  <FormField required label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" aiExtracted={ef.has("passportExpiry")} />
                 </div>
               </section>
 
@@ -1027,7 +1029,7 @@ function AddStudentModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim()}
+                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim()}
                 className="rounded-xl gap-2"
               >
                 {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
