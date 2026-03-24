@@ -1427,9 +1427,9 @@ const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
 
 function degreeToLevel(degree?: string | null): AppLevel {
   if (!degree) return "undergraduate";
-  const d = degree.toLowerCase();
-  if (d.includes("phd") || d.includes("doctor")) return "doctorate";
-  if (d.includes("master") || d.includes("graduate") || d.includes("msc") || d.includes("mba") || d.includes("ma ")) return "graduate";
+  const d = degree.toLowerCase().replace(/['''`\s.]/g, "");
+  if (d.includes("phd") || d.includes("doctor") || d.includes("doctorate")) return "doctorate";
+  if (d.includes("master") || d.includes("graduate") || d.includes("msc") || d.includes("mba")) return "graduate";
   if (d.includes("pathway") || d.includes("prep") || d.includes("language") || d.includes("foundation")) return "pathway";
   return "undergraduate";
 }
