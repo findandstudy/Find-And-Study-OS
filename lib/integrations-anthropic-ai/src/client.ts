@@ -43,7 +43,7 @@ export async function getClaudeConfig(): Promise<ClaudeConfig> {
   const now = Date.now();
   if (cachedConfig && now < cachedConfig.expiresAt) {
     if (cachedConfig.config) return cachedConfig.config;
-    throw new Error("AI integration is disabled. An admin can enable it in Settings → Integrations.");
+    throw new Error("AI integration not configured. Please add your Anthropic API key in Settings → Integrations.");
   }
 
   const dbResult = await fetchClaudeFromDB();
@@ -51,7 +51,7 @@ export async function getClaudeConfig(): Promise<ClaudeConfig> {
   if (dbResult.found) {
     cachedConfig = { config: dbResult.config, expiresAt: now + CACHE_TTL_MS };
     if (dbResult.config) return dbResult.config;
-    throw new Error("AI integration is disabled. An admin can enable it in Settings → Integrations.");
+    throw new Error("AI integration not configured. Please add your Anthropic API key in Settings → Integrations.");
   }
 
   if (process.env.ANTHROPIC_API_KEY) {
