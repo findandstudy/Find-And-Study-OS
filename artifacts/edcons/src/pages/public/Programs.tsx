@@ -1050,23 +1050,22 @@ export default function Programs() {
                           {effectiveFee ? (
                             <span className="flex items-center gap-1.5">
                               <DollarSign className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                              <span className="truncate text-xs font-medium">
-                                {formatFee(effectiveFee, prog.currency)}
+                              <span className="flex items-center gap-1 text-xs font-medium min-w-0">
+                                {hasDiscount && (
+                                  <span className="line-through text-muted-foreground/40 text-[10px]">{formatFee(prog.tuitionFee, prog.currency)}</span>
+                                )}
+                                <span className={hasDiscount ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}>
+                                  {formatFee(effectiveFee, prog.currency)}
+                                </span>
+                                {hasDiscount && (
+                                  <span className="text-[9px] font-bold text-white bg-emerald-500 rounded px-1 py-px leading-tight">
+                                    -{Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}%
+                                  </span>
+                                )}
                               </span>
                             </span>
                           ) : null}
                         </div>
-
-                        {hasDiscount && (
-                          <div className="mb-2">
-                            <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs gap-1">
-                              <DollarSign className="w-3 h-3" />
-                              <span className="line-through text-muted-foreground/50 mr-0.5">{formatFee(prog.tuitionFee, prog.currency)}</span>
-                              {formatFee(prog.discountedFee, prog.currency)}
-                              <span className="ml-0.5 font-bold">({Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}% OFF)</span>
-                            </Badge>
-                          </div>
-                        )}
 
                         {prog.scholarship && prog.scholarship > 0 ? (
                           <div className="mb-3">
