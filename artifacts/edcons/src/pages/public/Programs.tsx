@@ -116,6 +116,7 @@ const DEGREE_DOC_MAP: Record<string, DocType[]> = {
     { key: "equivalency_letter", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: false, subtitle: "Recognition" },
     { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, subtitle: "If required" },
     { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, subtitle: "If required" },
+    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: "image/*,.pdf", required: false, subtitle: "If available" },
   ],
   doctorate: [
     { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
@@ -127,6 +128,7 @@ const DEGREE_DOC_MAP: Record<string, DocType[]> = {
     { key: "equivalency_letter", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: false, subtitle: "Recognition" },
     { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, subtitle: "If required" },
     { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, subtitle: "If required" },
+    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: "image/*,.pdf", required: false, subtitle: "If available" },
   ],
   language: [
     { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
