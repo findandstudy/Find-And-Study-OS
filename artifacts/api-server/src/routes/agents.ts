@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, commissionsTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
-import { requireAuth, requireRole, requireAgentStaffPermission } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
@@ -371,15 +371,10 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
   res.json({ success: true, redirectTo: "/" });
 });
 
-const AGENT_STAFF_PERMISSIONS = [
-  { key: "leads", label: "Leads" },
-  { key: "students", label: "Students" },
-  { key: "applications", label: "Applications" },
-  { key: "documents", label: "Documents" },
-  { key: "course_finder", label: "Course Finder" },
-  { key: "messages", label: "Messages" },
-  { key: "commissions", label: "Commissions" },
-];
+const AGENT_STAFF_PERMISSIONS = PERM_KEYS.map(key => ({
+  key,
+  label: key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+}));
 
 async function resolveManagingAgent(userId: number, userRole: string) {
   if (userRole === "agent" || userRole === "sub_agent") {
