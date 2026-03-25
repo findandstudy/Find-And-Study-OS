@@ -5,11 +5,13 @@ export async function getAgentVisibleIds(userId: number, userRole: string): Prom
   if (userRole === "agent_staff") {
     const [staffUser] = await db.select({ managingAgentId: usersTable.managingAgentId }).from(usersTable).where(eq(usersTable.id, userId));
     if (!staffUser?.managingAgentId) return [];
-    const parentAgentId = staffUser.managingAgentId;
-    const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, parentAgentId));
-    if (!parentAgent) return [];
-    const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, parentAgent.id));
-    return [parentAgent.id, ...subAgents.map(s => s.id)];
+    const [managingAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, staffUser.managingAgentId));
+    if (!managingAgent) return [];
+    if (!managingAgent.parentAgentId) {
+      const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, managingAgent.id));
+      return [managingAgent.id, ...subAgents.map(s => s.id)];
+    }
+    return [managingAgent.id];
   }
 
   const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
