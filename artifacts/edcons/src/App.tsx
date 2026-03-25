@@ -284,7 +284,7 @@ function Router() {
           <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
         </Route>
         <Route path="/agent/team">
-          <ProtectedRoute allowedRoles={["agent", "sub_agent", "agent_staff"]}><AgentTeam /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={["agent", "sub_agent"]}><AgentTeam /></ProtectedRoute>
         </Route>
 
         {/* Language-prefixed public routes */}

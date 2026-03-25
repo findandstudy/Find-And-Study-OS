@@ -3,6 +3,7 @@ import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransac
 import { eq, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { getAgentRecord } from "../lib/agentVisibility";
 
 const router: IRouter = Router();
 
@@ -700,7 +701,7 @@ router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async 
 router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  const agent = await getAgentRecord(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   const agentId = agent.id;
   const isSubAgent = userRole === "sub_agent" || !!agent.parentAgentId;
@@ -751,7 +752,7 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), r
 router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  const agent = await getAgentRecord(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   const isSubAgent = userRole === "sub_agent" || !!agent.parentAgentId;
 
@@ -772,7 +773,8 @@ router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), requi
 
 router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  const userRole = req.user!.role;
+  const agent = await getAgentRecord(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   const { page = "1", limit = "50" } = req.query as Record<string, string>;
