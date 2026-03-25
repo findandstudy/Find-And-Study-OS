@@ -44,7 +44,7 @@ export function requireRole(...roles: string[]) {
 
 export const AGENT_STAFF_PERMISSIONS = [
   "leads", "students", "applications", "documents",
-  "course_finder", "messages", "commissions", "team",
+  "course_finder", "messages", "commissions",
 ] as const;
 
 export function requireAgentStaffPermission(...requiredPerms: string[]) {

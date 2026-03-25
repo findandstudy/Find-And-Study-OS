@@ -576,7 +576,16 @@ router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_age
   res.json({ success: true });
 });
 
-router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent"), async (_req, res): Promise<void> => {
+router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+  if (userRole === "sub_agent") {
+    const agent = await resolveManagingAgent(userId, userRole);
+    if (!agent || !agent.canManageStaff) {
+      res.status(403).json({ error: "Staff management is not enabled for your account" });
+      return;
+    }
+  }
   res.json(AGENT_STAFF_PERMISSIONS);
 });
 
