@@ -26,9 +26,21 @@ import * as XLSX from "xlsx";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+function getCsrfToken(): string {
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
 async function apiFetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, { ...opts, credentials: "include" });
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  const headers = new Headers(opts?.headers);
+  if (opts?.method && opts.method !== "GET" && opts.method !== "HEAD") {
+    headers.set("x-csrf-token", getCsrfToken());
+  }
+  const res = await fetch(url, { ...opts, credentials: "include", headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `API ${res.status}`);
+  }
   if (res.status === 204) return null;
   return res.json();
 }

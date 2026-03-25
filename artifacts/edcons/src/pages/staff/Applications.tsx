@@ -51,9 +51,21 @@ import { CSS } from "@dnd-kit/utilities";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
 
+function getCsrfToken(): string {
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
 async function apiFetch(url: string, opts?: RequestInit) {
-  const r = await fetch(url, { credentials: "include", ...opts });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const headers = new Headers(opts?.headers);
+  if (opts?.method && opts.method !== "GET" && opts.method !== "HEAD") {
+    headers.set("x-csrf-token", getCsrfToken());
+  }
+  const r = await fetch(url, { credentials: "include", ...opts, headers });
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error(text || `HTTP ${r.status}`);
+  }
   if (r.status === 204) return undefined;
   return r.json();
 }

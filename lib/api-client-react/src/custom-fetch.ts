@@ -285,6 +285,13 @@ export async function customFetch<T = unknown>(
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
 
+  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+    if (typeof document !== "undefined" && !headers.has("x-csrf-token")) {
+      const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+      if (m) headers.set("x-csrf-token", decodeURIComponent(m[1]));
+    }
+  }
+
   if (
     typeof init.body === "string" &&
     !headers.has("content-type") &&
