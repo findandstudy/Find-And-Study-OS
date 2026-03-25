@@ -303,6 +303,8 @@ async function seedClaudeIntegration() {
   await linkAgentUser();
   await seedClaudeIntegration();
   await backfillMissingCommissions();
+  const { startEmailWorker } = await import("./lib/email");
+  startEmailWorker();
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);

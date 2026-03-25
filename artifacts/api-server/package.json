@@ -22,6 +22,7 @@
     "express-rate-limit": "^8.3.1",
     "google-auth-library": "^10.6.2",
     "helmet": "^8.1.0",
+    "nodemailer": "^8.0.3",
     "openid-client": "^6.8.2",
     "zod": "catalog:"
   },
@@ -31,6 +32,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
+    "@types/nodemailer": "^7.0.11",
     "esbuild": "^0.27.3",
     "tsx": "catalog:"
   }

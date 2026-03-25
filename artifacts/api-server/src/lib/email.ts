@@ -1,5 +1,132 @@
 import crypto from "crypto";
-import { db, emailQueueTable } from "@workspace/db";
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
+import { db, emailQueueTable, integrationsTable, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+
+let cachedTransporter: Transporter | null = null;
+let transporterConfigHash = "";
+
+interface SmtpConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  fromEmail?: string;
+  fromName?: string;
+}
+
+async function getSmtpConfig(): Promise<SmtpConfig | null> {
+  const [integration] = await db.select()
+    .from(integrationsTable)
+    .where(eq(integrationsTable.key, "smtp"));
+
+  if (!integration || !integration.isEnabled) return null;
+
+  const config = integration.config as Record<string, any>;
+  if (!config.host || !config.username || !config.password) return null;
+
+  return {
+    host: config.host,
+    port: parseInt(config.port, 10) || 587,
+    username: config.username,
+    password: config.password,
+    fromEmail: config.fromEmail || config.username,
+    fromName: config.fromName,
+  };
+}
+
+async function getSenderDefaults(): Promise<{ senderName: string; senderEmail: string; replyTo?: string }> {
+  const [settings] = await db.select({
+    emailSenderName: settingsTable.emailSenderName,
+    emailSenderEmail: settingsTable.emailSenderEmail,
+    emailReplyTo: settingsTable.emailReplyTo,
+  }).from(settingsTable);
+
+  return {
+    senderName: settings?.emailSenderName || "Find & Study",
+    senderEmail: settings?.emailSenderEmail || "",
+    replyTo: settings?.emailReplyTo || undefined,
+  };
+}
+
+function buildConfigHash(host: string, port: number, user: string, pass: string): string {
+  return `${host}:${port}:${user}:${pass}`;
+}
+
+export async function createSmtpTransporter(config: SmtpConfig): Promise<Transporter> {
+  return nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
+    auth: {
+      user: config.username,
+      pass: config.password,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  });
+}
+
+async function getTransporter(): Promise<{ transporter: Transporter; fromEmail: string; fromName: string; replyTo?: string } | null> {
+  const smtpConfig = await getSmtpConfig();
+  if (!smtpConfig) return null;
+
+  const hash = buildConfigHash(smtpConfig.host, smtpConfig.port, smtpConfig.username, smtpConfig.password);
+  const defaults = await getSenderDefaults();
+
+  if (cachedTransporter && transporterConfigHash === hash) {
+    return {
+      transporter: cachedTransporter,
+      fromEmail: defaults.senderEmail || smtpConfig.fromEmail || smtpConfig.username,
+      fromName: defaults.senderName || smtpConfig.fromName || "Find & Study",
+      replyTo: defaults.replyTo,
+    };
+  }
+
+  cachedTransporter = await createSmtpTransporter(smtpConfig);
+  transporterConfigHash = hash;
+
+  return {
+    transporter: cachedTransporter,
+    fromEmail: defaults.senderEmail || smtpConfig.fromEmail || smtpConfig.username,
+    fromName: defaults.senderName || smtpConfig.fromName || "Find & Study",
+    replyTo: defaults.replyTo,
+  };
+}
+
+export function invalidateSmtpCache(): void {
+  cachedTransporter = null;
+  transporterConfigHash = "";
+}
+
+async function sendViaSmtp(to: string, subject: string, html: string, text: string): Promise<boolean> {
+  try {
+    const smtp = await getTransporter();
+    if (!smtp) {
+      console.log("[EMAIL] SMTP not configured or disabled, email queued only");
+      return false;
+    }
+
+    const from = `"${smtp.fromName}" <${smtp.fromEmail}>`;
+
+    await smtp.transporter.sendMail({
+      from,
+      to,
+      subject,
+      html,
+      text,
+      ...(smtp.replyTo ? { replyTo: smtp.replyTo } : {}),
+    });
+
+    console.log(`[EMAIL] Sent via SMTP to ${to}: ${subject}`);
+    return true;
+  } catch (err) {
+    console.error(`[EMAIL] SMTP send failed for ${to}:`, err);
+    return false;
+  }
+}
 
 export function generateSecureToken(): string {
   return crypto.randomBytes(32).toString("hex");
@@ -224,21 +351,82 @@ If you did not request this, you can safely ignore this email.`;
 }
 
 export async function sendEmail(to: string, email: { subject: string; html: string; text: string }): Promise<void> {
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`[EMAIL] To: ${to}`);
-  console.log(`[EMAIL] Subject: ${email.subject}`);
-  console.log(`[EMAIL] Text Preview:\n${email.text}`);
-  console.log(`${"=".repeat(60)}\n`);
+  console.log(`[EMAIL] Queuing email to ${to}: ${email.subject}`);
 
+  let queueId: number | undefined;
   try {
-    await db.insert(emailQueueTable).values({
+    const [row] = await db.insert(emailQueueTable).values({
       toEmail: to,
       subject: email.subject,
       htmlBody: email.html,
       textBody: email.text,
       status: "pending",
-    });
+    }).returning({ id: emailQueueTable.id });
+    queueId = row?.id;
   } catch (err) {
     console.error("[EMAIL] Failed to persist email to queue:", err);
+  }
+
+  const sent = await sendViaSmtp(to, email.subject, email.html, email.text);
+  if (sent && queueId) {
+    try {
+      await db.update(emailQueueTable)
+        .set({ status: "sent", sentAt: new Date() })
+        .where(eq(emailQueueTable.id, queueId));
+    } catch (err) {
+      console.error("[EMAIL] Failed to update queue status:", err);
+    }
+  }
+}
+
+export async function processEmailQueue(): Promise<number> {
+  let processed = 0;
+  try {
+    const pending = await db.select().from(emailQueueTable)
+      .where(eq(emailQueueTable.status, "pending"))
+      .limit(20);
+
+    if (pending.length === 0) return 0;
+
+    for (const email of pending) {
+      const sent = await sendViaSmtp(email.toEmail, email.subject, email.htmlBody, email.textBody);
+      if (sent) {
+        await db.update(emailQueueTable)
+          .set({ status: "sent", sentAt: new Date() })
+          .where(eq(emailQueueTable.id, email.id));
+        processed++;
+      } else {
+        await db.update(emailQueueTable)
+          .set({ status: "failed" })
+          .where(eq(emailQueueTable.id, email.id));
+      }
+    }
+  } catch (err) {
+    console.error("[EMAIL] Queue processing error:", err);
+  }
+  return processed;
+}
+
+let emailWorkerInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startEmailWorker(intervalMs = 30000): void {
+  if (emailWorkerInterval) return;
+  console.log(`[EMAIL] Worker started, processing queue every ${intervalMs / 1000}s`);
+
+  processEmailQueue().then(count => {
+    if (count > 0) console.log(`[EMAIL] Initial queue: sent ${count} emails`);
+  });
+
+  emailWorkerInterval = setInterval(async () => {
+    const count = await processEmailQueue();
+    if (count > 0) console.log(`[EMAIL] Queue processed: sent ${count} emails`);
+  }, intervalMs);
+}
+
+export function stopEmailWorker(): void {
+  if (emailWorkerInterval) {
+    clearInterval(emailWorkerInterval);
+    emailWorkerInterval = null;
+    console.log("[EMAIL] Worker stopped");
   }
 }

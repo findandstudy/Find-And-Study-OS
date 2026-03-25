@@ -5,6 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import Anthropic from "@anthropic-ai/sdk";
 import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
+import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -74,6 +75,7 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
   }
 
   if (key === "claude") clearConfigCache();
+  if (key === "smtp") invalidateSmtpCache();
   await logAudit(req.user!.id, "update_integration", "integration", result.id, { key, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(result.config as Record<string, any>) });
 });
@@ -96,6 +98,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
     .returning();
 
   if (req.params.key === "claude") clearConfigCache();
+  if (req.params.key === "smtp") invalidateSmtpCache();
   await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: req.params.key, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(result.config as Record<string, any>) });
 });
@@ -134,6 +137,26 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
           : `Connection failed: ${err?.message || "Unknown error"}`;
       const success = err?.status === 429;
       res.json({ success, message: msg });
+    }
+    return;
+  }
+
+  if (req.params.key === "smtp") {
+    if (!config.host || !config.username || !config.password) {
+      res.json({ success: false, message: "SMTP host, username, and password are required" });
+      return;
+    }
+    try {
+      const transporter = await createSmtpTransporter({
+        host: config.host,
+        port: parseInt(config.port, 10) || 587,
+        username: config.username,
+        password: config.password,
+      });
+      await transporter.verify();
+      res.json({ success: true, message: "SMTP connection verified successfully" });
+    } catch (err: any) {
+      res.json({ success: false, message: `SMTP connection failed: ${err?.message || "Unknown error"}` });
     }
     return;
   }
