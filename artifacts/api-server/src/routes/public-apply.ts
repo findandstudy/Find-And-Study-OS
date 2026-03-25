@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
@@ -167,7 +167,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, leadId } = req.body;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality) {
     res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, and nationality are required" });
@@ -245,6 +245,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         nationality: nationality || null,
         motherName: s(motherName, 100),
         fatherName: s(fatherName, 100),
+        passportNumber: s(passportNumber, 50),
       }).returning();
 
       await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
@@ -265,6 +266,15 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
       console.log(`[PUBLIC-APPLY] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id})`);
     }
+
+    if (leadId) {
+      try {
+        await db.update(leadsTable).set({ status: "converted" }).where(eq(leadsTable.id, parseInt(String(leadId), 10)));
+      } catch (e) {
+        console.error("[PUBLIC-APPLY] Failed to update lead status:", e);
+      }
+    }
+
     res.status(201).json({ success: true });
   } catch (err) {
     console.error("[PUBLIC-APPLY] Error during student/application creation:", err);

@@ -43,7 +43,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     res.status(400).json({ error: "Invalid email address" });
     return;
   }
-  await db.insert(leadsTable).values({
+  const [lead] = await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
     email: String(email).slice(0, 255),
@@ -54,8 +54,8 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
     source: "website",
     status: "new",
-  });
-  res.status(201).json({ success: true, message: "Inquiry submitted successfully" });
+  }).returning();
+  res.status(201).json({ success: true, message: "Inquiry submitted successfully", leadId: lead.id });
 });
 
 router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<void> => {

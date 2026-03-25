@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import {
-  Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign,
+  Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
 } from "lucide-react";
@@ -264,22 +264,46 @@ function AiBadge() {
   return <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-medium">AI</span>;
 }
 
-type ApplyStep = "upload" | "analyzing" | "form" | "success";
+type ApplyStep = "personal" | "documents" | "analyzing" | "review" | "success";
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
   nationality: "", dateOfBirth: "", notes: "",
-  motherName: "", fatherName: "",
+  motherName: "", fatherName: "", passportNumber: "",
 };
+
+function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
+  return (
+    <div className="flex items-center justify-center gap-2 mb-2">
+      {steps.map((label, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className={`flex items-center gap-1.5 ${i <= current ? "text-primary" : "text-muted-foreground/50"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
+              ${i < current ? "bg-primary text-white border-primary" : i === current ? "border-primary text-primary bg-primary/10" : "border-muted-foreground/30 text-muted-foreground/50"}`}>
+              {i < current ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+            </div>
+            <span className="text-xs font-medium hidden sm:inline">{label}</span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className={`w-8 h-0.5 rounded-full transition-all ${i < current ? "bg-primary" : "bg-muted-foreground/20"}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
   const { toast } = useToast();
-  const [step, setStep] = useState<ApplyStep>("upload");
+  const [step, setStep] = useState<ApplyStep>("personal");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [extracted, setExtracted] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [leadId, setLeadId] = useState<number | null>(null);
+  const [creatingLead, setCreatingLead] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const docTypes = getDocTypesForDegree(program?.degree);
   const requiredDocs = docTypes.filter(d => d.required);
@@ -287,14 +311,56 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const totalCount = docTypes.length;
   const missingRequired = requiredDocs.filter(d => !docs[d.key]);
 
+  const stepIndex = step === "personal" ? 0 : step === "documents" || step === "analyzing" ? 1 : step === "review" ? 2 : 2;
+
   function reset() {
-    setStep("upload");
+    setStep("personal");
     setDocs({});
     setForm({ ...EMPTY_FORM });
     setExtracted(new Set());
     setSubmitting(false);
     setAiError(null);
+    setLeadId(null);
+    setCreatingLead(false);
+    setEmailError(null);
     onClose();
+  }
+
+  async function handleNextPersonal() {
+    if (!form.firstName || !form.lastName || !form.email || !form.phone) {
+      toast({ title: "Please fill in all fields", variant: "destructive" });
+      return;
+    }
+
+    setCreatingLead(true);
+    try {
+      const resp = await fetch(`${BASE_URL}/api/public/lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          email: form.email,
+          phone: `${form.phoneCode}${form.phone}`,
+          interestedProgram: program?.name || null,
+          interestedCountry: program?.universityCountry || null,
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Failed to save information" }));
+        toast({ title: err.error || "Failed to save information", variant: "destructive" });
+        return;
+      }
+
+      const data = await resp.json();
+      if (data.leadId) setLeadId(data.leadId);
+      setStep("documents");
+    } catch {
+      toast({ title: "Failed to save information. Please try again.", variant: "destructive" });
+    } finally {
+      setCreatingLead(false);
+    }
   }
 
   async function analyzeDocuments() {
@@ -330,7 +396,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
       if (data.passportExpired === true) {
         setAiError(`Passport has expired (${data.passportExpiry}). Please upload a valid, non-expired passport to continue.`);
-        setStep("form");
+        mergeAiData(data);
+        setStep("review");
         return;
       }
 
@@ -338,36 +405,73 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         setAiError(serverWarnings.join(" "));
       }
 
-      const newForm = { ...EMPTY_FORM };
-      const newExtracted = new Set<string>();
-
-      const mapping: [keyof typeof EMPTY_FORM, string][] = [
-        ["firstName", "firstName"], ["lastName", "lastName"],
-        ["email", "email"], ["phone", "phone"],
-        ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
-        ["motherName", "motherName"], ["fatherName", "fatherName"],
-      ];
-
-      for (const [fk, ek] of mapping) {
-        const val = data[ek];
-        if (val != null && val !== "") {
-          (newForm as any)[fk] = String(val);
-          newExtracted.add(fk);
-        }
-      }
-
-      setForm(newForm);
-      setExtracted(newExtracted);
-      setStep("form");
+      mergeAiData(data);
+      setStep("review");
     } catch (err: any) {
       setAiError(err.message || "AI extraction failed");
-      setStep("form");
+      setStep("review");
     }
   }
 
+  function mergeAiData(data: Record<string, any>) {
+    const newForm = { ...form };
+    const newExtracted = new Set<string>();
+
+    const mapping: [keyof typeof EMPTY_FORM, string][] = [
+      ["motherName", "motherName"], ["fatherName", "fatherName"],
+      ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
+      ["passportNumber", "passportNumber"],
+    ];
+
+    for (const [fk, ek] of mapping) {
+      const val = data[ek];
+      if (val != null && val !== "") {
+        (newForm as any)[fk] = String(val);
+        newExtracted.add(fk);
+      }
+    }
+
+    if (data.firstName && data.firstName !== "") {
+      newForm.firstName = String(data.firstName);
+      newExtracted.add("firstName");
+    }
+    if (data.lastName && data.lastName !== "") {
+      newForm.lastName = String(data.lastName);
+      newExtracted.add("lastName");
+    }
+
+    if (data.email && data.email !== "") {
+      newForm.email = String(data.email);
+      newExtracted.add("email");
+    }
+    if (data.phone && data.phone !== "") {
+      newForm.phone = String(data.phone);
+      newExtracted.add("phone");
+    }
+
+    setForm(newForm);
+    setExtracted(newExtracted);
+  }
+
+  function handleSkipToReview() {
+    if (missingRequired.length > 0) {
+      toast({ title: `Please upload all required documents: ${missingRequired.map(d => d.label).join(", ")}`, variant: "destructive" });
+      return;
+    }
+    setStep("review");
+  }
+
   async function handleSubmit() {
+    setEmailError(null);
+
     if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName || !form.nationality) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email)) {
+      setEmailError("Please enter a valid email address");
       return;
     }
 
@@ -384,6 +488,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           universityName: program?.universityName,
           programDegree: program?.degree || null,
           uploadedDocuments: uploadedDocKeys,
+          leadId,
         }),
       });
 
@@ -414,7 +519,73 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           <p className="text-sm text-muted-foreground">{program.universityName}</p>
         </DialogHeader>
 
-        {step === "upload" && (
+        {step !== "success" && step !== "analyzing" && (
+          <StepIndicator current={stepIndex} steps={["Personal Info", "Documents", "Review & Submit"]} />
+        )}
+
+        {step === "personal" && (
+          <div className="space-y-5">
+            <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-primary" />
+                <h3 className="font-semibold text-sm">Personal Information</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Please provide your contact details. You will be able to review and update them before submitting.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">
+                  First Name <span className="text-destructive ml-0.5">*</span>
+                </Label>
+                <Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
+                  placeholder="First name" className="rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">
+                  Last Name <span className="text-destructive ml-0.5">*</span>
+                </Label>
+                <Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
+                  placeholder="Last name" className="rounded-xl" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold">
+                Email <span className="text-destructive ml-0.5">*</span>
+              </Label>
+              <Input type="email" value={form.email} onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@example.com" className="rounded-xl" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold">
+                Phone <span className="text-destructive ml-0.5">*</span>
+              </Label>
+              <div className="flex gap-1.5">
+                <Input value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
+                  placeholder="+90" className="rounded-xl w-20" />
+                <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="Phone number" className="rounded-xl flex-1" />
+              </div>
+            </div>
+
+            <div className="bg-secondary/50 rounded-xl p-3 text-sm">
+              <p className="font-medium text-foreground mb-1">Applying for:</p>
+              <p className="text-muted-foreground">{program.name} — {program.universityName}</p>
+            </div>
+
+            <Button onClick={handleNextPersonal} className="w-full rounded-xl gap-2" disabled={creatingLead}>
+              {creatingLead && <Loader2 className="w-4 h-4 animate-spin" />}
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
+        {step === "documents" && (
           <div className="space-y-5">
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
               <div className="flex items-center gap-2 mb-2">
@@ -454,13 +625,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0}>
                 <Sparkles className="w-4 h-4" /> Analyze with AI & Continue
               </Button>
-              <Button variant="ghost" onClick={() => {
-                if (missingRequired.length > 0) {
-                  toast({ title: `Please upload all required documents: ${missingRequired.map(d => d.label).join(", ")}`, variant: "destructive" });
-                  return;
-                }
-                setStep("form");
-              }} className="rounded-xl">
+              <Button variant="ghost" onClick={handleSkipToReview} className="rounded-xl">
                 Skip, fill manually
               </Button>
             </div>
@@ -510,7 +675,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           </div>
         )}
 
-        {step === "form" && (
+        {step === "review" && (
           <div className="space-y-4">
             {aiError && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-700 dark:text-amber-300">
@@ -567,8 +732,9 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 Email <span className="text-destructive ml-0.5">*</span>
                 {extracted.has("email") && <AiBadge />}
               </Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="email@example.com" className={`rounded-xl ${extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              <Input type="email" value={form.email} onChange={(e) => { setForm(f => ({ ...f, email: e.target.value })); setEmailError(null); }}
+                placeholder="email@example.com" className={`rounded-xl ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              {emailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -598,6 +764,15 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             </div>
 
             <div className="space-y-1.5">
+              <Label className="text-sm font-semibold flex items-center">
+                Passport Number
+                {extracted.has("passportNumber") && <AiBadge />}
+              </Label>
+              <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
+                placeholder="Passport number" className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-sm font-semibold">Additional Notes</Label>
               <Textarea value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder="Any additional information..." className="rounded-xl resize-none" rows={3} />
@@ -609,7 +784,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             </div>
 
             <div className="flex gap-3">
-              <Button onClick={() => setStep("upload")} variant="outline" className="rounded-xl">
+              <Button onClick={() => setStep("documents")} variant="outline" className="rounded-xl">
                 Back
               </Button>
               <Button onClick={handleSubmit} className="flex-1 rounded-xl gap-2" disabled={submitting}>
