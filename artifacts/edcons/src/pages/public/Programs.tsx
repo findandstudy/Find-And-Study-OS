@@ -1041,7 +1041,7 @@ export default function Programs() {
 
   return (
     <PublicLayout>
-      <section className="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 relative overflow-hidden">
+      <section className="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/[0.07] via-transparent to-transparent" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
@@ -1095,11 +1095,10 @@ export default function Programs() {
                 {showFilters && (
                   <motion.div
                     key="filter-panel"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{ opacity: 0, height: 0, overflow: "hidden" }}
+                    animate={{ opacity: 1, height: "auto", overflow: "visible" }}
+                    exit={{ opacity: 0, height: 0, overflow: "hidden" }}
                     transition={{ duration: 0.25, ease: "easeInOut" }}
-                    className="overflow-hidden"
                   >
                     <div id="programs-filter-panel" className="pt-5 space-y-4">
                       <div className="h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
@@ -1231,7 +1230,7 @@ export default function Programs() {
         </div>
       </section>
 
-      <section className="pt-20 pb-16">
+      <section className="pt-2 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
             className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
