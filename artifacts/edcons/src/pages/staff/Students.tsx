@@ -23,7 +23,7 @@ import {
   Users, Download, Eye, Loader2, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   ChevronRight, Filter, UserCheck, UserX, UserMinus, UserPlus,
-  Trophy, XCircle,
+  Trophy, XCircle, MessageSquare, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -1396,7 +1396,7 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
   );
 }
 
-function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssignToMe, isAdmin }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssignToMe?: (id: number) => void; isAdmin?: boolean }) {
+function DraggableStudentCard({ student, onView, onMessage, onEmail, variant, assignedUserName, onAssignToMe, isAdmin }: { student: any; onView: (id: number) => void; onMessage?: (s: any) => void; onEmail?: (s: any) => void; variant?: StuColVariant; assignedUserName?: string; onAssignToMe?: (id: number) => void; isAdmin?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
@@ -1429,18 +1429,45 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
             <button onClick={(e) => { e.stopPropagation(); onAssignToMe(student.id); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"><UserPlus className="w-3 h-3" />Assign to Me</button>
           ) : null}
         </div>
-        <button
-          onClick={() => onView(student.id)}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-        >
-          <Eye className="w-3 h-3" /> View
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onMessage && (
+            <button onClick={(e) => { e.stopPropagation(); onMessage(student); }} title="Message"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
+              <MessageSquare className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onEmail && student.email && (
+            <button onClick={(e) => { e.stopPropagation(); onEmail(student); }} title="Email"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
+              <Mail className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {student.phone && (
+            <a href={`https://wa.me/${student.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()} title="WhatsApp"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            </a>
+          )}
+          {!student.assignedToId && !isAdmin && onAssignToMe && (
+            <button onClick={(e) => { e.stopPropagation(); onAssignToMe(student.id); }} title="Assign"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
+              <UserPlus className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => onView(student.id)}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+          >
+            <Eye className="w-3 h-3" /> View
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssignToMe, isAdmin }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssignToMe?: (id: number) => void; isAdmin?: boolean }) {
+function DroppableStuColumn({ status, label, variant, students, onView, onMessage, onEmail, staffUsersMap, onAssignToMe, isAdmin }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; onMessage?: (s: any) => void; onEmail?: (s: any) => void; staffUsersMap?: Record<number, string>; onAssignToMe?: (id: number) => void; isAdmin?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -1477,7 +1504,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={students.map(s => s.id)} strategy={verticalListSortingStrategy}>
           {students.map((s: any) => (
-            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssignToMe={onAssignToMe} isAdmin={isAdmin} />
+            <DraggableStudentCard key={s.id} student={s} onView={onView} onMessage={onMessage} onEmail={onEmail} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssignToMe={onAssignToMe} isAdmin={isAdmin} />
           ))}
           {students.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
@@ -2023,7 +2050,7 @@ export default function StudentsPage() {
               >
                 {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
-                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssignToMe={!isAdmin ? handleAssignToMe : undefined} isAdmin={isAdmin} />;
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} onMessage={() => setLocation(`/staff/messages`)} onEmail={(s) => { window.open(`mailto:${s.email}`, "_blank"); }} staffUsersMap={staffUsersMap} onAssignToMe={!isAdmin ? handleAssignToMe : undefined} isAdmin={isAdmin} />;
                 })}
 
                 <DragOverlay>
