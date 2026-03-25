@@ -8,11 +8,13 @@ interface MultiSelectFilterProps {
   placeholder: string;
   className?: string;
   searchable?: boolean;
+  dropDirection?: "up" | "down" | "auto";
 }
 
-export function MultiSelectFilter({ values, onChange, options, placeholder, className = "", searchable = true }: MultiSelectFilterProps) {
+export function MultiSelectFilter({ values, onChange, options, placeholder, className = "", searchable = true, dropDirection = "auto" }: MultiSelectFilterProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [openUp, setOpenUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,6 +24,19 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (!open || dropDirection !== "auto") {
+      if (dropDirection === "up") setOpenUp(true);
+      else if (dropDirection === "down") setOpenUp(false);
+      return;
+    }
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 300);
+    }
+  }, [open, dropDirection]);
 
   const filtered = search
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
@@ -66,7 +81,9 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[180px] bg-popover border border-border rounded-lg shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95">
+        <div className={`absolute z-50 w-full min-w-[180px] bg-popover border border-border rounded-lg shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 ${
+          openUp ? "bottom-full mb-1" : "top-full mt-1"
+        }`}>
           {searchable && options.length > 6 && (
             <div className="p-2 border-b border-border">
               <input
