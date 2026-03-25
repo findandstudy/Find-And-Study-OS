@@ -23,6 +23,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Phone
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
+import { QuickContactButtons } from "@/components/QuickContact";
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
@@ -397,6 +398,15 @@ function UsersTab() {
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Mail className="w-4 h-4 shrink-0" />
                         {user.email || "—"}
+                      </div>
+                      <div className="mt-1">
+                        <QuickContactButtons
+                          name={`${user.firstName || ''} ${user.lastName || ''}`.trim()}
+                          email={user.email}
+                          phone={user.phone}
+                          entityType="agent"
+                          entityId={user.id}
+                        />
                       </div>
                     </td>
                     <td className="px-6 py-4">
