@@ -6,6 +6,7 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -230,6 +231,16 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   }).returning();
 
   await logAudit(req.user!.id, "create_student", "student", student.id, { firstName, lastName }, req.ip);
+
+  dispatchNotification({
+    event: "student.created",
+    title: "New Student Registered",
+    body: `${student.firstName} ${student.lastName} has been registered as a new student.`,
+    actionUrl: `/staff/students/${student.id}`,
+    icon: "GraduationCap",
+    templateVars: { firstName: student.firstName, lastName: student.lastName, email: student.email || "", nationality: student.nationality || "" },
+  }).catch(() => {});
+
   res.status(201).json(student);
 });
 
@@ -384,6 +395,22 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "update_student", "student", id, updates, req.ip);
+
+  if (updates.status && updates.status !== existing.status) {
+    const recipientIds: number[] = [];
+    if (student.assignedToId) recipientIds.push(student.assignedToId);
+    if (student.userId) recipientIds.push(student.userId);
+    dispatchNotification({
+      event: "student.status_changed",
+      title: "Student Status Changed",
+      body: `Student ${student.firstName} ${student.lastName} status changed from "${existing.status}" to "${updates.status}".`,
+      actionUrl: `/staff/students/${student.id}`,
+      icon: "UserCheck",
+      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+      templateVars: { firstName: student.firstName, lastName: student.lastName },
+    }).catch(() => {});
+  }
+
   res.json(student);
 });
 

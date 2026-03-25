@@ -3,10 +3,14 @@ import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Bell, Mail, MessageCircle, Send, Smartphone, Check, X,
-  Loader2, ChevronDown, ChevronRight, Settings2
+  Loader2, ChevronDown, ChevronRight, Settings2, Pencil, Eye, Save,
+  FileText, AlertCircle
 } from "lucide-react";
 
 interface NotificationRule {
@@ -19,6 +23,7 @@ interface NotificationRule {
   recipientType: string;
   recipientRoles: string[];
   isActive: boolean;
+  template?: { subject?: string; body?: string };
 }
 
 const CHANNEL_META: Record<string, { label: string; icon: any; color: string }> = {
@@ -34,9 +39,39 @@ const CATEGORY_LABELS: Record<string, string> = {
   finance: "Finance", agents: "Agents", system: "System", messages: "Messages",
 };
 
+const CATEGORY_ICONS: Record<string, string> = {
+  leads: "UserPlus", applications: "FileText", students: "GraduationCap",
+  finance: "DollarSign", agents: "Building", system: "Settings", messages: "MessageSquare",
+};
+
 const RECIPIENT_LABELS: Record<string, string> = {
   role: "By Role", assigned: "Assigned Staff", owner: "Record Owner",
   specific: "Specific User", all: "All Users",
+};
+
+const TEMPLATE_VARS: Record<string, string[]> = {
+  "lead.created": ["firstName", "lastName", "email", "phone"],
+  "lead.assigned": ["firstName", "lastName"],
+  "lead.stage_changed": ["firstName", "lastName", "oldStage", "newStage"],
+  "lead.follow_up_due": ["firstName", "lastName"],
+  "application.created": ["studentName", "universityName", "programName"],
+  "application.stage_changed": ["studentName", "universityName", "programName", "newStage"],
+  "application.offer_received": ["studentName", "universityName", "programName"],
+  "application.visa_update": ["studentName", "universityName"],
+  "student.created": ["firstName", "lastName", "email", "nationality"],
+  "student.document_uploaded": ["documentName", "documentType"],
+  "student.status_changed": ["firstName", "lastName"],
+  "finance.commission_confirmed": ["studentName", "universityName", "programName"],
+  "finance.payment_received": ["studentName", "amount"],
+  "finance.payment_due": ["studentName", "amount", "dueDate"],
+  "finance.agent_payout": ["agentName", "amount"],
+  "agent.new_registration": ["firstName", "lastName", "companyName", "email"],
+  "agent.sub_agent_added": ["firstName", "lastName", "email"],
+  "system.user_activated": ["firstName", "lastName"],
+  "system.broadcast": ["message"],
+  "system.announcement": ["title", "message"],
+  "message.new": ["senderName"],
+  "message.mention": ["senderName", "channel"],
 };
 
 interface Props {
@@ -50,6 +85,11 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<number | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [editingTemplate, setEditingTemplate] = useState<NotificationRule | null>(null);
+  const [templateSubject, setTemplateSubject] = useState("");
+  const [templateBody, setTemplateBody] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -79,7 +119,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
 
     setSaving(rule.id);
     try {
-      const updated = await customFetch(`/api/notification-rules/${rule.id}`, {
+      await customFetch(`/api/notification-rules/${rule.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ channels: newChannels }),
@@ -114,6 +154,58 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
       if (next.has(cat)) next.delete(cat); else next.add(cat);
       return next;
     });
+  }
+
+  function openTemplateEditor(rule: NotificationRule) {
+    setEditingTemplate(rule);
+    setTemplateSubject(rule.template?.subject || "");
+    setTemplateBody(rule.template?.body || "");
+    setShowPreview(false);
+  }
+
+  async function saveTemplate() {
+    if (!editingTemplate) return;
+    setSavingTemplate(true);
+    try {
+      await customFetch(`/api/notification-rules/${editingTemplate.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template: { subject: templateSubject, body: templateBody },
+        }),
+      });
+      setRules(prev => prev.map(r =>
+        r.id === editingTemplate.id
+          ? { ...r, template: { subject: templateSubject, body: templateBody } }
+          : r
+      ));
+      toast({ title: "Template saved successfully" });
+      setEditingTemplate(null);
+    } catch {
+      toast({ title: "Failed to save template", variant: "destructive" });
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  function renderPreview(subject: string, body: string) {
+    const vars = TEMPLATE_VARS[editingTemplate?.event || ""] || [];
+    let previewSubject = subject;
+    let previewBody = body;
+    const sampleValues: Record<string, string> = {
+      firstName: "John", lastName: "Doe", email: "john@example.com", phone: "+1234567890",
+      studentName: "John Doe", universityName: "Harvard University", programName: "Computer Science",
+      oldStage: "New", newStage: "Contacted", documentName: "Passport", documentType: "Identity",
+      amount: "$5,000", dueDate: "2026-04-15", agentName: "ABC Agency", companyName: "ABC Ltd",
+      nationality: "Turkish", senderName: "Admin", channel: "General", message: "Important update",
+      title: "System Update",
+    };
+    for (const v of vars) {
+      const re = new RegExp(`\\{\\{${v}\\}\\}`, "g");
+      previewSubject = previewSubject.replace(re, sampleValues[v] || v);
+      previewBody = previewBody.replace(re, sampleValues[v] || v);
+    }
+    return { previewSubject, previewBody };
   }
 
   const grouped = rules.reduce<Record<string, NotificationRule[]>>((acc, r) => {
@@ -158,7 +250,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                 System Notification Rules
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Configure which channels are used for each system event and who receives them.
+                Configure channels, toggle rules, and customize email templates for each event.
               </p>
             </div>
             <Badge className="bg-primary/10 text-primary border-primary/20">
@@ -204,6 +296,12 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                 <Badge variant="outline" className="text-[10px] font-mono px-1.5">
                                   {rule.event}
                                 </Badge>
+                                {rule.template?.subject && (
+                                  <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[10px] px-1.5">
+                                    <FileText className="w-2.5 h-2.5 mr-0.5" />
+                                    Template
+                                  </Badge>
+                                )}
                               </div>
                               <p className="text-xs text-muted-foreground mb-3">
                                 Recipients: {RECIPIENT_LABELS[rule.recipientType] || rule.recipientType}
@@ -213,7 +311,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                   </span>
                                 )}
                               </p>
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="flex flex-wrap gap-1.5 items-center">
                                 {Object.entries(CHANNEL_META).map(([ch, meta]) => {
                                   const Icon = meta.icon;
                                   const active = rule.channels.includes(ch);
@@ -234,6 +332,14 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                     </button>
                                   );
                                 })}
+                                <button
+                                  onClick={() => openTemplateEditor(rule)}
+                                  disabled={!rule.isActive}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border border-orange-200 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 transition-all ml-1"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  Email Template
+                                </button>
                               </div>
                             </div>
                             <button
@@ -261,6 +367,129 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
             </div>
           )}
         </Card>
+      )}
+
+      {editingTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-lg">Edit Email Template</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {editingTemplate.name} — <span className="font-mono text-xs">{editingTemplate.event}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEditingTemplate(null)}
+                  className="p-2 rounded-lg hover:bg-secondary transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Available Variables</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(TEMPLATE_VARS[editingTemplate.event] || []).map(v => (
+                        <code
+                          key={v}
+                          onClick={() => {
+                            const tag = `{{${v}}}`;
+                            setTemplateBody(prev => prev + tag);
+                          }}
+                          className="text-[11px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                        >
+                          {`{{${v}}}`}
+                        </code>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-blue-500 mt-1">Click a variable to insert it into the body.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Email Subject</Label>
+                <Input
+                  value={templateSubject}
+                  onChange={e => setTemplateSubject(e.target.value)}
+                  placeholder={`e.g. ${editingTemplate.name} — {{firstName}} {{lastName}}`}
+                  className="bg-secondary/30"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Email Body</Label>
+                <Textarea
+                  value={templateBody}
+                  onChange={e => setTemplateBody(e.target.value)}
+                  placeholder="Write the email body content. Use {{variable}} for dynamic values."
+                  rows={6}
+                  className="bg-secondary/30 font-mono text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="gap-1.5"
+                >
+                  <Eye className="w-4 h-4" />
+                  {showPreview ? "Hide Preview" : "Show Preview"}
+                </Button>
+              </div>
+
+              {showPreview && (templateSubject || templateBody) && (() => {
+                const { previewSubject, previewBody } = renderPreview(templateSubject, templateBody);
+                return (
+                  <div className="border border-border/50 rounded-xl overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center">
+                      <h3 className="text-white font-bold text-xl">Find & Study</h3>
+                      <p className="text-white/70 text-sm mt-1">Notification</p>
+                    </div>
+                    <div className="p-6 bg-white dark:bg-background">
+                      <h4 className="font-bold text-lg mb-3 text-foreground">{previewSubject || "(No subject)"}</h4>
+                      <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap mb-4">
+                        {previewBody || "(No body)"}
+                      </p>
+                      <div className="text-center">
+                        <span className="inline-block bg-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">
+                          View Details
+                        </span>
+                      </div>
+                      <hr className="my-4 border-border/30" />
+                      <p className="text-[11px] text-muted-foreground text-center">
+                        This is an automated notification from Find & Study.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="p-6 border-t border-border/50 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setEditingTemplate(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={saveTemplate}
+                disabled={savingTemplate}
+                className="gap-1.5"
+              >
+                {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Template
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

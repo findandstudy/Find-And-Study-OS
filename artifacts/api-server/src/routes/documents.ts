@@ -3,6 +3,7 @@ import { db, documentsTable, studentsTable } from "@workspace/db";
 import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,22 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     notes: notes || null,
   }).returning();
   await logAudit(user.id, "create_document", "document", doc.id, { name, type }, req.ip);
+
+  if (doc.studentId) {
+    const [studentRec] = await db.select({ assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+    const recipientIds: number[] = [];
+    if (studentRec?.assignedToId) recipientIds.push(studentRec.assignedToId);
+    dispatchNotification({
+      event: "student.document_uploaded",
+      title: "Document Uploaded",
+      body: `A new document "${doc.name}" (${doc.type}) has been uploaded.`,
+      actionUrl: `/staff/students`,
+      icon: "Upload",
+      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+      templateVars: { documentName: doc.name, documentType: doc.type },
+    }).catch(() => {});
+  }
+
   res.status(201).json(doc);
 });
 

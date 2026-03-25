@@ -6,6 +6,7 @@ import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -276,6 +277,16 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   }
 
   await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
+
+  dispatchNotification({
+    event: "application.created",
+    title: "New Application Created",
+    body: `A new application has been created for ${studentFullName || "a student"} — ${snapshotUniversityName || "University"} / ${snapshotProgramName || "Program"}.`,
+    actionUrl: `/staff/applications/${app.id}`,
+    icon: "FileText",
+    templateVars: { studentName: studentFullName || "", universityName: snapshotUniversityName || "", programName: snapshotProgramName || "" },
+  }).catch(() => {});
+
   res.status(201).json(app);
 });
 
@@ -452,6 +463,25 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   await logAudit(req.user!.id, "update_application", "application", id, updates, req.ip);
+
+  if (updates.stage !== undefined) {
+    const stageStr = String(updates.stage);
+    const [studentRec3] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, userId: studentsTable.userId }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+    const sName3 = studentRec3 ? `${studentRec3.firstName || ""} ${studentRec3.lastName || ""}`.trim() : "";
+    const recipientIds: number[] = [];
+    if (studentRec3?.userId) recipientIds.push(studentRec3.userId);
+
+    dispatchNotification({
+      event: "application.stage_changed",
+      title: "Application Status Changed",
+      body: `Application for ${sName3 || "student"} — ${app.universityName || "University"} has moved to "${stageStr}".`,
+      actionUrl: `/staff/applications/${app.id}`,
+      icon: "ArrowRight",
+      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+      templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageStr },
+    }).catch(() => {});
+  }
+
   res.json(app);
 });
 

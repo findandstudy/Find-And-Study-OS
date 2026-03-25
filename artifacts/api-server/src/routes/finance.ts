@@ -4,6 +4,7 @@ import { eq, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentRecord } from "../lib/agentVisibility";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -138,6 +139,16 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
   }).returning();
 
   await logAudit(req.user!.id, "create_commission", "commission", commission.id, { studentName, universityName }, req.ip);
+
+  dispatchNotification({
+    event: "finance.commission_confirmed",
+    title: "Commission Created",
+    body: `A new commission has been created for ${studentName || "student"} — ${universityName || "University"}.`,
+    actionUrl: `/staff/finance`,
+    icon: "DollarSign",
+    templateVars: { studentName: studentName || "", universityName: universityName || "", programName: programName || "" },
+  }).catch(() => {});
+
   res.status(201).json(commission);
 });
 

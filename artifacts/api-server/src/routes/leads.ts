@@ -6,6 +6,7 @@ import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -170,6 +171,16 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     season: season || currentYear,
   }).returning();
   await logAudit(user.id, "create_lead", "lead", lead.id, {}, req.ip);
+
+  dispatchNotification({
+    event: "lead.created",
+    title: "New Lead Created",
+    body: `${lead.firstName} ${lead.lastName} has been added as a new lead.`,
+    actionUrl: `/staff/leads/${lead.id}`,
+    icon: "UserPlus",
+    templateVars: { firstName: lead.firstName, lastName: lead.lastName, email: lead.email || "", phone: lead.phone || "" },
+  }).catch(() => {});
+
   res.status(201).json(lead);
 });
 
@@ -253,6 +264,31 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   await logAudit(user.id, "update_lead", "lead", id, updates, req.ip);
+
+  if (updates.status && updates.status !== existing.status) {
+    dispatchNotification({
+      event: "lead.stage_changed",
+      title: "Lead Stage Changed",
+      body: `Lead ${lead.firstName} ${lead.lastName} moved from "${existing.status}" to "${updates.status}".`,
+      actionUrl: `/staff/leads/${lead.id}`,
+      icon: "ArrowRight",
+      recipientUserIds: lead.assignedToId ? [lead.assignedToId] : undefined,
+      templateVars: { firstName: lead.firstName, lastName: lead.lastName, oldStage: existing.status || "", newStage: String(updates.status) },
+    }).catch(() => {});
+  }
+
+  if (updates.assignedToId && updates.assignedToId !== existing.assignedToId) {
+    dispatchNotification({
+      event: "lead.assigned",
+      title: "Lead Assigned to You",
+      body: `Lead ${lead.firstName} ${lead.lastName} has been assigned to you.`,
+      actionUrl: `/staff/leads/${lead.id}`,
+      icon: "UserCheck",
+      recipientUserIds: [updates.assignedToId as number],
+      templateVars: { firstName: lead.firstName, lastName: lead.lastName },
+    }).catch(() => {});
+  }
+
   res.json(lead);
 });
 

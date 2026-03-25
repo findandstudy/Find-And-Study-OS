@@ -6,6 +6,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERM
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -221,6 +222,15 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     hideServiceFees: hideServiceFees === true,
     embedToken: crypto.randomUUID(),
   }).returning();
+
+  dispatchNotification({
+    event: "agent.sub_agent_added",
+    title: "Sub-Agent Added",
+    body: `A new sub-agent ${firstName} ${lastName} has been added.`,
+    actionUrl: `/staff/agents`,
+    icon: "UserPlus",
+    templateVars: { firstName, lastName, email: email || "" },
+  }).catch(() => {});
 
   res.status(201).json(subAgent);
 });
@@ -700,6 +710,15 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     hideServiceFees: hideServiceFees === true || hideServiceFees === "true" ? true : false,
     embedToken: crypto.randomUUID(),
   }).returning();
+
+  dispatchNotification({
+    event: "agent.new_registration",
+    title: "New Agent Registration",
+    body: `A new agent ${firstName} ${lastName} (${companyName || "N/A"}) has been registered.`,
+    actionUrl: `/staff/agents/${agent.id}`,
+    icon: "Building",
+    templateVars: { firstName, lastName, companyName: companyName || "", email: email || "" },
+  }).catch(() => {});
 
   res.status(201).json(agent);
 });

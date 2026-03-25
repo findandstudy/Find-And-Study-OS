@@ -17,9 +17,11 @@ const router: IRouter = Router();
 
 async function seedNotificationRules() {
   const existing = await db.select().from(notificationRulesTable);
-  if (existing.length > 0) return;
+  const existingEvents = new Set(existing.map(r => r.event));
 
+  let added = 0;
   for (const rule of DEFAULT_NOTIFICATION_RULES) {
+    if (existingEvents.has(rule.event)) continue;
     await db.insert(notificationRulesTable).values({
       event: rule.event,
       name: rule.name,
@@ -29,8 +31,9 @@ async function seedNotificationRules() {
       recipientRoles: rule.recipientRoles,
       isActive: true,
     });
+    added++;
   }
-  console.log("[notifications] Seeded default notification rules");
+  if (added > 0) console.log(`[notifications] Seeded ${added} new notification rules`);
 }
 
 seedNotificationRules().catch((err) => console.error("[notifications] Seed error:", err));
