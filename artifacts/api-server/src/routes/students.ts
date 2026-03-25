@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, studentsTable, documentsTable, usersTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isNull } from "drizzle-orm";
@@ -94,7 +94,7 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
   res.send(buffer);
 });
 
-router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as any, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as any, ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const user = req.user!;
   const { agentId, status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -175,7 +175,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
   });
 });
 
-router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const {
     firstName, lastName, status = "active",
     email, phone, nationality,
@@ -288,7 +288,7 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
   res.status(201).json({ inserted, errors, total: students.length, success: inserted.length });
 });
 
-router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const user = req.user!;
 
@@ -319,7 +319,7 @@ router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(student);
 });
 
-router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const role = req.user!.role;
   const isStaff = (STAFF_ROLES as readonly string[]).includes(role);

@@ -176,7 +176,9 @@ function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { l
     ];
     if (role === 'agent') {
       accountItems.push({ title: "Sub Agents", icon: Users, url: '/agent/sub-agents' });
-      accountItems.push({ title: "My Team", icon: Briefcase, url: '/agent/team' });
+    }
+    if (role === 'agent' || role === 'sub_agent' || (role === 'agent_staff' && agentStaffPerms?.includes('team'))) {
+      accountItems.push({ title: "My Team", icon: Briefcase, url: '/agent/team', permKey: 'team' });
     }
     return {
       groups: [

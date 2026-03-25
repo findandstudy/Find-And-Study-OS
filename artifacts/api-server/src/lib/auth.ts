@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { db, auditLogsTable } from "@workspace/db";
+import { db, auditLogsTable, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 export type AuthUser = {
   id: number;
@@ -35,6 +36,35 @@ export function requireRole(...roles: string[]) {
     }
     if (!roles.includes(req.user.role)) {
       res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
+      return;
+    }
+    next();
+  };
+}
+
+export const AGENT_STAFF_PERMISSIONS = [
+  "leads", "students", "applications", "documents",
+  "course_finder", "messages", "commissions", "team",
+] as const;
+
+export function requireAgentStaffPermission(...requiredPerms: string[]) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    if (req.user.role !== "agent_staff") {
+      next();
+      return;
+    }
+    const [staffUser] = await db
+      .select({ agentStaffPermissions: usersTable.agentStaffPermissions })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user.id));
+    const perms = (staffUser?.agentStaffPermissions as string[] | null) || [];
+    const hasAll = requiredPerms.every(p => perms.includes(p));
+    if (!hasAll) {
+      res.status(403).json({ error: "You do not have permission to access this resource" });
       return;
     }
     next();

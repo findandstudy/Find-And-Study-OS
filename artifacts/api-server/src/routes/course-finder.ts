@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, desc, or } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { usersTable } from "@workspace/db";
 import { resolveAgentCommission } from "../lib/agentCommission";
@@ -237,7 +237,7 @@ router.get("/course-finder/students", requireAuth, async (req, res): Promise<voi
   res.json(rows);
 });
 
-router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES, "student"), async (req, res): Promise<void> => {
+router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES, "student"), requireAgentStaffPermission("course_finder"), async (req, res): Promise<void> => {
   const { studentId, programId, notes } = req.body;
   const isStudentRole = req.user!.role === "student";
 

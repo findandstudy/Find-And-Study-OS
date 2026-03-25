@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, commissionsTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc } from "drizzle-orm";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
@@ -383,18 +383,20 @@ const AGENT_STAFF_PERMISSIONS = [
 ];
 
 async function resolveManagingAgent(userId: number, userRole: string) {
-  if (userRole === "agent") {
+  if (userRole === "agent" || userRole === "sub_agent") {
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
     return agent || null;
   }
-  if (userRole === "sub_agent") {
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  if (userRole === "agent_staff") {
+    const [staffUser] = await db.select({ managingAgentId: usersTable.managingAgentId }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!staffUser?.managingAgentId) return null;
+    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, staffUser.managingAgentId));
     return agent || null;
   }
   return null;
 }
 
-router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), requireAgentStaffPermission("team"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const agent = await resolveManagingAgent(userId, userRole);
@@ -451,7 +453,7 @@ router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), a
   });
 });
 
-router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), requireAgentStaffPermission("team"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const agent = await resolveManagingAgent(userId, userRole);
@@ -507,7 +509,7 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
   });
 });
 
-router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), requireAgentStaffPermission("team"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const staffId = parseInt(req.params.id, 10);
@@ -557,7 +559,7 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
   });
 });
 
-router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), requireAgentStaffPermission("team"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const staffId = parseInt(req.params.id, 10);
@@ -578,7 +580,7 @@ router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_age
   res.json({ success: true });
 });
 
-router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent"), async (_req, res): Promise<void> => {
+router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), requireAgentStaffPermission("team"), async (_req, res): Promise<void> => {
   res.json(AGENT_STAFF_PERMISSIONS);
 });
 

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
@@ -18,7 +18,7 @@ const APP_PATCH_FIELDS = [
   "languageFee", "currency", "notes", "season",
 ];
 
-router.get("/applications", requireAuth, async (req, res): Promise<void> => {
+router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const { studentId, agentId, stage, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
@@ -114,7 +114,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const user = req.user!;
   const {
     studentId, stage = "inquiry", universityId, programId, agentId,
@@ -279,7 +279,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   res.status(201).json(app);
 });
 
-router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [row] = await db
     .select({
@@ -341,7 +341,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
   res.json(row);
 });
 
-router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);

@@ -13,7 +13,7 @@ import {
   agentsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
@@ -919,7 +919,7 @@ async function getAgentContactUserIds(userId: number, userRole: string): Promise
   return contactUserIds;
 }
 
-router.get("/agent/conversations", requireAuth, async (req, res): Promise<void> => {
+router.get("/agent/conversations", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
 
@@ -957,7 +957,7 @@ router.get("/agent/conversations", requireAuth, async (req, res): Promise<void> 
   res.json({ data: result });
 });
 
-router.get("/agent/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+router.get("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
   const conversationId = parseInt(req.params.id, 10);
@@ -986,7 +986,7 @@ router.get("/agent/conversations/:id/messages", requireAuth, async (req, res): P
   res.json({ data: messages });
 });
 
-router.get("/agent/staff-contacts", requireAuth, async (req, res): Promise<void> => {
+router.get("/agent/staff-contacts", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
   const userRole = req.user!.role;
@@ -1004,7 +1004,7 @@ router.get("/agent/staff-contacts", requireAuth, async (req, res): Promise<void>
   res.json({ data: contacts });
 });
 
-router.post("/agent/conversations", requireAuth, async (req, res): Promise<void> => {
+router.post("/agent/conversations", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
   const userRole = req.user!.role;
@@ -1039,7 +1039,7 @@ router.post("/agent/conversations", requireAuth, async (req, res): Promise<void>
   res.status(201).json(conv);
 });
 
-router.post("/agent/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+router.post("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
   const conversationId = parseInt(req.params.id, 10);

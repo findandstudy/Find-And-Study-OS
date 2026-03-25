@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable } from "@workspace/db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
-import { requireAuth, logAudit } from "../lib/auth";
+import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 
@@ -37,7 +37,7 @@ async function verifyApplicationAccess(userId: number, role: string, application
   return false;
 }
 
-router.get("/applications/:id/stage-documents", requireAuth, async (req, res): Promise<void> => {
+router.get("/applications/:id/stage-documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
@@ -76,7 +76,7 @@ router.get("/applications/:id/stage-documents", requireAuth, async (req, res): P
   res.json(docs);
 });
 
-router.post("/applications/:id/stage-documents", requireAuth, async (req, res): Promise<void> => {
+router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
@@ -151,7 +151,7 @@ router.post("/applications/:id/stage-documents", requireAuth, async (req, res): 
   res.status(201).json(doc);
 });
 
-router.delete("/applications/:id/stage-documents/:docId", requireAuth, async (req, res): Promise<void> => {
+router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const docId = parseInt(req.params.docId, 10);
   const user = req.user!;
@@ -249,7 +249,7 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, async (req, res)
   res.json(result);
 });
 
-router.get("/applications/:id/stage-documents/:docId/download", requireAuth, async (req, res): Promise<void> => {
+router.get("/applications/:id/stage-documents/:docId/download", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const docId = parseInt(req.params.docId, 10);
   const user = req.user!;

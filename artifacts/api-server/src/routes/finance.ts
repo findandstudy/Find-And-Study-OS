@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable } from "@workspace/db";
 import { eq, sql, and, desc, inArray } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
@@ -697,7 +697,7 @@ router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async 
   res.json(invoice);
 });
 
-router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
@@ -748,7 +748,7 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), a
   res.json({ commissions: commSummary, serviceFees: feeSummary });
 });
 
-router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
@@ -770,7 +770,7 @@ router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), async
   res.json({ data, isSubAgent, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
