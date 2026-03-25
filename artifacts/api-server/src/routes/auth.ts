@@ -44,28 +44,28 @@ function setSessionCookie(res: Response, sid: string) {
   });
 }
 
-function buildSessionUser(user: any): SessionUser {
-  const result: any = {
-    id: user.id,
-    replitId: user.replitId || `local-${user.id}`,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    role: user.role,
-    avatarUrl: user.avatarUrl,
-    language: user.language,
-    isActive: user.isActive,
-    emailVerified: user.emailVerified,
-    startDate: user.startDate,
-    homeAddress: user.homeAddress,
-    passportNumber: user.passportNumber,
-    contractUrl: user.contractUrl,
-    passportUrl: user.passportUrl,
-    emergencyContactName: user.emergencyContactName,
-    emergencyContactPhone: user.emergencyContactPhone,
+function buildSessionUser(user: Record<string, unknown>): SessionUser {
+  const result: SessionUser = {
+    id: user.id as number,
+    replitId: (user.replitId as string) || `local-${user.id}`,
+    email: user.email as string | null,
+    firstName: user.firstName as string | null,
+    lastName: user.lastName as string | null,
+    role: user.role as string,
+    avatarUrl: user.avatarUrl as string | null,
+    language: user.language as string,
+    isActive: user.isActive as boolean,
+    emailVerified: user.emailVerified as boolean,
+    startDate: user.startDate as string | null,
+    homeAddress: user.homeAddress as string | null,
+    passportNumber: user.passportNumber as string | null,
+    contractUrl: user.contractUrl as string | null,
+    passportUrl: user.passportUrl as string | null,
+    emergencyContactName: user.emergencyContactName as string | null,
+    emergencyContactPhone: user.emergencyContactPhone as string | null,
   };
   if (user.role === "agent_staff" && user.agentStaffPermissions) {
-    result.agentStaffPermissions = user.agentStaffPermissions;
+    result.agentStaffPermissions = user.agentStaffPermissions as string[];
   }
   return result;
 }

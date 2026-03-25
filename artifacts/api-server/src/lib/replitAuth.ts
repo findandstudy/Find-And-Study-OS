@@ -21,6 +21,10 @@ export interface SessionUser {
   homeAddress?: string | null;
   passportNumber?: string | null;
   contractUrl?: string | null;
+  passportUrl?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  agentStaffPermissions?: string[];
 }
 
 export interface SessionData {

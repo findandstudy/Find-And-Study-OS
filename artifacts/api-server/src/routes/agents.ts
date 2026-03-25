@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, commissionsTable } from "@workspace/db";
-import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc } from "drizzle-orm";
+import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
@@ -122,7 +122,7 @@ router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (re
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions: any[] = [eq(agentsTable.parentAgentId, agent.id)];
+  const conditions: SQL[] = [eq(agentsTable.parentAgentId, agent.id)];
 
   if (status && status !== "all") {
     conditions.push(eq(agentsTable.status, status));
@@ -411,7 +411,7 @@ router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), a
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions: any[] = [
+  const conditions: SQL[] = [
     eq(usersTable.role, "agent_staff"),
     eq(usersTable.managingAgentId, agent.id),
   ];
@@ -587,7 +587,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions: any[] = [];
+  const conditions: SQL[] = [];
 
   if (type === "agent") {
     conditions.push(isNull(agentsTable.parentAgentId));
