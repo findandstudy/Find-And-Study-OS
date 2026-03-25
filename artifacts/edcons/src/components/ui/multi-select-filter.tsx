@@ -42,9 +42,13 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full h-9 px-3 rounded-lg border border-input bg-background text-sm hover:bg-accent/50 transition-colors"
+        className={`flex items-center justify-between w-full h-9 px-3 rounded-lg border text-sm transition-colors ${
+          values.length > 0
+            ? "bg-primary/10 border-primary/30 hover:bg-primary/15"
+            : "border-input bg-background hover:bg-accent/50"
+        }`}
       >
-        <span className={`truncate text-left ${values.length === 0 ? "text-muted-foreground" : "text-foreground"}`}>
+        <span className={`truncate text-left ${values.length === 0 ? "text-muted-foreground" : "text-primary font-medium"}`}>
           {displayText}
         </span>
         <div className="flex items-center gap-1 shrink-0 ml-1">
