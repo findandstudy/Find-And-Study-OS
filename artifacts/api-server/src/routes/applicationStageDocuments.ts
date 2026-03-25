@@ -174,7 +174,7 @@ router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAg
   res.sendStatus(204);
 });
 
-router.get("/applications/:id/missing-doc-notes", requireAuth, async (req, res): Promise<void> => {
+router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
@@ -201,7 +201,7 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, async (req, res):
   res.json(notes);
 });
 
-router.post("/applications/:id/missing-doc-notes", requireAuth, async (req, res): Promise<void> => {
+router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
