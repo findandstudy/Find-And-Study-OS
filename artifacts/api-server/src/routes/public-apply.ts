@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
@@ -167,7 +167,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, leadId } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, leadId, documents } = req.body;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality) {
     res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, and nationality are required" });
@@ -192,6 +192,9 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
+    let resultStudentId: number | null = null;
+    let resultAppId: number | null = null;
+
     if (existingUser) {
       let [existingStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, existingUser.id));
       if (!existingStudent) {
@@ -206,7 +209,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         }).returning();
       }
 
-      await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
+      resultStudentId = existingStudent.id;
+      resultAppId = await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
 
       const emailContent = buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
@@ -248,7 +252,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         passportNumber: s(passportNumber, 50),
       }).returning();
 
-      await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
+      resultStudentId = newStudent.id;
+      resultAppId = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
@@ -272,6 +277,41 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         await db.update(leadsTable).set({ status: "converted" }).where(eq(leadsTable.id, parseInt(String(leadId), 10)));
       } catch (e) {
         console.error("[PUBLIC-APPLY] Failed to update lead status:", e);
+      }
+    }
+
+    if (Array.isArray(documents) && documents.length > 0 && resultStudentId && resultAppId) {
+      const MAX_DOCS = 10;
+      const MAX_DOC_SIZE = 5 * 1024 * 1024;
+      const ALLOWED_MIME = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
+      try {
+        const validDocs = documents.slice(0, MAX_DOCS);
+        let savedCount = 0;
+        for (const doc of validDocs) {
+          if (!doc.base64 || !doc.name) continue;
+          const mime = String(doc.mediaType || "").toLowerCase();
+          if (!ALLOWED_MIME.includes(mime)) continue;
+          const rawSize = doc.sizeBytes ? parseInt(String(doc.sizeBytes), 10) : 0;
+          if (rawSize > MAX_DOC_SIZE) continue;
+          const base64Len = typeof doc.base64 === "string" ? doc.base64.length : 0;
+          if (base64Len > MAX_DOC_SIZE * 1.4) continue;
+          await db.insert(documentsTable).values({
+            studentId: resultStudentId,
+            applicationId: resultAppId,
+            name: String(doc.name).replace(/[<>"'&]/g, "_").slice(0, 255),
+            type: String(doc.key || doc.label || "other").slice(0, 100),
+            status: "pending",
+            fileData: doc.base64,
+            mimeType: mime,
+            sizeBytes: rawSize || null,
+          });
+          savedCount++;
+        }
+        if (savedCount > 0) {
+          console.log(`[PUBLIC-APPLY] Saved ${savedCount} document(s) for student #${resultStudentId}, app #${resultAppId}`);
+        }
+      } catch (docErr) {
+        console.error("[PUBLIC-APPLY] Failed to save documents:", docErr);
       }
     }
 

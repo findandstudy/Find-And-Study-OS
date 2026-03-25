@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import { ALL_NATIONALITIES, PHONE_CODES } from "@/lib/nationalities";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
@@ -477,7 +478,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
     setSubmitting(true);
     try {
-      const uploadedDocKeys = Object.keys(docs);
+      const docPayload = Object.values(docs).map(d => ({
+        key: d.key,
+        label: d.label,
+        name: d.file.name,
+        base64: d.base64,
+        mediaType: d.mediaType,
+        sizeBytes: d.file.size,
+      }));
       const resp = await fetch(`${BASE_URL}/api/public/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -487,7 +495,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           programName: program?.name,
           universityName: program?.universityName,
           programDegree: program?.degree || null,
-          uploadedDocuments: uploadedDocKeys,
+          documents: docPayload,
           leadId,
         }),
       });
@@ -565,8 +573,10 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 Phone <span className="text-destructive ml-0.5">*</span>
               </Label>
               <div className="flex gap-1.5">
-                <Input value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
-                  placeholder="+90" className="rounded-xl w-20" />
+                <select value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
+                  className="h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-[100px] shrink-0">
+                  {PHONE_CODES.map(pc => <option key={`${pc.country}-${pc.code}`} value={pc.code}>{pc.label}</option>)}
+                </select>
                 <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="Phone number" className="rounded-xl flex-1" />
               </div>
@@ -744,8 +754,10 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                   {extracted.has("phone") && <AiBadge />}
                 </Label>
                 <div className="flex gap-1.5">
-                  <Input value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
-                    placeholder="+90" className="rounded-xl w-20" />
+                  <select value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
+                    className={`h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-[100px] shrink-0 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
+                    {PHONE_CODES.map(pc => <option key={`${pc.country}-${pc.code}`} value={pc.code}>{pc.label}</option>)}
+                  </select>
                   <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="Phone number" className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                 </div>
@@ -758,7 +770,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 <select value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
                   className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
                   <option value="">Select nationality</option>
-                  {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                  {ALL_NATIONALITIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
