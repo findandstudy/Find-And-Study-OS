@@ -15,7 +15,7 @@ const AGENT_PATCH_FIELDS = [
   "agencyCode", "state", "city", "address", "businessName",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
   "contractUrl", "branch", "pointOfContact", "parentAgentId",
-  "subAgentCommissionRate", "hideServiceFees", "assignedStaffId",
+  "subAgentCommissionRate", "hideServiceFees", "assignedStaffId", "canManageStaff",
 ];
 
 const AGENT_SELF_PATCH_FIELDS = [
@@ -211,13 +211,13 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
   const [subAgent] = await db.select().from(agentsTable).where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, parentAgent.id)));
   if (!subAgent) { res.status(404).json({ error: "Sub-agent not found" }); return; }
 
-  const allowed = ["firstName", "lastName", "email", "phone", "commissionRate", "status", "companyName", "logoUrl", "hideServiceFees"];
+  const allowed = ["firstName", "lastName", "email", "phone", "commissionRate", "status", "companyName", "logoUrl", "hideServiceFees", "canManageStaff"];
   const updates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) {
       if (key === "commissionRate") {
         updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
-      } else if (key === "hideServiceFees") {
+      } else if (key === "hideServiceFees" || key === "canManageStaff") {
         updates[key] = req.body[key] === true;
       } else {
         updates[key] = req.body[key] || null;
@@ -401,6 +401,10 @@ router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), a
   const userRole = req.user!.role;
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (userRole === "sub_agent" && !agent.canManageStaff) {
+    res.status(403).json({ error: "Staff management is not enabled for your account" });
+    return;
+  }
 
   const { search, page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -453,6 +457,10 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
   const userRole = req.user!.role;
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (userRole === "sub_agent" && !agent.canManageStaff) {
+    res.status(403).json({ error: "Staff management is not enabled for your account" });
+    return;
+  }
 
   const { firstName, lastName, email, phone, password, permissions } = req.body;
   if (!firstName || !lastName || !email) {
@@ -505,6 +513,10 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
   const staffId = parseInt(req.params.id, 10);
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (userRole === "sub_agent" && !agent.canManageStaff) {
+    res.status(403).json({ error: "Staff management is not enabled for your account" });
+    return;
+  }
 
   const [staffUser] = await db.select().from(usersTable).where(
     and(eq(usersTable.id, staffId), eq(usersTable.role, "agent_staff"), eq(usersTable.managingAgentId, agent.id))
@@ -550,6 +562,10 @@ router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_age
   const staffId = parseInt(req.params.id, 10);
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (userRole === "sub_agent" && !agent.canManageStaff) {
+    res.status(403).json({ error: "Staff management is not enabled for your account" });
+    return;
+  }
 
   const [staffUser] = await db.select().from(usersTable).where(
     and(eq(usersTable.id, staffId), eq(usersTable.role, "agent_staff"), eq(usersTable.managingAgentId, agent.id))
@@ -701,7 +717,7 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
     if (req.body[key] !== undefined) {
       if (key === "commissionRate" || key === "subAgentCommissionRate") {
         updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
-      } else if (key === "hideServiceFees") {
+      } else if (key === "hideServiceFees" || key === "canManageStaff") {
         updates[key] = req.body[key] === true || req.body[key] === "true";
       } else if (key === "parentAgentId" || key === "assignedStaffId") {
         updates[key] = req.body[key] ? parseInt(req.body[key], 10) : null;

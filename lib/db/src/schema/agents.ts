@@ -27,6 +27,7 @@ export const agentsTable = pgTable("agents", {
   agentIdProofUrl: text("agent_id_proof_url"),
   businessCertUrl: text("business_cert_url"),
   contractUrl: text("contract_url"),
+  canManageStaff: boolean("can_manage_staff").notNull().default(false),
   branch: text("branch"),
   assignedStaffId: integer("assigned_staff_id").references(() => usersTable.id, { onDelete: "set null" }),
   pointOfContact: text("point_of_contact"),

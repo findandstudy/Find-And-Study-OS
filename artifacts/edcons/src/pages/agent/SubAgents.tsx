@@ -70,6 +70,7 @@ type SubAgent = {
   companyName: string | null;
   logoUrl: string | null;
   hideServiceFees: boolean;
+  canManageStaff: boolean;
   status: string;
   createdAt: string;
 };
@@ -155,7 +156,7 @@ export default function AgentSubAgents() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", commissionRate: "", password: "", companyName: "", logoUrl: "", hideServiceFees: false,
+    firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", commissionRate: "", password: "", companyName: "", logoUrl: "", hideServiceFees: false, canManageStaff: false,
   });
   const [pwForm, setPwForm] = useState({ password: "" });
 
@@ -173,7 +174,7 @@ export default function AgentSubAgents() {
   const meta = data?.meta;
 
   function openCreate() {
-    setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", commissionRate: "", password: "", companyName: "", logoUrl: "", hideServiceFees: false });
+    setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", commissionRate: "", password: "", companyName: "", logoUrl: "", hideServiceFees: false, canManageStaff: false });
     setShowCreate(true);
   }
 
@@ -191,6 +192,7 @@ export default function AgentSubAgents() {
       companyName: sa.companyName || "",
       logoUrl: sa.logoUrl || "",
       hideServiceFees: sa.hideServiceFees || false,
+      canManageStaff: sa.canManageStaff || false,
     });
     setShowEdit(true);
   }
@@ -226,6 +228,7 @@ export default function AgentSubAgents() {
           companyName: form.companyName || undefined,
           logoUrl: form.logoUrl || undefined,
           hideServiceFees: form.hideServiceFees,
+          canManageStaff: form.canManageStaff,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
@@ -252,6 +255,7 @@ export default function AgentSubAgents() {
           companyName: form.companyName || null,
           logoUrl: form.logoUrl || null,
           hideServiceFees: form.hideServiceFees,
+          canManageStaff: form.canManageStaff,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
@@ -614,6 +618,18 @@ export default function AgentSubAgents() {
               </div>
               <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
             </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/20">
+              <div className="flex-1">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  {form.canManageStaff ? <Users className="w-3.5 h-3.5 text-green-500" /> : <Users className="w-3.5 h-3.5 text-muted-foreground" />}
+                  Staff Management
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {form.canManageStaff ? "Sub-agent can manage their own team members" : "Sub-agent cannot manage team members"}
+                </p>
+              </div>
+              <Switch checked={form.canManageStaff} onCheckedChange={(checked) => setForm(f => ({ ...f, canManageStaff: checked }))} />
+            </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setShowCreate(false)} size="sm">Cancel</Button>
               <Button onClick={handleCreate} disabled={saving || !form.firstName || !form.lastName} size="sm" className="gap-2 px-5">
@@ -711,6 +727,18 @@ export default function AgentSubAgents() {
                 </p>
               </div>
               <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/20">
+              <div className="flex-1">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  {form.canManageStaff ? <Users className="w-3.5 h-3.5 text-green-500" /> : <Users className="w-3.5 h-3.5 text-muted-foreground" />}
+                  Staff Management
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {form.canManageStaff ? "Sub-agent can manage their own team members" : "Sub-agent cannot manage team members"}
+                </p>
+              </div>
+              <Switch checked={form.canManageStaff} onCheckedChange={(checked) => setForm(f => ({ ...f, canManageStaff: checked }))} />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setShowEdit(false)} size="sm">Cancel</Button>
