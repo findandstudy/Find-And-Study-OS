@@ -39,37 +39,31 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId, 
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 px-2 gap-1 text-xs rounded-lg bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20"
+      <div className="flex items-center gap-1">
+        <button
           onClick={() => openDialog("internal")}
+          title="Message"
+          className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-blue-600 hover:bg-blue-500/10 transition-colors"
         >
           <MessageSquare className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Message</span>
-        </Button>
+        </button>
         {email && !hideEmail && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 gap-1 text-xs rounded-lg bg-purple-500/10 text-purple-600 border-purple-200 hover:bg-purple-500/20"
+          <button
             onClick={() => openDialog("email")}
+            title="Email"
+            className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
           >
             <Mail className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Email</span>
-          </Button>
+          </button>
         )}
         {phone && !hideWhatsApp && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 gap-1 text-xs rounded-lg bg-green-500/10 text-green-600 border-green-200 hover:bg-green-500/20"
+          <button
             onClick={() => openDialog("whatsapp")}
+            title="WhatsApp"
+            className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
           >
             <Phone className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">WhatsApp</span>
-          </Button>
+          </button>
         )}
       </div>
       <QuickContactDialog
