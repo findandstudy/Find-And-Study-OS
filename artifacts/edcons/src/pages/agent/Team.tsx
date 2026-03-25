@@ -79,12 +79,6 @@ export default function AgentTeam() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: agentProfile, isLoading: agentLoading } = useQuery({
-    queryKey: ["agent-me"],
-    queryFn: () => customFetch<{ canManageStaff?: boolean }>("/api/agents/me"),
-    staleTime: 5 * 60 * 1000,
-  });
-
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -112,20 +106,6 @@ export default function AgentTeam() {
     e.preventDefault();
     setSearch(searchInput);
     setPage(1);
-  }
-
-  if (user?.role === "sub_agent" && !agentLoading && agentProfile && !agentProfile.canManageStaff) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center max-w-md p-8">
-            <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">Staff Management Not Enabled</h2>
-            <p className="text-muted-foreground">Your parent agent has not enabled staff management for your account. Contact your parent agent to request access.</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
   }
 
   return (

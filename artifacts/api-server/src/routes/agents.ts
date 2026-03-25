@@ -395,11 +395,6 @@ router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), a
   const userRole = req.user!.role;
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  if (userRole === "sub_agent" && !agent.canManageStaff) {
-    res.status(403).json({ error: "Staff management is not enabled for your account" });
-    return;
-  }
-
   const { search, page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -451,10 +446,6 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
   const userRole = req.user!.role;
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  if (userRole === "sub_agent" && !agent.canManageStaff) {
-    res.status(403).json({ error: "Staff management is not enabled for your account" });
-    return;
-  }
 
   const { firstName, lastName, email, phone, password, permissions } = req.body;
   if (!firstName || !lastName || !email) {
@@ -507,10 +498,6 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
   const staffId = parseInt(req.params.id, 10);
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  if (userRole === "sub_agent" && !agent.canManageStaff) {
-    res.status(403).json({ error: "Staff management is not enabled for your account" });
-    return;
-  }
 
   const [staffUser] = await db.select().from(usersTable).where(
     and(eq(usersTable.id, staffId), eq(usersTable.role, "agent_staff"), eq(usersTable.managingAgentId, agent.id))
@@ -557,10 +544,6 @@ router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_age
   const staffId = parseInt(req.params.id, 10);
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  if (userRole === "sub_agent" && !agent.canManageStaff) {
-    res.status(403).json({ error: "Staff management is not enabled for your account" });
-    return;
-  }
 
   const [staffUser] = await db.select().from(usersTable).where(
     and(eq(usersTable.id, staffId), eq(usersTable.role, "agent_staff"), eq(usersTable.managingAgentId, agent.id))
@@ -571,16 +554,7 @@ router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_age
   res.json({ success: true });
 });
 
-router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
-  const userId = req.user!.id;
-  const userRole = req.user!.role;
-  if (userRole === "sub_agent") {
-    const agent = await resolveManagingAgent(userId, userRole);
-    if (!agent || !agent.canManageStaff) {
-      res.status(403).json({ error: "Staff management is not enabled for your account" });
-      return;
-    }
-  }
+router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent"), async (_req, res): Promise<void> => {
   res.json(AGENT_STAFF_PERMISSIONS);
 });
 

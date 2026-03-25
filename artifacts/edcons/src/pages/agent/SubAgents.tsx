@@ -618,18 +618,6 @@ export default function AgentSubAgents() {
               </div>
               <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/20">
-              <div className="flex-1">
-                <Label className="text-xs font-medium flex items-center gap-1.5">
-                  {form.canManageStaff ? <Users className="w-3.5 h-3.5 text-green-500" /> : <Users className="w-3.5 h-3.5 text-muted-foreground" />}
-                  Staff Management
-                </Label>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {form.canManageStaff ? "Sub-agent can manage their own team members" : "Sub-agent cannot manage team members"}
-                </p>
-              </div>
-              <Switch checked={form.canManageStaff} onCheckedChange={(checked) => setForm(f => ({ ...f, canManageStaff: checked }))} />
-            </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setShowCreate(false)} size="sm">Cancel</Button>
               <Button onClick={handleCreate} disabled={saving || !form.firstName || !form.lastName} size="sm" className="gap-2 px-5">
@@ -727,18 +715,6 @@ export default function AgentSubAgents() {
                 </p>
               </div>
               <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/20">
-              <div className="flex-1">
-                <Label className="text-xs font-medium flex items-center gap-1.5">
-                  {form.canManageStaff ? <Users className="w-3.5 h-3.5 text-green-500" /> : <Users className="w-3.5 h-3.5 text-muted-foreground" />}
-                  Staff Management
-                </Label>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {form.canManageStaff ? "Sub-agent can manage their own team members" : "Sub-agent cannot manage team members"}
-                </p>
-              </div>
-              <Switch checked={form.canManageStaff} onCheckedChange={(checked) => setForm(f => ({ ...f, canManageStaff: checked }))} />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setShowEdit(false)} size="sm">Cancel</Button>

@@ -61,7 +61,7 @@ import { LogOut, ChevronUp, User } from "lucide-react";
 
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string };
 
-function getMenuForRole(role: string, agentStaffPerms?: string[], canManageStaff?: boolean): { groups: { label: string; items: MenuItem[] }[] } {
+function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { label: string; items: MenuItem[] }[] } {
   const FINANCE_ROLES = ['super_admin', 'admin', 'accountant'];
   const showFinance = FINANCE_ROLES.includes(role);
 
@@ -177,7 +177,7 @@ function getMenuForRole(role: string, agentStaffPerms?: string[], canManageStaff
     if (role === 'agent') {
       accountItems.push({ title: "Sub Agents", icon: Users, url: '/agent/sub-agents' });
     }
-    if (role === 'agent' || (role === 'sub_agent' && canManageStaff)) {
+    if (role === 'agent' || role === 'sub_agent') {
       accountItems.push({ title: "My Team", icon: Briefcase, url: '/agent/team' });
     }
     return {
@@ -264,8 +264,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   const staffPerms = (user as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
-  const canManageStaff = agentProfile?.canManageStaff === true;
-  const { groups } = getMenuForRole(user.role, staffPerms, canManageStaff);
+  const { groups } = getMenuForRole(user.role, staffPerms);
   const allItems = groups.flatMap(g => g.items);
   const activeItem = allItems.find(i => {
     if (i.url === '/staff' || i.url === '/admin' || i.url === '/student' || i.url === '/agent') {
