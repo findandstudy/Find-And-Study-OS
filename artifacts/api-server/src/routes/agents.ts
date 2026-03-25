@@ -379,7 +379,6 @@ const AGENT_STAFF_PERMISSIONS = [
   { key: "course_finder", label: "Course Finder" },
   { key: "messages", label: "Messages" },
   { key: "commissions", label: "Commissions" },
-  { key: "team", label: "Manage Team" },
 ];
 
 async function resolveManagingAgent(userId: number, userRole: string) {

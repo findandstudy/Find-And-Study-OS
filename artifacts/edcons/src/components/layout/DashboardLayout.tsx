@@ -263,7 +263,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const staffPerms = (user as any).agentStaffPermissions as string[] | undefined;
+  const staffPerms = (user as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
   const canManageStaff = agentProfile?.canManageStaff === true;
   const { groups } = getMenuForRole(user.role, staffPerms, canManageStaff);
   const allItems = groups.flatMap(g => g.items);
