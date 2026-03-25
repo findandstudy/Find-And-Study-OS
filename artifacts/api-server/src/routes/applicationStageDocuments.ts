@@ -4,6 +4,7 @@ import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
+import { validateUploadedFile, sanitizeFileName } from "../lib/fileUploadValidation";
 
 const router: IRouter = Router();
 
@@ -95,9 +96,20 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     return;
   }
 
-  if (fileData && typeof fileData === "string" && fileData.length > 15 * 1024 * 1024) {
-    res.status(413).json({ error: "File too large. Maximum 10MB" });
-    return;
+  const safeName = sanitizeFileName(fileName);
+
+  if (fileData) {
+    if (!mimeType) {
+      res.status(400).json({ error: "mimeType is required for file uploads" });
+      return;
+    }
+    const fileSizeBytes = sizeBytes ? Number(sizeBytes) : Math.ceil((fileData.length * 3) / 4);
+    const validationError = validateUploadedFile(safeName, mimeType, fileSizeBytes);
+    if (validationError) {
+      const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
+      res.status(httpStatus).json({ error: validationError.message });
+      return;
+    }
   }
 
   if (fileUrl) {
@@ -136,7 +148,7 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const [doc] = await db.insert(applicationStageDocumentsTable).values({
     applicationId,
     stage,
-    fileName,
+    fileName: safeName,
     fileData: fileData || null,
     fileUrl: fileUrl || null,
     mimeType: mimeType || null,

@@ -23,6 +23,7 @@ import {
 import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 
 const DOC_TYPES = [
   { key: "passport", label: "Passport" },
@@ -492,11 +493,13 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
   }
 
   function handleFileSelect(file: File) {
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum 10 MB", variant: "destructive" });
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
       return;
     }
-    setUploadFile(file);
+    const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
+    setUploadFile(safeFile);
   }
 
   async function handleUpload() {
@@ -524,6 +527,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
           fileData: base64,
           mimeType: uploadFile.type,
           sizeBytes: uploadFile.size,
+          originalFileName: uploadFile.name,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["student-documents"] });
@@ -703,14 +707,14 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
                     <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG — max 10 MB</p>
+                    <p className="text-xs text-muted-foreground mt-1">{FILE_UPLOAD_HELP_TEXT}</p>
                   </>
                 )}
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,.pdf"
+                accept={ACCEPT_ATTRIBUTE}
                 className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0];

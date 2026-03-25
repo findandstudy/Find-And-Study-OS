@@ -4,6 +4,7 @@ import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { validateUploadedFile, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 
 const router: IRouter = Router();
 
@@ -49,7 +50,7 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
 router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileData, mimeType, sizeBytes, notes } = req.body;
+  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileData, mimeType, sizeBytes, notes, originalFileName } = req.body;
 
   if (!isStaff) {
     if (user.role === "student") {
@@ -72,9 +73,32 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "fileUrl must be a valid http/https URL" });
     return;
   }
+
+  const safeName = name ? sanitizeFileName(name) : name;
+
+  if (fileData) {
+    if (!mimeType) {
+      res.status(400).json({ error: "mimeType is required for file uploads" });
+      return;
+    }
+    const fileSizeBytes = sizeBytes ? Number(sizeBytes) : Math.ceil((fileData.length * 3) / 4);
+    const validationFileName = originalFileName
+      ? sanitizeFileName(originalFileName)
+      : (() => {
+          const syntheticExt = isPdf(mimeType) ? ".pdf" : mimeType === "image/png" ? ".png" : ".jpg";
+          return `document${syntheticExt}`;
+        })();
+    const validationError = validateUploadedFile(validationFileName, mimeType, fileSizeBytes);
+    if (validationError) {
+      const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
+      res.status(httpStatus).json({ error: validationError.message });
+      return;
+    }
+  }
+
   const effectiveStatus = isStaff ? status : "pending";
   const [doc] = await db.insert(documentsTable).values({
-    name, type, status: effectiveStatus,
+    name: safeName, type, status: effectiveStatus,
     studentId: studentId || null,
     applicationId: isStaff ? (applicationId || null) : null,
     fileUrl: fileUrl || null,

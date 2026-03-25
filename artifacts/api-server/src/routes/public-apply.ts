@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
+import { isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
 
 const router: IRouter = Router();
 
@@ -334,6 +335,23 @@ router.post("/public/ai/extract-document", aiExtractLimiter, async (req: Request
     if (documents.length > 4) {
       res.status(400).json({ error: "Maximum 4 documents allowed" });
       return;
+    }
+
+    for (const doc of documents) {
+      const mime = doc.mediaType || "";
+      if (!mime || !isAllowedMimeType(mime)) {
+        res.status(400).json({ error: "Sadece PDF, JPG, JPEG ve PNG dosyalar\u0131 y\u00fckleyebilirsiniz." });
+        return;
+      }
+      const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
+      const syntheticFileName = `document${syntheticExt}`;
+      const estimatedSize = doc.data ? Math.ceil((doc.data.length * 3) / 4) : 0;
+      const validationError = validateUploadedFile(syntheticFileName, mime, estimatedSize);
+      if (validationError) {
+        const statusCode = validationError.type === "size_exceeded" ? 413 : 400;
+        res.status(statusCode).json({ error: validationError.message });
+        return;
+      }
     }
 
     const totalSize = documents.reduce((sum, d) => sum + (d.data?.length || 0), 0);

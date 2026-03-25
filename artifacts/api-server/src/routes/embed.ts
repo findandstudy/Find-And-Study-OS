@@ -4,6 +4,7 @@ import { eq, ilike, sql, and, desc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
+import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
 
 const router: IRouter = Router();
 
@@ -332,7 +333,24 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
 
   const rawDocs = Array.isArray(documents) ? documents.slice(0, 4) : [];
-  const docArray = rawDocs.filter((d: any) => d && typeof d === 'object' && d.label && d.data && typeof d.data === 'string' && d.data.length < 7_000_000);
+  const docArray = rawDocs.filter((d: any) => d && typeof d === 'object' && d.label && d.data && typeof d.data === 'string');
+
+  for (const doc of docArray) {
+    const mime = doc.mediaType || "";
+    if (!mime || !isAllowedMimeType(mime)) {
+      res.status(400).json({ error: "Sadece PDF, JPG, JPEG ve PNG dosyalar\u0131 y\u00fckleyebilirsiniz." });
+      return;
+    }
+    const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
+    const syntheticFileName = `document${syntheticExt}`;
+    const estimatedSize = doc.sizeBytes ? Number(doc.sizeBytes) : Math.ceil((doc.data.length * 3) / 4);
+    const validationError = validateUploadedFile(syntheticFileName, mime, estimatedSize);
+    if (validationError) {
+      const statusCode = validationError.type === "size_exceeded" ? 413 : 400;
+      res.status(statusCode).json({ error: validationError.message });
+      return;
+    }
+  }
 
   const totalDocSize = docArray.reduce((sum: number, d: any) => sum + (d.data?.length || 0), 0);
   if (totalDocSize > 20_000_000) {
@@ -385,9 +403,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     if (docArray.length > 0) {
       for (const doc of docArray) {
         if (!doc.label || !doc.data) continue;
+        const docName = sanitizeFileName(`${firstName}-${lastName}-${doc.label}`.slice(0, 255));
         await tx.insert(documentsTable).values({
           leadId: lead.id,
-          name: `${firstName}-${lastName}-${doc.label}`.slice(0, 255),
+          name: docName,
           type: (doc.label || "other").toLowerCase(),
           status: "pending",
           fileData: doc.data,
@@ -589,32 +608,51 @@ var extractedFields={};
 var searchDebounce=null;
 var userFilters={};
 
+var ALLOWED_MIMES=['application/pdf','image/jpeg','image/png'];
+var ALLOWED_EXTS=['.pdf','.jpg','.jpeg','.png'];
+var PDF_MAX=10*1024*1024;
+var IMG_MAX=5*1024*1024;
+
+function validateFileUpload(file){
+  var ext=(file.name||'').toLowerCase().replace(/.*\\./,'.');
+  if(ext.indexOf('.')<0)ext='';
+  if(ALLOWED_MIMES.indexOf(file.type)<0||ALLOWED_EXTS.indexOf(ext)<0){
+    return 'Sadece PDF, JPG, JPEG ve PNG dosyalar\\u0131 y\\u00fckleyebilirsiniz.';
+  }
+  var maxSize=file.type==='application/pdf'?PDF_MAX:IMG_MAX;
+  if(file.size>maxSize){
+    if(file.type==='application/pdf')return 'PDF dosyalar\\u0131 en fazla 10 MB olabilir.';
+    return 'JPG, JPEG ve PNG dosyalar\\u0131 en fazla 5 MB olabilir.';
+  }
+  return null;
+}
+
 var LEVEL_DOCS={
   pathway:[
-    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
-    {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:false},
-    {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:false},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:false}
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
+    {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:false}
   ],
   undergraduate:[
-    {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
-    {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:true},
-    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:true}
+    {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:true}
   ],
   graduate:[
-    {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
-    {key:'bachelor_transcript',label:'Bachelor Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:true},
-    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:true},
-    {key:'equivalency',label:'Equivalency Letter',icon:'\\ud83d\\udcdc',accept:'image/*,.pdf',required:true}
+    {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'bachelor_transcript',label:'Bachelor Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:true},
+    {key:'equivalency',label:'Equivalency Letter',icon:'\\ud83d\\udcdc',accept:'.pdf,.jpg,.jpeg,.png',required:true}
   ],
   doctorate:[
-    {key:'master_diploma',label:'Master Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
-    {key:'master_transcript',label:'Master Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:true},
-    {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:true},
-    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'image/*',required:true}
+    {key:'master_diploma',label:'Master Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'master_transcript',label:'Master Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:true}
   ]
 };
 
@@ -838,10 +876,10 @@ function renderFormContent(prog){
     h+='<p style="font-size:0.78rem;color:#64748b;margin:0">Upload your documents and our AI will automatically extract your information. You can review and edit before submitting.</p>';
     h+='</div>';
     var docTypes=[
-      {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'image/*,.pdf',required:true},
-      {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'image/*,.pdf',required:false},
-      {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'image/*,.pdf',required:false},
-      {key:'photo',label:'Photo',icon:'\\ud83d\\udcf7',accept:'image/*',required:false}
+      {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+      {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
+      {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
+      {key:'photo',label:'Photo',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:false}
     ];
     h+='<div class="ew-doc-grid">';
     for(var i=0;i<docTypes.length;i++){
@@ -948,7 +986,8 @@ function bindModalEvents(modal,overlay){
       var key=input.getAttribute('data-doc-input');
       var file=e.target.files[0];
       if(!file)return;
-      if(file.size>5*1024*1024){alert('File too large. Maximum 5MB.');return;}
+      var vErr=validateFileUpload(file);
+      if(vErr){alert(vErr);return;}
       fileToBase64(file).then(function(result){
         uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
         if(formOpen)showModal();
@@ -1107,7 +1146,8 @@ function bindEvents(){
       var key=input.getAttribute('data-doc-input');
       var file=e.target.files[0];
       if(!file)return;
-      if(file.size>5*1024*1024){alert('File too large. Maximum 5MB.');return;}
+      var vErr2=validateFileUpload(file);
+      if(vErr2){alert(vErr2);return;}
       fileToBase64(file).then(function(result){
         uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
         render(false);

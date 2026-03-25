@@ -9,6 +9,7 @@ import {
   AlertTriangle, ChevronDown, ChevronRight, Save,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -169,12 +170,14 @@ function StageSection({
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum file size is 10MB", variant: "destructive" });
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
       return;
     }
     setUploading(true);
-    await uploadMutation.mutateAsync(file);
+    const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
+    await uploadMutation.mutateAsync(safeFile);
     setUploading(false);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -267,13 +270,13 @@ function StageSection({
           )}
 
           {canUpload && (
-            <div className="pt-1">
+            <div className="pt-1 space-y-1">
               <input
                 ref={fileRef}
                 type="file"
                 className="hidden"
                 onChange={handleFileSelect}
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                accept={ACCEPT_ATTRIBUTE}
               />
               <Button
                 variant="outline"
@@ -285,6 +288,7 @@ function StageSection({
                 <Upload className="w-3.5 h-3.5" />
                 {uploading ? "Uploading..." : "Upload Document"}
               </Button>
+              <p className="text-[10px] text-muted-foreground text-center">{FILE_UPLOAD_HELP_TEXT}</p>
             </div>
           )}
         </div>

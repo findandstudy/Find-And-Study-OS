@@ -46,6 +46,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -112,39 +113,39 @@ const LEVELS: { key: AppLevel; label: string; badge: string; color: string }[] =
 
 const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
   pathway: [
-    { key: "passport",        label: "Passport",         icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
-    { key: "hs_diploma",      label: "HS Diploma",       icon: "\u{1F393}", accept: "image/*,.pdf", required: false },
-    { key: "hs_transcript",   label: "HS Transcript",    icon: "\u{1F4CB}", accept: "image/*,.pdf", required: false },
-    { key: "photo",           label: "Photograph",       icon: "\u{1F4F7}", accept: "image/*",      required: false },
+    { key: "passport",        label: "Passport",         icon: "\u{1F6C2}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "hs_diploma",      label: "HS Diploma",       icon: "\u{1F393}", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+    { key: "hs_transcript",   label: "HS Transcript",    icon: "\u{1F4CB}", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+    { key: "photo",           label: "Photograph",       icon: "\u{1F4F7}", accept: ".jpg,.jpeg,.png",      required: false },
   ],
   undergraduate: [
-    { key: "hs_diploma",      label: "HS Diploma",       icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
-    { key: "hs_transcript",   label: "HS Transcript",    icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
-    { key: "passport",        label: "Passport",         icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
-    { key: "photo",           label: "Photograph",       icon: "\u{1F4F7}", accept: "image/*",      required: true  },
-    { key: "language_proof",  label: "Language Proof",   icon: "\u{1F310}", accept: "image/*,.pdf", required: false, note: "If available" },
+    { key: "hs_diploma",      label: "HS Diploma",       icon: "\u{1F393}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "hs_transcript",   label: "HS Transcript",    icon: "\u{1F4CB}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "passport",        label: "Passport",         icon: "\u{1F6C2}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "photo",           label: "Photograph",       icon: "\u{1F4F7}", accept: ".jpg,.jpeg,.png",      required: true  },
+    { key: "language_proof",  label: "Language Proof",   icon: "\u{1F310}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If available" },
   ],
   graduate: [
-    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
-    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
-    { key: "passport",            label: "Passport",             icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
-    { key: "photo",               label: "Photograph",           icon: "\u{1F4F7}", accept: "image/*",      required: true  },
-    { key: "equivalency",         label: "Equivalency Letter",   icon: "\u{1F4DC}", accept: "image/*,.pdf", required: false, note: "Recognition" },
-    { key: "cv",                  label: "CV",                   icon: "\u{1F4C4}", accept: "image/*,.pdf", required: false, note: "If required" },
-    { key: "sop",                 label: "SOP",                  icon: "\u270D\uFE0F", accept: "image/*,.pdf", required: false, note: "If required" },
-    { key: "language_proof",      label: "Language Proof",       icon: "\u{1F310}", accept: "image/*,.pdf", required: false, note: "If available" },
+    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "\u{1F393}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "\u{1F4CB}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "passport",            label: "Passport",             icon: "\u{1F6C2}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "photo",               label: "Photograph",           icon: "\u{1F4F7}", accept: ".jpg,.jpeg,.png",      required: true  },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "\u{1F4DC}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "Recognition" },
+    { key: "cv",                  label: "CV",                   icon: "\u{1F4C4}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If required" },
+    { key: "sop",                 label: "SOP",                  icon: "\u270D\uFE0F", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If required" },
+    { key: "language_proof",      label: "Language Proof",       icon: "\u{1F310}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If available" },
   ],
   doctorate: [
-    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
-    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
-    { key: "master_diploma",      label: "Master Diploma",       icon: "\u{1F393}", accept: "image/*,.pdf", required: true  },
-    { key: "master_transcript",   label: "Master Transcript",    icon: "\u{1F4CB}", accept: "image/*,.pdf", required: true  },
-    { key: "passport",            label: "Passport",             icon: "\u{1F6C2}", accept: "image/*,.pdf", required: true  },
-    { key: "photo",               label: "Photograph",           icon: "\u{1F4F7}", accept: "image/*",      required: true  },
-    { key: "equivalency",         label: "Equivalency Letter",   icon: "\u{1F4DC}", accept: "image/*,.pdf", required: false, note: "Recognition" },
-    { key: "cv",                  label: "CV",                   icon: "\u{1F4C4}", accept: "image/*,.pdf", required: false, note: "If required" },
-    { key: "sop",                 label: "SOP",                  icon: "\u270D\uFE0F", accept: "image/*,.pdf", required: false, note: "If required" },
-    { key: "language_proof",      label: "Language Proof",       icon: "\u{1F310}", accept: "image/*,.pdf", required: false, note: "If available" },
+    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "\u{1F393}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "\u{1F4CB}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "master_diploma",      label: "Master Diploma",       icon: "\u{1F393}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "master_transcript",   label: "Master Transcript",    icon: "\u{1F4CB}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "passport",            label: "Passport",             icon: "\u{1F6C2}", accept: ".pdf,.jpg,.jpeg,.png", required: true  },
+    { key: "photo",               label: "Photograph",           icon: "\u{1F4F7}", accept: ".jpg,.jpeg,.png",      required: true  },
+    { key: "equivalency",         label: "Equivalency Letter",   icon: "\u{1F4DC}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "Recognition" },
+    { key: "cv",                  label: "CV",                   icon: "\u{1F4C4}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If required" },
+    { key: "sop",                 label: "SOP",                  icon: "\u270D\uFE0F", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If required" },
+    { key: "language_proof",      label: "Language Proof",       icon: "\u{1F310}", accept: ".pdf,.jpg,.jpeg,.png", required: false, note: "If available" },
   ],
 };
 
@@ -292,10 +293,17 @@ function DropZone({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const { toast } = useToast();
 
   async function handleFile(file: File) {
-    const { base64, mediaType, isImage } = await prepareDocumentBase64(file);
-    onUpload({ key: docType.key, label: docType.label, file, base64, mediaType, isImage });
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
+      return;
+    }
+    const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
+    const { base64, mediaType, isImage } = await prepareDocumentBase64(safeFile);
+    onUpload({ key: docType.key, label: docType.label, file: safeFile, base64, mediaType, isImage });
   }
 
   const handleDrop = useCallback(
@@ -661,6 +669,7 @@ function AddStudentModal({
             fileData: d.base64,
             mimeType: d.mediaType,
             sizeBytes: d.file?.size ?? null,
+            originalFileName: d.file?.name ?? null,
           }),
         });
       })
@@ -812,6 +821,7 @@ function AddStudentModal({
                     {uploadedCount}/{currentDocs.length} uploaded
                   </p>
                 </div>
+                <p className="text-[11px] text-muted-foreground mb-2">{FILE_UPLOAD_HELP_TEXT}</p>
                 <div className={cn(
                   "grid gap-2",
                   currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
@@ -1018,6 +1028,7 @@ function AddStudentModal({
                     {Object.keys(docs).length}/{currentDocs.length} uploaded
                   </p>
                 </div>
+                <p className="text-[11px] text-muted-foreground mb-1">{FILE_UPLOAD_HELP_TEXT}</p>
                 <div className={cn(
                   "grid gap-2",
                   currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
