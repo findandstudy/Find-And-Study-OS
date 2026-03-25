@@ -55,7 +55,30 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     assignedStaff = staff || null;
   }
 
-  res.json({ ...agent, assignedStaff });
+  let parentAgent = null;
+  if (userRole === "sub_agent" && agent.parentAgentId) {
+    const [parentAgentRow] = await db.select().from(agentsTable).where(eq(agentsTable.id, agent.parentAgentId));
+    if (parentAgentRow) {
+      const [parentUser] = await db.select({
+        id: usersTable.id,
+        firstName: usersTable.firstName,
+        lastName: usersTable.lastName,
+        email: usersTable.email,
+        phone: usersTable.phone,
+        avatarUrl: usersTable.avatarUrl,
+        role: usersTable.role,
+      }).from(usersTable).where(eq(usersTable.id, parentAgentRow.userId));
+      if (parentUser) {
+        parentAgent = {
+          ...parentUser,
+          companyName: parentAgentRow.companyName,
+          logoUrl: parentAgentRow.logoUrl,
+        };
+      }
+    }
+  }
+
+  res.json({ ...agent, assignedStaff, parentAgent });
 });
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {

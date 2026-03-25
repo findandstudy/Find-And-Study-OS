@@ -105,6 +105,8 @@ export default function AgentDashboard() {
   const enrolled = applications.filter(a => a.stage === "enrolled").length;
   const inProgress = applications.filter(a => !["enrolled", "rejected"].includes(a.stage)).length;
   const assignedStaff = agentProfile?.assignedStaff;
+  const parentAgent = agentProfile?.parentAgent;
+  const contactPerson = user?.role === "sub_agent" ? parentAgent : assignedStaff;
 
   return (
     <DashboardLayout>
@@ -134,7 +136,7 @@ export default function AgentDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {assignedStaff && (
+          {contactPerson && (
             <Card className="p-6 border-none shadow-lg shadow-black/5">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -144,28 +146,28 @@ export default function AgentDashboard() {
               </div>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
-                  {assignedStaff.avatarUrl ? (
-                    <img src={assignedStaff.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  {contactPerson.avatarUrl ? (
+                    <img src={contactPerson.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    getInitials(assignedStaff.firstName, assignedStaff.lastName)
+                    getInitials(contactPerson.firstName, contactPerson.lastName)
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{assignedStaff.firstName} {assignedStaff.lastName}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{(assignedStaff.role || "").replace(/_/g, " ")}</p>
+                  <p className="font-semibold text-foreground">{contactPerson.firstName} {contactPerson.lastName}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{(contactPerson.role || "").replace(/_/g, " ")}</p>
                 </div>
               </div>
               <div className="space-y-2 mb-4">
-                {assignedStaff.email && (
+                {contactPerson.email && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Mail className="w-3.5 h-3.5 shrink-0" />
-                    <a href={`mailto:${assignedStaff.email}`} className="hover:text-primary truncate">{assignedStaff.email}</a>
+                    <a href={`mailto:${contactPerson.email}`} className="hover:text-primary truncate">{contactPerson.email}</a>
                   </div>
                 )}
-                {assignedStaff.phone && (
+                {contactPerson.phone && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone className="w-3.5 h-3.5 shrink-0" />
-                    <a href={`tel:${assignedStaff.phone}`} className="hover:text-primary">{assignedStaff.phone}</a>
+                    <a href={`tel:${contactPerson.phone}`} className="hover:text-primary">{contactPerson.phone}</a>
                   </div>
                 )}
               </div>
@@ -179,7 +181,7 @@ export default function AgentDashboard() {
             </Card>
           )}
 
-          <Card className={`p-6 border-none shadow-lg shadow-black/5 ${!assignedStaff ? "lg:col-span-1" : ""}`}>
+          <Card className={`p-6 border-none shadow-lg shadow-black/5 ${!contactPerson ? "lg:col-span-1" : ""}`}>
             <div className="flex items-center gap-2 mb-5">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                 <Plus className="w-4 h-4 text-emerald-500" />
