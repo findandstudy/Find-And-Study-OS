@@ -199,7 +199,7 @@ router.get("/course-finder/filters", async (_req, res): Promise<void> => {
   });
 });
 
-router.get("/course-finder/students", requireAuth, async (req, res): Promise<void> => {
+router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("course_finder"), async (req, res): Promise<void> => {
   const { search, limit = "10" } = req.query as Record<string, string>;
   const limitNum = Math.min(20, Math.max(1, parseInt(limit, 10)));
 

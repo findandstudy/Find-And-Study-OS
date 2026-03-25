@@ -539,7 +539,8 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
   }
 
   if (Object.keys(updates).length === 0) {
-    res.json(staffUser);
+    const { passwordHash: _ph, ...safeStaff } = staffUser;
+    res.json(safeStaff);
     return;
   }
 
