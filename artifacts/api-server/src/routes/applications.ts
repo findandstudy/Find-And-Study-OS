@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
@@ -11,7 +11,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 const router: IRouter = Router();
 
 const APP_PATCH_FIELDS = [
-  "stage", "universityId", "programId", "agentId",
+  "stage", "universityId", "programId", "agentId", "assignedToId",
   "universityName", "country", "programName", "intake",
   "level", "instructionLanguage", "deadline",
   "tuitionFee", "discountedFee", "scholarship", "commissionRate",
@@ -67,6 +67,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       programId: applicationsTable.programId,
       universityId: applicationsTable.universityId,
       agentId: applicationsTable.agentId,
+      assignedToId: applicationsTable.assignedToId,
       season: applicationsTable.season,
       stage: applicationsTable.stage,
       intake: applicationsTable.intake,
@@ -84,6 +85,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       studentFirstName: studentsTable.firstName,
       studentLastName: studentsTable.lastName,
       studentEmail: studentsTable.email,
+      studentPhone: studentsTable.phone,
       commissionAmount: commissionsTable.universityCommissionAmount,
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
     })
@@ -299,6 +301,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       programId: applicationsTable.programId,
       universityId: applicationsTable.universityId,
       agentId: applicationsTable.agentId,
+      assignedToId: applicationsTable.assignedToId,
       season: applicationsTable.season,
       stage: applicationsTable.stage,
       intake: applicationsTable.intake,
@@ -357,8 +360,19 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const AGENT_PATCH_FIELDS: string[] = [];
-  const allowedFields = isStaff ? APP_PATCH_FIELDS : AGENT_PATCH_FIELDS;
+  let allowedFields = isStaff ? [...APP_PATCH_FIELDS] : [...AGENT_PATCH_FIELDS];
+
+  if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
+    const [existing] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+    if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
+    if (existing.assignedToId !== null) {
+      allowedFields = allowedFields.filter(f => f !== "assignedToId");
+    } else if (req.body.assignedToId !== user.id) {
+      allowedFields = allowedFields.filter(f => f !== "assignedToId");
+    }
+  }
 
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {

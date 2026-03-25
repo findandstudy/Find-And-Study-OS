@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { studentsTable } from "./students";
 import { programsTable, universitiesTable } from "./universities";
 import { agentsTable } from "./agents";
+import { usersTable } from "./users";
 
 export const applicationsTable = pgTable("applications", {
   id: serial("id").primaryKey(),
@@ -11,6 +12,7 @@ export const applicationsTable = pgTable("applications", {
   programId: integer("program_id").references(() => programsTable.id, { onDelete: "set null" }),
   universityId: integer("university_id").references(() => universitiesTable.id, { onDelete: "set null" }),
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   season: text("season").notNull().default("2026"),
   stage: text("stage").notNull().default("inquiry"),
   intake: text("intake"),
@@ -39,6 +41,7 @@ export const applicationsTable = pgTable("applications", {
   index("applications_program_id_idx").on(table.programId),
   index("applications_university_id_idx").on(table.universityId),
   index("applications_agent_id_idx").on(table.agentId),
+  index("applications_assigned_to_id_idx").on(table.assignedToId),
   index("applications_stage_idx").on(table.stage),
   index("applications_season_idx").on(table.season),
 ]);
