@@ -214,7 +214,7 @@ function Router() {
           <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDocuments /></ProtectedRoute>
         </Route>
         <Route path="/staff/course-finder">
-          <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]}><StaffCourseFinder /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]} requiredPermission="course_finder"><StaffCourseFinder /></ProtectedRoute>
         </Route>
         <Route path="/staff/agents">
           <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
@@ -254,28 +254,28 @@ function Router() {
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentDashboard /></ProtectedRoute>
         </Route>
         <Route path="/agent/leads">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentLeads /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><AgentLeads /></ProtectedRoute>
         </Route>
         <Route path="/agent/leads/:id">
-          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><LeadDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><LeadDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
         </Route>
         <Route path="/agent/students">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentStudents /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="students"><AgentStudents /></ProtectedRoute>
         </Route>
         <Route path="/agent/students/:id">
-          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><StudentDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="students"><StudentDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
         </Route>
         <Route path="/agent/applications">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentApps /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="applications"><AgentApps /></ProtectedRoute>
         </Route>
         <Route path="/agent/applications/:id">
-          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES}><ApplicationDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="applications"><ApplicationDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
         </Route>
         <Route path="/agent/messages">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentMessages /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="messages"><AgentMessages /></ProtectedRoute>
         </Route>
         <Route path="/agent/commissions">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentCommissions /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="commissions"><AgentCommissions /></ProtectedRoute>
         </Route>
         <Route path="/agent/account">
           <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentAccount /></ProtectedRoute>
@@ -284,7 +284,7 @@ function Router() {
           <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
         </Route>
         <Route path="/agent/team">
-          <ProtectedRoute allowedRoles={["agent", "sub_agent"]}><AgentTeam /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={["agent", "sub_agent"]} requiredPermission="team"><AgentTeam /></ProtectedRoute>
         </Route>
 
         {/* Language-prefixed public routes */}

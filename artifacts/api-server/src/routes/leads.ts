@@ -3,7 +3,7 @@ import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, 
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
-import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 
@@ -108,7 +108,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
 
-  if (AGENT_ROLES.includes(user.role as any)) {
+  if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
@@ -155,7 +155,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const currentYear = String(new Date().getFullYear());
   let resolvedAgentId = agentId || null;
-  if (AGENT_ROLES.includes(user.role as any)) {
+  if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
     resolvedAgentId = agentRec?.id || null;
   }
@@ -179,7 +179,7 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   const user = req.user!;
-  if (AGENT_ROLES.includes(user.role as any)) {
+  if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
       res.status(403).json({ error: "Access denied" });
@@ -205,7 +205,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const user = req.user!;
-  const isAgent = AGENT_ROLES.includes(user.role as any);
+  const isAgent = isAgentRole(user.role);
 
   const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }

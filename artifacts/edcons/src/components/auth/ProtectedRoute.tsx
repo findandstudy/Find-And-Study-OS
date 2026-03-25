@@ -7,6 +7,7 @@ import { ShieldX, Clock } from "lucide-react";
 interface Props {
   children: React.ReactNode;
   allowedRoles?: string[];
+  requiredPermission?: string;
 }
 
 function PendingScreen() {
@@ -50,7 +51,7 @@ function AccessDeniedScreen() {
   );
 }
 
-export function ProtectedRoute({ children, allowedRoles }: Props) {
+export function ProtectedRoute({ children, allowedRoles, requiredPermission }: Props) {
   const { user, isLoading } = useAuth(true, allowedRoles);
 
   if (isLoading) {
@@ -69,6 +70,13 @@ export function ProtectedRoute({ children, allowedRoles }: Props) {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <AccessDeniedScreen />;
+  }
+
+  if (requiredPermission && user.role === "agent_staff") {
+    const perms = (user as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
+    if (!perms || !perms.includes(requiredPermission)) {
+      return <AccessDeniedScreen />;
+    }
   }
 
   return <>{children}</>;

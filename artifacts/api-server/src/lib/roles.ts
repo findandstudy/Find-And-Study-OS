@@ -8,3 +8,7 @@ export const FINANCE_ROLES = ["super_admin", "admin", "accountant"] as const;
 export const CONTENT_ROLES = ["super_admin", "admin", "manager", "editor"] as const;
 export const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"] as const;
 export const STUDENT_ROLES = ["student"] as const;
+
+export function isAgentRole(role: string): role is (typeof AGENT_ROLES)[number] {
+  return (AGENT_ROLES as readonly string[]).includes(role);
+}

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
@@ -42,7 +42,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       return;
     }
     conditions.push(eq(applicationsTable.studentId, studentRec.id));
-  } else if (AGENT_ROLES.includes(user.role as any)) {
+  } else if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
@@ -94,7 +94,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .offset(offset)
     .orderBy(desc(applicationsTable.createdAt));
 
-  const isAgentUser = req.user && AGENT_ROLES.includes(req.user.role as any);
+  const isAgentUser = req.user && isAgentRole(req.user.role);
   const mappedRows = rows.map(r => {
     const { agentCommissionAmount, ...rest } = r;
     if (isAgentUser) {
@@ -127,7 +127,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   }
   const currentYear = String(new Date().getFullYear());
   let resolvedAgentId = agentId || null;
-  if (AGENT_ROLES.includes(user.role as any)) {
+  if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
     if (!agentRec) {
       res.status(403).json({ error: "No agent record found" });
@@ -318,7 +318,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  if (AGENT_ROLES.includes(user.role as any)) {
+  if (isAgentRole(user.role)) {
     (row as any).commissionAmount = row.agentCommissionAmount;
   }
   delete (row as any).agentCommissionAmount;
@@ -328,7 +328,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       if (!studentRec || studentRec.id !== row.studentId) {
         res.status(403).json({ error: "Access denied" }); return;
       }
-    } else if (AGENT_ROLES.includes(user.role as any)) {
+    } else if (isAgentRole(user.role)) {
       const visibleIds = await getAgentVisibleIds(user.id, user.role);
       if (!row.agentId || !visibleIds.includes(row.agentId)) {
         res.status(403).json({ error: "Access denied" }); return;
