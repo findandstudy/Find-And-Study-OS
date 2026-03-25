@@ -3,7 +3,7 @@ import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, 
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
-import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 
@@ -97,7 +97,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   }
 });
 
-router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const { status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -108,7 +108,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "s
   if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
 
-  if (user.role === "agent" || user.role === "sub_agent") {
+  if (AGENT_ROLES.includes(user.role as any)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
@@ -142,7 +142,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "s
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo, season, agentId } = req.body;
   if (!firstName || !lastName || !email || !phone) {
@@ -155,8 +155,8 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const currentYear = String(new Date().getFullYear());
   let resolvedAgentId = agentId || null;
-  if (user.role === "agent" || user.role === "sub_agent") {
-    const agentRec = await getAgentRecord(user.id);
+  if (AGENT_ROLES.includes(user.role as any)) {
+    const agentRec = await getAgentRecord(user.id, user.role);
     resolvedAgentId = agentRec?.id || null;
   }
   const [lead] = await db.insert(leadsTable).values({
@@ -173,13 +173,13 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "
   res.status(201).json(lead);
 });
 
-router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   const user = req.user!;
-  if (user.role === "agent" || user.role === "sub_agent") {
+  if (AGENT_ROLES.includes(user.role as any)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
       res.status(403).json({ error: "Access denied" });
@@ -200,12 +200,12 @@ const AGENT_LEAD_PATCH_FIELDS = [
   "status", "notes", "estimatedValue",
 ];
 
-router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const user = req.user!;
-  const isAgent = user.role === "agent" || user.role === "sub_agent";
+  const isAgent = AGENT_ROLES.includes(user.role as any);
 
   const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }

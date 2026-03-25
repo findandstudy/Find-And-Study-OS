@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
@@ -42,7 +42,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
       return;
     }
     conditions.push(eq(applicationsTable.studentId, studentRec.id));
-  } else if (user.role === "agent" || user.role === "sub_agent") {
+  } else if (AGENT_ROLES.includes(user.role as any)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
@@ -94,7 +94,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
     .offset(offset)
     .orderBy(desc(applicationsTable.createdAt));
 
-  const isAgentUser = req.user && (req.user.role === "agent" || req.user.role === "sub_agent");
+  const isAgentUser = req.user && AGENT_ROLES.includes(req.user.role as any);
   const mappedRows = rows.map(r => {
     const { agentCommissionAmount, ...rest } = r;
     if (isAgentUser) {
@@ -114,7 +114,7 @@ router.get("/applications", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const {
     studentId, stage = "inquiry", universityId, programId, agentId,
@@ -127,8 +127,8 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, "agent" as
   }
   const currentYear = String(new Date().getFullYear());
   let resolvedAgentId = agentId || null;
-  if (user.role === "agent" || user.role === "sub_agent") {
-    const agentRec = await getAgentRecord(user.id);
+  if (AGENT_ROLES.includes(user.role as any)) {
+    const agentRec = await getAgentRecord(user.id, user.role);
     if (!agentRec) {
       res.status(403).json({ error: "No agent record found" });
       return;
@@ -318,7 +318,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  if (user.role === "agent" || user.role === "sub_agent") {
+  if (AGENT_ROLES.includes(user.role as any)) {
     (row as any).commissionAmount = row.agentCommissionAmount;
   }
   delete (row as any).agentCommissionAmount;
@@ -328,7 +328,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
       if (!studentRec || studentRec.id !== row.studentId) {
         res.status(403).json({ error: "Access denied" }); return;
       }
-    } else if (user.role === "agent" || user.role === "sub_agent") {
+    } else if (AGENT_ROLES.includes(user.role as any)) {
       const visibleIds = await getAgentVisibleIds(user.id, user.role);
       if (!row.agentId || !visibleIds.includes(row.agentId)) {
         res.status(403).json({ error: "Access denied" }); return;
@@ -341,7 +341,7 @@ router.get("/applications/:id", requireAuth, async (req, res): Promise<void> => 
   res.json(row);
 });
 
-router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);

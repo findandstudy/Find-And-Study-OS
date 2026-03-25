@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, studentsTable, documentsTable, usersTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
@@ -94,7 +94,7 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
   res.send(buffer);
 });
 
-router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as any, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as any, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const { agentId, status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -108,7 +108,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
   if (agentId && STAFF_ROLES.includes(user.role as any)) {
     conditions.push(eq(studentsTable.agentId, parseInt(agentId, 10)));
   }
-  if (user.role === "agent" || user.role === "sub_agent") {
+  if (AGENT_ROLES.includes(user.role as any)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
@@ -175,7 +175,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student" as an
   });
 });
 
-router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any, "sub_agent" as any), async (req, res): Promise<void> => {
+router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const {
     firstName, lastName, status = "active",
     email, phone, nationality,
@@ -198,8 +198,8 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, "agent" as any
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
 
   let resolvedAgentId = agentId || null;
-  if (req.user!.role === "agent" || req.user!.role === "sub_agent") {
-    const agentRec = await getAgentRecord(req.user!.id);
+  if (AGENT_ROLES.includes(req.user!.role as any)) {
+    const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
     if (!agentRec) {
       res.status(403).json({ error: "No agent record found" });
       return;
@@ -298,7 +298,7 @@ router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const isStaff = STAFF_ROLES.includes(user.role as any);
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const isOwnProfile = student.userId === user.id;
-  const isAgent = user.role === "agent" || user.role === "sub_agent";
+  const isAgent = AGENT_ROLES.includes(user.role as any);
 
   if (isAgent) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
@@ -323,7 +323,7 @@ router.patch("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const role = req.user!.role;
   const isStaff = (STAFF_ROLES as readonly string[]).includes(role);
-  const isAgent = role === "agent" || role === "sub_agent";
+  const isAgent = AGENT_ROLES.includes(role as any);
   const isStudent = role === "student";
   if (!isStaff && !isAgent && !isStudent) { res.status(403).json({ error: "Forbidden" }); return; }
 

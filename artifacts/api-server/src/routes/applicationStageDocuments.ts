@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable } from "@workspace/db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, logAudit } from "../lib/auth";
-import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 
 const router: IRouter = Router();
@@ -29,7 +29,7 @@ async function verifyApplicationAccess(userId: number, role: string, application
     return !!studentRec && studentRec.id === app.studentId;
   }
 
-  if (role === "agent" || role === "sub_agent") {
+  if (AGENT_ROLES.includes(role as any)) {
     const visibleIds = await getAgentVisibleIds(userId, role);
     return !!app.agentId && visibleIds.includes(app.agentId);
   }
@@ -126,7 +126,7 @@ router.post("/applications/:id/stage-documents", requireAuth, async (req, res): 
     return;
   }
 
-  if (EVERYONE_UPLOAD_STAGES.includes(stage) && !isStaff && user.role !== "agent" && user.role !== "sub_agent" && user.role !== "student") {
+  if (EVERYONE_UPLOAD_STAGES.includes(stage) && !isStaff && !AGENT_ROLES.includes(user.role as any) && user.role !== "student") {
     res.status(403).json({ error: "You do not have permission to upload documents" });
     return;
   }

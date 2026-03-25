@@ -1,7 +1,17 @@
-import { db, agentsTable } from "@workspace/db";
+import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 export async function getAgentVisibleIds(userId: number, userRole: string): Promise<number[]> {
+  if (userRole === "agent_staff") {
+    const [staffUser] = await db.select({ managingAgentId: usersTable.managingAgentId }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!staffUser?.managingAgentId) return [];
+    const parentAgentId = staffUser.managingAgentId;
+    const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, parentAgentId));
+    if (!parentAgent) return [];
+    const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, parentAgent.id));
+    return [parentAgent.id, ...subAgents.map(s => s.id)];
+  }
+
   const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agentRec) return [];
 
@@ -13,7 +23,22 @@ export async function getAgentVisibleIds(userId: number, userRole: string): Prom
   return [agentRec.id];
 }
 
-export async function getAgentRecord(userId: number) {
+export async function getAgentRecord(userId: number, userRole?: string) {
+  if (userRole === "agent_staff") {
+    const [staffUser] = await db.select({ managingAgentId: usersTable.managingAgentId }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!staffUser?.managingAgentId) return null;
+    const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.id, staffUser.managingAgentId));
+    return agentRec || null;
+  }
   const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   return agentRec || null;
+}
+
+export async function getManagingAgentId(userId: number, userRole: string): Promise<number | null> {
+  if (userRole === "agent_staff") {
+    const [staffUser] = await db.select({ managingAgentId: usersTable.managingAgentId }).from(usersTable).where(eq(usersTable.id, userId));
+    return staffUser?.managingAgentId || null;
+  }
+  const [agentRec] = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.userId, userId));
+  return agentRec?.id || null;
 }

@@ -67,7 +67,7 @@ export default function Login() {
         setLocation("/staff");
       } else if (user.role === "student") {
         setLocation("/student");
-      } else if (["agent", "sub_agent"].includes(user.role)) {
+      } else if (["agent", "sub_agent", "agent_staff"].includes(user.role)) {
         setLocation("/agent");
       } else {
         setLocation("/staff");

@@ -10,7 +10,7 @@ router.get("/quick-links", requireAuth, async (req, res): Promise<void> => {
   const userRole = req.user!.role;
   let target: string;
 
-  if (userRole === "agent") target = "agent";
+  if (userRole === "agent" || userRole === "agent_staff") target = "agent";
   else if (userRole === "sub_agent") target = "sub_agent";
   else if (userRole === "student") target = "student";
   else target = "staff";

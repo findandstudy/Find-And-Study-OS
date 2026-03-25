@@ -59,9 +59,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, ChevronUp, User } from "lucide-react";
 
-type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string };
+type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string };
 
-function getMenuForRole(role: string): { groups: { label: string; items: MenuItem[] }[] } {
+function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { label: string; items: MenuItem[] }[] } {
   const FINANCE_ROLES = ['super_admin', 'admin', 'accountant'];
   const showFinance = FINANCE_ROLES.includes(role);
 
@@ -158,21 +158,25 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
     };
   }
 
-  if (role === 'agent' || role === 'sub_agent') {
-    const agentItems: MenuItem[] = [
-      { title: "Dashboard",    icon: LayoutDashboard, url: '/agent' },
-      { title: "Leads",        icon: UserCheck,       url: '/agent/leads' },
-      { title: "Students",     icon: GraduationCap,   url: '/agent/students' },
-      { title: "Applications", icon: FileText,        url: '/agent/applications' },
-      { title: "Course Finder", icon: Search,         url: '/staff/course-finder' },
-      { title: "Messages",     icon: MessageSquare,   url: '/agent/messages' },
-      { title: "Commissions",  icon: TrendingUp,      url: '/agent/commissions' },
+  if (role === 'agent' || role === 'sub_agent' || role === 'agent_staff') {
+    let agentItems: MenuItem[] = [
+      { title: "Dashboard",     icon: LayoutDashboard, url: '/agent' },
+      { title: "Leads",         icon: UserCheck,       url: '/agent/leads',         permKey: 'leads' },
+      { title: "Students",      icon: GraduationCap,   url: '/agent/students',      permKey: 'students' },
+      { title: "Applications",  icon: FileText,        url: '/agent/applications',  permKey: 'applications' },
+      { title: "Course Finder", icon: Search,          url: '/staff/course-finder', permKey: 'course_finder' },
+      { title: "Messages",      icon: MessageSquare,   url: '/agent/messages',      permKey: 'messages' },
+      { title: "Commissions",   icon: TrendingUp,      url: '/agent/commissions',   permKey: 'commissions' },
     ];
+    if (role === 'agent_staff' && agentStaffPerms) {
+      agentItems = agentItems.filter(item => !item.permKey || agentStaffPerms.includes(item.permKey));
+    }
     const accountItems: MenuItem[] = [
       { title: "My Account", icon: UserCircle, url: '/agent/account' },
     ];
     if (role === 'agent') {
       accountItems.push({ title: "Sub Agents", icon: Users, url: '/agent/sub-agents' });
+      accountItems.push({ title: "My Team", icon: Briefcase, url: '/agent/team' });
     }
     return {
       groups: [
@@ -188,7 +192,7 @@ function getMenuForRole(role: string): { groups: { label: string; items: MenuIte
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin", admin: "Admin", manager: "Manager",
   staff: "Staff", consultant: "Consultant", accountant: "Accountant", editor: "Editor",
-  student: "Student", agent: "Agent", sub_agent: "Sub Agent",
+  student: "Student", agent: "Agent", sub_agent: "Sub Agent", agent_staff: "Staff",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -196,6 +200,7 @@ const ROLE_COLORS: Record<string, string> = {
   manager: "bg-orange-500/10 text-orange-600", staff: "bg-blue-500/10 text-blue-600",
   consultant: "bg-indigo-500/10 text-indigo-600", accountant: "bg-purple-500/10 text-purple-600",
   student: "bg-green-500/10 text-green-600", agent: "bg-amber-500/10 text-amber-600",
+  agent_staff: "bg-teal-500/10 text-teal-600",
 };
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
@@ -205,7 +210,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   useSeo({ title: "Portal", noindex: true });
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
-  const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent");
+  const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
 
   const { data: agentProfile } = useQuery({
     queryKey: ["agent-me"],
@@ -256,7 +261,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const { groups } = getMenuForRole(user.role);
+  const staffPerms = (user as any).agentStaffPermissions as string[] | undefined;
+  const { groups } = getMenuForRole(user.role, staffPerms);
   const allItems = groups.flatMap(g => g.items);
   const activeItem = allItems.find(i => {
     if (i.url === '/staff' || i.url === '/admin' || i.url === '/student' || i.url === '/agent') {

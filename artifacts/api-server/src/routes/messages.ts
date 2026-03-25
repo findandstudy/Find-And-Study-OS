@@ -875,10 +875,17 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
   res.status(201).json(message);
 });
 
-const AGENT_ROLE_LIST = ["agent", "sub_agent"];
+const AGENT_ROLE_LIST = ["agent", "sub_agent", "agent_staff"];
 
 async function getAgentContactUserIds(userId: number, userRole: string): Promise<Set<number>> {
-  const [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  let agentRec;
+  if (userRole === "agent_staff") {
+    const [staffUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!staffUser?.managingAgentId) return new Set();
+    [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.id, staffUser.managingAgentId));
+  } else {
+    [agentRec] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  }
   if (!agentRec) return new Set();
 
   const contactUserIds = new Set<number>();

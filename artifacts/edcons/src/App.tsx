@@ -84,11 +84,12 @@ const AgentCommissions = lazy(() => import("@/pages/agent/Commissions"));
 const AgentAccount = lazy(() => import("@/pages/agent/Account"));
 const AgentSubAgents = lazy(() => import("@/pages/agent/SubAgents"));
 const AgentMessages = lazy(() => import("@/pages/agent/Messages"));
+const AgentTeam = lazy(() => import("@/pages/agent/Team"));
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
 const STUDENT_ROLES = ["student"];
-const AGENT_ROLES = ["agent", "sub_agent"];
+const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -281,6 +282,9 @@ function Router() {
         </Route>
         <Route path="/agent/sub-agents">
           <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
+        </Route>
+        <Route path="/agent/team">
+          <ProtectedRoute allowedRoles={["agent"]}><AgentTeam /></ProtectedRoute>
         </Route>
 
         {/* Language-prefixed public routes */}

@@ -19,7 +19,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 - **API Codegen:** Orval (from OpenAPI spec).
 
 **Core Architectural Decisions:**
-- **Authentication:** Custom email/password authentication with session cookies and multi-role access control (`super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `pending`). Features include email verification, rate limiting, and open-redirect protection.
+- **Authentication:** Custom email/password authentication with session cookies and multi-role access control (`super_admin`, `admin`, `manager`, `staff`, `consultant`, `editor`, `accountant`, `student`, `agent`, `sub_agent`, `agent_staff`, `pending`). Features include email verification, rate limiting, and open-redirect protection.
 - **Role-Based Access Control (RBAC):** Granular, module-specific permissions and role-based visibility for leads and students, allowing staff to self-assign unassigned records.
 - **Dynamic Pipeline Management:** Lead, application, and student pipeline stages are database-driven and fully configurable via API.
 - **UI/UX:** Utilizes TailwindCSS and shadcn/ui for a consistent design system. Features role-based dashboards, navigation, customizable branding, and dark mode.
@@ -30,7 +30,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
     - **Application Management (Staff):** Pipeline and list views with cascading selects and auto-fill for program details. Includes stage-specific document management with upload permissions.
     - **Lead Management (Staff):** Kanban pipeline and list views.
     - **Finance Management (Staff):** Stage-based finance automation for commission and service fees, with dual-status tracking and configurable exclusion criteria. Price snapshots are taken at application creation to ensure financial data immutability. Agent commission amounts are auto-calculated from the agent's `commissionRate` at application creation time, including sub-agent waterfall calculations.
-    - **Agent Portal:** Dedicated portal with Leads, Students, and Applications pages mirroring staff functionality (with agent-scoped visibility), sub-agent management (CRUD), self-service account settings, and Web-to-Lead form (unique embed code per agent/sub-agent for collecting leads from external websites).
+    - **Agent Portal:** Dedicated portal with Leads, Students, and Applications pages mirroring staff functionality (with agent-scoped visibility), sub-agent management (CRUD), agent staff management (team members with granular permissions: leads, students, applications, documents, course_finder, messages, commissions, team), self-service account settings, and Web-to-Lead form (unique embed code per agent/sub-agent for collecting leads from external websites). Agent staff (`agent_staff` role) inherit their parent agent's visibility scope via `managingAgentId` FK; their sidebar is filtered based on `agentStaffPermissions` (JSONB array).
     - **Course Finder (Staff/Agent):** Program search, filtering, PDF proposal generation, and direct application creation.
     - **Communication Hub:** Internal messaging system supporting direct and group conversations across various channels (internal, WhatsApp, Telegram, email, SMS), broadcast messaging, message templates, and in-app notifications with configurable rules.
     - **Admin Settings Center:** Comprehensive configuration for branding, company information, SEO, email branding, document templates, and advanced settings.

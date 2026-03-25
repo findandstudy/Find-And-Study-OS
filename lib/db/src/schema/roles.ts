@@ -244,6 +244,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "documents.upload",
     "documents.download",
   ],
+  agent_staff: [
+    "dashboard.view",
+    "leads.view",
+    "leads.create",
+    "leads.edit",
+    "applications.view",
+    "applications.create",
+    "students.view",
+    "students.create",
+    "students.edit",
+    "documents.view",
+    "documents.upload",
+    "documents.download",
+    "course_finder.access",
+  ],
 };
 
 export const DEFAULT_ROLES = [
@@ -315,6 +330,13 @@ export const DEFAULT_ROLES = [
     displayName: "Sub Agent",
     description: "Sub-agent or employee of an agent partner",
     color: "yellow",
+    isSystem: true,
+  },
+  {
+    name: "agent_staff",
+    displayName: "Agent Staff",
+    description: "Staff member of an agent — permissions set by the agent",
+    color: "teal",
     isSystem: true,
   },
 ];

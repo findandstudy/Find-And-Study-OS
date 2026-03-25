@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -26,6 +26,8 @@ export const usersTable = pgTable("users", {
   passwordResetExpires: timestamp("password_reset_expires", { withTimezone: true }),
   emailVerificationToken: text("email_verification_token"),
   createdFromSource: text("created_from_source"),
+  managingAgentId: integer("managing_agent_id"),
+  agentStaffPermissions: jsonb("agent_staff_permissions"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

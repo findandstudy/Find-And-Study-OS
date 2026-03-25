@@ -45,7 +45,7 @@ function setSessionCookie(res: Response, sid: string) {
 }
 
 function buildSessionUser(user: any): SessionUser {
-  return {
+  const result: any = {
     id: user.id,
     replitId: user.replitId || `local-${user.id}`,
     email: user.email,
@@ -64,6 +64,10 @@ function buildSessionUser(user: any): SessionUser {
     emergencyContactName: user.emergencyContactName,
     emergencyContactPhone: user.emergencyContactPhone,
   };
+  if (user.role === "agent_staff" && user.agentStaffPermissions) {
+    result.agentStaffPermissions = user.agentStaffPermissions;
+  }
+  return result;
 }
 
 function generateVerificationCode(): string {

@@ -29,7 +29,16 @@ function isValidStorageUrl(url: string): boolean {
 
 router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  const userRole = req.user!.role;
+
+  let agent;
+  if (userRole === "agent_staff") {
+    const [staffUser] = await db.select({ managingAgentId: usersTable.managingAgentId }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!staffUser?.managingAgentId) { res.status(404).json({ error: "Agent profile not found" }); return; }
+    [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, staffUser.managingAgentId));
+  } else {
+    [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  }
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
   let assignedStaff = null;
@@ -360,6 +369,217 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
     maxAge: SESSION_TTL,
   });
   res.json({ success: true, redirectTo: "/" });
+});
+
+const AGENT_STAFF_PERMISSIONS = [
+  { key: "leads", label: "Leads" },
+  { key: "students", label: "Students" },
+  { key: "applications", label: "Applications" },
+  { key: "documents", label: "Documents" },
+  { key: "course_finder", label: "Course Finder" },
+  { key: "messages", label: "Messages" },
+  { key: "commissions", label: "Commissions" },
+  { key: "team", label: "Manage Team" },
+];
+
+async function resolveManagingAgent(userId: number, userRole: string) {
+  if (userRole === "agent") {
+    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+    return agent || null;
+  }
+  if (userRole === "sub_agent") {
+    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+    return agent || null;
+  }
+  return null;
+}
+
+router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+  const agent = await resolveManagingAgent(userId, userRole);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  if (userRole === "sub_agent") {
+    res.status(403).json({ error: "Sub-agents cannot manage staff" });
+    return;
+  }
+
+  const { search, page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const conditions: any[] = [
+    eq(usersTable.role, "agent_staff"),
+    eq(usersTable.managingAgentId, agent.id),
+  ];
+
+  if (search) {
+    conditions.push(
+      or(
+        ilike(usersTable.firstName, `%${search}%`),
+        ilike(usersTable.lastName, `%${search}%`),
+        ilike(usersTable.email, `%${search}%`),
+      )
+    );
+  }
+
+  const whereClause = and(...conditions);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(usersTable).where(whereClause);
+
+  const data = await db
+    .select({
+      id: usersTable.id,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      isActive: usersTable.isActive,
+      agentStaffPermissions: usersTable.agentStaffPermissions,
+      createdAt: usersTable.createdAt,
+    })
+    .from(usersTable)
+    .where(whereClause)
+    .limit(limitNum)
+    .offset(offset)
+    .orderBy(desc(usersTable.createdAt));
+
+  res.json({
+    data,
+    meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) },
+  });
+});
+
+router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+  const agent = await resolveManagingAgent(userId, userRole);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  if (userRole === "sub_agent") {
+    res.status(403).json({ error: "Sub-agents cannot manage staff" });
+    return;
+  }
+
+  const { firstName, lastName, email, phone, password, permissions } = req.body;
+  if (!firstName || !lastName || !email) {
+    res.status(400).json({ error: "First name, last name, and email are required" });
+    return;
+  }
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+
+  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  if (existingUser) {
+    res.status(400).json({ error: "A user with this email already exists" });
+    return;
+  }
+
+  const validPerms = Array.isArray(permissions) 
+    ? permissions.filter((p: string) => AGENT_STAFF_PERMISSIONS.some(asp => asp.key === p)) 
+    : ["leads", "students", "applications", "documents", "course_finder"];
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const [newUser] = await db.insert(usersTable).values({
+    email,
+    firstName,
+    lastName,
+    phone: phone || null,
+    role: "agent_staff",
+    passwordHash,
+    managingAgentId: agent.id,
+    agentStaffPermissions: validPerms,
+    isActive: true,
+  }).returning();
+
+  res.status(201).json({
+    id: newUser.id,
+    firstName: newUser.firstName,
+    lastName: newUser.lastName,
+    email: newUser.email,
+    phone: newUser.phone,
+    isActive: newUser.isActive,
+    agentStaffPermissions: newUser.agentStaffPermissions,
+    createdAt: newUser.createdAt,
+  });
+});
+
+router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+  const staffId = parseInt(req.params.id, 10);
+  const agent = await resolveManagingAgent(userId, userRole);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  if (userRole === "sub_agent") {
+    res.status(403).json({ error: "Sub-agents cannot manage staff" });
+    return;
+  }
+
+  const [staffUser] = await db.select().from(usersTable).where(
+    and(eq(usersTable.id, staffId), eq(usersTable.role, "agent_staff"), eq(usersTable.managingAgentId, agent.id))
+  );
+  if (!staffUser) { res.status(404).json({ error: "Staff member not found" }); return; }
+
+  const updates: Record<string, unknown> = {};
+  if (req.body.firstName !== undefined) updates.firstName = req.body.firstName;
+  if (req.body.lastName !== undefined) updates.lastName = req.body.lastName;
+  if (req.body.phone !== undefined) updates.phone = req.body.phone || null;
+  if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
+  if (req.body.permissions !== undefined) {
+    const validPerms = Array.isArray(req.body.permissions)
+      ? req.body.permissions.filter((p: string) => AGENT_STAFF_PERMISSIONS.some(asp => asp.key === p))
+      : [];
+    updates.agentStaffPermissions = validPerms;
+  }
+  if (req.body.password && req.body.password.length >= 6) {
+    updates.passwordHash = await bcrypt.hash(req.body.password, 10);
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.json(staffUser);
+    return;
+  }
+
+  const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, staffId)).returning();
+  res.json({
+    id: updated.id,
+    firstName: updated.firstName,
+    lastName: updated.lastName,
+    email: updated.email,
+    phone: updated.phone,
+    isActive: updated.isActive,
+    agentStaffPermissions: updated.agentStaffPermissions,
+    createdAt: updated.createdAt,
+  });
+});
+
+router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+  const staffId = parseInt(req.params.id, 10);
+  const agent = await resolveManagingAgent(userId, userRole);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+
+  if (userRole === "sub_agent") {
+    res.status(403).json({ error: "Sub-agents cannot manage staff" });
+    return;
+  }
+
+  const [staffUser] = await db.select().from(usersTable).where(
+    and(eq(usersTable.id, staffId), eq(usersTable.role, "agent_staff"), eq(usersTable.managingAgentId, agent.id))
+  );
+  if (!staffUser) { res.status(404).json({ error: "Staff member not found" }); return; }
+
+  await db.delete(usersTable).where(eq(usersTable.id, staffId));
+  res.json({ success: true });
+});
+
+router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "sub_agent"), async (_req, res): Promise<void> => {
+  res.json(AGENT_STAFF_PERMISSIONS);
 });
 
 router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
