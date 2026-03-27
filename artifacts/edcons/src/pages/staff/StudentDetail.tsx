@@ -78,7 +78,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
   const photoDoc = useMemo(() => {
-    const photoDocs = documents.filter((d: any) => d.type === "photo" && d.fileData);
+    const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && d.fileData);
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents]);

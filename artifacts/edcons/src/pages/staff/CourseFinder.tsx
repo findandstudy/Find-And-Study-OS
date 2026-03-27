@@ -1687,13 +1687,15 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
     for (const d of uploadedDocs) {
       try {
         const docName = `${studentFirstName}-${studentLastName}-${d.label}`;
+        let docType = d.label?.toLowerCase().replace(/\s+/g, "_") ?? "other";
+        if (docType === "photograph") docType = "photo";
         const res = await fetch(`${BASE_URL}/api/documents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
             name: docName,
-            type: d.label?.toLowerCase().replace(/\s+/g, "_") ?? "other",
+            type: docType,
             status: "pending",
             studentId,
             applicationId,
