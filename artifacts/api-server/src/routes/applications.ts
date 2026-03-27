@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -277,6 +277,18 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       });
     }
   }
+
+  try {
+    const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.key, "application_made")));
+    if (appMadeStage) {
+      const [stu] = await db.select({ status: studentsTable.status }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+      if (stu && (stu.status === "active" || stu.status === "inactive")) {
+        await db.update(studentsTable).set({ status: "application_made" }).where(eq(studentsTable.id, parseInt(studentId, 10)));
+      }
+    }
+  } catch {}
 
   await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
 

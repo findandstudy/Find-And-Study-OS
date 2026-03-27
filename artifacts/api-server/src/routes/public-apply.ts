@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
@@ -157,6 +157,18 @@ async function createApplicationForStudent(studentId: number, programId: number 
         status: "pending",
       });
     }
+
+    try {
+      const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
+        .from(pipelineStagesTable)
+        .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.key, "application_made")));
+      if (appMadeStage) {
+        const [stu] = await db.select({ status: studentsTable.status }).from(studentsTable).where(eq(studentsTable.id, studentId));
+        if (stu && (stu.status === "active" || stu.status === "inactive")) {
+          await db.update(studentsTable).set({ status: "application_made" }).where(eq(studentsTable.id, studentId));
+        }
+      }
+    } catch {}
 
     console.log(`[AUTO-APPLICATION] Created application #${app.id} for student #${studentId}, program: ${snapshotProgramName}`);
     return app.id;
