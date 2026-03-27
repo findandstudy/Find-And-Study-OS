@@ -30,6 +30,33 @@ const DOC_TYPES = [
   { key: "other", label: "Other" },
 ];
 
+const DEGREE_REQUIRED_DOCS: Record<string, string[]> = {
+  associate: ["hs_diploma", "hs_transcript", "passport", "photo"],
+  bachelors: ["hs_diploma", "hs_transcript", "passport", "photo"],
+  masters: ["bachelor_diploma", "bachelor_transcript", "passport", "photo"],
+  doctorate: ["bachelor_diploma", "bachelor_transcript", "master_diploma", "master_transcript", "passport", "photo"],
+  language: ["passport"],
+  foundation: ["passport"],
+};
+
+function getRequiredDocsForDegree(degree: string | null | undefined): { keys: string[]; labels: Record<string, string> } {
+  const labelMap: Record<string, string> = {
+    passport: "Passport", photo: "Photo", photograph: "Photo",
+    hs_diploma: "HS Diploma", hs_transcript: "HS Transcript",
+    bachelor_diploma: "Bachelor Diploma", bachelor_transcript: "Bachelor Transcript",
+    master_diploma: "Master Diploma", master_transcript: "Master Transcript",
+  };
+  if (!degree) return { keys: ["passport"], labels: labelMap };
+  const normalized = degree.toLowerCase().replace(/['''`\s.]/g, "");
+  if (normalized.includes("associate")) return { keys: DEGREE_REQUIRED_DOCS.associate, labels: labelMap };
+  if (normalized.includes("bachelor")) return { keys: DEGREE_REQUIRED_DOCS.bachelors, labels: labelMap };
+  if (normalized.includes("master")) return { keys: DEGREE_REQUIRED_DOCS.masters, labels: labelMap };
+  if (normalized.includes("doctor") || normalized.includes("phd") || normalized.includes("doctorate")) return { keys: DEGREE_REQUIRED_DOCS.doctorate, labels: labelMap };
+  if (normalized.includes("language")) return { keys: DEGREE_REQUIRED_DOCS.language, labels: labelMap };
+  if (normalized.includes("foundation")) return { keys: DEGREE_REQUIRED_DOCS.foundation, labels: labelMap };
+  return { keys: ["passport"], labels: labelMap };
+}
+
 interface Props {
   id: number;
   basePath?: string;
@@ -138,6 +165,22 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     const raw = typeof prog.intakes === "string" ? prog.intakes : "";
     return raw.split(",").map((s: string) => s.trim()).filter(Boolean);
   }, [appProgramId, filteredPrograms]);
+
+  const missingDocs = useMemo(() => {
+    if (!appProgramId) return [];
+    const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
+    const { keys, labels } = getRequiredDocsForDegree(prog?.degree);
+    const studentDocTypes = new Set(
+      documents.map((d: any) => {
+        const t = (d.type || "").toLowerCase();
+        if (t === "photograph") return "photo";
+        return t;
+      })
+    );
+    return keys
+      .filter(k => !studentDocTypes.has(k))
+      .map(k => labels[k] || k);
+  }, [appProgramId, filteredPrograms, documents]);
 
   useEffect(() => { setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }, [appCountry]);
   useEffect(() => { setAppProgramId(""); setAppIntake(""); }, [appUniversityId]);
@@ -506,11 +549,18 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     </Select>
                   </div>
                 </div>
+                {missingDocs.length > 0 && appProgramId && (
+                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm font-medium text-red-700 mb-1">Missing required documents:</p>
+                    <p className="text-xs text-red-600">{missingDocs.join(", ")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Please upload these documents in the Documents tab before creating an application.</p>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 mt-3">
                   <Button variant="outline" size="sm" onClick={() => { setShowNewApp(false); setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }}>
                     Cancel
                   </Button>
-                  <Button size="sm" disabled={!appProgramId || appSubmitting} onClick={handleQuickApply}>
+                  <Button size="sm" disabled={!appProgramId || appSubmitting || missingDocs.length > 0} onClick={handleQuickApply}>
                     {appSubmitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
                     Create Application
                   </Button>
