@@ -1,12 +1,13 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useGetStudent,
   useListApplications,
   useListDocuments,
+  customFetch,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,8 +16,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2 } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2 } from "lucide-react";
 import { QuickContactButtons } from "@/components/QuickContact";
+import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -83,6 +85,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents]);
 
+  const { toast } = useToast();
+
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadType, setUploadType] = useState("passport");
   const [uploadName, setUploadName] = useState("");
@@ -90,6 +94,90 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+
+  const [showNewApp, setShowNewApp] = useState(false);
+  const [appCountry, setAppCountry] = useState("");
+  const [appUniversityId, setAppUniversityId] = useState("");
+  const [appProgramId, setAppProgramId] = useState("");
+  const [appIntake, setAppIntake] = useState("");
+  const [appSubmitting, setAppSubmitting] = useState(false);
+
+  const { data: filtersData } = useQuery({
+    queryKey: ["course-finder-filters"],
+    queryFn: () => customFetch("/api/course-finder/filters") as Promise<any>,
+    staleTime: 5 * 60 * 1000,
+    enabled: showNewApp,
+  });
+
+  const { data: countryProgramsData } = useQuery({
+    queryKey: ["course-finder-programs-country", appCountry],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: "500" });
+      if (appCountry) params.set("country", appCountry);
+      return customFetch(`/api/course-finder?${params}`) as Promise<any>;
+    },
+    staleTime: 60_000,
+    enabled: showNewApp,
+  });
+
+  const filteredUniversities = useMemo(() => {
+    if (!filtersData?.universities) return [];
+    if (!appCountry) return filtersData.universities;
+    const programs: any[] = countryProgramsData?.data || [];
+    const uniIds = new Set(programs.map((p: any) => p.universityId));
+    return filtersData.universities.filter((u: any) => uniIds.has(u.id));
+  }, [filtersData, appCountry, countryProgramsData]);
+
+  const filteredPrograms = useMemo(() => {
+    const programs: any[] = countryProgramsData?.data || [];
+    if (appUniversityId) return programs.filter((p: any) => String(p.universityId) === appUniversityId);
+    return programs;
+  }, [countryProgramsData, appUniversityId]);
+
+  const availableIntakes = useMemo(() => {
+    if (!appProgramId) return [];
+    const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
+    if (!prog?.intakes) return [];
+    const raw = typeof prog.intakes === "string" ? prog.intakes : "";
+    return raw.split(",").map((s: string) => s.trim()).filter(Boolean);
+  }, [appProgramId, filteredPrograms]);
+
+  useEffect(() => { setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }, [appCountry]);
+  useEffect(() => { setAppProgramId(""); setAppIntake(""); }, [appUniversityId]);
+  useEffect(() => { setAppIntake(""); }, [appProgramId]);
+
+  async function handleQuickApply() {
+    if (!appProgramId) return;
+    setAppSubmitting(true);
+    try {
+      const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
+      await customFetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: id,
+          programId: Number(appProgramId),
+          universityId: prog?.universityId ?? null,
+          universityName: prog?.universityName ?? null,
+          programName: prog?.name ?? null,
+          country: prog?.universityCountry ?? appCountry,
+          intake: appIntake || null,
+          level: prog?.degree ?? null,
+          instructionLanguage: prog?.language ?? null,
+          tuitionFee: prog?.tuitionFee ?? null,
+          stage: "inquiry",
+        }),
+      });
+      toast({ title: "Application created", description: `${prog?.universityName} – ${prog?.name}` });
+      await qc.refetchQueries({ queryKey: ["/api/applications"] });
+      setShowNewApp(false);
+      setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake("");
+    } catch (err: any) {
+      toast({ title: "Failed", description: err.message || "Could not create application", variant: "destructive" });
+    } finally {
+      setAppSubmitting(false);
+    }
+  }
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -355,6 +443,84 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </TabsContent>
 
           <TabsContent value="applications" className="mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-muted-foreground">{applications.length} application{applications.length !== 1 ? "s" : ""}</p>
+              <Button size="sm" onClick={() => setShowNewApp(!showNewApp)}>
+                <Plus className="w-4 h-4 mr-1" />
+                New Application
+              </Button>
+            </div>
+
+            {showNewApp && (
+              <div className="bg-card rounded-2xl border shadow-sm p-4 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">Country</Label>
+                    <Select value={appCountry} onValueChange={setAppCountry}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="All Countries" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(filtersData?.countries || []).map((c: string) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">University</Label>
+                    <Select value={appUniversityId} onValueChange={setAppUniversityId}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="All Universities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredUniversities.map((u: any) => (
+                          <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">Course</Label>
+                    <Select value={appProgramId} onValueChange={setAppProgramId}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select Course" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredPrograms.map((p: any) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}{!appUniversityId && p.universityName ? ` (${p.universityName})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">Intake</Label>
+                    <Select value={appIntake} onValueChange={setAppIntake} disabled={availableIntakes.length === 0}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder={availableIntakes.length === 0 ? "Select course first" : "Select Intake"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableIntakes.map((i: string) => (
+                          <SelectItem key={i} value={i}>{i}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-3">
+                  <Button variant="outline" size="sm" onClick={() => { setShowNewApp(false); setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" disabled={!appProgramId || appSubmitting} onClick={handleQuickApply}>
+                    {appSubmitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                    Create Application
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
               {applications.length === 0 ? (
                 <div className="p-12 text-center text-muted-foreground">
