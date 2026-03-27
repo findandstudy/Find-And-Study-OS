@@ -939,9 +939,10 @@ export default function LeadsPage() {
     if (isWonColumn && isMainStaff) {
       try {
         const result = await customFetch(`/api/leads/${leadId}/convert`, { method: "POST" }) as any;
-        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-        queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
-        queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: ["/api/leads"] }),
+          queryClient.refetchQueries({ queryKey: ["/api/students"] }),
+        ]);
         const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
         toast({
           title: "Lead converted to student",
@@ -951,7 +952,7 @@ export default function LeadsPage() {
         });
       } catch (err: any) {
         toast({ title: "Conversion failed", description: err.message || "Failed to convert lead", variant: "destructive" });
-        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/leads"] });
       }
       return;
     }
