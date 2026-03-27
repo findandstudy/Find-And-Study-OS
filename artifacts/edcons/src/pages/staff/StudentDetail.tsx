@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -102,37 +102,34 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [appIntake, setAppIntake] = useState("");
   const [appSubmitting, setAppSubmitting] = useState(false);
 
-  const { data: filtersData } = useQuery({
-    queryKey: ["course-finder-filters"],
-    queryFn: () => customFetch("/api/course-finder/filters") as Promise<any>,
+  const { data: countriesList } = useQuery({
+    queryKey: ["app-countries"],
+    queryFn: () => customFetch("/api/universities/countries") as Promise<string[]>,
+    staleTime: 10 * 60 * 1000,
+    enabled: showNewApp,
+  });
+
+  const { data: universitiesData } = useQuery({
+    queryKey: ["app-universities", appCountry],
+    queryFn: () => customFetch(`/api/universities?country=${encodeURIComponent(appCountry)}&limit=100`) as Promise<any>,
     staleTime: 5 * 60 * 1000,
-    enabled: showNewApp,
+    enabled: showNewApp && !!appCountry,
   });
 
-  const { data: countryProgramsData } = useQuery({
-    queryKey: ["course-finder-programs-country", appCountry],
-    queryFn: () => {
-      const params = new URLSearchParams({ limit: "500" });
-      if (appCountry) params.set("country", appCountry);
-      return customFetch(`/api/course-finder?${params}`) as Promise<any>;
-    },
+  const { data: programsData } = useQuery({
+    queryKey: ["app-programs", appUniversityId],
+    queryFn: () => customFetch(`/api/course-finder?universityId=${appUniversityId}&limit=500`) as Promise<any>,
     staleTime: 60_000,
-    enabled: showNewApp,
+    enabled: showNewApp && !!appUniversityId,
   });
 
-  const filteredUniversities = useMemo(() => {
-    if (!filtersData?.universities) return [];
-    if (!appCountry) return filtersData.universities;
-    const programs: any[] = countryProgramsData?.data || [];
-    const uniIds = new Set(programs.map((p: any) => p.universityId));
-    return filtersData.universities.filter((u: any) => uniIds.has(u.id));
-  }, [filtersData, appCountry, countryProgramsData]);
+  const filteredUniversities: any[] = useMemo(() => {
+    return universitiesData?.data || [];
+  }, [universitiesData]);
 
-  const filteredPrograms = useMemo(() => {
-    const programs: any[] = countryProgramsData?.data || [];
-    if (appUniversityId) return programs.filter((p: any) => String(p.universityId) === appUniversityId);
-    return programs;
-  }, [countryProgramsData, appUniversityId]);
+  const filteredPrograms: any[] = useMemo(() => {
+    return programsData?.data || [];
+  }, [programsData]);
 
   const availableIntakes = useMemo(() => {
     if (!appProgramId) return [];
@@ -461,7 +458,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                         <SelectValue placeholder="All Countries" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(filtersData?.countries || []).map((c: string) => (
+                        {(countriesList || []).map((c: string) => (
                           <SelectItem key={c} value={c}>{c}</SelectItem>
                         ))}
                       </SelectContent>
@@ -469,9 +466,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">University</Label>
-                    <Select value={appUniversityId} onValueChange={setAppUniversityId}>
+                    <Select value={appUniversityId} onValueChange={setAppUniversityId} disabled={!appCountry}>
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="All Universities" />
+                        <SelectValue placeholder={!appCountry ? "Select country first" : "Select University"} />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredUniversities.map((u: any) => (
@@ -482,14 +479,14 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">Course</Label>
-                    <Select value={appProgramId} onValueChange={setAppProgramId}>
+                    <Select value={appProgramId} onValueChange={setAppProgramId} disabled={!appUniversityId}>
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select Course" />
+                        <SelectValue placeholder={!appUniversityId ? "Select university first" : "Select Course"} />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredPrograms.map((p: any) => (
                           <SelectItem key={p.id} value={String(p.id)}>
-                            {p.name}{!appUniversityId && p.universityName ? ` (${p.universityName})` : ""}
+                            {p.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
