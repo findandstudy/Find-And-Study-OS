@@ -11,6 +11,7 @@ import {
   studentsTable,
   leadsTable,
   agentsTable,
+  documentsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -113,6 +114,43 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
       .from(conversationParticipantsTable)
       .innerJoin(usersTable, eq(conversationParticipantsTable.userId, usersTable.id))
       .where(inArray(conversationParticipantsTable.conversationId, convIds));
+
+    const studentUserIds = participants.filter(p => p.role === "student" && !p.avatarUrl).map(p => p.userId);
+    let photoMap: Record<number, string> = {};
+    if (studentUserIds.length > 0) {
+      const studentRows = await db
+        .select({ userId: studentsTable.userId, studentId: studentsTable.id })
+        .from(studentsTable)
+        .where(and(inArray(studentsTable.userId, studentUserIds), isNull(studentsTable.deletedAt)));
+      const studentIdMap: Record<number, number> = {};
+      for (const s of studentRows) if (s.userId) studentIdMap[s.userId] = s.id;
+      const sIds = studentRows.map(s => s.id);
+      if (sIds.length > 0) {
+        const photoDocs = await db
+          .select({ studentId: documentsTable.studentId, fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
+          .from(documentsTable)
+          .where(and(
+            inArray(documentsTable.studentId, sIds),
+            or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")),
+            isNull(documentsTable.deletedAt)
+          ))
+          .orderBy(desc(documentsTable.createdAt));
+        const seen = new Set<number>();
+        for (const pd of photoDocs) {
+          if (pd.studentId && !seen.has(pd.studentId) && pd.fileData) {
+            seen.add(pd.studentId);
+            const mime = pd.mimeType || "image/jpeg";
+            photoMap[pd.studentId] = `data:${mime};base64,${pd.fileData}`;
+          }
+        }
+      }
+      for (const p of participants) {
+        if (p.role === "student" && !p.avatarUrl && studentIdMap[p.userId]) {
+          const url = photoMap[studentIdMap[p.userId]];
+          if (url) (p as any).avatarUrl = url;
+        }
+      }
+    }
 
     for (const p of participants) {
       if (!participantsMap[p.conversationId]) participantsMap[p.conversationId] = [];
@@ -283,7 +321,44 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
       )
     );
 
-  res.json({ data: messages.reverse() });
+  const reversed = messages.reverse();
+  const studentSenders = reversed.filter(m => m.senderRole === "student" && !m.senderAvatarUrl && m.senderId);
+  if (studentSenders.length > 0) {
+    const senderIds = [...new Set(studentSenders.map(m => m.senderId!))];
+    const studentRows = await db
+      .select({ userId: studentsTable.userId, studentId: studentsTable.id })
+      .from(studentsTable)
+      .where(and(inArray(studentsTable.userId, senderIds), isNull(studentsTable.deletedAt)));
+    const sidMap: Record<number, number> = {};
+    for (const s of studentRows) if (s.userId) sidMap[s.userId] = s.id;
+    const sIds = Object.values(sidMap);
+    if (sIds.length > 0) {
+      const photoDocs = await db
+        .select({ studentId: documentsTable.studentId, fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
+        .from(documentsTable)
+        .where(and(
+          inArray(documentsTable.studentId, sIds),
+          or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")),
+          isNull(documentsTable.deletedAt)
+        ))
+        .orderBy(desc(documentsTable.createdAt));
+      const pMap: Record<number, string> = {};
+      const seen = new Set<number>();
+      for (const pd of photoDocs) {
+        if (pd.studentId && !seen.has(pd.studentId) && pd.fileData) {
+          seen.add(pd.studentId);
+          pMap[pd.studentId] = `data:${pd.mimeType || "image/jpeg"};base64,${pd.fileData}`;
+        }
+      }
+      for (const m of reversed) {
+        if (m.senderRole === "student" && !m.senderAvatarUrl && m.senderId && sidMap[m.senderId]) {
+          (m as any).senderAvatarUrl = pMap[sidMap[m.senderId]] || null;
+        }
+      }
+    }
+  }
+
+  res.json({ data: reversed });
 });
 
 router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {

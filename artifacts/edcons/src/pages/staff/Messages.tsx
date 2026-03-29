@@ -113,6 +113,7 @@ function ConversationList({
             const others = conv.participants.filter(p => p.userId !== user?.id);
             const displayName = conv.title || others.map(p => `${p.firstName} ${p.lastName}`).join(", ") || "Conversation";
             const initials = others[0] ? `${others[0].firstName?.[0] || ""}${others[0].lastName?.[0] || ""}` : "?";
+            const avatarUrl = others[0]?.avatarUrl || null;
             const isSelected = conv.id === selectedId;
 
             return (
@@ -121,9 +122,13 @@ function ConversationList({
                 onClick={() => onSelect(conv.id)}
                 className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 transition-colors ${isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-secondary/50"}`}
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-xs text-foreground shrink-0">
-                  {initials}
-                </div>
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={displayName} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-xs text-foreground shrink-0">
+                    {initials}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-sm text-foreground truncate">{displayName}</p>
@@ -316,9 +321,13 @@ function MessageThread({
             return (
               <div key={msg.id} className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}>
                 {!isMe && (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
-                    {initials}
-                  </div>
+                  msg.senderAvatarUrl ? (
+                    <img src={msg.senderAvatarUrl} alt={initials} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
+                      {initials}
+                    </div>
+                  )
                 )}
                 <div className={`max-w-[70%] ${isMe ? "items-end" : ""}`}>
                   {!isMe && (
