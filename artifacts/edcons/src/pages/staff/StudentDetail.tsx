@@ -16,7 +16,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
@@ -123,6 +125,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [dragging, setDragging] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
 
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showNewApp, setShowNewApp] = useState(false);
   const [appCountry, setAppCountry] = useState("");
   const [appUniversityId, setAppUniversityId] = useState("");
@@ -421,6 +424,12 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
+            <div className="flex justify-end mb-2">
+              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setShowEditDialog(true)}>
+                <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                Edit Profile
+              </Button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
                 <h2 className="font-semibold text-foreground">Personal Information</h2>
@@ -778,7 +787,304 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {student && (
+        <EditStudentDetailDialog
+          open={showEditDialog}
+          onClose={() => setShowEditDialog(false)}
+          student={student}
+          studentId={id}
+        />
+      )}
     </DashboardLayout>
+  );
+}
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" }, { code: "+254", country: "KE" }, { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" }, { code: "+61", country: "AU" }, { code: "+64", country: "NZ" },
+  { code: "+60", country: "MY" }, { code: "+65", country: "SG" }, { code: "+66", country: "TH" },
+  { code: "+84", country: "VN" }, { code: "+62", country: "ID" }, { code: "+63", country: "PH" },
+  { code: "+880", country: "BD" }, { code: "+94", country: "LK" }, { code: "+977", country: "NP" },
+  { code: "+251", country: "ET" }, { code: "+255", country: "TZ" }, { code: "+233", country: "GH" },
+];
+
+const GRADING_SYSTEMS = [
+  { value: "4", label: "/ 4", max: 4, placeholder: "e.g. 3.8" },
+  { value: "5", label: "/ 5", max: 5, placeholder: "e.g. 4.5" },
+  { value: "10", label: "/ 10", max: 10, placeholder: "e.g. 8.5" },
+  { value: "100", label: "/ 100", max: 100, placeholder: "e.g. 85" },
+];
+
+function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
+  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
+  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length).trim() };
+  return { phoneCode: "+90", phone: fullPhone.replace(/^\+/, "").trim() };
+}
+
+function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [inputVal, setInputVal] = useState(value);
+  const [open, setOpen] = useState(false);
+
+  const { data: countriesResp } = useQuery({
+    queryKey: ["all-countries-nationality"],
+    queryFn: () => fetch(`${BASE_URL}/api/countries?limit=500`, { credentials: "include" }).then(r => r.json()),
+    staleTime: 5 * 60_000,
+  });
+  const allCountries: Array<{ id: number; name: string; code?: string }> = countriesResp?.data ?? [];
+
+  useEffect(() => { setInputVal(value); }, [value]);
+
+  const filtered = inputVal
+    ? allCountries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
+    : allCountries;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative cursor-text" onClick={() => setOpen(true)}>
+          <Input
+            value={inputVal}
+            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Select or type..."
+            autoComplete="off"
+            className="rounded-xl h-9"
+          />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+        {filtered.map(c => (
+          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
+            {c.code && <CountryFlag code={c.code} size="sm" />}
+            {c.name}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function EditStudentDetailDialog({ open, onClose, student, studentId }: {
+  open: boolean; onClose: () => void; student: any; studentId: number;
+}) {
+  const [form, setForm] = useState({
+    firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
+    nationality: "", dateOfBirth: "",
+    passportNumber: "", passportIssueDate: "", passportExpiry: "",
+    motherName: "", fatherName: "", address: "",
+    highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
+    universityBachelor: "", universityMaster: "",
+    languageScore: "", notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open && student) {
+      const parsed = parsePhoneCode(student.phone || "");
+      const gpaRaw = student.gpa || "";
+      let gpaVal = gpaRaw;
+      let gradingSys = "4";
+      const gpaMatch = gpaRaw.match(/^([\d.]+)\s*\/\s*(\d+)$/);
+      if (gpaMatch) {
+        gpaVal = gpaMatch[1];
+        const ms = GRADING_SYSTEMS.find(g => g.value === gpaMatch[2]);
+        if (ms) gradingSys = ms.value;
+      }
+      setForm({
+        firstName: student.firstName || "", lastName: student.lastName || "",
+        email: student.email || "", phone: parsed.phone, phoneCode: parsed.phoneCode,
+        nationality: student.nationality || "", dateOfBirth: student.dateOfBirth || "",
+        passportNumber: student.passportNumber || "",
+        passportIssueDate: student.passportIssueDate || "",
+        passportExpiry: student.passportExpiry || "",
+        motherName: student.motherName || "", fatherName: student.fatherName || "",
+        address: student.address || "",
+        highSchool: student.highSchool || "",
+        graduationYear: student.graduationYear?.toString() || "",
+        gpa: gpaVal, gradingSystem: gradingSys,
+        universityBachelor: student.universityBachelor || "",
+        universityMaster: student.universityMaster || "",
+        languageScore: student.languageScore || "",
+        notes: student.notes || "",
+      });
+    }
+  }, [open, student]);
+
+  function field(name: string) {
+    return (val: string) => setForm(f => ({ ...f, [name]: val }));
+  }
+
+  async function handleSave() {
+    if (!form.firstName || !form.lastName) return;
+    setSaving(true);
+    try {
+      const phone = form.phone ? `${form.phoneCode}${form.phone.replace(/^\s+/, "")}` : "";
+      const gpa = form.gpa ? (form.gradingSystem !== "4" ? `${form.gpa}/${form.gradingSystem}` : form.gpa) : "";
+      const res = await fetch(`${BASE_URL}/api/students/${studentId}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: form.firstName, lastName: form.lastName,
+          email: form.email, phone,
+          nationality: form.nationality,
+          dateOfBirth: form.dateOfBirth,
+          passportNumber: form.passportNumber,
+          passportIssueDate: form.passportIssueDate,
+          passportExpiry: form.passportExpiry,
+          motherName: form.motherName, fatherName: form.fatherName,
+          address: form.address, highSchool: form.highSchool,
+          graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
+          gpa, universityBachelor: form.universityBachelor,
+          universityMaster: form.universityMaster,
+          languageScore: form.languageScore, notes: form.notes,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Student updated" });
+      qc.invalidateQueries({ queryKey: [`/api/students/${studentId}`] });
+      qc.invalidateQueries({ queryKey: ["/api/students"] });
+      onClose();
+    } catch {
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  const F = ({ label, value, onChange, type = "text", placeholder = "", required = false, className = "", latinUppercase = false }: {
+    label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean; className?: string; latinUppercase?: boolean;
+  }) => (
+    <div className={`space-y-1.5 ${className}`}>
+      <Label className="font-semibold text-sm">{label}{required && <span className="text-destructive ml-0.5">*</span>}</Label>
+      <Input type={type} value={value} onChange={e => { let v = e.target.value; if (latinUppercase) v = v.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, ""); onChange(v); }} placeholder={placeholder} className={`rounded-xl h-9 ${latinUppercase ? "uppercase" : ""}`} />
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+        <div className="overflow-y-auto flex-1 space-y-6 pr-1 py-2">
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+              <User className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" latinUppercase />
+              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" latinUppercase />
+              <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Phone</Label>
+                <div className="flex gap-1.5">
+                  <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
+                    <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PHONE_CODES.map(pc => (
+                        <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                          <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
+                </div>
+              </div>
+              <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Nationality</Label>
+                <NationalityCombobox value={form.nationality} onChange={field("nationality")} />
+              </div>
+              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" latinUppercase />
+              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" latinUppercase />
+              <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+              <FileText className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Passport / Identity</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <F label="Passport Number" value={form.passportNumber} onChange={field("passportNumber")} placeholder="e.g. AB1234567" className="col-span-2" />
+              <F label="Issue Date" value={form.passportIssueDate} onChange={field("passportIssueDate")} type="date" />
+              <F label="Expiry Date" value={form.passportExpiry} onChange={field("passportExpiry")} type="date" />
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+              <GraduationCap className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
+              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
+              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+              <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">GPA</Label>
+                <div className="flex gap-1.5">
+                  <Input
+                    type="number" step="0.01" min="0"
+                    max={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.max ?? 4}
+                    value={form.gpa}
+                    onChange={e => setForm(f => ({ ...f, gpa: e.target.value }))}
+                    placeholder={GRADING_SYSTEMS.find(g => g.value === form.gradingSystem)?.placeholder ?? "e.g. 3.8"}
+                    className="rounded-xl flex-1 h-9"
+                  />
+                  <Select value={form.gradingSystem} onValueChange={v => setForm(f => ({ ...f, gradingSystem: v, gpa: "" }))}>
+                    <SelectTrigger className="w-[110px] h-9 text-sm rounded-xl shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GRADING_SYSTEMS.map(gs => (
+                        <SelectItem key={gs.value} value={gs.value}>/ {gs.value}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <F label="Language Score" value={form.languageScore} onChange={field("languageScore")} placeholder="e.g. IELTS 7.0, TOEFL 100" className="col-span-2" />
+            </div>
+          </section>
+
+          <div className="space-y-1.5">
+            <Label className="font-semibold text-sm">Notes</Label>
+            <textarea
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Any additional notes about this student..."
+              rows={2}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+            />
+          </div>
+        </div>
+        <DialogFooter className="pt-3 border-t border-border/50">
+          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.firstName || !form.lastName || saving} className="rounded-xl">
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

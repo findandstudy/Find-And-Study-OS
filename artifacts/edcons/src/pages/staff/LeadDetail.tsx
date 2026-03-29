@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -15,11 +15,57 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil } from "lucide-react";
 import { QuickContactButtons } from "@/components/QuickContact";
+import { CountryFlag } from "@/components/CountryFlag";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+
+const PHONE_CODES = [
+  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
+  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
+  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
+  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
+  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
+  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
+  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
+  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
+  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
+  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
+  { code: "+234", country: "NG" }, { code: "+254", country: "KE" }, { code: "+55", country: "BR" },
+  { code: "+52", country: "MX" }, { code: "+61", country: "AU" }, { code: "+64", country: "NZ" },
+  { code: "+60", country: "MY" }, { code: "+65", country: "SG" }, { code: "+66", country: "TH" },
+  { code: "+84", country: "VN" }, { code: "+62", country: "ID" }, { code: "+63", country: "PH" },
+  { code: "+880", country: "BD" }, { code: "+94", country: "LK" }, { code: "+977", country: "NP" },
+  { code: "+251", country: "ET" }, { code: "+255", country: "TZ" }, { code: "+233", country: "GH" },
+];
+
+const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
+
+function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
+  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
+  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
+  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length).trim() };
+  return { phoneCode: "+90", phone: fullPhone.replace(/^\+/, "").trim() };
+}
+
+type CountryRecord = { id: number; name: string; code: string; flagEmoji?: string; isActive: boolean };
+
+function useCountries() {
+  return useQuery<CountryRecord[]>({
+    queryKey: ["countries-all"],
+    queryFn: async () => {
+      const res = await customFetch(`/api/countries?limit=500`);
+      return res.data ?? res;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
 
 const STATUS_OPTIONS = ["new", "contacted", "interested", "qualified", "converted", "lost"];
 
@@ -51,6 +97,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [fuTime, setFuTime] = useState("10:00");
   const [fuNotes, setFuNotes] = useState("");
   const [assigning, setAssigning] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
   const isAgent = basePath === "/agent";
@@ -236,7 +283,12 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           <div className="md:col-span-2 space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-foreground">Contact Information</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold text-foreground">Contact Information</h2>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowEditDialog(true)}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
                 <Select
                   value={lead?.status}
                   onValueChange={handleStatusChange}
@@ -532,7 +584,192 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           </div>
         </div>
       </div>
+      {lead && (
+        <EditLeadDetailDialog
+          open={showEditDialog}
+          onClose={() => setShowEditDialog(false)}
+          lead={lead}
+          leadId={id}
+        />
+      )}
     </DashboardLayout>
+  );
+}
+
+function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: allCountries = [] } = useCountries();
+  const [inputVal, setInputVal] = useState(value);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setInputVal(value); }, [value]);
+
+  const filtered = inputVal
+    ? allCountries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
+    : allCountries;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative cursor-text" onClick={() => setOpen(true)}>
+          <Input
+            value={inputVal}
+            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Select or type..."
+            autoComplete="off"
+          />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+        {filtered.map(c => (
+          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
+            <CountryFlag code={c.code} size="sm" />
+            {c.name}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: allCountries = [] } = useCountries();
+  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
+
+  return (
+    <Select value={value || "__clear"} onValueChange={v => onChange(v === "__clear" ? "" : v)}>
+      <SelectTrigger><SelectValue placeholder="Select destination..." /></SelectTrigger>
+      <SelectContent className="max-h-60">
+        <SelectItem value="__clear" className="text-muted-foreground">— None —</SelectItem>
+        {activeDestinations.map(c => (
+          <SelectItem key={c.id} value={c.name}>
+            <span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
+  open: boolean; onClose: () => void; lead: any; leadId: number;
+}) {
+  const [form, setForm] = useState({
+    firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "",
+    source: "website", interestedProgram: "", interestedCountry: "", nationality: "", estimatedValue: "",
+  });
+  const updateLead = useUpdateLead();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open && lead) {
+      const parsed = parsePhoneCode(lead.phone || "");
+      setForm({
+        firstName: lead.firstName || "", lastName: lead.lastName || "",
+        email: lead.email || "", phoneCode: parsed.phoneCode, phone: parsed.phone,
+        source: lead.source || "website", interestedProgram: lead.interestedProgram || "",
+        interestedCountry: lead.interestedCountry || "", nationality: lead.nationality || "",
+        estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
+      });
+    }
+  }, [open, lead]);
+
+  function handleSave() {
+    if (!form.firstName || !form.lastName) return;
+    const { phoneCode, ...rest } = form;
+    const payload: any = { ...rest, phone: form.phone ? `${phoneCode}${form.phone}` : "" };
+    const parsedVal = parseFloat(form.estimatedValue);
+    if (form.estimatedValue && !isNaN(parsedVal)) payload.estimatedValue = parsedVal;
+    else delete payload.estimatedValue;
+
+    updateLead.mutate(
+      { id: leadId, data: payload },
+      {
+        onSuccess: () => {
+          toast({ title: "Lead updated" });
+          queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
+          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          onClose();
+        },
+        onError: () => {
+          toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+        },
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-1.5">
+            <Label>First Name *</Label>
+            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Last Name *</Label>
+            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email</Label>
+            <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Phone</Label>
+            <div className="flex gap-1">
+              <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
+                <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PHONE_CODES.map(pc => (
+                    <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
+                      <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nationality</Label>
+            <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Source</Label>
+            <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SOURCES.map(s => (
+                  <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Interested Program</Label>
+            <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Interested Country</Label>
+            <CountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>Estimated Value (USD)</Label>
+            <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
+            {updateLead.isPending ? "Saving…" : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
