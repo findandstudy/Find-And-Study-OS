@@ -376,7 +376,7 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
     path: "/",
     maxAge: SESSION_TTL,
   });
-  res.json({ success: true, redirectTo: "/" });
+  res.json({ success: true, redirectTo: "/agent" });
 });
 
 router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise<void> => {
@@ -888,7 +888,7 @@ router.post("/agents/:id/impersonate", requireAuth, requireRole(...MANAGER_ROLES
     path: "/",
     maxAge: SESSION_TTL,
   });
-  res.json({ success: true, redirectTo: "/" });
+  res.json({ success: true, redirectTo: "/agent" });
 });
 
 export default router;

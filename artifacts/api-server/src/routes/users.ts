@@ -3,7 +3,7 @@ import { db, usersTable, rolesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { ADMIN_ROLES, MANAGER_ROLES } from "../lib/roles";
+import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { createSession, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 
 const router: IRouter = Router();
@@ -244,7 +244,12 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
     maxAge: SESSION_TTL,
   });
   await logAudit(req.user!.id, "impersonate_user", "user", id, { targetRole: targetUser.role }, req.ip);
-  res.json({ success: true, redirectTo: "/" });
+  let redirectTo = "/staff";
+  if (ADMIN_ROLES.includes(targetUser.role as any)) redirectTo = "/admin";
+  else if (targetUser.role === "student") redirectTo = "/student";
+  else if (["agent", "sub_agent", "agent_staff"].includes(targetUser.role)) redirectTo = "/agent";
+  else if (STAFF_ROLES.includes(targetUser.role as any)) redirectTo = "/staff";
+  res.json({ success: true, redirectTo, role: targetUser.role });
 });
 
 export default router;

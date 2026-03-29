@@ -309,7 +309,7 @@ export default function AgentSubAgents() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      window.location.href = `${BASE_URL}/`;
+      window.location.href = `${BASE_URL}/agent`;
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }

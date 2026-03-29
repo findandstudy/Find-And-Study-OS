@@ -434,7 +434,8 @@ export default function AgentsPage() {
         headers: { "Content-Type": "application/json" },
       });
       if (res.redirectTo) {
-        window.location.href = res.redirectTo;
+        const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+        window.location.href = `${base}${res.redirectTo}`;
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });

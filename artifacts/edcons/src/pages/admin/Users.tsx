@@ -246,7 +246,8 @@ function UsersTab() {
         headers: { "Content-Type": "application/json" },
       });
       if ((res as any).redirectTo) {
-        window.location.href = (res as any).redirectTo;
+        const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+        window.location.href = `${base}${(res as any).redirectTo}`;
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
