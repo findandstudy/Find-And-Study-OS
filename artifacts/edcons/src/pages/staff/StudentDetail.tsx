@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2 } from "lucide-react";
 import { QuickContactButtons } from "@/components/QuickContact";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -170,13 +171,13 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     if (!appProgramId) return [];
     const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
     const { keys, labels } = getRequiredDocsForDegree(prog?.degree);
-    const studentDocTypes = new Set(
-      documents.map((d: any) => {
-        const t = (d.type || "").toLowerCase();
-        if (t === "photograph") return "photo";
-        return t;
-      })
-    );
+    const rawTypes = documents.map((d: any) => (d.type || "").toLowerCase());
+    const studentDocTypes = new Set(rawTypes);
+    rawTypes.forEach(t => {
+      if (t === "photograph") studentDocTypes.add("photo");
+      if (t === "diploma") { studentDocTypes.add("hs_diploma"); studentDocTypes.add("bachelor_diploma"); studentDocTypes.add("master_diploma"); }
+      if (t === "transcript") { studentDocTypes.add("hs_transcript"); studentDocTypes.add("bachelor_transcript"); studentDocTypes.add("master_transcript"); }
+    });
     return keys
       .filter(k => !studentDocTypes.has(k))
       .map(k => labels[k] || k);
@@ -496,57 +497,42 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <Label className="text-xs font-medium mb-1 block">Country</Label>
-                    <Select value={appCountry} onValueChange={setAppCountry}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="All Countries" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(countriesList || []).map((c: string) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={appCountry}
+                      onValueChange={setAppCountry}
+                      options={(countriesList || []).map((c: string) => ({ value: c, label: c }))}
+                      placeholder="Select Country"
+                    />
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">University</Label>
-                    <Select value={appUniversityId} onValueChange={setAppUniversityId} disabled={!appCountry}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder={!appCountry ? "Select country first" : "Select University"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredUniversities.map((u: any) => (
-                          <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={appUniversityId}
+                      onValueChange={setAppUniversityId}
+                      options={filteredUniversities.map((u: any) => ({ value: String(u.id), label: u.name }))}
+                      placeholder={!appCountry ? "Select country first" : "Select University"}
+                      disabled={!appCountry}
+                    />
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">Course</Label>
-                    <Select value={appProgramId} onValueChange={setAppProgramId} disabled={!appUniversityId}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder={!appUniversityId ? "Select university first" : "Select Course"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredPrograms.map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={appProgramId}
+                      onValueChange={setAppProgramId}
+                      options={filteredPrograms.map((p: any) => ({ value: String(p.id), label: p.name }))}
+                      placeholder={!appUniversityId ? "Select university first" : "Select Course"}
+                      disabled={!appUniversityId}
+                    />
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">Intake</Label>
-                    <Select value={appIntake} onValueChange={setAppIntake} disabled={availableIntakes.length === 0}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder={availableIntakes.length === 0 ? "Select course first" : "Select Intake"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableIntakes.map((i: string) => (
-                          <SelectItem key={i} value={i}>{i}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={appIntake}
+                      onValueChange={setAppIntake}
+                      options={availableIntakes.map((i: string) => ({ value: i, label: i }))}
+                      placeholder={availableIntakes.length === 0 ? "Select course first" : "Select Intake"}
+                      disabled={availableIntakes.length === 0}
+                    />
                   </div>
                 </div>
                 {missingDocs.length > 0 && appProgramId && (

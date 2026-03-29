@@ -15,6 +15,7 @@ interface SearchableSelectProps {
   options: SearchableSelectOption[];
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function SearchableSelect({
@@ -23,6 +24,7 @@ export function SearchableSelect({
   options,
   placeholder = "Select…",
   className,
+  disabled = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -36,6 +38,10 @@ export function SearchableSelect({
     : options;
 
   const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     if (open && inputRef.current) {
@@ -64,8 +70,12 @@ export function SearchableSelect({
     <div ref={containerRef} className={cn("relative", className)}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(!open)}
+        className={cn(
+          "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring",
+          disabled && "cursor-not-allowed opacity-50"
+        )}
       >
         <span className={cn("line-clamp-1 flex items-center gap-1.5", !selected && "text-muted-foreground")}>
           {selected ? (
