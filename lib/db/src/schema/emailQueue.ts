@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
 export const emailQueueTable = pgTable("email_queue", {
   id: serial("id").primaryKey(),
@@ -7,6 +7,8 @@ export const emailQueueTable = pgTable("email_queue", {
   htmlBody: text("html_body").notNull(),
   textBody: text("text_body").notNull(),
   status: text("status").notNull().default("pending"),
-  sentAt: timestamp("sent_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("email_queue_status_idx").on(table.status),
+]);

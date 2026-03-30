@@ -218,7 +218,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     expiresAt: new Date(Date.now() + 15 * 60 * 1000),
   });
 
-  console.log(`[EMAIL VERIFICATION] Code for ${normalizedEmail}: ${code}`);
+  console.log(`[EMAIL VERIFICATION] Code sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
 
   try {
     const emailContent = buildVerificationCodeEmail(firstName.trim(), code);
@@ -331,7 +331,7 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
     expiresAt: new Date(Date.now() + 15 * 60 * 1000),
   });
 
-  console.log(`[EMAIL VERIFICATION] New code for ${normalizedEmail}: ${code}`);
+  console.log(`[EMAIL VERIFICATION] New code sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
 
   try {
     const emailContent = buildVerificationCodeEmail(user.firstName || "Student", code);
@@ -386,7 +386,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
   });
   await sendEmail(user.email || normalizedEmail, emailContent);
 
-  console.log(`[PASSWORD RESET] Reset email sent to ${normalizedEmail}`);
+  console.log(`[PASSWORD RESET] Reset email sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
 
   res.json({ message: "If an account with that email exists, a password reset link has been sent." });
 });

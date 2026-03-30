@@ -33,6 +33,7 @@ export const agentsTable = pgTable("agents", {
   pointOfContact: text("point_of_contact"),
   notes: text("notes"),
   embedToken: text("embed_token"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

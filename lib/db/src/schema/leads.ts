@@ -23,6 +23,7 @@ export const leadsTable = pgTable("leads", {
   notes: text("notes"),
   estimatedValue: numeric("estimated_value", { precision: 12, scale: 2 }),
   convertedStudentId: integer("converted_student_id").references(() => studentsTable.id, { onDelete: "set null" }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
@@ -50,6 +51,7 @@ export const followUpsTable = pgTable("follow_ups", {
   index("follow_ups_lead_id_idx").on(table.leadId),
   index("follow_ups_student_id_idx").on(table.studentId),
   index("follow_ups_assigned_to_id_idx").on(table.assignedToId),
+  index("follow_ups_created_by_id_idx").on(table.createdById),
 ]);
 
 export const insertLeadSchema = createInsertSchema(leadsTable).omit({ id: true, createdAt: true, updatedAt: true });

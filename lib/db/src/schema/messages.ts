@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const conversationsTable = pgTable("conversations", {
@@ -12,7 +12,9 @@ export const conversationsTable = pgTable("conversations", {
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("conversations_created_by_id_idx").on(table.createdById),
+]);
 
 export const conversationParticipantsTable = pgTable("conversation_participants", {
   id: serial("id").primaryKey(),
@@ -33,7 +35,10 @@ export const messagesTable = pgTable("messages", {
   replyToId: integer("reply_to_id"),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("messages_sender_id_idx").on(table.senderId),
+  index("messages_conversation_id_idx").on(table.conversationId),
+]);
 
 export const broadcastsTable = pgTable("broadcasts", {
   id: serial("id").primaryKey(),
@@ -48,7 +53,9 @@ export const broadcastsTable = pgTable("broadcasts", {
   recipientCount: integer("recipient_count").default(0),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("broadcasts_sent_by_id_idx").on(table.sentById),
+]);
 
 export const messageTemplatesTable = pgTable("message_templates", {
   id: serial("id").primaryKey(),
@@ -63,7 +70,9 @@ export const messageTemplatesTable = pgTable("message_templates", {
   createdById: integer("created_by_id").references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("msg_templates_created_by_id_idx").on(table.createdById),
+]);
 
 export type Conversation = typeof conversationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;

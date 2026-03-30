@@ -18,7 +18,11 @@ export const invoicesTable = pgTable("invoices", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("invoices_student_id_idx").on(table.studentId),
+  index("invoices_application_id_idx").on(table.applicationId),
+  index("invoices_status_idx").on(table.status),
+]);
 
 export const commissionsTable = pgTable("commissions", {
   id: serial("id").primaryKey(),
@@ -31,7 +35,7 @@ export const commissionsTable = pgTable("commissions", {
   programName: text("program_name"),
   isStateUniversity: boolean("is_state_university").default(false),
 
-  season: text("season").notNull().default("2025"),
+  season: text("season").notNull().default("2026"),
   currency: text("currency").notNull().default("USD"),
 
   programFee: numeric("program_fee", { precision: 12, scale: 2 }),
@@ -75,7 +79,7 @@ export const serviceFeesTable = pgTable("service_fees", {
   isStateUniversity: boolean("is_state_university").default(false),
 
   payerType: text("payer_type").notNull().default("student"),
-  season: text("season").notNull().default("2025"),
+  season: text("season").notNull().default("2026"),
   currency: text("currency").notNull().default("USD"),
 
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
@@ -114,7 +118,11 @@ export const financialTransactionsTable = pgTable("financial_transactions", {
   fileName: text("file_name"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("fin_tx_commission_id_idx").on(table.commissionId),
+  index("fin_tx_agent_id_idx").on(table.agentId),
+  index("fin_tx_type_idx").on(table.type),
+]);
 
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
