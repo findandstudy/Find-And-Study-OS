@@ -1062,7 +1062,7 @@ export default function ApplicationsPage() {
               >
                 {pipelineStages.map(s => {
                   const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
-                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssignToMe={!isAdmin ? handleAssignToMe : undefined} isAdmin={isAdmin} />;
+                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssignToMe={handleAssignToMe} isAdmin={isAdmin} />;
                 })}
 
                 <DragOverlay>
@@ -1140,8 +1140,6 @@ export default function ApplicationsPage() {
                         <TableCell>
                           {app.assignedToId ? (
                             <span className="text-xs text-muted-foreground">{staffUsersMap[app.assignedToId] || "Assigned"}</span>
-                          ) : isAdmin ? (
-                            <span className="text-xs text-muted-foreground">Unassigned</span>
                           ) : (
                             <button onClick={(e) => { e.stopPropagation(); handleAssignToMe(app.id); }} className="text-xs text-primary hover:underline font-medium">Assign to Me</button>
                           )}

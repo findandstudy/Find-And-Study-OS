@@ -1078,7 +1078,7 @@ export default function LeadsPage() {
                       showRevenue={canSeeRevenue}
                       onView={(id) => setLocation(`/staff/leads/${id}`)}
                       staffUsersMap={staffUsersMap}
-                      onAssignToMe={!isAdmin ? handleAssignToMe : undefined}
+                      onAssignToMe={handleAssignToMe}
                       isAdmin={isAdmin}
                     />
                   );
@@ -1211,10 +1211,8 @@ export default function LeadsPage() {
                       <TableCell onClick={e => e.stopPropagation()}>
                         {lead.assignedToId ? (
                           <span className="text-xs text-muted-foreground">{staffUsersMap[lead.assignedToId] || "Assigned"}</span>
-                        ) : !isAdmin ? (
-                          <button onClick={() => handleAssignToMe(lead.id)} className="text-xs text-primary hover:underline font-medium">Assign to Me</button>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Unassigned</span>
+                          <button onClick={() => handleAssignToMe(lead.id)} className="text-xs text-primary hover:underline font-medium">Assign to Me</button>
                         )}
                       </TableCell>
                       <TableCell
