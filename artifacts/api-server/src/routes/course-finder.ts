@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable } from "@workspace/db";
+import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -326,6 +326,15 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
 
   await logAudit(req.user!.id, "create_application", "application", application.id,
     { studentId: student.id, programId: program.id, source: "course_finder" }, req.ip);
+
+  try {
+    const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
+    if (appMadeStage && (student.status === "active" || student.status === "inactive")) {
+      await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, student.id));
+    }
+  } catch {}
 
   let commission = null;
   if (program.commissionRate && program.commissionRate > 0 && effectiveFee && effectiveFee > 0) {

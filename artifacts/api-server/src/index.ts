@@ -1,6 +1,6 @@
 import express from "express";
 import app from "./app";
-import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable } from "@workspace/db";
+import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable } from "@workspace/db";
 import { eq, isNull, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
@@ -276,6 +276,30 @@ async function backfillMissingCommissions() {
   }
 }
 
+async function backfillStudentAppStatus() {
+  try {
+    const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
+    if (!appMadeStage) return;
+
+    const result = await db.execute(sql`
+      UPDATE students SET status = ${appMadeStage.key}
+      WHERE id IN (
+        SELECT DISTINCT s.id FROM students s
+        JOIN applications a ON a.student_id = s.id
+        WHERE s.status IN ('active', 'inactive')
+      )
+    `);
+    const count = (result as any)?.rowCount || 0;
+    if (count > 0) {
+      console.log(`[backfill] Updated ${count} student(s) with applications to '${appMadeStage.key}' status`);
+    }
+  } catch (err) {
+    console.error("[backfill] backfillStudentAppStatus error:", err);
+  }
+}
+
 async function seedClaudeIntegration() {
   const envKey = process.env.ANTHROPIC_API_KEY;
   if (!envKey) return;
@@ -303,6 +327,7 @@ async function seedClaudeIntegration() {
   await linkAgentUser();
   await seedClaudeIntegration();
   await backfillMissingCommissions();
+  await backfillStudentAppStatus();
   const { startEmailWorker } = await import("./lib/email");
   startEmailWorker();
   serveStaticFrontend();

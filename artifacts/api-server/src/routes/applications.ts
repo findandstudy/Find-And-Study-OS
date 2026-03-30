@@ -281,11 +281,11 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   try {
     const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
       .from(pipelineStagesTable)
-      .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.key, "application_made")));
+      .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
     if (appMadeStage) {
       const [stu] = await db.select({ status: studentsTable.status }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
       if (stu && (stu.status === "active" || stu.status === "inactive")) {
-        await db.update(studentsTable).set({ status: "application_made" }).where(eq(studentsTable.id, parseInt(studentId, 10)));
+        await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, parseInt(studentId, 10)));
       }
     }
   } catch {}
