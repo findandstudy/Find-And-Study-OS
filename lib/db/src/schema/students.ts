@@ -31,6 +31,7 @@ export const studentsTable = pgTable("students", {
   season: text("season").notNull().default("2026"),
   photoUrl: text("photo_url"),
   notes: text("notes"),
+  nextFollowup: timestamp("next_followup", { withTimezone: true }),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -17,7 +17,7 @@ const STUDENT_PATCH_FIELDS = [
   "status", "agentId", "assignedToId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
   "universityBachelor", "universityMaster",
-  "photoUrl",
+  "photoUrl", "nextFollowup",
 ];
 
 router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
@@ -144,14 +144,19 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .where(whereClause);
 
   const rows = await db
-    .select()
+    .select({
+      student: studentsTable,
+      agentName: agentsTable.companyName,
+    })
     .from(studentsTable)
+    .leftJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
     .orderBy(desc(studentsTable.createdAt));
 
-  const studentIds = rows.map(r => r.id);
+  const flatRows = rows.map(r => ({ ...r.student, agentName: r.agentName || null }));
+  const studentIds = flatRows.map(r => r.id);
   let photoSet = new Set<number>();
   if (studentIds.length > 0) {
     const photoDocs = await db.select({ studentId: documentsTable.studentId })
@@ -163,7 +168,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     photoSet = new Set(photoDocs.map(d => d.studentId!));
   }
 
-  const data = rows.map(r => ({ ...r, hasPhoto: photoSet.has(r.id) }));
+  const data = flatRows.map(r => ({ ...r, hasPhoto: photoSet.has(r.id) }));
 
   res.json({
     data,
