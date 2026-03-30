@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { db, usersTable, emailVerificationCodesTable } from "@workspace/db";
 import { eq, and, gt, sql } from "drizzle-orm";
+import { sendEmail } from "../lib/email";
 import {
   clearSession,
   getSession,
@@ -72,6 +73,36 @@ function buildSessionUser(user: Record<string, unknown>): SessionUser {
 
 function generateVerificationCode(): string {
   return crypto.randomInt(100000, 999999).toString();
+}
+
+function buildVerificationCodeEmail(firstName: string, code: string): { subject: string; html: string; text: string } {
+  const subject = "Your Verification Code — Find & Study";
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
+    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
+      <h1 style="margin:0;color:#fff;font-size:24px;">Find & Study</h1>
+      <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Email Verification</p>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Verify Your Email</h2>
+      <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+        Hi ${firstName}, use the code below to verify your email address. This code expires in 15 minutes.
+      </p>
+      <div style="text-align:center;margin:0 0 24px;">
+        <div style="display:inline-block;background:#f0f0ff;border:2px solid #6366f1;border-radius:12px;padding:16px 32px;letter-spacing:8px;font-size:32px;font-weight:700;color:#6366f1;">${code}</div>
+      </div>
+      <p style="margin:0 0 8px;color:#6b7280;font-size:13px;text-align:center;">
+        If you did not create an account, you can safely ignore this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+  const text = `Hi ${firstName},\n\nYour verification code is: ${code}\n\nThis code expires in 15 minutes.\nIf you did not create an account, you can safely ignore this email.`;
+  return { subject, html, text };
 }
 
 router.get("/auth/me", async (req: Request, res: Response) => {
@@ -188,6 +219,13 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
   console.log(`[EMAIL VERIFICATION] Code for ${normalizedEmail}: ${code}`);
 
+  try {
+    const emailContent = buildVerificationCodeEmail(firstName.trim(), code);
+    await sendEmail(normalizedEmail, emailContent);
+  } catch (err) {
+    console.error("[EMAIL VERIFICATION] Failed to send verification email:", err);
+  }
+
   res.status(201).json({
     message: "Account created. Please verify your email.",
     requiresVerification: true,
@@ -293,6 +331,13 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
   });
 
   console.log(`[EMAIL VERIFICATION] New code for ${normalizedEmail}: ${code}`);
+
+  try {
+    const emailContent = buildVerificationCodeEmail(user.firstName || "Student", code);
+    await sendEmail(normalizedEmail, emailContent);
+  } catch (err) {
+    console.error("[EMAIL VERIFICATION] Failed to send verification email:", err);
+  }
 
   res.json({ message: "A new verification code has been sent to your email." });
 });
