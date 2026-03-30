@@ -1,0 +1,306 @@
+You are working on an existing CRM system with Kanban-style boards for Leads, Students, and Applications.
+
+Your task is to implement a robust, end-to-end “Origin / Source Ownership” system across Lead, Student, and Application records, without breaking any existing functionality, permissions, filters, or board behavior.
+
+IMPORTANT:
+There is already some kind of “lead source” or “channel” information in the Leads UI (examples: website, referral, embed, agent). Do NOT overload or replace that field.
+We must clearly separate these two concepts:
+
+1) Acquisition Channel = where the lead came from
+   Examples: website, referral, embed, manual import, campaign, landing page
+2) Business Origin / Ownership Source = who brought the person into the system
+   Allowed values:
+   - direct
+   - agent
+   - sub_agent
+
+The goal is that every Lead, Student, and Application card clearly shows whether it is:
+- Direct
+- Agent
+- Sub-Agent
+
+and, when applicable, also shows the related organization/person name:
+- Direct
+- Agent · ABC Agency
+- Sub-Agent · Karachi Office
+
+==================================================
+PHASE 1 — INSPECT THE CURRENT CODEBASE FIRST
+==================================================
+
+Before changing anything, inspect and understand:
+
+- database schema / ORM models / migrations
+- Lead model and Lead board/card components
+- Student model and Student board/card components
+- Application model and Application board/card components
+- conversion flow from Lead -> Student
+- creation flow from Student -> Application
+- manual create forms
+- bulk import flow
+- role/permission model for main company, admin, staff, agent, sub-agent
+- existing filtering/search logic
+- existing audit log model if available
+
+Then implement the feature in the cleanest possible way using the existing architecture and UI style.
+
+==================================================
+PHASE 2 — DATA MODEL CHANGES
+==================================================
+
+Add a new normalized origin system to Leads, Students, and Applications.
+
+For each entity, add fields equivalent to the following (adapt to current schema naming conventions if needed):
+
+- originType: enum('direct', 'agent', 'sub_agent')
+- originEntityType: enum('company', 'agent', 'sub_agent') nullable if not needed
+- originEntityId: nullable string/uuid/number
+- originDisplayName: nullable string
+- originLocked: boolean default true once inherited through conversion
+- originLeadId: nullable on Student and Application if helpful for lineage
+- originStudentId: nullable on Application if helpful for lineage
+
+Do NOT remove or repurpose the existing lead source/channel field.
+
+If the project already has fields like createdBy, agentId, subAgentId, tenantId, ownerId, panelOwnerId, or assignment relations, reuse them intelligently instead of duplicating logic.
+
+==================================================
+PHASE 3 — BUSINESS RULES
+==================================================
+
+Implement the following business rules consistently:
+
+A) LEAD CREATION
+1. If a lead is created by main company / internal staff / admin / super admin for the main panel:
+   originType = 'direct'
+   originDisplayName = 'Find And Study'
+
+2. If a lead is created under an agent account:
+   originType = 'agent'
+   originEntityType = 'agent'
+   originEntityId = that agent’s id
+   originDisplayName = that agent’s company/brand name
+
+3. If a lead is created under a sub-agent account:
+   originType = 'sub_agent'
+   originEntityType = 'sub_agent'
+   originEntityId = that sub-agent’s id
+   originDisplayName = sub-agent name (or office/branch name)
+
+4. If a lead is imported in bulk, preserve or infer origin using the importer’s role unless an explicit origin mapping is provided.
+
+B) LEAD -> STUDENT CONVERSION
+When a Student is created by converting a Lead:
+- copy the Lead’s entire origin metadata to Student
+- lock it by default so it remains traceable
+- store reference to source lead if useful
+
+C) STUDENT CREATION WITHOUT LEAD
+If a Student is created manually:
+- by main company/internal staff => direct
+- by agent => agent
+- by sub-agent => sub_agent
+
+D) STUDENT -> APPLICATION
+When an Application is created from a Student:
+- inherit the Student’s origin metadata exactly
+- do not recalculate it from scratch
+- store reference to student if useful
+
+E) APPLICATION CREATED DIRECTLY
+If your system allows direct manual Application creation:
+- if tied to an existing student, inherit from student
+- if created standalone, infer from current user role and ownership context
+
+F) EDIT RULES
+- origin should be read-only in normal workflows
+- only super admin (and optionally admin) can manually override origin
+- every manual override must be logged in audit trail with old value, new value, user, timestamp
+
+==================================================
+PHASE 4 — UI / UX IMPLEMENTATION
+==================================================
+
+Use the current CRM design language. Keep cards compact and readable.
+
+Create ONE consistent reusable badge component for origin:
+- Direct
+- Agent · {name}
+- Sub-Agent · {name}
+
+Recommended styles:
+- Direct = blue toned badge with user/home icon
+- Agent = violet/purple badge with briefcase/building icon
+- Sub-Agent = amber/orange badge with users/network icon
+
+Badge requirements:
+- compact
+- elegant
+- text truncation with ellipsis if long
+- full value visible in tooltip on hover
+- same component reused in Lead, Student, Application cards and detail drawers/modals
+
+VERY IMPORTANT:
+Do not confuse this new origin badge with existing lead channel chips like website/referral/embed.
+Both may coexist on Lead cards.
+
+--------------------------------------------------
+LEAD CARD UI
+--------------------------------------------------
+On Lead cards:
+- keep existing channel/acquisition chip exactly as it is (or improve visually if safe)
+- add a separate origin badge
+- recommended placement:
+  - acquisition channel chip remains in the current top-right place
+  - origin badge appears below email or below the title/email block
+- if space is tight, make sure both are still distinguishable
+
+Examples on Lead cards:
+- channel: website
+- origin: Direct
+
+or
+
+- channel: referral
+- origin: Agent · ABC Agency
+
+--------------------------------------------------
+STUDENT CARD UI
+--------------------------------------------------
+On Student cards:
+- add the same origin badge in a visible but non-intrusive position
+- recommended placement: below email and above country / assignee / action row
+- do not remove existing country, assignee, or action icons
+
+Examples:
+- Direct
+- Agent · British Education Group
+- Sub-Agent · Karachi Office
+
+--------------------------------------------------
+APPLICATION CARD UI
+--------------------------------------------------
+On Application cards:
+- add the same origin badge
+- recommended placement: under program/university block and above country/financial line, or just under student name if layout allows
+- keep commission / fee / country / assignee visuals intact
+
+==================================================
+PHASE 5 — FILTERS, SEARCH, DETAIL PAGES
+==================================================
+
+Add filtering support on Leads, Students, and Applications pages:
+
+New filter group:
+- Origin Type
+  - All
+  - Direct
+  - Agent
+  - Sub-Agent
+
+Optional second filter if easy and architecture supports it:
+- Origin Entity
+  - searchable by agency/sub-agent/company name
+
+In detail pages/drawers/modals for Lead, Student, and Application, add a read-only “Origin” section that shows:
+- Origin Type
+- Origin Name
+- Acquisition Channel (where relevant)
+- Linked source Lead / Student reference if available
+
+==================================================
+PHASE 6 — BACKFILL / MIGRATION FOR EXISTING DATA
+==================================================
+
+Create a safe migration / backfill strategy for existing records.
+
+For existing Leads:
+- infer origin from creator role and existing ownership relations
+- if owned by main company/internal accounts => direct
+- if associated with an agent => agent
+- if associated with a sub-agent => sub_agent
+
+For existing Students:
+- if linked to a Lead, inherit from linked Lead
+- otherwise infer from creator/owner role and hierarchy
+
+For existing Applications:
+- if linked to a Student, inherit from Student
+- otherwise infer from linked Lead/creator/owner context
+
+Backfill rules should be deterministic and safe.
+Avoid setting null origin unless absolutely impossible.
+If impossible, set a conservative default and log/report exceptions.
+
+==================================================
+PHASE 7 — PERMISSIONS & REPORTING SAFETY
+==================================================
+
+This feature is for provenance and clarity.
+It must NOT break existing data visibility logic.
+
+Existing visibility rules for main company / admin / staff / agent / sub-agent must continue to work exactly as before.
+
+However, the new origin fields should be available for:
+- filtering
+- badge display
+- future reporting
+- auditability
+
+If reporting pages/services exist, expose originType and originDisplayName cleanly in API responses.
+
+==================================================
+PHASE 8 — TECHNICAL QUALITY
+==================================================
+
+Implement this cleanly and professionally:
+
+- reusable badge component
+- reusable helper for origin text formatting
+- reusable inference function for origin assignment
+- reusable inheritance logic for conversion flows
+- migration script for backfill
+- update types/interfaces/schemas/validators
+- update API contracts if necessary
+- update board card rendering
+- update form handling
+- update filters
+- add audit log entries for manual origin changes
+
+If the project uses TypeScript, keep strict typing.
+If it uses Prisma/Drizzle/other ORM, generate proper migration files.
+Do not hardcode labels in multiple places.
+
+==================================================
+PHASE 9 — ACCEPTANCE CRITERIA
+==================================================
+
+The work is complete only if all of the following are true:
+
+1. Every Lead, Student, and Application has an originType.
+2. Lead acquisition channel remains separate from business origin.
+3. Lead cards visibly show both channel (if available) and origin.
+4. Student cards visibly show origin.
+5. Application cards visibly show origin.
+6. Lead -> Student conversion preserves origin.
+7. Student -> Application creation preserves origin.
+8. Manual creation infers origin from user role/hierarchy.
+9. Existing records are backfilled.
+10. Filters by origin type work on all three pages.
+11. Manual origin override is restricted and audited.
+12. Existing UI, Kanban drag-drop, permissions, and current card actions are not broken.
+
+==================================================
+PHASE 10 — FINAL OUTPUT
+==================================================
+
+After implementation, provide:
+
+1. a short summary of what was changed
+2. which files/components/models were updated
+3. backfill logic explanation
+4. any assumptions made
+5. any edge cases that still need manual review
+
+Do not ask unnecessary questions.
+Make reasonable assumptions from the current codebase and implement the feature end-to-end.
