@@ -686,6 +686,7 @@ export default function AgentLeadsPage() {
   const leadStageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const filteredLeads = allLeads.filter((l: any) => {
+    if (l.convertedStudentId || l.status === "converted") return false;
     if (filters.source !== "all" && l.source !== filters.source) return false;
     if (filters.status !== "all" && l.status !== filters.status) return false;
     return true;
