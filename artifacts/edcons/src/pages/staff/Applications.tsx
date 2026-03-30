@@ -658,7 +658,12 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
   const [open, setOpen] = useState(false);
   const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
   const { data: allCountries = [] } = useCountries();
-  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
+
+  const countriesInApps = useMemo(() => {
+    const seen = new Set<string>();
+    apps.forEach((a: any) => { if (a.country) seen.add(a.country); });
+    return allCountries.filter(c => seen.has(c.name)).sort((a, b) => a.name.localeCompare(b.name));
+  }, [apps, allCountries]);
 
   const uniqueUniversities = useMemo(() => {
     const map = new Map<number, string>();
@@ -701,7 +706,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
               <SelectItem value="all">All</SelectItem>
-              {activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}
+              {countriesInApps.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}
             </SelectContent>
           </Select>
         </div>
