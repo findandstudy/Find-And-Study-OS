@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -347,13 +347,15 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (lead.convertedStudentId) {
     const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, lead.convertedStudentId));
     if (existing) {
+      const wonStages = await db.select().from(pipelineStagesTable)
+        .where(and(eq(pipelineStagesTable.pipelineType, "lead"), eq(pipelineStagesTable.variant, "won")));
+      const convertedKey = wonStages.length > 0 ? wonStages[0].key : "converted";
+      if (lead.status !== convertedKey) {
+        await db.update(leadsTable).set({ status: convertedKey }).where(eq(leadsTable.id, id));
+      }
       res.json({ student: existing, merged: false, alreadyConverted: true });
       return;
     }
-  }
-  if (lead.status === "converted") {
-    res.json({ student: null, merged: false, alreadyConverted: true });
-    return;
   }
 
   const embedSubmissions = await db.select().from(embedSubmissionsTable).where(eq(embedSubmissionsTable.leadId, lead.id));
