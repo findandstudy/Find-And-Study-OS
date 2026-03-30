@@ -179,7 +179,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, leadId, documents } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, address, highSchool, graduationYear, gpa, leadId, documents } = req.body;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality) {
     res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, and nationality are required" });
@@ -216,9 +216,34 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           lastName: existingUser.lastName || lastName,
           email: normalizedEmail,
           phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+          nationality: nationality || null,
+          dateOfBirth: s(dateOfBirth, 20),
           motherName: s(motherName, 100),
           fatherName: s(fatherName, 100),
+          passportNumber: s(passportNumber, 50),
+          passportIssueDate: s(passportIssueDate, 20),
+          passportExpiry: s(passportExpiry, 20),
+          address: s(address, 300),
+          highSchool: s(highSchool, 200),
+          graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
+          gpa: s(gpa, 20),
         }).returning();
+      }
+
+      const fillableFields: Record<string, any> = {};
+      if (!existingStudent.nationality && nationality) fillableFields.nationality = nationality;
+      if (!existingStudent.dateOfBirth && dateOfBirth) fillableFields.dateOfBirth = s(dateOfBirth, 20);
+      if (!existingStudent.motherName && motherName) fillableFields.motherName = s(motherName, 100);
+      if (!existingStudent.fatherName && fatherName) fillableFields.fatherName = s(fatherName, 100);
+      if (!existingStudent.passportNumber && passportNumber) fillableFields.passportNumber = s(passportNumber, 50);
+      if (!existingStudent.passportIssueDate && passportIssueDate) fillableFields.passportIssueDate = s(passportIssueDate, 20);
+      if (!existingStudent.passportExpiry && passportExpiry) fillableFields.passportExpiry = s(passportExpiry, 20);
+      if (!existingStudent.address && address) fillableFields.address = s(address, 300);
+      if (!existingStudent.highSchool && highSchool) fillableFields.highSchool = s(highSchool, 200);
+      if (!existingStudent.graduationYear && graduationYear) fillableFields.graduationYear = parseInt(String(graduationYear), 10) || null;
+      if (!existingStudent.gpa && gpa) fillableFields.gpa = s(gpa, 20);
+      if (Object.keys(fillableFields).length > 0) {
+        await db.update(studentsTable).set(fillableFields).where(eq(studentsTable.id, existingStudent.id));
       }
 
       resultStudentId = existingStudent.id;
@@ -259,9 +284,16 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         email: normalizedEmail,
         phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
         nationality: nationality || null,
+        dateOfBirth: s(dateOfBirth, 20),
         motherName: s(motherName, 100),
         fatherName: s(fatherName, 100),
         passportNumber: s(passportNumber, 50),
+        passportIssueDate: s(passportIssueDate, 20),
+        passportExpiry: s(passportExpiry, 20),
+        address: s(address, 300),
+        highSchool: s(highSchool, 200),
+        graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
+        gpa: s(gpa, 20),
       }).returning();
 
       resultStudentId = newStudent.id;

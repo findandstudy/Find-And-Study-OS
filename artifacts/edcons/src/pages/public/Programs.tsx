@@ -271,6 +271,8 @@ const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
   nationality: "", dateOfBirth: "", notes: "",
   motherName: "", fatherName: "", passportNumber: "",
+  passportIssueDate: "", passportExpiry: "",
+  address: "", highSchool: "", graduationYear: "", gpa: "",
 };
 
 function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
@@ -422,6 +424,9 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       ["motherName", "motherName"], ["fatherName", "fatherName"],
       ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
       ["passportNumber", "passportNumber"],
+      ["passportIssueDate", "passportIssueDate"], ["passportExpiry", "passportExpiry"],
+      ["address", "address"], ["highSchool", "highSchool"],
+      ["graduationYear", "graduationYear"], ["gpa", "gpa"],
     ];
 
     for (const [fk, ek] of mapping) {
@@ -775,13 +780,79 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Date of Birth
+                  {extracted.has("dateOfBirth") && <AiBadge />}
+                </Label>
+                <Input type="date" value={form.dateOfBirth} onChange={(e) => setForm(f => ({ ...f, dateOfBirth: e.target.value }))}
+                  className={`rounded-xl ${extracted.has("dateOfBirth") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Passport Number
+                  {extracted.has("passportNumber") && <AiBadge />}
+                </Label>
+                <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
+                  placeholder="Passport number" className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Passport Issue Date
+                  {extracted.has("passportIssueDate") && <AiBadge />}
+                </Label>
+                <Input type="date" value={form.passportIssueDate} onChange={(e) => setForm(f => ({ ...f, passportIssueDate: e.target.value }))}
+                  className={`rounded-xl ${extracted.has("passportIssueDate") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Passport Expiry Date
+                  {extracted.has("passportExpiry") && <AiBadge />}
+                </Label>
+                <Input type="date" value={form.passportExpiry} onChange={(e) => setForm(f => ({ ...f, passportExpiry: e.target.value }))}
+                  className={`rounded-xl ${extracted.has("passportExpiry") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold flex items-center">
-                Passport Number
-                {extracted.has("passportNumber") && <AiBadge />}
+                Address
+                {extracted.has("address") && <AiBadge />}
               </Label>
-              <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
-                placeholder="Passport number" className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              <Input value={form.address} onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
+                placeholder="Full address" className={`rounded-xl ${extracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  High School
+                  {extracted.has("highSchool") && <AiBadge />}
+                </Label>
+                <Input value={form.highSchool} onChange={(e) => setForm(f => ({ ...f, highSchool: e.target.value }))}
+                  placeholder="High school name" className={`rounded-xl ${extracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center">
+                  Graduation Year
+                  {extracted.has("graduationYear") && <AiBadge />}
+                </Label>
+                <Input value={form.graduationYear} onChange={(e) => setForm(f => ({ ...f, graduationYear: e.target.value }))}
+                  placeholder="e.g. 2023" className={`rounded-xl ${extracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold flex items-center">
+                GPA
+                {extracted.has("gpa") && <AiBadge />}
+              </Label>
+              <Input value={form.gpa} onChange={(e) => setForm(f => ({ ...f, gpa: e.target.value }))}
+                placeholder="e.g. 3.5" className={`rounded-xl ${extracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
             </div>
 
             <div className="space-y-1.5">
