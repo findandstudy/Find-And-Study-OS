@@ -33,39 +33,3 @@ channel = "stable-25_05"
 [userenv.development]
 SEED_ADMIN_PASSWORD = "En9881274!"
 SEED_AGENT_PASSWORD = "findandstudy123"
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 80
-
-[[ports]]
-localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 8083
-externalPort = 5000
-
-[[ports]]
-localPort = 8084
-externalPort = 5173
-
-[[ports]]
-localPort = 25197
-externalPort = 3000
-
-[[ports]]
-localPort = 25198
-externalPort = 3002
-
-[[ports]]
-localPort = 25199
-externalPort = 3003
-
-[[ports]]
-localPort = 25200
-externalPort = 4200
