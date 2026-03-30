@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
@@ -77,6 +78,7 @@ function InfoCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 export default function CountryDetail({ slug }: { slug: string }) {
+  const { t, lang, localePath } = useI18n();
   const [data, setData] = useState<{
     destination: Destination;
     universities: UniversityBrief[];
@@ -87,8 +89,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const [error, setError] = useState(false);
 
   useSeo({
-    title: data ? `Study in ${data.destination.name}` : "Study Destination",
-    description: data?.destination.shortDescription || "Explore study opportunities in this destination.",
+    title: data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination"),
+    description: data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
+    lang,
   });
 
   useEffect(() => {
@@ -117,10 +120,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
       <PublicLayout>
         <div className="pt-24 pb-16 text-center max-w-7xl mx-auto px-4">
           <Globe2 className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-foreground mb-2">Destination not found</h2>
-          <p className="text-muted-foreground mb-6">The destination you're looking for doesn't exist or is no longer available.</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">{t("countryDetail.notFound")}</h2>
+          <p className="text-muted-foreground mb-6">{t("countryDetail.notFoundDesc")}</p>
           <Button asChild variant="outline" className="rounded-full">
-            <Link href="/countries"><ArrowLeft className="w-4 h-4 mr-2" /> Back to Destinations</Link>
+            <Link href={localePath("/countries")}><ArrowLeft className="w-4 h-4 mr-2" /> {t("countryDetail.backToDestinations")}</Link>
           </Button>
         </div>
       </PublicLayout>
@@ -137,24 +140,28 @@ export default function CountryDetail({ slug }: { slug: string }) {
     <PublicLayout>
       <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Link href="/countries" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
-            <ArrowLeft className="w-4 h-4" /> All Destinations
+          <Link href={localePath("/countries")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
+            <ArrowLeft className="w-4 h-4" /> {t("countryDetail.allDestinations")}
           </Link>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-center gap-6">
             <span className="text-7xl">{dest.flagEmoji || "🌍"}</span>
             <div>
               <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
-                Study in <span className="text-primary">{dest.name}</span>
+                {(() => {
+                  const full = t("countryDetail.studyIn", { name: "|||" });
+                  const parts = full.split("|||");
+                  return <>{parts[0]}<span className="text-primary">{dest.name}</span>{parts[1] || ""}</>;
+                })()}
               </h1>
               {dest.shortDescription && (
                 <p className="text-lg text-muted-foreground max-w-2xl">{dest.shortDescription}</p>
               )}
               <div className="flex items-center gap-6 mt-4">
                 <span className="flex items-center gap-2 text-sm font-medium">
-                  <Building2 className="w-4 h-4 text-primary" /> {stats.universityCount} Universities
+                  <Building2 className="w-4 h-4 text-primary" /> {stats.universityCount} {t("countryDetail.universities")}
                 </span>
                 <span className="flex items-center gap-2 text-sm font-medium">
-                  <GraduationCap className="w-4 h-4 text-accent" /> {stats.programCount} Programs
+                  <GraduationCap className="w-4 h-4 text-accent" /> {stats.programCount} {t("countryDetail.programs")}
                 </span>
               </div>
             </div>
@@ -168,14 +175,14 @@ export default function CountryDetail({ slug }: { slug: string }) {
             <div className="lg:col-span-2 space-y-8">
               {dest.description && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">About {dest.name}</h2>
+                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.about", { name: dest.name })}</h2>
                   <p className="text-muted-foreground leading-relaxed">{dest.description}</p>
                 </motion.div>
               )}
 
               {whyPoints.length > 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">Why Study in {dest.name}?</h2>
+                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.whyStudy", { name: dest.name })}</h2>
                   <div className="grid sm:grid-cols-2 gap-3">
                     {whyPoints.map((point, i) => (
                       <div key={i} className="flex gap-3 bg-card rounded-xl border border-border/40 p-4">
@@ -191,7 +198,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
 
               {cities.length > 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">Popular Cities</h2>
+                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.popularCities")}</h2>
                   <div className="flex flex-wrap gap-3">
                     {cities.map(city => (
                       <div key={city} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2">
@@ -205,13 +212,13 @@ export default function CountryDetail({ slug }: { slug: string }) {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-display font-bold text-foreground mb-2">Quick Facts</h3>
-              {dest.language && <InfoCard icon={Languages} label="Language" value={dest.language} color="bg-blue-500" />}
-              {dest.currency && <InfoCard icon={Wallet} label="Currency" value={dest.currency} color="bg-emerald-500" />}
-              {dest.livingCost && <InfoCard icon={DollarSign} label="Living Cost" value={dest.livingCost} color="bg-amber-500" />}
-              {dest.climate && <InfoCard icon={Thermometer} label="Climate" value={dest.climate} color="bg-orange-500" />}
-              {dest.visaInfo && <InfoCard icon={FileText} label="Visa Info" value={dest.visaInfo} color="bg-violet-500" />}
-              {dest.workPermit && <InfoCard icon={Briefcase} label="Work Permit" value={dest.workPermit} color="bg-rose-500" />}
+              <h3 className="text-lg font-display font-bold text-foreground mb-2">{t("countryDetail.quickFacts")}</h3>
+              {dest.language && <InfoCard icon={Languages} label={t("countryDetail.language")} value={dest.language} color="bg-blue-500" />}
+              {dest.currency && <InfoCard icon={Wallet} label={t("countryDetail.currency")} value={dest.currency} color="bg-emerald-500" />}
+              {dest.livingCost && <InfoCard icon={DollarSign} label={t("countryDetail.livingCost")} value={dest.livingCost} color="bg-amber-500" />}
+              {dest.climate && <InfoCard icon={Thermometer} label={t("countryDetail.climate")} value={dest.climate} color="bg-orange-500" />}
+              {dest.visaInfo && <InfoCard icon={FileText} label={t("countryDetail.visaInfo")} value={dest.visaInfo} color="bg-violet-500" />}
+              {dest.workPermit && <InfoCard icon={Briefcase} label={t("countryDetail.workPermit")} value={dest.workPermit} color="bg-rose-500" />}
             </div>
           </div>
         </div>
@@ -222,11 +229,11 @@ export default function CountryDetail({ slug }: { slug: string }) {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-display font-bold text-foreground">
-                Universities in {dest.name}
+                {t("countryDetail.universitiesIn", { name: dest.name })}
               </h2>
               <Button asChild variant="outline" size="sm" className="rounded-full">
-                <Link href={`/programs?country=${encodeURIComponent(dest.country)}`}>
-                  View All Programs <ChevronRight className="w-4 h-4 ml-1" />
+                <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>
+                  {t("countryDetail.viewAllPrograms")} <ChevronRight className="w-4 h-4 ml-1" />
                 </Link>
               </Button>
             </div>
@@ -261,10 +268,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
                           <Badge variant="secondary" className="text-xs">{uni.universityType}</Badge>
                         )}
                         {uni.ranking && (
-                          <Badge variant="outline" className="text-xs">Rank #{uni.ranking}</Badge>
+                          <Badge variant="outline" className="text-xs">{t("countryDetail.rank", { rank: uni.ranking })}</Badge>
                         )}
                         <Badge className="text-xs bg-primary/10 text-primary border-0">
-                          {uniPrograms.length} Programs
+                          {t("countryDetail.programCount", { count: uniPrograms.length })}
                         </Badge>
                       </div>
                     </div>
@@ -278,14 +285,14 @@ export default function CountryDetail({ slug }: { slug: string }) {
 
       <section className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
         <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
-          <h2 className="text-3xl font-display font-bold mb-4">Ready to study in {dest.name}?</h2>
-          <p className="text-white/80 mb-8">Get personalized guidance from our expert counselors and start your application today.</p>
+          <h2 className="text-3xl font-display font-bold mb-4">{t("countryDetail.readyToStudy", { name: dest.name })}</h2>
+          <p className="text-white/80 mb-8">{t("countryDetail.readyToStudyDesc")}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold">
-              <Link href={`/programs?country=${encodeURIComponent(dest.country)}`}>Browse Programs</Link>
+              <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="rounded-full px-8 text-white border-white/30 hover:bg-white/10 font-bold">
-              <a href="/contact">Talk to an Advisor</a>
+              <a href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</a>
             </Button>
           </div>
         </div>

@@ -94,64 +94,64 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 
 type DocKey = "passport" | "hs_diploma" | "hs_transcript" | "photo" | "language_proof" | "bachelor_diploma" | "bachelor_transcript" | "equivalency_letter" | "cv" | "sop" | "master_diploma" | "master_transcript";
 
-interface DocType { key: DocKey; label: string; icon: string; accept: string; required: boolean; subtitle?: string }
+interface DocType { key: DocKey; labelKey: string; icon: string; accept: string; required: boolean; subtitleKey?: string }
 
 const DEGREE_DOC_MAP: Record<string, DocType[]> = {
   associate: [
-    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
-    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If available" },
+    { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "language_proof", labelKey: "apply.docLabel_language_proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifAvailable" },
   ],
   bachelors: [
-    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
-    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If available" },
+    { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "language_proof", labelKey: "apply.docLabel_language_proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifAvailable" },
   ],
   masters: [
-    { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
-    { key: "equivalency_letter", label: "Equivalency Letter", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "Recognition" },
-    { key: "cv", label: "CV", icon: "📄", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If required" },
-    { key: "sop", label: "SOP", icon: "✍️", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If required" },
-    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If available" },
+    { key: "bachelor_diploma", labelKey: "apply.docLabel_bachelor_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "bachelor_transcript", labelKey: "apply.docLabel_bachelor_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "equivalency_letter", labelKey: "apply.docLabel_equivalency_letter", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_recognition" },
+    { key: "cv", labelKey: "apply.docLabel_cv", icon: "📄", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
+    { key: "sop", labelKey: "apply.docLabel_sop", icon: "✍️", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
+    { key: "language_proof", labelKey: "apply.docLabel_language_proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifAvailable" },
   ],
   doctorate: [
-    { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "master_diploma", label: "Master Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "master_transcript", label: "Master Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
-    { key: "equivalency_letter", label: "Equivalency Letter", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "Recognition" },
-    { key: "cv", label: "CV", icon: "📄", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If required" },
-    { key: "sop", label: "SOP", icon: "✍️", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If required" },
-    { key: "language_proof", label: "Language Proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitle: "If available" },
+    { key: "bachelor_diploma", labelKey: "apply.docLabel_bachelor_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "bachelor_transcript", labelKey: "apply.docLabel_bachelor_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "master_diploma", labelKey: "apply.docLabel_master_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "master_transcript", labelKey: "apply.docLabel_master_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "equivalency_letter", labelKey: "apply.docLabel_equivalency_letter", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_recognition" },
+    { key: "cv", labelKey: "apply.docLabel_cv", icon: "📄", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
+    { key: "sop", labelKey: "apply.docLabel_sop", icon: "✍️", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
+    { key: "language_proof", labelKey: "apply.docLabel_language_proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifAvailable" },
   ],
   language: [
-    { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-    { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
+    { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+    { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
   ],
   foundation: [
-    { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-    { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-    { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
+    { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+    { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+    { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
   ],
 };
 
 const DEFAULT_DOC_TYPES: DocType[] = [
-  { key: "passport", label: "Passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-  { key: "hs_diploma", label: "Diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-  { key: "hs_transcript", label: "Transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-  { key: "photo", label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
+  { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
+  { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+  { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
+  { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
 ];
 
 function getDocTypesForDegree(degree: string | null | undefined): DocType[] {
@@ -208,6 +208,7 @@ async function prepareDoc(file: File): Promise<{ base64: string; mediaType: stri
 function DropZone({ docType, uploaded, onUpload, onRemove }: {
   docType: DocType; uploaded?: UploadedDoc; onUpload: (d: UploadedDoc) => void; onRemove: () => void;
 }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const { toast } = useToast();
@@ -215,12 +216,12 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
   async function handleFile(file: File) {
     const validation = validateFile(file);
     if (!validation.valid) {
-      toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
+      toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" });
       return;
     }
     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
     const { base64, mediaType, isImage } = await prepareDoc(safeFile);
-    onUpload({ key: docType.key, label: docType.label, file: safeFile, base64, mediaType, isImage });
+    onUpload({ key: docType.key, label: t(docType.labelKey), file: safeFile, base64, mediaType, isImage });
   }
 
   if (uploaded) {
@@ -231,7 +232,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
         </button>
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <p className="text-xs font-semibold text-foreground truncate max-w-[90px]">{uploaded.file.name}</p>
-        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label}</span>
+        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{t(docType.labelKey)}</span>
       </div>
     );
   }
@@ -249,11 +250,11 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
       onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
     >
       <span className="text-2xl">{docType.icon}</span>
-      <p className="text-xs font-semibold text-foreground">{docType.label}</p>
-      {docType.subtitle && <span className="text-[10px] text-muted-foreground">{docType.subtitle}</span>}
+      <p className="text-xs font-semibold text-foreground">{t(docType.labelKey)}</p>
+      {docType.subtitleKey && <span className="text-[10px] text-muted-foreground">{t(docType.subtitleKey)}</span>}
       {docType.required
-        ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">Required</span>
-        : <span className="text-[10px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 px-1.5 py-0.5 rounded-full font-medium">Optional</span>
+        ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">{t("apply.required")}</span>
+        : <span className="text-[10px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 px-1.5 py-0.5 rounded-full font-medium">{t("apply.optional")}</span>
       }
       <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
@@ -297,6 +298,7 @@ function StepIndicator({ current, steps }: { current: number; steps: string[] })
 }
 
 function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [step, setStep] = useState<ApplyStep>("personal");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
@@ -331,7 +333,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
   async function handleNextPersonal() {
     if (!form.firstName || !form.lastName || !form.email || !form.phone) {
-      toast({ title: "Please fill in all fields", variant: "destructive" });
+      toast({ title: t("apply.fillAllFields"), variant: "destructive" });
       return;
     }
 
@@ -351,8 +353,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       });
 
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Failed to save information" }));
-        toast({ title: err.error || "Failed to save information", variant: "destructive" });
+        const err = await resp.json().catch(() => ({ error: t("apply.failedToSave") }));
+        toast({ title: err.error || t("apply.failedToSave"), variant: "destructive" });
         return;
       }
 
@@ -360,7 +362,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       if (data.leadId) setLeadId(data.leadId);
       setStep("documents");
     } catch {
-      toast({ title: "Failed to save information. Please try again.", variant: "destructive" });
+      toast({ title: t("apply.failedToSave"), variant: "destructive" });
     } finally {
       setCreatingLead(false);
     }
@@ -369,7 +371,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   async function analyzeDocuments() {
     const uploadedDocs = Object.values(docs);
     if (uploadedDocs.length === 0) {
-      toast({ title: "Please upload at least one document", variant: "destructive" });
+      toast({ title: t("apply.uploadAtLeastOne"), variant: "destructive" });
       return;
     }
 
@@ -398,7 +400,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       const { extracted: data, warnings: serverWarnings } = await resp.json();
 
       if (data.passportExpired === true) {
-        setAiError(`Passport has expired (${data.passportExpiry}). Please upload a valid, non-expired passport to continue.`);
+        setAiError(t("apply.passportExpired", { date: data.passportExpiry }));
         mergeAiData(data);
         setStep("review");
         return;
@@ -461,7 +463,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
   function handleSkipToReview() {
     if (missingRequired.length > 0) {
-      toast({ title: `Please upload all required documents: ${missingRequired.map(d => d.label).join(", ")}`, variant: "destructive" });
+      toast({ title: t("apply.uploadRequired", { docs: missingRequired.map(d => t(d.labelKey)).join(", ") }), variant: "destructive" });
       return;
     }
     setStep("review");
@@ -471,13 +473,13 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     setEmailError(null);
 
     if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName || !form.nationality) {
-      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      toast({ title: t("apply.fillRequiredFields"), variant: "destructive" });
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email)) {
-      setEmailError("Please enter a valid email address");
+      setEmailError(t("apply.invalidEmail"));
       return;
     }
 
@@ -506,14 +508,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       });
 
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Submission failed" }));
-        toast({ title: err.error || "Failed to submit application", variant: "destructive" });
+        const err = await resp.json().catch(() => ({ error: t("apply.submissionFailed") }));
+        toast({ title: err.error || t("apply.failedToSubmit"), variant: "destructive" });
         return;
       }
 
       setStep("success");
     } catch {
-      toast({ title: "Failed to submit application", variant: "destructive" });
+      toast({ title: t("apply.failedToSubmit"), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -527,13 +529,13 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <GraduationCap className="w-5 h-5 text-primary" />
-            Apply — {program.name}
+            {t("apply.title", { name: program.name })}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">{program.universityName}</p>
         </DialogHeader>
 
         {step !== "success" && step !== "analyzing" && (
-          <StepIndicator current={stepIndex} steps={["Personal Info", "Documents", "Review & Submit"]} />
+          <StepIndicator current={stepIndex} steps={[t("apply.stepPersonal"), t("apply.stepDocuments"), t("apply.stepReview")]} />
         )}
 
         {step === "personal" && (
@@ -541,41 +543,41 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
               <div className="flex items-center gap-2 mb-1">
                 <Users className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Personal Information</h3>
+                <h3 className="font-semibold text-sm">{t("apply.personalInfo")}</h3>
               </div>
               <p className="text-xs text-muted-foreground">
-                Please provide your contact details. You will be able to review and update them before submitting.
+                {t("apply.personalInfoDesc")}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">
-                  First Name <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.firstName")} <span className="text-destructive ml-0.5">*</span>
                 </Label>
                 <Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder="First name" className="rounded-xl" />
+                  placeholder={t("apply.firstNamePlaceholder")} className="rounded-xl" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">
-                  Last Name <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.lastName")} <span className="text-destructive ml-0.5">*</span>
                 </Label>
                 <Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder="Last name" className="rounded-xl" />
+                  placeholder={t("apply.lastNamePlaceholder")} className="rounded-xl" />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold">
-                Email <span className="text-destructive ml-0.5">*</span>
+                {t("apply.email")} <span className="text-destructive ml-0.5">*</span>
               </Label>
               <Input type="email" value={form.email} onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="email@example.com" className="rounded-xl" />
+                placeholder={t("apply.emailPlaceholder")} className="rounded-xl" />
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold">
-                Phone <span className="text-destructive ml-0.5">*</span>
+                {t("apply.phone")} <span className="text-destructive ml-0.5">*</span>
               </Label>
               <div className="flex gap-1.5">
                 <select value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
@@ -583,18 +585,18 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                   {PHONE_CODES.map(pc => <option key={`${pc.country}-${pc.code}`} value={pc.code}>{pc.label}</option>)}
                 </select>
                 <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="Phone number" className="rounded-xl flex-1" />
+                  placeholder={t("apply.phonePlaceholder")} className="rounded-xl flex-1" />
               </div>
             </div>
 
             <div className="bg-secondary/50 rounded-xl p-3 text-sm">
-              <p className="font-medium text-foreground mb-1">Applying for:</p>
+              <p className="font-medium text-foreground mb-1">{t("apply.applyingFor")}</p>
               <p className="text-muted-foreground">{program.name} — {program.universityName}</p>
             </div>
 
             <Button onClick={handleNextPersonal} className="w-full rounded-xl gap-2" disabled={creatingLead}>
               {creatingLead && <Loader2 className="w-4 h-4 animate-spin" />}
-              Next
+              {t("common.next")}
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -605,16 +607,16 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">AI-Powered Document Analysis</h3>
+                <h3 className="font-semibold text-sm">{t("apply.aiDocAnalysis")}</h3>
               </div>
               <p className="text-xs text-muted-foreground">
-                Upload your documents and our AI will automatically extract your information. You can review and edit before submitting.
+                {t("apply.aiDocAnalysisDesc")}
               </p>
             </div>
 
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm text-foreground">Required Documents</h3>
-              <span className="text-xs text-muted-foreground">{uploadedCount}/{totalCount} uploaded</span>
+              <h3 className="font-semibold text-sm text-foreground">{t("apply.requiredDocuments")}</h3>
+              <span className="text-xs text-muted-foreground">{t("apply.uploaded", { count: uploadedCount, total: totalCount })}</span>
             </div>
 
             <p className="text-[11px] text-muted-foreground">{FILE_UPLOAD_HELP_TEXT}</p>
@@ -632,16 +634,16 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
             {missingRequired.length > 0 && uploadedCount > 0 && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
-                Missing required: {missingRequired.map(d => d.label).join(", ")}
+                {t("apply.missingRequired", { docs: missingRequired.map(d => t(d.labelKey)).join(", ") })}
               </div>
             )}
 
             <div className="flex gap-3">
               <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0}>
-                <Sparkles className="w-4 h-4" /> Analyze with AI & Continue
+                <Sparkles className="w-4 h-4" /> {t("apply.analyzeWithAi")}
               </Button>
               <Button variant="ghost" onClick={handleSkipToReview} className="rounded-xl">
-                Skip, fill manually
+                {t("apply.skipFillManually")}
               </Button>
             </div>
           </div>
@@ -655,8 +657,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </div>
               <Loader2 className="absolute -top-1 -right-1 w-6 h-6 text-primary animate-spin" />
             </div>
-            <h3 className="font-semibold text-foreground">AI is analyzing your documents...</h3>
-            <p className="text-sm text-muted-foreground">This usually takes a few seconds</p>
+            <h3 className="font-semibold text-foreground">{t("apply.aiAnalyzing")}</h3>
+            <p className="text-sm text-muted-foreground">{t("apply.aiAnalyzingDesc")}</p>
           </div>
         )}
 
@@ -666,25 +668,25 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h3 className="font-display font-bold text-xl text-foreground mb-2">Application Submitted!</h3>
+              <h3 className="font-display font-bold text-xl text-foreground mb-2">{t("apply.appSubmitted")}</h3>
               <p className="text-muted-foreground text-sm leading-relaxed max-w-sm mx-auto">
-                Your application has been received. We have sent your login details and email verification instructions to your email address.
+                {t("apply.appSubmittedDesc")}
               </p>
             </div>
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 w-full text-left">
-              <p className="text-sm font-semibold text-foreground mb-2">What happens next?</p>
+              <p className="text-sm font-semibold text-foreground mb-2">{t("apply.whatHappensNext")}</p>
               <ul className="text-xs text-muted-foreground space-y-1.5">
-                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">1.</span> Check your email for account setup instructions</li>
-                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">2.</span> Set your password to activate your account</li>
-                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">3.</span> Log in to track your application progress</li>
+                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">1.</span> {t("apply.step1")}</li>
+                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">2.</span> {t("apply.step2")}</li>
+                <li className="flex items-start gap-2"><span className="text-primary font-bold mt-0.5">3.</span> {t("apply.step3")}</li>
               </ul>
             </div>
             <div className="flex gap-3 w-full">
               <Button variant="outline" onClick={reset} className="flex-1 rounded-xl">
-                Close
+                {t("common.close")}
               </Button>
               <Button onClick={() => { reset(); window.location.href = "/login"; }} className="flex-1 rounded-xl gap-2">
-                Go to Login
+                {t("apply.goToLogin")}
               </Button>
             </div>
           </div>
@@ -694,68 +696,68 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           <div className="space-y-4">
             {aiError && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-700 dark:text-amber-300">
-                {aiError}. Please fill in the form manually.
+                {aiError}. {t("apply.fillManually")}
               </div>
             )}
             {extracted.size > 0 && !aiError && (
               <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                AI extracted {extracted.size} fields. Please review and complete the form.
+                {t("apply.aiExtracted", { count: extracted.size })}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  First Name <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.firstName")} <span className="text-destructive ml-0.5">*</span>
                   {extracted.has("firstName") && <AiBadge />}
                 </Label>
                 <Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder="First name" className={`rounded-xl ${extracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.firstNamePlaceholder")} className={`rounded-xl ${extracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Last Name <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.lastName")} <span className="text-destructive ml-0.5">*</span>
                   {extracted.has("lastName") && <AiBadge />}
                 </Label>
                 <Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder="Last name" className={`rounded-xl ${extracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.lastNamePlaceholder")} className={`rounded-xl ${extracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Mother Name <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.motherName")} <span className="text-destructive ml-0.5">*</span>
                   {extracted.has("motherName") && <AiBadge />}
                 </Label>
                 <Input value={form.motherName} onChange={(e) => setForm(f => ({ ...f, motherName: e.target.value }))}
-                  placeholder="Mother's full name" className={`rounded-xl ${extracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.motherNamePlaceholder")} className={`rounded-xl ${extracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Father Name <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.fatherName")} <span className="text-destructive ml-0.5">*</span>
                   {extracted.has("fatherName") && <AiBadge />}
                 </Label>
                 <Input value={form.fatherName} onChange={(e) => setForm(f => ({ ...f, fatherName: e.target.value }))}
-                  placeholder="Father's full name" className={`rounded-xl ${extracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.fatherNamePlaceholder")} className={`rounded-xl ${extracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold flex items-center">
-                Email <span className="text-destructive ml-0.5">*</span>
+                {t("apply.email")} <span className="text-destructive ml-0.5">*</span>
                 {extracted.has("email") && <AiBadge />}
               </Label>
               <Input type="email" value={form.email} onChange={(e) => { setForm(f => ({ ...f, email: e.target.value })); setEmailError(null); }}
-                placeholder="email@example.com" className={`rounded-xl ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                placeholder={t("apply.emailPlaceholder")} className={`rounded-xl ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               {emailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Phone <span className="text-destructive ml-0.5">*</span>
+                  {t("apply.phone")} <span className="text-destructive ml-0.5">*</span>
                   {extracted.has("phone") && <AiBadge />}
                 </Label>
                 <div className="flex gap-1.5">
@@ -764,17 +766,17 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                     {PHONE_CODES.map(pc => <option key={`${pc.country}-${pc.code}`} value={pc.code}>{pc.label}</option>)}
                   </select>
                   <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
-                    placeholder="Phone number" className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                    placeholder={t("apply.phonePlaceholder")} className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Nationality <span className="text-destructive ml-0.5">*</span>
+                  {t("contact.nationality")} <span className="text-destructive ml-0.5">*</span>
                   {extracted.has("nationality") && <AiBadge />}
                 </Label>
                 <select value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
                   className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
-                  <option value="">Select nationality</option>
+                  <option value="">{t("apply.selectNationality")}</option>
                   {ALL_NATIONALITIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
@@ -783,7 +785,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Date of Birth
+                  {t("apply.dateOfBirth")}
                   {extracted.has("dateOfBirth") && <AiBadge />}
                 </Label>
                 <Input type="date" value={form.dateOfBirth} onChange={(e) => setForm(f => ({ ...f, dateOfBirth: e.target.value }))}
@@ -791,18 +793,18 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Passport Number
+                  {t("apply.passportNumber")}
                   {extracted.has("passportNumber") && <AiBadge />}
                 </Label>
                 <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
-                  placeholder="Passport number" className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.passportPlaceholder")} className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Passport Issue Date
+                  {t("apply.passportIssueDate")}
                   {extracted.has("passportIssueDate") && <AiBadge />}
                 </Label>
                 <Input type="date" value={form.passportIssueDate} onChange={(e) => setForm(f => ({ ...f, passportIssueDate: e.target.value }))}
@@ -810,7 +812,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Passport Expiry Date
+                  {t("apply.passportExpiryDate")}
                   {extracted.has("passportExpiry") && <AiBadge />}
                 </Label>
                 <Input type="date" value={form.passportExpiry} onChange={(e) => setForm(f => ({ ...f, passportExpiry: e.target.value }))}
@@ -820,59 +822,59 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold flex items-center">
-                Address
+                {t("apply.address")}
                 {extracted.has("address") && <AiBadge />}
               </Label>
               <Input value={form.address} onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
-                placeholder="Full address" className={`rounded-xl ${extracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                placeholder={t("apply.addressPlaceholder")} className={`rounded-xl ${extracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  High School
+                  {t("apply.highSchool")}
                   {extracted.has("highSchool") && <AiBadge />}
                 </Label>
                 <Input value={form.highSchool} onChange={(e) => setForm(f => ({ ...f, highSchool: e.target.value }))}
-                  placeholder="High school name" className={`rounded-xl ${extracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.highSchoolPlaceholder")} className={`rounded-xl ${extracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold flex items-center">
-                  Graduation Year
+                  {t("apply.graduationYear")}
                   {extracted.has("graduationYear") && <AiBadge />}
                 </Label>
                 <Input value={form.graduationYear} onChange={(e) => setForm(f => ({ ...f, graduationYear: e.target.value }))}
-                  placeholder="e.g. 2023" className={`rounded-xl ${extracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  placeholder={t("apply.gradYearPlaceholder")} className={`rounded-xl ${extracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold flex items-center">
-                GPA
+                {t("apply.gpa")}
                 {extracted.has("gpa") && <AiBadge />}
               </Label>
               <Input value={form.gpa} onChange={(e) => setForm(f => ({ ...f, gpa: e.target.value }))}
-                placeholder="e.g. 3.5" className={`rounded-xl ${extracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                placeholder={t("apply.gpaPlaceholder")} className={`rounded-xl ${extracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-semibold">Additional Notes</Label>
+              <Label className="text-sm font-semibold">{t("apply.additionalNotes")}</Label>
               <Textarea value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Any additional information..." className="rounded-xl resize-none" rows={3} />
+                placeholder={t("apply.notesPlaceholder")} className="rounded-xl resize-none" rows={3} />
             </div>
 
             <div className="bg-secondary/50 rounded-xl p-3 text-sm">
-              <p className="font-medium text-foreground mb-1">Applying for:</p>
+              <p className="font-medium text-foreground mb-1">{t("apply.applyingFor")}</p>
               <p className="text-muted-foreground">{program.name} — {program.universityName}</p>
             </div>
 
             <div className="flex gap-3">
               <Button onClick={() => setStep("documents")} variant="outline" className="rounded-xl">
-                Back
+                {t("common.back")}
               </Button>
               <Button onClick={handleSubmit} className="flex-1 rounded-xl gap-2" disabled={submitting}>
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                Submit Application
+                {submitting ? t("apply.submitting") : t("apply.submitApplication")}
               </Button>
             </div>
           </div>
@@ -883,22 +885,23 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 }
 
 function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClose: () => void; program: Program | null }) {
+  const { t } = useI18n();
   if (!program) return null;
   const effectiveFee = program.discountedFee ?? program.tuitionFee;
   const hasDiscount = program.discountedFee && program.tuitionFee && program.discountedFee < program.tuitionFee;
   const logoSrc = fixStorageUrl(program.universityLogoUrl);
 
   const detailRows: { icon: React.ReactNode; label: string; value: string }[] = [];
-  if (program.degree) detailRows.push({ icon: <GraduationCap className="w-4 h-4 text-primary" />, label: "Degree", value: program.degree });
-  if (program.field) detailRows.push({ icon: <Award className="w-4 h-4 text-violet-500" />, label: "Field", value: program.field });
-  if (program.language) detailRows.push({ icon: <Languages className="w-4 h-4 text-blue-500" />, label: "Language", value: program.language });
-  if (program.duration) detailRows.push({ icon: <Clock className="w-4 h-4 text-green-500" />, label: "Duration", value: program.duration });
-  if (program.intakes) detailRows.push({ icon: <BookOpen className="w-4 h-4 text-orange-500" />, label: "Intakes", value: program.intakes });
-  if (program.feeType) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-emerald-500" />, label: "Fee Type", value: program.feeType });
-  if (program.applicationFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-amber-500" />, label: "Application Fee", value: formatFee(program.applicationFee, program.currency) });
-  if (program.depositFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-cyan-500" />, label: "Deposit Fee", value: formatFee(program.depositFee, program.currency) });
-  if (program.advancedFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-sky-500" />, label: "Advanced Fee", value: formatFee(program.advancedFee, program.currency) });
-  if (program.languageFee) detailRows.push({ icon: <Languages className="w-4 h-4 text-indigo-500" />, label: "Language Fee", value: formatFee(program.languageFee, program.currency) });
+  if (program.degree) detailRows.push({ icon: <GraduationCap className="w-4 h-4 text-primary" />, label: t("apply.degree"), value: program.degree });
+  if (program.field) detailRows.push({ icon: <Award className="w-4 h-4 text-violet-500" />, label: t("apply.field"), value: program.field });
+  if (program.language) detailRows.push({ icon: <Languages className="w-4 h-4 text-blue-500" />, label: t("apply.language"), value: program.language });
+  if (program.duration) detailRows.push({ icon: <Clock className="w-4 h-4 text-green-500" />, label: t("programs.duration"), value: program.duration });
+  if (program.intakes) detailRows.push({ icon: <BookOpen className="w-4 h-4 text-orange-500" />, label: t("apply.intakes"), value: program.intakes });
+  if (program.feeType) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-emerald-500" />, label: t("apply.feeType"), value: program.feeType });
+  if (program.applicationFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-amber-500" />, label: t("apply.applicationFee"), value: formatFee(program.applicationFee, program.currency) });
+  if (program.depositFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-cyan-500" />, label: t("apply.depositFee"), value: formatFee(program.depositFee, program.currency) });
+  if (program.advancedFee) detailRows.push({ icon: <DollarSign className="w-4 h-4 text-sky-500" />, label: t("apply.advancedFee"), value: formatFee(program.advancedFee, program.currency) });
+  if (program.languageFee) detailRows.push({ icon: <Languages className="w-4 h-4 text-indigo-500" />, label: t("apply.languageFee"), value: formatFee(program.languageFee, program.currency) });
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -935,7 +938,7 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
                   )}
                   {hasDiscount && (
                     <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0">
-                      {Math.round(((program.tuitionFee! - program.discountedFee!) / program.tuitionFee!) * 100)}% OFF
+                      {t("programs.percentOff", { percent: String(Math.round(((program.tuitionFee! - program.discountedFee!) / program.tuitionFee!) * 100)) })}
                     </Badge>
                   )}
                 </div>
@@ -943,7 +946,7 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
               {program.scholarship && program.scholarship > 0 ? (
                 <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
                   <Award className="w-4 h-4" />
-                  <span className="font-medium">Scholarship: {formatFee(program.scholarship, program.currency)}</span>
+                  <span className="font-medium">{t("apply.scholarship")}: {formatFee(program.scholarship, program.currency)}</span>
                 </div>
               ) : null}
             </div>
@@ -965,14 +968,14 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
 
           {program.requirements && (
             <div className="space-y-1.5">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Requirements</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{t("programs.requirements")}</p>
               <p className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{program.requirements}</p>
             </div>
           )}
 
           {program.universityDescription && (
             <div className="space-y-1.5 pt-2 border-t border-border/30">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">About {program.universityName}</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{t("apply.universityInfo")}</p>
               <p className="text-sm text-foreground/80 leading-relaxed line-clamp-4">{program.universityDescription}</p>
             </div>
           )}
@@ -980,13 +983,13 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
           {(program.universityRanking || program.universityQsRanking || program.universityTimesRanking) && (
             <div className="flex flex-wrap gap-2">
               {program.universityRanking && (
-                <Badge variant="outline" className="text-xs gap-1"><Award className="w-3 h-3" /> Ranking: {program.universityRanking}</Badge>
+                <Badge variant="outline" className="text-xs gap-1"><Award className="w-3 h-3" /> {t("programs.ranking", { value: program.universityRanking })}</Badge>
               )}
               {program.universityQsRanking && (
-                <Badge variant="outline" className="text-xs gap-1">QS: {program.universityQsRanking}</Badge>
+                <Badge variant="outline" className="text-xs gap-1">{t("programs.qsRanking", { value: program.universityQsRanking })}</Badge>
               )}
               {program.universityTimesRanking && (
-                <Badge variant="outline" className="text-xs gap-1">Times: {program.universityTimesRanking}</Badge>
+                <Badge variant="outline" className="text-xs gap-1">{t("programs.timesRanking", { value: program.universityTimesRanking })}</Badge>
               )}
             </div>
           )}
@@ -994,7 +997,7 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
           {program.universityWebsite && (
             <a href={program.universityWebsite} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-              <ExternalLink className="w-3.5 h-3.5" /> Visit University Website
+              <ExternalLink className="w-3.5 h-3.5" /> {t("programs.visitUniversity")}
             </a>
           )}
         </div>
@@ -1004,7 +1007,7 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
 }
 
 export default function Programs() {
-  const { t, lang } = useI18n();
+  const { t, lang, localePath } = useI18n();
   useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -1267,12 +1270,12 @@ export default function Programs() {
                           </label>
                           <div className="flex items-center gap-2">
                             <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
-                              placeholder={filters.feeRange?.min != null ? `Min (${filters.feeRange.min})` : t("programs.feeMin")}
+                              placeholder={filters.feeRange?.min != null ? t("programs.feeMinValue", { value: String(filters.feeRange.min) }) : t("programs.feeMin")}
                               className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                               max={filters.feeRange?.max} />
                             <span className="text-muted-foreground text-sm font-medium">–</span>
                             <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
-                              placeholder={filters.feeRange?.max != null ? `Max (${filters.feeRange.max})` : t("programs.feeMax")}
+                              placeholder={filters.feeRange?.max != null ? t("programs.feeMaxValue", { value: String(filters.feeRange.max) }) : t("programs.feeMax")}
                               className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                               max={filters.feeRange?.max} />
                           </div>
@@ -1310,7 +1313,7 @@ export default function Programs() {
                 <BookOpen className="w-4 h-4 text-primary" />
               </div>
               <p className="text-muted-foreground">
-                Showing <span className="font-bold text-foreground">{total}</span> programs
+                {t("programs.showingResults", { count: String(total) })}
               </p>
             </div>
           </motion.div>
@@ -1453,18 +1456,18 @@ export default function Programs() {
                         {prog.scholarship && prog.scholarship > 0 ? (
                           <div className="mb-3">
                             <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1">
-                              <Award className="w-3 h-3" /> Scholarship: {formatFee(prog.scholarship, prog.currency)}
+                              <Award className="w-3 h-3" /> {t("apply.scholarship")}: {formatFee(prog.scholarship, prog.currency)}
                             </Badge>
                           </div>
                         ) : null}
 
                         <div className="mt-auto flex gap-2">
                           <Button variant="outline" size="icon" onClick={() => setDetailProgram(prog)}
-                            className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5" title="Program Details">
+                            className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5" title={t("programs.programDetails")}>
                             <Info className="w-4 h-4" />
                           </Button>
                           <Button onClick={() => setApplyProgram(prog)} className="flex-1 rounded-xl shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
-                            Apply Now
+                            {t("programs.apply")}
                           </Button>
                         </div>
                       </div>
@@ -1505,10 +1508,10 @@ export default function Programs() {
       <section className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.1),transparent_60%)]" />
         <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
-          <h2 className="text-3xl font-display font-bold mb-4">Can't find the right program?</h2>
-          <p className="text-white/80 mb-8">Our advisors can help you find the perfect fit for your academic goals.</p>
+          <h2 className="text-3xl font-display font-bold mb-4">{t("programs.cantFind")}</h2>
+          <p className="text-white/80 mb-8">{t("programs.cantFindDesc")}</p>
           <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold shadow-xl shadow-black/10 hover:-translate-y-1 transition-all duration-300">
-            <a href="/contact">Talk to an Advisor</a>
+            <a href={localePath("/contact")}>{t("programs.talkToAdvisor")}</a>
           </Button>
         </div>
       </section>

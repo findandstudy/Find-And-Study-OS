@@ -60,43 +60,44 @@ import {
 import { LogOut, ChevronUp, User } from "lucide-react";
 
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string };
+type TFunc = (key: string, params?: Record<string, string | number>) => string;
 
-function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { label: string; items: MenuItem[] }[] } {
+function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { groups: { label: string; items: MenuItem[] }[] } {
   const FINANCE_ROLES = ['super_admin', 'admin', 'accountant'];
   const showFinance = FINANCE_ROLES.includes(role);
 
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
     const opsItems: MenuItem[] = [
-      { title: "Leads", icon: Users, url: '/staff/leads' },
-      { title: "Students", icon: GraduationCap, url: '/staff/students' },
-      { title: "Applications", icon: FileText, url: '/staff/applications' },
-      { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
-      { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
-      { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
-      { title: "Agents", icon: Handshake, url: '/staff/agents' },
+      { title: t("dashboard.leads"), icon: Users, url: '/staff/leads' },
+      { title: t("dashboard.students"), icon: GraduationCap, url: '/staff/students' },
+      { title: t("dashboard.applications"), icon: FileText, url: '/staff/applications' },
+      { title: t("dashboard.documents"), icon: FolderOpen, url: '/staff/documents' },
+      { title: t("dashboard.courseFinder"), icon: Search, url: '/staff/course-finder' },
+      { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
+      { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
     ];
-    if (showFinance) opsItems.push({ title: "Finance", icon: DollarSign, url: '/staff/finance' });
+    if (showFinance) opsItems.push({ title: t("dashboard.finance"), icon: DollarSign, url: '/staff/finance' });
     return {
       groups: [
         {
-          label: "Overview",
+          label: t("dashboard.overview"),
           items: [
-            { title: "Dashboard", icon: LayoutDashboard, url: '/admin' },
+            { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' },
           ]
         },
         {
-          label: "Operations",
+          label: t("dashboard.operations"),
           items: opsItems
         },
         {
-          label: "Admin",
+          label: t("dashboard.admin"),
           items: [
-            { title: "Catalog", icon: Library, url: '/admin/catalog' },
-            { title: "Users", icon: UserCheck, url: '/admin/users' },
-            { title: "Audit Log", icon: Activity, url: '/admin/audit' },
-            { title: "User Activity", icon: Activity, url: '/admin/activity' },
-            { title: "Embeds", icon: Code2, url: '/admin/embeds' },
-            { title: "Settings", icon: Settings, url: '/admin/settings' },
+            { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
+            { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
+            { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
+            { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
+            { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
+            { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
           ]
         }
       ]
@@ -105,30 +106,30 @@ function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { l
 
   if (role === 'staff' || role === 'consultant' || role === 'accountant' || role === 'editor') {
     const workItems: MenuItem[] = [
-      { title: "Leads", icon: Users, url: '/staff/leads' },
-      { title: "Students", icon: GraduationCap, url: '/staff/students' },
-      { title: "Applications", icon: FileText, url: '/staff/applications' },
-      { title: "Documents", icon: FolderOpen, url: '/staff/documents' },
-      { title: "Course Finder", icon: Search, url: '/staff/course-finder' },
-      { title: "Messages", icon: MessageCircle, url: '/staff/messages' },
+      { title: t("dashboard.leads"), icon: Users, url: '/staff/leads' },
+      { title: t("dashboard.students"), icon: GraduationCap, url: '/staff/students' },
+      { title: t("dashboard.applications"), icon: FileText, url: '/staff/applications' },
+      { title: t("dashboard.documents"), icon: FolderOpen, url: '/staff/documents' },
+      { title: t("dashboard.courseFinder"), icon: Search, url: '/staff/course-finder' },
+      { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
     ];
-    if (showFinance) workItems.push({ title: "Finance", icon: Briefcase, url: '/staff/finance' });
+    if (showFinance) workItems.push({ title: t("dashboard.finance"), icon: Briefcase, url: '/staff/finance' });
     return {
       groups: [
         {
-          label: "Overview",
+          label: t("dashboard.overview"),
           items: [
-            { title: "Dashboard", icon: LayoutDashboard, url: '/staff' },
+            { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/staff' },
           ]
         },
         {
-          label: "Work",
+          label: t("dashboard.work"),
           items: workItems
         },
         {
-          label: "System",
+          label: t("dashboard.system"),
           items: [
-            { title: "Settings", icon: Settings, url: '/staff/settings' },
+            { title: t("dashboard.settings"), icon: Settings, url: '/staff/settings' },
           ]
         }
       ]
@@ -139,19 +140,19 @@ function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { l
     return {
       groups: [
         {
-          label: "My Portal",
+          label: t("dashboard.myPortal"),
           items: [
-            { title: "Dashboard",        icon: LayoutDashboard, url: '/student' },
-            { title: "Wishlist",         icon: Heart,           url: '/student/wishlist' },
-            { title: "My Applications",  icon: FileText,        url: '/student/applications' },
-            { title: "Messages",         icon: MessageSquare,   url: '/student/messages' },
-            { title: "Course Finder",    icon: Search,          url: '/student/course-finder' },
+            { title: t("dashboard.dashboard"),       icon: LayoutDashboard, url: '/student' },
+            { title: t("dashboard.wishlist"),        icon: Heart,           url: '/student/wishlist' },
+            { title: t("dashboard.myApplications"), icon: FileText,        url: '/student/applications' },
+            { title: t("dashboard.messages"),        icon: MessageSquare,   url: '/student/messages' },
+            { title: t("dashboard.courseFinder"),   icon: Search,          url: '/student/course-finder' },
           ]
         },
         {
-          label: "Account",
+          label: t("dashboard.account"),
           items: [
-            { title: "My Account",  icon: UserCircle, url: '/student/account' },
+            { title: t("dashboard.myAccount"), icon: UserCircle, url: '/student/account' },
           ]
         }
       ]
@@ -160,30 +161,30 @@ function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { l
 
   if (role === 'agent' || role === 'sub_agent' || role === 'agent_staff') {
     let agentItems: MenuItem[] = [
-      { title: "Dashboard",     icon: LayoutDashboard, url: '/agent' },
-      { title: "Leads",         icon: UserCheck,       url: '/agent/leads',         permKey: 'leads' },
-      { title: "Students",      icon: GraduationCap,   url: '/agent/students',      permKey: 'students' },
-      { title: "Applications",  icon: FileText,        url: '/agent/applications',  permKey: 'applications' },
-      { title: "Course Finder", icon: Search,          url: '/staff/course-finder', permKey: 'course_finder' },
-      { title: "Messages",      icon: MessageSquare,   url: '/agent/messages',      permKey: 'messages' },
-      { title: "Commissions",   icon: TrendingUp,      url: '/agent/commissions',   permKey: 'commissions' },
+      { title: t("dashboard.dashboard"),    icon: LayoutDashboard, url: '/agent' },
+      { title: t("dashboard.leads"),        icon: UserCheck,       url: '/agent/leads',         permKey: 'leads' },
+      { title: t("dashboard.students"),     icon: GraduationCap,   url: '/agent/students',      permKey: 'students' },
+      { title: t("dashboard.applications"), icon: FileText,        url: '/agent/applications',  permKey: 'applications' },
+      { title: t("dashboard.courseFinder"), icon: Search,          url: '/staff/course-finder', permKey: 'course_finder' },
+      { title: t("dashboard.messages"),     icon: MessageSquare,   url: '/agent/messages',      permKey: 'messages' },
+      { title: t("dashboard.commissions"),  icon: TrendingUp,      url: '/agent/commissions',   permKey: 'commissions' },
     ];
     if (role === 'agent_staff' && agentStaffPerms) {
       agentItems = agentItems.filter(item => !item.permKey || agentStaffPerms.includes(item.permKey));
     }
     const accountItems: MenuItem[] = [
-      { title: "My Account", icon: UserCircle, url: '/agent/account' },
+      { title: t("dashboard.myAccount"), icon: UserCircle, url: '/agent/account' },
     ];
     if (role === 'agent') {
-      accountItems.push({ title: "Sub Agents", icon: Users, url: '/agent/sub-agents' });
+      accountItems.push({ title: t("dashboard.subAgents"), icon: Users, url: '/agent/sub-agents' });
     }
     if (role === 'agent' || role === 'sub_agent') {
-      accountItems.push({ title: "My Team", icon: Briefcase, url: '/agent/team' });
+      accountItems.push({ title: t("dashboard.myTeam"), icon: Briefcase, url: '/agent/team' });
     }
     return {
       groups: [
-        { label: "Agent Portal", items: agentItems },
-        { label: "Account", items: accountItems },
+        { label: t("dashboard.agentPortal"), items: agentItems },
+        { label: t("dashboard.account"), items: accountItems },
       ]
     };
   }
@@ -191,11 +192,14 @@ function getMenuForRole(role: string, agentStaffPerms?: string[]): { groups: { l
   return { groups: [] };
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin", admin: "Admin", manager: "Manager",
-  staff: "Staff", consultant: "Consultant", accountant: "Accountant", editor: "Editor",
-  student: "Student", agent: "Agent", sub_agent: "Sub Agent", agent_staff: "Staff",
-};
+function getRoleLabel(role: string, t: TFunc): string {
+  const roleKeyMap: Record<string, string> = {
+    super_admin: "dashboard.superAdmin", admin: "dashboard.admin", manager: "dashboard.manager",
+    staff: "dashboard.staff", consultant: "dashboard.consultant", accountant: "dashboard.accountant", editor: "dashboard.editor",
+    student: "dashboard.student", agent: "dashboard.agent", sub_agent: "dashboard.subAgent", agent_staff: "dashboard.staff",
+  };
+  return roleKeyMap[role] ? t(roleKeyMap[role]) : role;
+}
 
 const ROLE_COLORS: Record<string, string> = {
   super_admin: "bg-rose-500/10 text-rose-600", admin: "bg-red-500/10 text-red-600",
@@ -257,14 +261,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="h-screen w-full flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full" />
-          <p className="text-muted-foreground font-medium text-sm">Loading portal...</p>
+          <p className="text-muted-foreground font-medium text-sm">{t("dashboard.loadingPortal")}</p>
         </div>
       </div>
     );
   }
 
   const staffPerms = (user as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
-  const { groups } = getMenuForRole(user.role, staffPerms);
+  const { groups } = getMenuForRole(user.role, t, staffPerms);
   const allItems = groups.flatMap(g => g.items);
   const activeItem = allItems.find(i => {
     if (i.url === '/staff' || i.url === '/admin' || i.url === '/student' || i.url === '/agent') {
@@ -325,7 +329,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               <Link href={item.url}>
                                 <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
                                 <span className="flex-1">{item.title}</span>
-                                {item.title === "Messages" && totalUnreadMessages > 0 && (
+                                {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
                                   <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
                                     {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
                                   </span>
@@ -364,14 +368,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   <DropdownMenuItem asChild>
                     <Link href={['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}>
                       <User className="w-4 h-4 mr-2" />
-                      Profile & Settings
+                      {t("dashboard.profileSettings")}
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
                     <a href="/api/auth/logout">
                       <LogOut className="w-4 h-4 mr-2" />
-                      Sign Out
+                      {t("dashboard.signOut")}
                     </a>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -387,7 +391,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
               <div className="h-5 w-px bg-border" />
               <h1 className="font-display font-bold text-base text-foreground hidden sm:block">
-                {activeItem?.title || 'Portal'}
+                {activeItem?.title || t("dashboard.portal")}
               </h1>
             </div>
             <div className="flex items-center gap-3">
@@ -409,19 +413,19 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               <NotificationCenter />
               <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg"
                 onClick={() => setMode(resolvedTheme === "dark" ? "light" : "dark")}
-                title={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+                title={resolvedTheme === "dark" ? t("dashboard.switchToLight") : t("dashboard.switchToDark")}>
                 {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </Button>
               <Badge className={`hidden sm:flex text-xs font-semibold border-0 ${roleBadgeColor}`}>
                 <Shield className="w-3 h-3 mr-1" />
-                {ROLE_LABELS[user.role] || user.role}
+                {getRoleLabel(user.role, t)}
               </Badge>
             </div>
           </header>
 
           {(user as any).isImpersonating && (
             <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-sm font-medium">
-              <span>You are viewing as: {user.firstName} {user.lastName} ({user.role})</span>
+              <span>{t("dashboard.impersonating", { name: `${user.firstName} ${user.lastName}`, role: getRoleLabel(user.role, t) })}</span>
               <Button
                 size="sm"
                 variant="ghost"
@@ -436,7 +440,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 }}
               >
                 <ArrowLeftCircle className="w-4 h-4" />
-                Return to Agent Account
+                {t("dashboard.returnToAgent")}
               </Button>
             </div>
           )}

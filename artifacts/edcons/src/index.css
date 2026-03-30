@@ -171,7 +171,9 @@
   font-family: 'Noto Sans Arabic', 'DM Sans', sans-serif;
 }
 
-[dir="rtl"] .font-display {
+[dir="rtl"] .font-display,
+[dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3,
+[dir="rtl"] h4, [dir="rtl"] h5, [dir="rtl"] h6 {
   font-family: 'Noto Sans Arabic', 'Outfit', sans-serif;
 }
 
@@ -179,8 +181,20 @@ html[lang="zh"] {
   font-family: 'Noto Sans SC', 'DM Sans', sans-serif;
 }
 
+html[lang="zh"] .font-display,
+html[lang="zh"] h1, html[lang="zh"] h2, html[lang="zh"] h3,
+html[lang="zh"] h4, html[lang="zh"] h5, html[lang="zh"] h6 {
+  font-family: 'Noto Sans SC', 'Outfit', sans-serif;
+}
+
 html[lang="hi"] {
   font-family: 'Noto Sans Devanagari', 'DM Sans', sans-serif;
+}
+
+html[lang="hi"] .font-display,
+html[lang="hi"] h1, html[lang="hi"] h2, html[lang="hi"] h3,
+html[lang="hi"] h4, html[lang="hi"] h5, html[lang="hi"] h6 {
+  font-family: 'Noto Sans Devanagari', 'Outfit', sans-serif;
 }
 
 [dir="rtl"] .ms-auto {

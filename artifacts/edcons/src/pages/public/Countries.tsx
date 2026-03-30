@@ -143,7 +143,7 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
               <span className="text-7xl">{dest.flagEmoji || "🌍"}</span>
             )}
             {dest.isFeatured && (
-              <Badge className="absolute top-4 right-4 bg-amber-500 text-white border-0">Featured</Badge>
+              <Badge className="absolute top-4 right-4 bg-amber-500 text-white border-0">{t("countries.featuredBadge")}</Badge>
             )}
           </div>
           <div className="p-6 flex-1 flex flex-col">

@@ -119,6 +119,15 @@ function LoginRedirect() {
   return <PageLoader />;
 }
 
+function InvalidLangRedirect({ segment, rest }: { segment: string; rest: string }) {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    const path = rest ? `/en/${rest}` : `/en`;
+    setLocation(path, { replace: true });
+  }, [segment, rest, setLocation]);
+  return <PageLoader />;
+}
+
 function LanguageSync({ lang }: { lang: string }) {
   const { setLang } = useI18nContext();
   useEffect(() => {
@@ -293,15 +302,16 @@ function Router() {
             if (isValidLanguage(params.lang)) {
               return <PublicRoutes lang={params.lang} />;
             }
-            return <NotFound />;
+            return <InvalidLangRedirect segment={params.lang} rest="" />;
           }}
         </Route>
         <Route path="/:lang/:rest*">
-          {(params) => {
+          {(params: Record<string, string>) => {
             if (isValidLanguage(params.lang)) {
               return <PublicRoutes lang={params.lang} />;
             }
-            return <NotFound />;
+            const rest = params["rest*"] || params.rest || "";
+            return <InvalidLangRedirect segment={params.lang} rest={rest} />;
           }}
         </Route>
 
