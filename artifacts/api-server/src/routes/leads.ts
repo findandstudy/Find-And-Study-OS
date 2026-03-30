@@ -348,7 +348,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, lead.convertedStudentId));
     if (existing) {
       const wonStages = await db.select().from(pipelineStagesTable)
-        .where(and(eq(pipelineStagesTable.pipelineType, "lead"), eq(pipelineStagesTable.variant, "won")));
+        .where(and(eq(pipelineStagesTable.entityType, "lead"), eq(pipelineStagesTable.variant, "won")));
       const convertedKey = wonStages.length > 0 ? wonStages[0].key : "converted";
       if (lead.status !== convertedKey) {
         await db.update(leadsTable).set({ status: convertedKey }).where(eq(leadsTable.id, id));
