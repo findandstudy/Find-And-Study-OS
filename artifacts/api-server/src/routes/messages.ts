@@ -444,14 +444,20 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     );
 
   const senderName = req.user!.firstName + " " + req.user!.lastName;
+  const recipientUsers = otherParticipants.length > 0
+    ? await db.select({ id: usersTable.id, role: usersTable.role }).from(usersTable).where(inArray(usersTable.id, otherParticipants.map(p => p.userId)))
+    : [];
+  const recipientRoleMap = new Map(recipientUsers.map(u => [u.id, u.role]));
   for (const p of otherParticipants) {
+    const role = recipientRoleMap.get(p.userId);
+    const actionUrl = role === "student" ? `/student/messages` : `/staff/messages`;
     await db.insert(notificationsTable).values({
       userId: p.userId,
       type: "message.new",
       title: `New message from ${senderName}`,
       body: messageContent.substring(0, 150),
       icon: "message-circle",
-      actionUrl: `/staff/messages`,
+      actionUrl,
       channel: "in_app",
       data: { conversationId, messageId: message.id },
     });
@@ -617,13 +623,40 @@ router.get("/broadcasts", requireAuth, requireRole(...ADMIN_ROLES), async (_req,
 
 async function createQuickContactConversation(
   userId: number, title: string, channel: string, status: string,
-  content: string, metadata: Record<string, any>
+  content: string, metadata: Record<string, any>, recipientUserId?: number | null
 ) {
+  if (recipientUserId && channel === "internal") {
+    const existingParticipations = await db
+      .select({ conversationId: conversationParticipantsTable.conversationId })
+      .from(conversationParticipantsTable)
+      .where(eq(conversationParticipantsTable.userId, userId));
+    for (const e of existingParticipations) {
+      const conv = await db.select().from(conversationsTable).where(
+        and(eq(conversationsTable.id, e.conversationId), eq(conversationsTable.type, "direct"))
+      );
+      if (conv.length > 0) {
+        const otherP = await db.select().from(conversationParticipantsTable).where(
+          and(eq(conversationParticipantsTable.conversationId, e.conversationId), eq(conversationParticipantsTable.userId, recipientUserId))
+        );
+        if (otherP.length > 0) {
+          await db.insert(messagesTable).values({ conversationId: conv[0].id, senderId: userId, content, channel, status, metadata });
+          await db.update(conversationsTable)
+            .set({ lastMessageAt: new Date(), lastMessagePreview: content.substring(0, 200) })
+            .where(eq(conversationsTable.id, conv[0].id));
+          return conv[0];
+        }
+      }
+    }
+  }
+
   const [conv] = await db
     .insert(conversationsTable)
     .values({ type: "direct", title, createdById: userId })
     .returning();
   await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId });
+  if (recipientUserId && recipientUserId !== userId) {
+    await db.insert(conversationParticipantsTable).values({ conversationId: conv.id, userId: recipientUserId });
+  }
   await db.insert(messagesTable).values({
     conversationId: conv.id, senderId: userId, content,
     channel, status, metadata,
@@ -656,24 +689,36 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
     let conv;
     let note: string | undefined;
 
+    let recipientUserId: number | null = null;
+    if (entityType === "student" && entityId) {
+      const [s] = await db.select({ userId: studentsTable.userId }).from(studentsTable).where(eq(studentsTable.id, parseInt(String(entityId), 10)));
+      if (s?.userId) recipientUserId = s.userId;
+    } else if (entityType === "lead" && entityId && recipientEmail) {
+      const [u] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, recipientEmail));
+      if (u) recipientUserId = u.id;
+    }
+
     if (channel === "internal") {
       const title = `${entityLabel}: ${recipientName}`;
       conv = await createQuickContactConversation(
         userId, title, "internal", "sent", message,
-        { entityType, entityId, recipientName, recipientEmail, recipientPhone }
+        { entityType, entityId, recipientName, recipientEmail, recipientPhone },
+        recipientUserId
       );
     } else if (channel === "email") {
       const title = `Email to ${recipientName}: ${subject || "(no subject)"}`;
       conv = await createQuickContactConversation(
         userId, title, "email", "queued", message,
-        { entityType, entityId, recipientName, recipientEmail, subject }
+        { entityType, entityId, recipientName, recipientEmail, subject },
+        recipientUserId
       );
       note = "Email queued for delivery";
     } else if (channel === "whatsapp") {
       const title = `WhatsApp to ${recipientName}`;
       conv = await createQuickContactConversation(
         userId, title, "whatsapp", "queued", message,
-        { entityType, entityId, recipientName, recipientPhone }
+        { entityType, entityId, recipientName, recipientPhone },
+        recipientUserId
       );
       note = "WhatsApp message queued";
     } else {
