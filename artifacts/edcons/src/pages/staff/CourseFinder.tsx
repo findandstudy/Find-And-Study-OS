@@ -20,6 +20,7 @@ import {
   ArrowUp, ArrowDown, Sparkles, CheckCircle2, AlertCircle, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ALL_NATIONALITIES } from "@/lib/nationalities";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
@@ -1593,9 +1594,15 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [step, setStep] = useState<"select" | "documents" | "analyzing" | "submit">("select");
+  const [step, setStep] = useState<"select" | "documents" | "analyzing" | "review">("select");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
   const [analysisResult, setAnalysisResult] = useState<Record<string, string> | null>(null);
+  const [reviewForm, setReviewForm] = useState({
+    firstName: "", lastName: "", motherName: "", fatherName: "",
+    nationality: "", dateOfBirth: "", passportNumber: "",
+    address: "", highSchool: "", graduationYear: "", gpa: "",
+  });
+  const [reviewExtracted, setReviewExtracted] = useState<Set<string>>(new Set());
 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
   const currentDocs = LEVEL_DOCS[level];
@@ -1652,10 +1659,40 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
     setStep("documents");
   }
 
+  function mergeAiToReviewForm(aiData: Record<string, any>) {
+    const newForm = {
+      firstName: currentUser?.firstName || selectedStudent?.firstName || "",
+      lastName: currentUser?.lastName || selectedStudent?.lastName || "",
+      motherName: "", fatherName: "",
+      nationality: selectedStudent?.nationality || "",
+      dateOfBirth: "", passportNumber: "",
+      address: "", highSchool: "", graduationYear: "", gpa: "",
+    };
+    const ex = new Set<string>();
+    const mapping: [keyof typeof newForm, string][] = [
+      ["firstName", "firstName"], ["lastName", "lastName"],
+      ["motherName", "motherName"], ["fatherName", "fatherName"],
+      ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
+      ["passportNumber", "passportNumber"], ["address", "address"],
+      ["highSchool", "highSchool"], ["graduationYear", "graduationYear"],
+      ["gpa", "gpa"],
+    ];
+    for (const [fk, ek] of mapping) {
+      const val = aiData[ek];
+      if (val != null && val !== "" && val !== "null") {
+        newForm[fk] = String(val);
+        ex.add(fk);
+      }
+    }
+    setReviewForm(newForm);
+    setReviewExtracted(ex);
+  }
+
   async function handleAnalyzeAndContinue() {
     const uploadedDocs = Object.values(docs);
     if (uploadedDocs.length === 0) {
-      setStep("submit");
+      mergeAiToReviewForm({});
+      setStep("review");
       return;
     }
     setStep("analyzing");
@@ -1675,9 +1712,14 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
       if (res.ok) {
         const { extracted } = await res.json();
         setAnalysisResult(extracted);
+        mergeAiToReviewForm(extracted || {});
+      } else {
+        mergeAiToReviewForm({});
       }
-    } catch {}
-    setStep("submit");
+    } catch {
+      mergeAiToReviewForm({});
+    }
+    setStep("review");
   }
 
   async function saveDocumentsForApplication(studentId: number, applicationId: number, studentFirstName: string, studentLastName: string): Promise<number> {
@@ -1741,7 +1783,20 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
         }
       }
 
-      if (analysisResult && resolvedStudentId) {
+      const mergedProfile: Record<string, string> = { ...analysisResult };
+      if (reviewForm.firstName) mergedProfile.firstName = reviewForm.firstName;
+      if (reviewForm.lastName) mergedProfile.lastName = reviewForm.lastName;
+      if (reviewForm.motherName) mergedProfile.motherName = reviewForm.motherName;
+      if (reviewForm.fatherName) mergedProfile.fatherName = reviewForm.fatherName;
+      if (reviewForm.nationality) mergedProfile.nationality = reviewForm.nationality;
+      if (reviewForm.dateOfBirth) mergedProfile.dateOfBirth = reviewForm.dateOfBirth;
+      if (reviewForm.passportNumber) mergedProfile.passportNumber = reviewForm.passportNumber;
+      if (reviewForm.address) mergedProfile.address = reviewForm.address;
+      if (reviewForm.highSchool) mergedProfile.highSchool = reviewForm.highSchool;
+      if (reviewForm.graduationYear) mergedProfile.graduationYear = reviewForm.graduationYear;
+      if (reviewForm.gpa) mergedProfile.gpa = reviewForm.gpa;
+
+      if (resolvedStudentId) {
         try {
           const studentRes = await fetch(`${BASE_URL}/api/students/${resolvedStudentId}`, {
             credentials: "include",
@@ -1749,6 +1804,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
           if (studentRes.ok) {
             const currentStudent = await studentRes.json();
             const extractableFields = [
+              "firstName", "lastName",
               "dateOfBirth", "nationality", "passportNumber",
               "passportIssueDate", "passportExpiry",
               "motherName", "fatherName", "address",
@@ -1756,7 +1812,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
             ] as const;
             const profileFields: Record<string, unknown> = {};
             for (const field of extractableFields) {
-              const val = analysisResult[field];
+              const val = mergedProfile[field];
               if (val && val !== "null") {
                 const existing = currentStudent[field];
                 if (!existing && existing !== 0) {
@@ -1961,53 +2017,21 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   </div>
                 </div>
 
-                <div>
-                  <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
-                  <Textarea
-                    rows={2}
-                    placeholder="Add a note about this application..."
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    className="resize-none rounded-lg"
-                  />
-                </div>
-
-                {isStudentUser ? (
-                  <div className="bg-blue-50 rounded-xl p-3">
-                    <p className="text-xs text-blue-700">Your application will be submitted for review.</p>
-                  </div>
-                ) : (
-                  <div className="bg-blue-50 rounded-xl p-3 space-y-1">
-                    <p className="text-xs font-semibold text-blue-700">The following will be created automatically:</p>
-                    <ul className="text-xs text-blue-600 space-y-0.5">
-                      <li>• Application record (Applications → inquiry stage)</li>
-                      {commissionAmount != null && commissionAmount > 0 && (
-                        <li>• Commission record ({formatCurrency(commissionAmount, cur)} — potential)</li>
-                      )}
-                      {p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                        <li>• Service fee ({formatCurrency(p.serviceFeeAmount, cur)} — 2 installments)</li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep("select")} className="rounded-xl h-11">
                     <ChevronLeft className="w-4 h-4 mr-1" /> Back
                   </Button>
                   <Button
-                    onClick={uploadedCount > 0 ? handleAnalyzeAndContinue : handleSubmit}
+                    onClick={handleAnalyzeAndContinue}
                     disabled={submitting || !allRequiredUploaded}
                     className="flex-1 rounded-xl h-11"
                   >
-                    {submitting ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>
-                    ) : !allRequiredUploaded ? (
+                    {!allRequiredUploaded ? (
                       <><Send className="w-4 h-4 mr-2" /> Upload Required Documents ({missingRequiredCount} remaining)</>
                     ) : uploadedCount > 0 ? (
-                      <><Sparkles className="w-4 h-4 mr-2" /> Analyze & Submit ({uploadedCount} doc{uploadedCount !== 1 ? "s" : ""})</>
+                      <><Sparkles className="w-4 h-4 mr-2" /> Analyze & Continue ({uploadedCount} doc{uploadedCount !== 1 ? "s" : ""})</>
                     ) : (
-                      <><Send className="w-4 h-4 mr-2" /> Submit Application</>
+                      <><Send className="w-4 h-4 mr-2" /> Continue</>
                     )}
                   </Button>
                 </div>
@@ -2039,14 +2063,12 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
               </div>
             )}
 
-            {step === "submit" && (
+            {step === "review" && (
               <>
-                {analysisResult && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-emerald-700">
-                      <strong>AI analysis complete.</strong> Documents processed and ready to submit.
-                    </p>
+                {reviewExtracted.size > 0 && (
+                  <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    AI extracted {reviewExtracted.size} fields. Please review and complete any missing information.
                   </div>
                 )}
 
@@ -2064,15 +2086,117 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   </div>
                 )}
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      First Name <span className="text-destructive ml-0.5">*</span>
+                      {reviewExtracted.has("firstName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.firstName} onChange={e => setReviewForm(f => ({ ...f, firstName: e.target.value }))}
+                      placeholder="First name" className={`rounded-xl ${reviewExtracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Last Name <span className="text-destructive ml-0.5">*</span>
+                      {reviewExtracted.has("lastName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.lastName} onChange={e => setReviewForm(f => ({ ...f, lastName: e.target.value }))}
+                      placeholder="Last name" className={`rounded-xl ${reviewExtracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Mother Name
+                      {reviewExtracted.has("motherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.motherName} onChange={e => setReviewForm(f => ({ ...f, motherName: e.target.value }))}
+                      placeholder="Mother's full name" className={`rounded-xl ${reviewExtracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Father Name
+                      {reviewExtracted.has("fatherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.fatherName} onChange={e => setReviewForm(f => ({ ...f, fatherName: e.target.value }))}
+                      placeholder="Father's full name" className={`rounded-xl ${reviewExtracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Nationality
+                      {reviewExtracted.has("nationality") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <select value={reviewForm.nationality} onChange={e => setReviewForm(f => ({ ...f, nationality: e.target.value }))}
+                      className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${reviewExtracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
+                      <option value="">Select nationality</option>
+                      {ALL_NATIONALITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Date of Birth
+                      {reviewExtracted.has("dateOfBirth") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input type="date" value={reviewForm.dateOfBirth} onChange={e => setReviewForm(f => ({ ...f, dateOfBirth: e.target.value }))}
+                      className={`rounded-xl ${reviewExtracted.has("dateOfBirth") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Passport Number
+                      {reviewExtracted.has("passportNumber") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.passportNumber} onChange={e => setReviewForm(f => ({ ...f, passportNumber: e.target.value }))}
+                      placeholder="Passport number" className={`rounded-xl ${reviewExtracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      GPA
+                      {reviewExtracted.has("gpa") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.gpa} onChange={e => setReviewForm(f => ({ ...f, gpa: e.target.value }))}
+                      placeholder="e.g. 3.50" className={`rounded-xl ${reviewExtracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      High School
+                      {reviewExtracted.has("highSchool") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.highSchool} onChange={e => setReviewForm(f => ({ ...f, highSchool: e.target.value }))}
+                      placeholder="High school name" className={`rounded-xl ${reviewExtracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold flex items-center">
+                      Graduation Year
+                      {reviewExtracted.has("graduationYear") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    </Label>
+                    <Input value={reviewForm.graduationYear} onChange={e => setReviewForm(f => ({ ...f, graduationYear: e.target.value }))}
+                      placeholder="e.g. 2024" className={`rounded-xl ${reviewExtracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold flex items-center">
+                    Address
+                    {reviewExtracted.has("address") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                  </Label>
+                  <Input value={reviewForm.address} onChange={e => setReviewForm(f => ({ ...f, address: e.target.value }))}
+                    placeholder="Home address" className={`rounded-xl ${reviewExtracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                </div>
+
                 <div>
                   <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
-                  <Textarea
-                    rows={2}
-                    placeholder="Add a note about this application..."
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    className="resize-none rounded-lg"
-                  />
+                  <Textarea rows={2} placeholder="Add a note about this application..." value={notes}
+                    onChange={e => setNotes(e.target.value)} className="resize-none rounded-lg" />
                 </div>
 
                 <div className="flex gap-3">
@@ -2081,7 +2205,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   </Button>
                   <Button
                     onClick={handleSubmit}
-                    disabled={submitting}
+                    disabled={submitting || !reviewForm.firstName || !reviewForm.lastName}
                     className="flex-1 rounded-xl h-11"
                   >
                     {submitting ? (
