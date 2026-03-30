@@ -344,17 +344,16 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       return;
     }
   }
-  if (lead.status === "converted") {
-    res.status(400).json({ error: "Lead is already converted" });
-    return;
-  }
-
   if (lead.convertedStudentId) {
     const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, lead.convertedStudentId));
     if (existing) {
-      res.status(400).json({ error: "Lead has already been converted", studentId: existing.id });
+      res.json({ student: existing, merged: false, alreadyConverted: true });
       return;
     }
+  }
+  if (lead.status === "converted") {
+    res.json({ student: null, merged: false, alreadyConverted: true });
+    return;
   }
 
   const embedSubmissions = await db.select().from(embedSubmissionsTable).where(eq(embedSubmissionsTable.leadId, lead.id));

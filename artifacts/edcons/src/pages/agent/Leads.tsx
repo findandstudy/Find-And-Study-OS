@@ -686,7 +686,6 @@ export default function AgentLeadsPage() {
   const leadStageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const filteredLeads = allLeads.filter((l: any) => {
-    if (l.convertedStudentId || l.status === "converted") return false;
     if (filters.source !== "all" && l.source !== filters.source) return false;
     if (filters.status !== "all" && l.status !== filters.status) return false;
     return true;
@@ -811,13 +810,17 @@ export default function AgentLeadsPage() {
           queryClient.refetchQueries({ queryKey: ["/api/leads"] }),
           queryClient.refetchQueries({ queryKey: ["/api/students"] }),
         ]);
-        const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
-        toast({
-          title: "Lead converted to student",
-          description: result.merged
-            ? `Merged with existing student: ${studentName}`
-            : `New student created: ${studentName}`,
-        });
+        if (result.alreadyConverted) {
+          toast({ title: "Lead already converted", description: "This lead has already been converted to a student." });
+        } else {
+          const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
+          toast({
+            title: "Lead converted to student",
+            description: result.merged
+              ? `Merged with existing student: ${studentName}`
+              : `New student created: ${studentName}`,
+          });
+        }
       } catch (err: any) {
         toast({ title: "Conversion failed", description: err.message || "Failed to convert lead", variant: "destructive" });
         await queryClient.refetchQueries({ queryKey: ["/api/leads"] });
