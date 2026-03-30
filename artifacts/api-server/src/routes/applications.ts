@@ -88,10 +88,14 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       studentPhone: studentsTable.phone,
       commissionAmount: commissionsTable.universityCommissionAmount,
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
+      universityType: universitiesTable.universityType,
+      agentName: agentsTable.companyName,
     })
     .from(applicationsTable)
     .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
     .leftJoin(commissionsTable, eq(applicationsTable.id, commissionsTable.applicationId))
+    .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
+    .leftJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)

@@ -632,15 +632,45 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 }
 
 /* ── FilterPopover ────────────────────────────────────────── */
-function FilterPopover({ filters, onChange, stages }: {
+type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string };
+const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "all", dateRange: "all" };
+
+function isDateInRange(dateStr: string, range: string): boolean {
+  if (range === "all") return true;
+  const d = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === "today") return d >= today;
+  if (range === "yesterday") { const y = new Date(today); y.setDate(y.getDate() - 1); return d >= y && d < today; }
+  if (range === "last7") { const w = new Date(today); w.setDate(w.getDate() - 7); return d >= w; }
+  if (range === "thisMonth") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  if (range === "thisYear") return d.getFullYear() === now.getFullYear();
+  return true;
+}
+
+function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
   stages: PipelineStage[];
-  filters: { stage: string; country: string; source: string };
-  onChange: (f: { stage: string; country: string; source: string }) => void;
+  filters: AppFilters;
+  onChange: (f: AppFilters) => void;
+  apps: any[];
+  staffUsersList: { id: number; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.stage !== "all" || filters.country !== "all" || filters.source !== "all";
+  const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
   const { data: allCountries = [] } = useCountries();
   const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
+
+  const uniqueUniversities = useMemo(() => {
+    const map = new Map<number, string>();
+    apps.forEach((a: any) => { if (a.universityId && a.universityName) map.set(a.universityId, a.universityName); });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [apps]);
+
+  const uniqueAgents = useMemo(() => {
+    const map = new Map<number, string>();
+    apps.forEach((a: any) => { if (a.agentId && a.agentName) map.set(a.agentId, a.agentName); });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [apps]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -650,10 +680,10 @@ function FilterPopover({ filters, onChange, stages }: {
           {hasActive && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-4 space-y-4" align="end">
+      <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Filters</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ stage: "all", country: "all", source: "all" })}>Clear</Button>}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_FILTERS })}>Clear</Button>}
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Stage</Label>
@@ -666,7 +696,7 @@ function FilterPopover({ filters, onChange, stages }: {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Country</Label>
+          <Label className="text-xs">Study Country</Label>
           <Select value={filters.country} onValueChange={v => onChange({ ...filters, country: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -676,13 +706,59 @@ function FilterPopover({ filters, onChange, stages }: {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Applications</Label>
-          <Select value={filters.source} onValueChange={v => onChange({ ...filters, source: v })}>
+          <Label className="text-xs">University</Label>
+          <Select value={filters.university} onValueChange={v => onChange({ ...filters, university: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-60">
+              <SelectItem value="all">All</SelectItem>
+              {uniqueUniversities.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">University Type</Label>
+          <Select value={filters.universityType} onValueChange={v => onChange({ ...filters, universityType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="staff">Staff</SelectItem>
+              <SelectItem value="state">State</SelectItem>
+              <SelectItem value="private">Private</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Agent</Label>
+          <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-60">
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="none">No Agent (Staff)</SelectItem>
+              {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Assigned To</Label>
+          <Select value={filters.assignedTo} onValueChange={v => onChange({ ...filters, assignedTo: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-60">
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {staffUsersList.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Created Date</Label>
+          <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="yesterday">Yesterday</SelectItem>
+              <SelectItem value="last7">Last 7 Days</SelectItem>
+              <SelectItem value="thisMonth">This Month</SelectItem>
+              <SelectItem value="thisYear">This Year</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -859,7 +935,7 @@ export default function ApplicationsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
-  const [filters, setFilters] = useState({ stage: "all", country: "all", source: "all" });
+  const [filters, setFilters] = useState<AppFilters>({ ...DEFAULT_FILTERS });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
   const [editApp, setEditApp] = useState<any>(null);
@@ -923,6 +999,20 @@ export default function ApplicationsPage() {
     if (filters.country !== "all" && a.country !== filters.country) return false;
     if (filters.source === "agent" && !a.agentId) return false;
     if (filters.source === "staff" && a.agentId) return false;
+    if (filters.university !== "all" && String(a.universityId) !== filters.university) return false;
+    if (filters.universityType !== "all") {
+      const uType = (a.universityType || "").toLowerCase();
+      if (uType !== filters.universityType) return false;
+    }
+    if (filters.agent !== "all") {
+      if (filters.agent === "none") { if (a.agentId) return false; }
+      else if (String(a.agentId) !== filters.agent) return false;
+    }
+    if (filters.assignedTo !== "all") {
+      if (filters.assignedTo === "unassigned") { if (a.assignedToId) return false; }
+      else if (String(a.assignedToId) !== filters.assignedTo) return false;
+    }
+    if (filters.dateRange !== "all" && a.createdAt && !isDateInRange(a.createdAt, filters.dateRange)) return false;
     if (search) {
       const q = search.toLowerCase();
       const name = `${a.studentFirstName || ""} ${a.studentLastName || ""}`.toLowerCase();
@@ -1036,7 +1126,7 @@ export default function ApplicationsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search applications..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} />
+            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
