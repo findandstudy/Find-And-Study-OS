@@ -330,11 +330,20 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req
   res.sendStatus(204);
 });
 
-router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+  const user = req.user!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
+      res.status(403).json({ error: "You do not have access to this lead" });
+      return;
+    }
+  }
   if (lead.status === "converted") {
     res.status(400).json({ error: "Lead is already converted" });
     return;
