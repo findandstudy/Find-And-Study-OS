@@ -17,6 +17,7 @@ export interface SessionUser {
   language: string;
   isActive: boolean;
   emailVerified: boolean;
+  phone?: string | null;
   startDate?: string | null;
   homeAddress?: string | null;
   passportNumber?: string | null;

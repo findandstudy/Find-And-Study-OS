@@ -57,6 +57,7 @@ function buildSessionUser(user: Record<string, unknown>): SessionUser {
     language: user.language as string,
     isActive: user.isActive as boolean,
     emailVerified: user.emailVerified as boolean,
+    phone: user.phone as string | null,
     startDate: user.startDate as string | null,
     homeAddress: user.homeAddress as string | null,
     passportNumber: user.passportNumber as string | null,
