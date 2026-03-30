@@ -331,6 +331,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       try {
         const validDocs = documents.slice(0, MAX_DOCS);
         let savedCount = 0;
+        let photoSet = false;
         for (const doc of validDocs) {
           if (!doc.base64 || !doc.name) continue;
           const mime = String(doc.mediaType || "").toLowerCase();
@@ -339,16 +340,26 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           if (rawSize > MAX_DOC_SIZE) continue;
           const base64Len = typeof doc.base64 === "string" ? doc.base64.length : 0;
           if (base64Len > MAX_DOC_SIZE * 1.4) continue;
+          const docType = String(doc.key || doc.label || "other").slice(0, 100);
           await db.insert(documentsTable).values({
             studentId: resultStudentId,
             applicationId: resultAppId,
             name: String(doc.name).replace(/[<>"'&]/g, "_").slice(0, 255),
-            type: String(doc.key || doc.label || "other").slice(0, 100),
+            type: docType,
             status: "pending",
             fileData: doc.base64,
             mimeType: mime,
             sizeBytes: rawSize || null,
           });
+          if (!photoSet && (docType === "photo" || docType === "photograph") && resultStudentId) {
+            try {
+              const photoUrl = `data:${mime};base64,${doc.base64}`;
+              await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, resultStudentId));
+              photoSet = true;
+            } catch (e) {
+              console.error("[PUBLIC-APPLY] Failed to set student photo:", e);
+            }
+          }
           savedCount++;
         }
         if (savedCount > 0) {

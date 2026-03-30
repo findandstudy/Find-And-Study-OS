@@ -109,6 +109,16 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   }).returning();
   await logAudit(user.id, "create_document", "document", doc.id, { name, type }, req.ip);
 
+  if (doc.studentId && (type === "photo" || type === "photograph") && fileData) {
+    try {
+      const photoMime = mimeType || "image/jpeg";
+      const photoUrl = `data:${photoMime};base64,${fileData}`;
+      await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, doc.studentId));
+    } catch (err) {
+      console.error("[DOCUMENTS] Failed to set student photo from document:", err);
+    }
+  }
+
   if (doc.studentId) {
     const [studentRec] = await db.select({ assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, doc.studentId));
     const recipientIds: number[] = [];
