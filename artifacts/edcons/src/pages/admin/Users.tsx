@@ -147,7 +147,8 @@ function UsersTab() {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   }
 
-  const filtered = users.filter((u: any) => {
+  const nonStudentUsers = users.filter((u: any) => u.role !== "student");
+  const filtered = nonStudentUsers.filter((u: any) => {
     const matchSearch = !search ||
       (u.firstName || "").toLowerCase().includes(search.toLowerCase()) ||
       (u.email || "").toLowerCase().includes(search.toLowerCase());
@@ -295,16 +296,17 @@ function UsersTab() {
     }
   }
 
-  const availableRoles = roles.length > 0
+  const availableRoles = (roles.length > 0
     ? roles.map(r => ({ value: r.name, label: r.displayName }))
-    : Object.entries(roleBadge).map(([k, v]) => ({ value: k, label: v.label }));
+    : Object.entries(roleBadge).map(([k, v]) => ({ value: k, label: v.label }))
+  ).filter(r => r.value !== "student");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">All Users</h2>
-          <p className="text-muted-foreground text-sm mt-0.5">{users?.length || 0} users in the system</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{nonStudentUsers?.length || 0} users in the system</p>
         </div>
         <Button className="rounded-xl gap-2" onClick={() => setCreateOpen(true)}>
           <UserPlus className="w-4 h-4" /> Create User
@@ -322,7 +324,7 @@ function UsersTab() {
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === "all" ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
             All
           </button>
-          {["staff", "student", "agent", "admin"].map(r => (
+          {["staff", "agent", "admin"].map(r => (
             <button key={r} onClick={() => setRoleFilter(r)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all capitalize ${roleFilter === r ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
               {r}
@@ -333,10 +335,10 @@ function UsersTab() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Users", value: users.length || 0, icon: Users, color: "text-blue-500 bg-blue-50" },
-          { label: "Staff", value: users.filter((u: any) => ['staff', 'consultant', 'accountant'].includes(u.role)).length, icon: Shield, color: "text-purple-500 bg-purple-50" },
-          { label: "Students", value: users.filter((u: any) => u.role === 'student').length, icon: Users, color: "text-green-500 bg-green-50" },
-          { label: "Agents", value: users.filter((u: any) => ['agent', 'sub_agent'].includes(u.role)).length, icon: Users, color: "text-amber-500 bg-amber-50" },
+          { label: "Total Users", value: nonStudentUsers.length || 0, icon: Users, color: "text-blue-500 bg-blue-50" },
+          { label: "Staff", value: nonStudentUsers.filter((u: any) => ['staff', 'consultant', 'accountant'].includes(u.role)).length, icon: Shield, color: "text-purple-500 bg-purple-50" },
+          { label: "Admins", value: nonStudentUsers.filter((u: any) => ['super_admin', 'admin', 'manager'].includes(u.role)).length, icon: Shield, color: "text-green-500 bg-green-50" },
+          { label: "Agents", value: nonStudentUsers.filter((u: any) => ['agent', 'sub_agent'].includes(u.role)).length, icon: Users, color: "text-amber-500 bg-amber-50" },
         ].map((s, i) => (
           <Card key={i} className="p-4 border-none shadow-md shadow-black/5 flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0`}>
