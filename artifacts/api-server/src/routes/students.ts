@@ -374,7 +374,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   let allowedFields = isStudent
     ? STUDENT_SELF_FIELDS
     : isAgent
-    ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId")
+    ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId" && f !== "status")
     : STUDENT_PATCH_FIELDS;
   if (!isAdmin && !isAgent) {
     if (req.body.assignedToId !== undefined) {

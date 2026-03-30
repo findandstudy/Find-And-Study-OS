@@ -1387,10 +1387,11 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Status</Label>
-                <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
-                  <SelectTrigger className="h-9 text-sm rounded-xl"><SelectValue /></SelectTrigger>
+                <Select value={form.status} disabled>
+                  <SelectTrigger className="h-9 text-sm rounded-xl opacity-60 cursor-not-allowed"><SelectValue /></SelectTrigger>
                   <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
                 </Select>
+                <p className="text-[10px] text-muted-foreground">Only admin & staff can change status</p>
               </div>
             </div>
           </section>
@@ -1612,6 +1613,10 @@ export default function AgentStudentsPage() {
   const handleStuDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
 
   const handleStuDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    toast({ title: "Only admin & staff can change student status", variant: "destructive" });
+  };
+  const _handleStuDragEndDisabled = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
