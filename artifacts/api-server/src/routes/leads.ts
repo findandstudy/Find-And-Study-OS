@@ -138,7 +138,37 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause);
-  const data = await db.select().from(leadsTable).where(whereClause).limit(limitNum).offset(offset).orderBy(desc(leadsTable.createdAt));
+  const rows = await db
+    .select({ lead: leadsTable, agentName: agentsTable.companyName })
+    .from(leadsTable)
+    .leftJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
+    .where(whereClause)
+    .limit(limitNum)
+    .offset(offset)
+    .orderBy(desc(leadsTable.createdAt));
+
+  const leadIds = rows.map(r => r.lead.id);
+  let nextFollowupMap = new Map<number, string>();
+  if (leadIds.length > 0) {
+    const fuRows = await db
+      .select({
+        leadId: followUpsTable.leadId,
+        nextDate: sql<string>`min(${followUpsTable.scheduledAt})`,
+      })
+      .from(followUpsTable)
+      .where(and(
+        sql`${followUpsTable.leadId} IN (${sql.join(leadIds.map(id => sql`${id}`), sql`, `)})`,
+        eq(followUpsTable.completed, false),
+      ))
+      .groupBy(followUpsTable.leadId);
+    fuRows.forEach(r => { if (r.leadId) nextFollowupMap.set(r.leadId, r.nextDate); });
+  }
+
+  const data = rows.map(r => ({
+    ...r.lead,
+    agentName: r.agentName || null,
+    nextFollowup: nextFollowupMap.get(r.lead.id) || null,
+  }));
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });

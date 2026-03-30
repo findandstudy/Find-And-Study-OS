@@ -301,43 +301,60 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
 
 
 /* ── FilterPopover ────────────────────────────────────────── */
-function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId }: {
-  filters: { source: string; status: string; appSource: string; assignment: string };
-  onChange: (f: { source: string; status: string; appSource: string; assignment: string }) => void;
+type LeadFilters = { source: string; status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string };
+const DEFAULT_LEAD_FILTERS: LeadFilters = { source: "all", status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all" };
+
+function leadIsDateInRange(dateStr: string, range: string): boolean {
+  if (range === "all") return true;
+  const d = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === "today") return d >= today && d < new Date(today.getTime() + 86400000);
+  if (range === "yesterday") { const y = new Date(today); y.setDate(y.getDate() - 1); return d >= y && d < today; }
+  if (range === "last7") { const w = new Date(today); w.setDate(w.getDate() - 7); return d >= w; }
+  if (range === "thisMonth") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  if (range === "thisYear") return d.getFullYear() === now.getFullYear();
+  if (range === "upcoming7") { const w = new Date(today); w.setDate(w.getDate() + 7); return d >= today && d <= w; }
+  if (range === "overdue") return d < today;
+  if (range === "none") return false;
+  return true;
+}
+
+function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, leads }: {
+  filters: LeadFilters;
+  onChange: (f: LeadFilters) => void;
   columns: ColDef[];
   staffUsers: any[];
   currentUserId?: number;
+  leads: any[];
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.source !== "all" || filters.status !== "all" || filters.appSource !== "all" || filters.assignment !== "all";
+  const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
+
+  const uniqueNationalities = useMemo(() => {
+    const set = new Set<string>();
+    leads.forEach((l: any) => { if (l.nationality) set.add(l.nationality); });
+    return Array.from(set).sort();
+  }, [leads]);
+
+  const uniqueAgents = useMemo(() => {
+    const map = new Map<number, string>();
+    leads.forEach((l: any) => { if (l.agentId && l.agentName) map.set(l.agentId, l.agentName); });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [leads]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}
-        >
+        <Button variant="outline" size="icon" className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}>
           <Filter className="w-4 h-4" />
-          {hasActive && (
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />
-          )}
+          {hasActive && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-4 space-y-4" align="end">
+      <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Filters</p>
-          {hasActive && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs text-muted-foreground"
-              onClick={() => onChange({ source: "all", status: "all", appSource: "all", assignment: "all" })}
-            >
-              Clear
-            </Button>
-          )}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_LEAD_FILTERS })}>Clear</Button>}
         </div>
 
         <div className="space-y-1.5">
@@ -367,13 +384,24 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId }
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Applications</Label>
-          <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
+          <Label className="text-xs">Nationality</Label>
+          <Select value={filters.nationality} onValueChange={v => onChange({ ...filters, nationality: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60">
               <SelectItem value="all">All</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="staff">Staff</SelectItem>
+              {uniqueNationalities.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Agent</Label>
+          <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-60">
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="none">No Agent</SelectItem>
+              {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -395,9 +423,48 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId }
           </Select>
         </div>
 
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
-          Apply
-        </Button>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Applications</Label>
+          <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="staff">Staff</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Created Date</Label>
+          <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="yesterday">Yesterday</SelectItem>
+              <SelectItem value="last7">Last 7 Days</SelectItem>
+              <SelectItem value="thisMonth">This Month</SelectItem>
+              <SelectItem value="thisYear">This Year</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Next Follow-up</Label>
+          <Select value={filters.followupRange} onValueChange={v => onChange({ ...filters, followupRange: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="upcoming7">Next 7 Days</SelectItem>
+              <SelectItem value="none">Not Set</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
       </PopoverContent>
     </Popover>
   );
@@ -736,7 +803,7 @@ export default function LeadsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [filters, setFilters] = useState({ source: "all", status: "all", appSource: "all", assignment: "all" });
+  const [filters, setFilters] = useState<LeadFilters>({ ...DEFAULT_LEAD_FILTERS });
   const { stages: pipelineStages } = usePipelineStages("lead");
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
@@ -821,6 +888,17 @@ export default function LeadsPage() {
     if (filters.assignment === "mine" && l.assignedToId !== user?.id) return false;
     if (filters.assignment === "unassigned" && l.assignedToId != null) return false;
     if (filters.assignment !== "all" && filters.assignment !== "mine" && filters.assignment !== "unassigned" && l.assignedToId !== Number(filters.assignment)) return false;
+    if (filters.nationality !== "all" && (l.nationality || "") !== filters.nationality) return false;
+    if (filters.agent !== "all") {
+      if (filters.agent === "none") { if (l.agentId) return false; }
+      else if (String(l.agentId) !== filters.agent) return false;
+    }
+    if (filters.dateRange !== "all" && l.createdAt && !leadIsDateInRange(l.createdAt, filters.dateRange)) return false;
+    if (filters.followupRange !== "all") {
+      if (filters.followupRange === "none") { if (l.nextFollowup) return false; }
+      else if (!l.nextFollowup) return false;
+      else if (!leadIsDateInRange(l.nextFollowup, filters.followupRange)) return false;
+    }
     return true;
   });
 
@@ -1028,7 +1106,7 @@ export default function LeadsPage() {
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
               />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} columns={columns} staffUsers={staffUsers} currentUserId={user?.id} />
+            <FilterPopover filters={filters} onChange={setFilters} columns={columns} staffUsers={staffUsers} currentUserId={user?.id} leads={allLeads} />
 
             <div className="flex items-center border rounded-full overflow-hidden">
               <button
