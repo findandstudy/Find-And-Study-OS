@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { db, documentsTable, studentsTable } from "@workspace/db";
 import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
+import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 
@@ -58,6 +59,15 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
       if (!studentRec || (studentId && studentRec.id !== studentId)) {
         res.status(403).json({ error: "Students can only upload documents for themselves" });
         return;
+      }
+    } else if (isAgentRole(user.role)) {
+      if (studentId) {
+        const visibleIds = await getAgentVisibleIds(user.id, user.role);
+        const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, studentId));
+        if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+          res.status(403).json({ error: "You can only upload documents for your own students" });
+          return;
+        }
       }
     } else {
       res.status(403).json({ error: "Access denied" });
