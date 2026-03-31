@@ -837,6 +837,22 @@ router.post("/agents/bulk-delete", requireAuth, requireRole(...MANAGER_ROLES), a
   res.json({ success: true, count: deleted.length });
 });
 
+router.post("/agents/bulk-assign", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const { ids, assignedStaffId } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids array is required" });
+    return;
+  }
+  const numIds = ids.map((id: any) => parseInt(id, 10)).filter((id: number) => !isNaN(id));
+  if (numIds.length === 0) {
+    res.status(400).json({ error: "No valid IDs provided" });
+    return;
+  }
+  const staffVal = assignedStaffId === null || assignedStaffId === undefined ? null : parseInt(assignedStaffId, 10);
+  const updated = await db.update(agentsTable).set({ assignedStaffId: staffVal }).where(inArray(agentsTable.id, numIds)).returning();
+  res.json({ success: true, count: updated.length });
+});
+
 router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { status } = req.body;

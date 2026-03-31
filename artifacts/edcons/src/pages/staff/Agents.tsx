@@ -381,6 +381,25 @@ export default function AgentsPage() {
     }
   }
 
+  async function handleBulkAssignStaff(ids: Set<number>, staffId: number | null) {
+    if (ids.size === 0) return;
+    try {
+      await customFetch(`/api/agents/bulk-assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(ids), assignedStaffId: staffId }),
+      });
+      const staffName = staffId ? staffMembers.find(s => s.id === staffId) : null;
+      toast({ title: staffId ? `Contact person assigned to ${ids.size} agent(s)` : `Contact person removed from ${ids.size} agent(s)` });
+      setSelectedIds(new Set());
+      setSubSelectedIds(new Set());
+      fetchAgents();
+      fetchSubAgents();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleDelete(id: number) {
     if (!confirm("Are you sure you want to delete this agent?")) return;
     try {
@@ -543,8 +562,22 @@ export default function AgentsPage() {
     return (
       <div className="overflow-x-auto">
         {isManager && someChecked && (
-          <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+          <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20 flex-wrap">
             <span className="text-sm font-medium text-foreground">{selected.size} selected</span>
+            <Select onValueChange={v => handleBulkAssignStaff(selected, v === "none" ? null : Number(v))}>
+              <SelectTrigger className="h-8 text-xs w-[180px] rounded-lg">
+                <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                <SelectValue placeholder="Assign Contact Person" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                <SelectItem value="none">Unassigned</SelectItem>
+                {staffMembers.map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {`${s.firstName || ""} ${s.lastName || ""}`.trim() || "Staff"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="destructive" className="rounded-lg gap-1.5 h-8" onClick={() => handleBulkDelete(selected)}>
               <Trash2 className="w-3.5 h-3.5" /> Delete Selected
             </Button>
