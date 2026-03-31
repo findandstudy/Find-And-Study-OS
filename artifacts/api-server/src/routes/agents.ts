@@ -592,7 +592,7 @@ router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "su
 });
 
 router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { search, status, page = "1", limit = "50", type } = req.query as Record<string, string>;
+  const { search, status, page = "1", limit = "50", type, country } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -607,6 +607,10 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 
   if (status && status !== "all") {
     conditions.push(eq(agentsTable.status, status));
+  }
+
+  if (country && country !== "all") {
+    conditions.push(eq(agentsTable.country, country));
   }
 
   if (search) {
@@ -626,13 +630,26 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(agentsTable).where(whereClause);
 
-  const data = await db
-    .select()
+  const staffAlias = usersTable;
+  const rows = await db
+    .select({
+      agent: agentsTable,
+      staffFirstName: staffAlias.firstName,
+      staffLastName: staffAlias.lastName,
+    })
     .from(agentsTable)
+    .leftJoin(staffAlias, eq(agentsTable.assignedStaffId, staffAlias.id))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
     .orderBy(desc(agentsTable.createdAt));
+
+  const data = rows.map(r => ({
+    ...r.agent,
+    assignedStaffName: r.staffFirstName && r.staffLastName
+      ? `${r.staffFirstName} ${r.staffLastName}`.trim()
+      : r.staffFirstName || r.staffLastName || null,
+  }));
 
   res.json({
     data,

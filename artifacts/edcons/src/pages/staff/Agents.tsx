@@ -103,6 +103,8 @@ type Agent = {
   pointOfContact: string | null;
   notes: string | null;
   createdAt: string;
+  assignedStaffId: number | null;
+  assignedStaffName: string | null;
 };
 
 const emptyForm = {
@@ -137,6 +139,8 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [subSearch, setSubSearch] = useState("");
+  const [countryFilter, setCountryFilter] = useState("all");
+  const [subCountryFilter, setSubCountryFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -183,7 +187,9 @@ export default function AgentsPage() {
   async function fetchAgents() {
     setLoading(true);
     try {
-      const res = await customFetch(`/api/agents?type=agent&page=${page}&limit=20&search=${encodeURIComponent(search)}`);
+      const params = new URLSearchParams({ type: "agent", page: String(page), limit: "20", search });
+      if (countryFilter !== "all") params.set("country", countryFilter);
+      const res = await customFetch(`/api/agents?${params}`);
       setAgents(res.data);
       setTotal(res.meta.total);
       setTotalPages(res.meta.totalPages);
@@ -193,7 +199,9 @@ export default function AgentsPage() {
 
   async function fetchSubAgents() {
     try {
-      const res = await customFetch(`/api/agents?type=sub_agent&page=${subPage}&limit=20&search=${encodeURIComponent(subSearch)}`);
+      const params = new URLSearchParams({ type: "sub_agent", page: String(subPage), limit: "20", search: subSearch });
+      if (subCountryFilter !== "all") params.set("country", subCountryFilter);
+      const res = await customFetch(`/api/agents?${params}`);
       setSubAgents(res.data);
       setSubTotal(res.meta.total);
       setSubTotalPages(res.meta.totalPages);
@@ -217,8 +225,8 @@ export default function AgentsPage() {
     } catch {}
   }
 
-  useEffect(() => { fetchAgents(); }, [page, search]);
-  useEffect(() => { fetchSubAgents(); }, [subPage, subSearch]);
+  useEffect(() => { fetchAgents(); }, [page, search, countryFilter]);
+  useEffect(() => { fetchSubAgents(); }, [subPage, subSearch, subCountryFilter]);
   useEffect(() => { fetchParentAgents(); fetchCountries(); fetchStaffMembers(); }, []);
 
   function openCreate(isSub: boolean) {
@@ -358,6 +366,21 @@ export default function AgentsPage() {
     }
   }
 
+  async function handleAssignStaff(agentId: number, staffId: number | null) {
+    try {
+      await customFetch(`/api/agents/${agentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedStaffId: staffId }),
+      });
+      toast({ title: staffId ? "Contact person assigned" : "Contact person removed" });
+      fetchAgents();
+      fetchSubAgents();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleDelete(id: number) {
     if (!confirm("Are you sure you want to delete this agent?")) return;
     try {
@@ -474,7 +497,7 @@ export default function AgentsPage() {
     return colors[s] || "bg-gray-500/10 text-gray-600 border-gray-200";
   };
 
-  type AgentSortKey = "agent" | "contact" | "category" | "commission" | "status" | "parent";
+  type AgentSortKey = "agent" | "contact" | "category" | "commission" | "status" | "parent" | "country" | "contactPerson";
   type AgentSortDir = "asc" | "desc";
 
   function AgentSortHeader({ label, sortKey, currentSort, onSort, className }: {
@@ -512,6 +535,8 @@ export default function AgentsPage() {
         case "category": return dir * ((a.category || "").localeCompare(b.category || ""));
         case "commission": return dir * ((a.commissionRate ?? 0) - (b.commissionRate ?? 0));
         case "status": return dir * ((a.status || "").localeCompare(b.status || ""));
+        case "country": return dir * ((a.country || "").localeCompare(b.country || ""));
+        case "contactPerson": return dir * ((a.assignedStaffName || "").localeCompare(b.assignedStaffName || ""));
         default: return 0;
       }
     });
@@ -539,15 +564,17 @@ export default function AgentsPage() {
               <AgentSortHeader label="Agent" sortKey="agent" currentSort={agentSort} onSort={handleAgentSort} />
               <AgentSortHeader label="Contact" sortKey="contact" currentSort={agentSort} onSort={handleAgentSort} />
               {showParent && <AgentSortHeader label="Parent Agent" sortKey="parent" currentSort={agentSort} onSort={handleAgentSort} />}
+              <AgentSortHeader label="Country" sortKey="country" currentSort={agentSort} onSort={handleAgentSort} />
               <AgentSortHeader label="Category" sortKey="category" currentSort={agentSort} onSort={handleAgentSort} />
               <AgentSortHeader label="Commission %" sortKey="commission" currentSort={agentSort} onSort={handleAgentSort} />
+              <AgentSortHeader label="Contact Person" sortKey="contactPerson" currentSort={agentSort} onSort={handleAgentSort} />
               <AgentSortHeader label="Status" sortKey="status" currentSort={agentSort} onSort={handleAgentSort} />
               {isManager && <th className="py-3 px-3 font-semibold text-muted-foreground text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {sortedData.length === 0 ? (
-              <tr><td colSpan={showParent ? 8 : 7} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
+              <tr><td colSpan={showParent ? 10 : 9} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
             ) : sortedData.map(a => (
               <tr key={a.id} className={`border-b border-border/30 hover:bg-secondary/30 transition-colors ${selected.has(a.id) ? "bg-primary/5" : ""}`}>
                 {isManager && (
@@ -585,9 +612,39 @@ export default function AgentsPage() {
                 </td>
                 {showParent && <td className="py-3 px-3 text-xs text-foreground">{getParentName(a.parentAgentId)}</td>}
                 <td className="py-3 px-3">
+                  {a.country ? (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <CountryFlag country={a.country} size="sm" />
+                      <span>{a.country}</span>
+                    </div>
+                  ) : <span className="text-muted-foreground text-xs">-</span>}
+                </td>
+                <td className="py-3 px-3">
                   {a.category ? <Badge variant="outline" className="text-xs">{a.category}</Badge> : <span className="text-muted-foreground text-xs">-</span>}
                 </td>
                 <td className="py-3 px-3 font-mono text-foreground">{a.commissionRate != null ? `${a.commissionRate}%` : "-"}</td>
+                <td className="py-3 px-3">
+                  {isManager ? (
+                    <Select
+                      value={a.assignedStaffId ? String(a.assignedStaffId) : "none"}
+                      onValueChange={v => handleAssignStaff(a.id, v === "none" ? null : Number(v))}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[140px]">
+                        <SelectValue placeholder="Assign..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {staffMembers.map(s => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {`${s.firstName || ""} ${s.lastName || ""}`.trim() || "Staff"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-xs">{a.assignedStaffName || "-"}</span>
+                  )}
+                </td>
                 <td className="py-3 px-3">
                   <Badge className={`text-xs ${statusBadge(a.status)}`}>{a.status}</Badge>
                 </td>
@@ -666,11 +723,25 @@ export default function AgentsPage() {
           <TabsContent value="agents" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Search agents..." value={search}
-                    onChange={e => { setSearch(e.target.value); setPage(1); }}
-                    className="pl-9 rounded-xl" />
+                <div className="flex items-center gap-3 flex-1 flex-wrap">
+                  <div className="relative min-w-[200px] max-w-sm flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Search agents..." value={search}
+                      onChange={e => { setSearch(e.target.value); setPage(1); }}
+                      className="pl-9 rounded-xl" />
+                  </div>
+                  <Select value={countryFilter} onValueChange={v => { setCountryFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[160px] h-9 text-sm rounded-xl">
+                      <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                      <SelectValue placeholder="Country" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      <SelectItem value="all">All Countries</SelectItem>
+                      {countries.map(c => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {isManager && (
                   <Button onClick={() => openCreate(false)} className="rounded-xl gap-2">
@@ -691,11 +762,25 @@ export default function AgentsPage() {
           <TabsContent value="sub-agents" className="mt-6">
             <Card className="border-none shadow-lg shadow-black/5 p-6">
               <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Search sub-agents..." value={subSearch}
-                    onChange={e => { setSubSearch(e.target.value); setSubPage(1); }}
-                    className="pl-9 rounded-xl" />
+                <div className="flex items-center gap-3 flex-1 flex-wrap">
+                  <div className="relative min-w-[200px] max-w-sm flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Search sub-agents..." value={subSearch}
+                      onChange={e => { setSubSearch(e.target.value); setSubPage(1); }}
+                      className="pl-9 rounded-xl" />
+                  </div>
+                  <Select value={subCountryFilter} onValueChange={v => { setSubCountryFilter(v); setSubPage(1); }}>
+                    <SelectTrigger className="w-[160px] h-9 text-sm rounded-xl">
+                      <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                      <SelectValue placeholder="Country" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      <SelectItem value="all">All Countries</SelectItem>
+                      {countries.map(c => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {isManager && (
                   <Button onClick={() => openCreate(true)} className="rounded-xl gap-2">
