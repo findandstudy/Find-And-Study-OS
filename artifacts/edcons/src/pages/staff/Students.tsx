@@ -434,6 +434,7 @@ type Step = "upload" | "analyzing" | "review";
 function NationalityCombobox({ value, onChange, countries }: { value: string; onChange: (v: string) => void; countries: Array<{ id: number; name: string; code?: string }> }) {
   const [inputVal, setInputVal] = useState(value);
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setInputVal(value); }, [value]);
 
@@ -441,31 +442,38 @@ function NationalityCombobox({ value, onChange, countries }: { value: string; on
     ? countries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
     : countries;
 
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative cursor-text" onClick={() => setOpen(true)}>
-          <Input
-            value={inputVal}
-            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-            placeholder="Select or type..."
-            className="h-9 text-sm"
-            autoComplete="off"
-          />
+    <div className="relative" ref={containerRef}>
+      <Input
+        value={inputVal}
+        onChange={e => { setInputVal(e.target.value); onChange(e.target.value); if (!open) setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Select or type..."
+        className="h-9 text-sm"
+        autoComplete="off"
+      />
+      {open && (
+        <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.map(c => (
+            <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
+              <CountryFlag code={c.code || ""} size="sm" />
+              {c.name}
+            </button>
+          ))}
         </div>
-      </PopoverTrigger>
-      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
-        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
-        {filtered.map(c => (
-          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
-            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
-            <CountryFlag code={c.code || ""} size="sm" />
-            {c.name}
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   );
 }
 
