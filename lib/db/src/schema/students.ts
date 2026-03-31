@@ -42,7 +42,7 @@ export const studentsTable = pgTable("students", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
-  uniqueIndex("students_email_uniq").on(table.email),
+  index("students_email_idx").on(table.email),
   index("students_agent_id_idx").on(table.agentId),
   index("students_assigned_to_id_idx").on(table.assignedToId),
   index("students_status_idx").on(table.status),
