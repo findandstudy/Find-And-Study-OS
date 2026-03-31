@@ -1227,10 +1227,12 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
                   {pipeline.stages.map(s => (
                     <span key={s.key} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
                       s.variant === "won" ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800" :
+                      s.variant === "partial_won" ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800" :
                       s.variant === "lost" ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800" :
+                      s.variant === "none_finance" ? "bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700" :
                       "bg-secondary text-muted-foreground border-border/50"
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.variant === "won" ? "bg-emerald-500" : s.variant === "lost" ? "bg-rose-500" : "bg-muted-foreground/40"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.variant === "won" ? "bg-emerald-500" : s.variant === "partial_won" ? "bg-amber-500" : s.variant === "lost" ? "bg-rose-500" : s.variant === "none_finance" ? "bg-gray-300" : "bg-muted-foreground/40"}`} />
                       {s.label}
                     </span>
                   ))}

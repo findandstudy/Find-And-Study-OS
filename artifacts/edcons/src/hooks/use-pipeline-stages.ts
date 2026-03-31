@@ -12,6 +12,13 @@ export interface PipelineStage {
   variant?: string | null;
   icon?: string | null;
   color?: string | null;
+  isNotesMandatory?: boolean;
+  canAttachFile?: boolean;
+  maxFiles?: number;
+  isFileUploadMandatory?: boolean;
+  canGoBack?: boolean;
+  isCaseClose?: boolean;
+  countries?: string | null;
 }
 
 async function fetchStages(entityType: string): Promise<PipelineStage[]> {

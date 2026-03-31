@@ -122,6 +122,13 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           variant: s.variant || null,
           icon: s.icon || null,
           color: s.color || null,
+          isNotesMandatory: !!s.isNotesMandatory,
+          canAttachFile: !!s.canAttachFile,
+          maxFiles: s.canAttachFile ? Math.max(1, parseInt(s.maxFiles) || 1) : 1,
+          isFileUploadMandatory: s.canAttachFile ? !!s.isFileUploadMandatory : false,
+          canGoBack: s.canGoBack !== false,
+          isCaseClose: !!s.isCaseClose,
+          countries: s.countries || null,
         })))
         .returning();
 
