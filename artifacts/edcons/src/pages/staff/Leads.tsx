@@ -517,39 +517,48 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
 /* ── NationalityCombobox ──────────────────────────────────── */
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: allCountries = [] } = useCountries();
-  const [inputVal, setInputVal] = useState(value);
+  const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setInputVal(value); }, [value]);
-
-  const filtered = inputVal
-    ? allCountries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
+  const filtered = searchVal
+    ? allCountries.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
     : allCountries;
 
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearchVal("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative cursor-text" onClick={() => setOpen(true)}>
-          <Input
-            value={inputVal}
-            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-            placeholder="Select or type..."
-            autoComplete="off"
-          />
+    <div className="relative" ref={containerRef}>
+      <Input
+        value={open ? searchVal : value}
+        onChange={e => { setSearchVal(e.target.value); if (!open) setOpen(true); }}
+        onFocus={() => { setSearchVal(""); setOpen(true); }}
+        placeholder="Select or type..."
+        autoComplete="off"
+      />
+      {open && (
+        <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.map(c => (
+            <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              onMouseDown={e => { e.preventDefault(); onChange(c.name); setSearchVal(""); setOpen(false); }}>
+              <CountryFlag code={c.code} size="sm" />
+              {c.name}
+            </button>
+          ))}
         </div>
-      </PopoverTrigger>
-      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
-        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
-        {filtered.map(c => (
-          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
-            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
-            <CountryFlag code={c.code} size="sm" />
-            {c.name}
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   );
 }
 
