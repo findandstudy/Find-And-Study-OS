@@ -727,15 +727,12 @@ function AddStudentModal({
           fatherName: form.fatherName || null,
           address: form.address || null,
           highSchool: form.highSchool || null,
-          universityBachelor: form.universityBachelor || null,
-          universityMaster: form.universityMaster || null,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null,
           gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null,
           languageScore: form.languageScore || null,
           notes: form.notes || null,
           status: defaultStatus || "active",
-          season,
-        },
+        } as any,
       },
       {
         onSuccess: async (createdStudent: any) => {

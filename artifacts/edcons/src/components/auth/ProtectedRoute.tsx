@@ -73,7 +73,7 @@ export function ProtectedRoute({ children, allowedRoles, requiredPermission }: P
   }
 
   if (requiredPermission && user.role === "agent_staff") {
-    const perms = (user as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
+    const perms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
     if (!perms || !perms.includes(requiredPermission)) {
       return <AccessDeniedScreen />;
     }

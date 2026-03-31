@@ -64,6 +64,7 @@ export function SearchableSelect({
       return () =>
         document.removeEventListener("mousedown", handleClickOutside);
     }
+    return undefined;
   }, [open]);
 
   return (

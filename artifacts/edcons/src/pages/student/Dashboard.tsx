@@ -33,8 +33,8 @@ function formatRole(role?: string | null) {
 export default function StudentDashboard() {
   const { user } = useAuth(true);
   const [, setLocation] = useLocation();
-  const { data: applicationsResp, isLoading: appsLoading } = useListApplications({ query: { queryKey: ['student-applications'] } });
-  const { data: documentsResp } = useListDocuments({ query: { queryKey: ['student-docs'] } });
+  const { data: applicationsResp, isLoading: appsLoading } = useListApplications(undefined, { query: { queryKey: ['student-applications'] } as any });
+  const { data: documentsResp } = useListDocuments(undefined, { query: { queryKey: ['student-docs'] } as any });
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
   const documents: any[] = (documentsResp as any)?.data || documentsResp || [];
 

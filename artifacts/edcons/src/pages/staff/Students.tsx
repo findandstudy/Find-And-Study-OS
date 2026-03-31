@@ -5,6 +5,7 @@ import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
+import { BulkActionBar } from "@/components/BulkActionBar";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -21,6 +22,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import {
+  DndContext, closestCorners, DragOverlay,
+  useSensors, useSensor, PointerSensor, KeyboardSensor,
+  useDroppable,
+  type DragStartEvent, type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Search, Plus, FileText, FileUp, Sparkles, ChevronLeft,
   User, GraduationCap, X, CheckCircle2, AlertCircle,
   Users, Download, Eye, Loader2, LayoutGrid, List,
@@ -31,6 +40,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { CountryFlag } from "@/components/CountryFlag";
 import { OriginBadge } from "@/components/OriginBadge";
+import { cn } from "@/lib/utils";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -730,15 +740,12 @@ function AddStudentModal({
           fatherName: form.fatherName || null,
           address: form.address || null,
           highSchool: form.highSchool || null,
-          universityBachelor: form.universityBachelor || null,
-          universityMaster: form.universityMaster || null,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null,
           gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null,
           languageScore: form.languageScore || null,
           notes: form.notes || null,
           status: defaultStatus || "active",
-          season,
-        },
+        } as any,
       },
       {
         onSuccess: async (createdStudent: any) => {

@@ -1038,7 +1038,7 @@ export default function AgentLeadsPage() {
                           {activeCard.interestedProgram}
                         </p>
                       )}
-                      {canSeeRevenue && activeCard.estimatedValue && parseFloat(activeCard.estimatedValue) > 0 && (
+                      {canSeeRevenue && activeCard.estimatedValue && parseFloat(String(activeCard.estimatedValue)) > 0 && (
                         <div className="mt-2 flex items-center gap-1">
                           <TrendingUp className="w-3 h-3 text-emerald-500" />
                           <span className="text-xs font-semibold text-emerald-600">

@@ -60,7 +60,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
 
   const isRTL = RTL_LANGUAGES.includes(lang);
-  const dir = isRTL ? "rtl" : "ltr";
+  const dir: "ltr" | "rtl" = isRTL ? "rtl" : "ltr";
 
   const localePath = useCallback(
     (path: string) => buildLocalizedPath(path, lang),

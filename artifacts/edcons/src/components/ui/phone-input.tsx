@@ -135,6 +135,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
+    return undefined;
   }, [open]);
 
   const selectedCountry = COUNTRY_CODES.find(c => c.dial === dialCode) || COUNTRY_CODES[0];

@@ -1635,6 +1635,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
         lastName: currentUser.lastName || "",
         email: currentUser.email || "",
         nationality: null,
+        createdAt: currentUser.createdAt || new Date().toISOString(),
       });
     }
   }, [isStudentUser, currentUser, p]);

@@ -77,7 +77,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const isStaffUser = authUser && ["super_admin", "admin", "manager", "staff"].includes(authUser.role);
 
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-  const { data: app, isLoading } = useGetApplication(id);
+  const { data: app, isLoading } = useGetApplication(id) as { data: any; isLoading: boolean };
 
   const { data: generalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/applications/${id}/notes`, "general"],

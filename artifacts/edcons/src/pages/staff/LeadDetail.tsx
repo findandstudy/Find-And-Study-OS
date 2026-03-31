@@ -23,7 +23,7 @@ import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, R
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
-import { OriginSection } from "@/components/OriginBadge";
+import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -62,7 +62,7 @@ function useCountries() {
   return useQuery<CountryRecord[]>({
     queryKey: ["countries-all"],
     queryFn: async () => {
-      const res = await customFetch(`/api/countries?limit=500`);
+      const res: any = await customFetch(`/api/countries?limit=500`);
       return res.data ?? res;
     },
     staleTime: 5 * 60_000,
@@ -104,7 +104,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
   const isAgent = basePath === "/agent";
 
-  const { data: lead, isLoading } = useGetLead(id);
+  const { data: lead, isLoading } = useGetLead(id) as { data: any; isLoading: boolean };
   const { data: notes = [] } = useGetLeadNotes(id);
   const updateLead = useUpdateLead();
   const convertLead = useConvertLead();

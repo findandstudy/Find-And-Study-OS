@@ -76,7 +76,7 @@ export default function StudentAccount() {
     }
   }, [user]);
 
-  const { data: studentProfile, isLoading: profileLoading } = useQuery({
+  const { data: studentProfile, isLoading: profileLoading } = useQuery<any>({
     queryKey: ["student-me"],
     enabled: !!user,
     queryFn: async () => {

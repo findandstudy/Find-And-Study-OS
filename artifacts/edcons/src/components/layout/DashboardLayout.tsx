@@ -267,7 +267,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const staffPerms = (user as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
+  const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
   const { groups } = getMenuForRole(user.role, t, staffPerms);
   const allItems = groups.flatMap(g => g.items);
   const activeItem = allItems.find(i => {

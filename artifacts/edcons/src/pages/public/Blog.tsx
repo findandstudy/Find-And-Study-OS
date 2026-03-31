@@ -13,7 +13,7 @@ export default function Blog() {
   useSeo({ title: t("seo.blogTitle"), description: t("seo.blogDesc"), lang });
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
-  const { data: postsResp, isLoading } = useListBlogPosts({ query: { queryKey: ['blog-posts'] } });
+  const { data: postsResp, isLoading } = useListBlogPosts(undefined, { query: { queryKey: ['blog-posts'] } as any });
   const posts = (postsResp as any)?.data || postsResp || [];
 
   const categories = [

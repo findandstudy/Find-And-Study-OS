@@ -20,7 +20,7 @@ const STAGE_CONFIG: Record<string, { label: string; color: string; icon: typeof 
 const STEPS = ["inquiry","documents_collected","submitted","offer_received","visa_applied","visa_approved","enrolled"];
 
 export default function StudentApplications() {
-  const { data: resp, isLoading } = useListApplications({ query: { queryKey: ["student-apps-list"] } });
+  const { data: resp, isLoading } = useListApplications(undefined, { query: { queryKey: ["student-apps-list"] } as any });
   const applications: any[] = (resp as any)?.data || resp || [];
 
   return (

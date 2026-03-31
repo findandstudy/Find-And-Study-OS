@@ -21,10 +21,11 @@ const ORIGIN_CONFIG: Record<OriginType, { icon: typeof Home; color: string; labe
   },
 };
 
-interface OriginBadgeProps {
+export interface OriginBadgeProps {
   originType?: string | null;
   originDisplayName?: string | null;
   size?: "sm" | "md";
+  className?: string;
 }
 
 export function OriginBadge({ originType, originDisplayName, size = "sm" }: OriginBadgeProps) {

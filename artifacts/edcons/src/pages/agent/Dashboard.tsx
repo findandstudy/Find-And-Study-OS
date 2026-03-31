@@ -68,7 +68,7 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 export default function AgentDashboard() {
   const { user } = useAuth(true);
   const [, setLocation] = useLocation();
-  const { data: appsResp } = useListApplications({ query: { queryKey: ["agent-dash-apps"] } });
+  const { data: appsResp } = useListApplications(undefined, { query: { queryKey: ["agent-dash-apps"] } as any });
   const applications: any[] = (appsResp as any)?.data || appsResp || [];
 
   const { data: agentProfile } = useQuery<any>({

@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { OriginSection } from "@/components/OriginBadge";
+import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -105,7 +105,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const qc = useQueryClient();
   const isAgent = basePath === "/agent";
 
-  const { data: student, isLoading } = useGetStudent(id);
+  const { data: student, isLoading } = useGetStudent(id) as { data: any; isLoading: boolean };
   const { data: applicationsResp } = useListApplications({ studentId: id });
   const { data: documentsResp } = useListDocuments({ studentId: id });
 

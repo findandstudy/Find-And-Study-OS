@@ -172,14 +172,14 @@ export default function AgentsPage() {
 
   async function fetchCountries() {
     try {
-      const res = await customFetch(`/api/countries?limit=300`);
+      const res: any = await customFetch(`/api/countries?limit=300`);
       setCountries(res.data || []);
     } catch {}
   }
 
   async function fetchCities(countryId: number) {
     try {
-      const res = await customFetch(`/api/cities?countryId=${countryId}&limit=500`);
+      const res: any = await customFetch(`/api/cities?countryId=${countryId}&limit=500`);
       setCities(res.data || []);
     } catch {}
   }
@@ -189,7 +189,7 @@ export default function AgentsPage() {
     try {
       const params = new URLSearchParams({ type: "agent", page: String(page), limit: "20", search });
       if (countryFilter !== "all") params.set("country", countryFilter);
-      const res = await customFetch(`/api/agents?${params}`);
+      const res: any = await customFetch(`/api/agents?${params}`);
       setAgents(res.data);
       setTotal(res.meta.total);
       setTotalPages(res.meta.totalPages);
@@ -201,7 +201,7 @@ export default function AgentsPage() {
     try {
       const params = new URLSearchParams({ type: "sub_agent", page: String(subPage), limit: "20", search: subSearch });
       if (subCountryFilter !== "all") params.set("country", subCountryFilter);
-      const res = await customFetch(`/api/agents?${params}`);
+      const res: any = await customFetch(`/api/agents?${params}`);
       setSubAgents(res.data);
       setSubTotal(res.meta.total);
       setSubTotalPages(res.meta.totalPages);
@@ -210,14 +210,14 @@ export default function AgentsPage() {
 
   async function fetchParentAgents() {
     try {
-      const res = await customFetch(`/api/agents?type=agent&limit=100`);
+      const res: any = await customFetch(`/api/agents?type=agent&limit=100`);
       setParentAgents(res.data);
     } catch {}
   }
 
   async function fetchStaffMembers() {
     try {
-      const res = await customFetch(`/api/users?limit=100`);
+      const res: any = await customFetch(`/api/users?limit=100`);
       const staff = (res.data || []).filter((u: any) =>
         ["super_admin", "admin", "manager", "staff", "consultant"].includes(u.role) && u.isActive !== false
       );
@@ -279,7 +279,7 @@ export default function AgentsPage() {
   async function uploadFile(file: File, field: string, setUploading: (v: boolean) => void) {
     setUploading(true);
     try {
-      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+      const urlRes: any = await customFetch(`/api/storage/uploads/request-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
@@ -471,7 +471,7 @@ export default function AgentsPage() {
   async function handleImpersonate(agent: Agent) {
     if (!confirm(`Login as ${agent.firstName} ${agent.lastName}? You will be logged out of your current session.`)) return;
     try {
-      const res = await customFetch(`/api/agents/${agent.id}/impersonate`, {
+      const res: any = await customFetch(`/api/agents/${agent.id}/impersonate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -618,7 +618,7 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-3">
                     {a.logoUrl ? (
-                      <img src={fixStorageUrl(a.logoUrl)!} alt={a.name || 'Agent logo'} width={36} height={36} loading="lazy" className="w-9 h-9 rounded-lg object-cover border border-border" />
+                      <img src={fixStorageUrl(a.logoUrl)!} alt={(a as any).name || 'Agent logo'} width={36} height={36} loading="lazy" className="w-9 h-9 rounded-lg object-cover border border-border" />
                     ) : (
                       <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-primary/20 to-accent/20 flex items-center justify-center font-bold text-xs text-primary">
                         {a.firstName[0]}{a.lastName[0]}
@@ -647,7 +647,7 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   {a.country ? (
                     <div className="flex items-center gap-1.5 text-xs">
-                      <CountryFlag country={a.country} size="sm" />
+                      <CountryFlag code={a.country} size="sm" />
                       <span>{a.country}</span>
                     </div>
                   ) : <span className="text-muted-foreground text-xs">-</span>}

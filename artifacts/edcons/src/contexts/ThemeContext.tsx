@@ -87,6 +87,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       mq.addEventListener("change", handler);
       return () => mq.removeEventListener("change", handler);
     }
+    return undefined;
   }, [mode]);
 
   const applyThemeColors = useCallback((s: ThemeSettings) => {

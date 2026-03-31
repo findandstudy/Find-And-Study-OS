@@ -35,7 +35,7 @@ export default function StudentWishlist() {
   };
 
   return (
-    <DashboardLayout title="My Wishlist">
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">My Wishlist</h1>

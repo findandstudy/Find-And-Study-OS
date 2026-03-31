@@ -250,10 +250,9 @@ export default function AgentTeam() {
           {meta && meta.totalPages > 1 && (
             <div className="p-4 border-t border-border/50">
               <TablePagination
-                page={page}
-                totalPages={meta.totalPages}
-                total={meta.total}
-                limit={limit}
+                currentPage={page}
+                totalItems={meta.total}
+                pageSize={limit}
                 onPageChange={setPage}
               />
             </div>

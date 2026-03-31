@@ -63,9 +63,8 @@ export default function AdminAuditLog() {
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
       if (search) params.set("search", search);
-      const res = await customFetch(`/api/audit?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
+      const res: any = await customFetch(`/api/audit?${params.toString()}`);
+      return res;
     },
   });
 
