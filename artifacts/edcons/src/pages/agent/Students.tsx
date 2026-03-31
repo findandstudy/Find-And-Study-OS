@@ -1689,32 +1689,10 @@ export default function AgentStudentsPage() {
         {viewMode === "pipeline" && (
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
             <div className="flex gap-5 h-full min-w-max px-1">
-              <DndContext
-                sensors={stuSensors}
-                collisionDetection={closestCorners}
-                onDragStart={handleStuDragStart}
-                onDragEnd={handleStuDragEnd}
-              >
-                {pipelineStages.map((ps, idx) => {
+              {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
                   return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/agent/students/${id}`)} />;
                 })}
-
-                <DragOverlay>
-                  {activeStuCard ? (
-                    <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
-                      <div className="flex items-center gap-2.5 mb-1.5">
-                        <StudentAvatar student={activeStuCard} />
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-sm text-foreground line-clamp-1">{activeStuCard.firstName} {activeStuCard.lastName}</h4>
-                          <p className="text-xs text-muted-foreground truncate">{activeStuCard.email || activeStuCard.phone || "No contact"}</p>
-                        </div>
-                      </div>
-                      {activeStuCard.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{activeStuCard.nationality}</span>}
-                    </div>
-                  ) : null}
-                </DragOverlay>
-              </DndContext>
             </div>
           </div>
         )}

@@ -228,7 +228,7 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async 
   res.sendStatus(204);
 });
 
-router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
