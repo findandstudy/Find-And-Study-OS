@@ -124,6 +124,22 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   }
 
   const effectiveStatus = isStaff ? status : "pending";
+
+  if (studentId && type) {
+    const oldDocs = await db.select({ id: documentsTable.id }).from(documentsTable).where(
+      and(
+        eq(documentsTable.studentId, studentId),
+        eq(documentsTable.type, type),
+        isNull(documentsTable.deletedAt)
+      )
+    );
+    if (oldDocs.length > 0) {
+      await db.update(documentsTable)
+        .set({ deletedAt: new Date() })
+        .where(inArray(documentsTable.id, oldDocs.map(d => d.id)));
+    }
+  }
+
   const [doc] = await db.insert(documentsTable).values({
     name: safeName, type, status: effectiveStatus,
     studentId: studentId || null,
@@ -265,11 +281,22 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
   res.json({ deleted: docs.length });
 });
 
-router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    if (!doc.studentId) { res.status(403).json({ error: "Access denied" }); return; }
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+    if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  }
+
   await db.update(documentsTable).set({ deletedAt: new Date() }).where(eq(documentsTable.id, id));
   await logAudit(req.user!.id, "delete_document", "document", id, { name: doc.name }, req.ip);
   res.sendStatus(204);

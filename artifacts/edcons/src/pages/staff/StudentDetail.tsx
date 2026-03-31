@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil } from "lucide-react";
+import { apiFetch } from "@/lib/apiFetch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -256,10 +257,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       const last = (student?.lastName ?? "").toLowerCase();
       const docName = uploadName.trim() || `${type}-${first}-${last}`;
 
-      const resp = await fetch(`${BASE_URL}/api/documents`, {
+      const resp = await apiFetch(`${BASE_URL}/api/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           name: docName,
           type: uploadType,
@@ -292,10 +292,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       const first = (student?.firstName ?? "").toLowerCase();
       const last = (student?.lastName ?? "").toLowerCase();
 
-      const resp = await fetch(`${BASE_URL}/api/documents`, {
+      const resp = await apiFetch(`${BASE_URL}/api/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           name: `photo-${first}-${last}`,
           type: "photo",
@@ -687,6 +686,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       <th className="text-left px-4 py-3 font-semibold text-foreground">Status</th>
                       <th className="text-left px-4 py-3 font-semibold text-foreground">Uploaded</th>
                       <th className="text-left px-4 py-3 font-semibold text-foreground">File</th>
+                      <th className="text-left px-4 py-3 font-semibold text-foreground"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -725,6 +725,23 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                               View
                             </a>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Are you sure you want to delete this document?")) return;
+                              const resp = await apiFetch(`${BASE_URL}/api/documents/${doc.id}`, {
+                                method: "DELETE",
+                              });
+                              if (resp.ok) {
+                                await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student"))) });
+                              }
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                            title="Delete document"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
