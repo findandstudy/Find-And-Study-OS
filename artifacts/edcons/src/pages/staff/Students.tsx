@@ -1398,7 +1398,7 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
   );
 }
 
-function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number }) {
+function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, isAdmin }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
@@ -1432,13 +1432,21 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       </div>
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && staffUsersList ? (
+          {onAssign && isAdmin && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
               currentUserId={currentUserId}
               onAssign={(userId) => onAssign(student.id, userId)}
             />
+          ) : onAssign && !isAdmin && currentUserId && !student.assignedToId ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAssign(student.id, currentUserId); }}
+              className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
+              title="Assign to me"
+            >
+              <UserPlus className="w-3 h-3 shrink-0" />Assign to me
+            </button>
           ) : assignedUserName ? (
             <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate"><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
           ) : null}
@@ -1485,7 +1493,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
   );
 }
 
-function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssign, staffUsersList, currentUserId }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number }) {
+function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, isAdmin }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -1522,7 +1530,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={students.map(s => s.id)} strategy={verticalListSortingStrategy}>
           {students.map((s: any) => (
-            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} />
+            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} isAdmin={isAdmin} />
           ))}
           {students.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
@@ -1961,8 +1969,9 @@ export default function StudentsPage() {
     queryKey: ["staff-users-list"],
     queryFn: () => customFetch("/api/users") as Promise<any>,
     staleTime: 5 * 60 * 1000,
+    enabled: isAdmin,
   });
-  const staffUsers = staffUsersData
+  const staffUsers = isAdmin && staffUsersData
     ? (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []).filter((u: any) => ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"].includes(u.role))
     : [];
   const staffUsersMap = useMemo(() => {
@@ -2165,7 +2174,7 @@ export default function StudentsPage() {
               >
                 {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
-                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} />;
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} isAdmin={isAdmin} />;
                 })}
 
                 <DragOverlay>
@@ -2228,13 +2237,26 @@ export default function StudentsPage() {
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        <AssignPopover
-                          assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
-                          staffUsers={staffUsersList}
-                          currentUserId={user?.id}
-                          onAssign={(userId) => handleAssign(student.id, userId)}
-                          size="list"
-                        />
+                        {isAdmin ? (
+                          <AssignPopover
+                            assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
+                            staffUsers={staffUsersList}
+                            currentUserId={user?.id}
+                            onAssign={(userId) => handleAssign(student.id, userId)}
+                            size="list"
+                          />
+                        ) : !student.assignedToId && user?.id ? (
+                          <button
+                            onClick={() => handleAssign(student.id, user.id)}
+                            className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3 h-3" />Assign to me
+                          </button>
+                        ) : student.assignedToId ? (
+                          <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                            <UserCheck className="w-3 h-3" />{staffUsersMap[student.assignedToId] || "Assigned"}
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>

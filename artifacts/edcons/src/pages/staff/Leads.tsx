@@ -111,10 +111,10 @@ function getLeadStageColor(stage: PipelineStage, index: number): string {
 }
 
 /* ── LeadCard ──────────────────────────────────────────────── */
-function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId }: {
+function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId, isAdmin }: {
   lead: any; onView: (id: number) => void; showRevenue: boolean; variant?: ColVariant;
   assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -167,13 +167,21 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       </div>
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && staffUsersList ? (
+          {onAssign && isAdmin && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
               currentUserId={currentUserId}
               onAssign={(userId) => onAssign(lead.id, userId)}
             />
+          ) : onAssign && !isAdmin && currentUserId && !lead.assignedToId ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }}
+              className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
+              title="Assign to me"
+            >
+              <UserPlus className="w-3 h-3 shrink-0" />Assign to me
+            </button>
           ) : assignedUserName ? (
             <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}>
               <UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}
@@ -223,10 +231,10 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
 }
 
 /* ── DroppableColumn ──────────────────────────────────────── */
-function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId }: {
+function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, isAdmin }: {
   col: ColDef; leads: any[]; showRevenue: boolean; onView: (id: number) => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   const totalRevenue = showRevenue ? leads.reduce((sum, l) => sum + (parseFloat(l.estimatedValue) || 0), 0) : 0;
@@ -286,7 +294,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} />
+            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} isAdmin={isAdmin} />
           ))}
           {leads.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
@@ -830,8 +838,9 @@ export default function LeadsPage() {
     queryKey: ["staff-users-list"],
     queryFn: () => customFetch("/api/users") as Promise<any>,
     staleTime: 5 * 60 * 1000,
+    enabled: isAdmin,
   });
-  const staffUsers = staffUsersData
+  const staffUsers = isAdmin && staffUsersData
     ? (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []).filter((u: any) => ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"].includes(u.role))
     : [];
   const queryClient = useQueryClient();
@@ -1165,6 +1174,7 @@ export default function LeadsPage() {
                       onAssign={handleAssign}
                       staffUsersList={staffUsersList}
                       currentUserId={user?.id}
+                      isAdmin={isAdmin}
                     />
                   );
                 })}
@@ -1294,13 +1304,26 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        <AssignPopover
-                          assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
-                          staffUsers={staffUsersList}
-                          currentUserId={user?.id}
-                          onAssign={(userId) => handleAssign(lead.id, userId)}
-                          size="list"
-                        />
+                        {isAdmin ? (
+                          <AssignPopover
+                            assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
+                            staffUsers={staffUsersList}
+                            currentUserId={user?.id}
+                            onAssign={(userId) => handleAssign(lead.id, userId)}
+                            size="list"
+                          />
+                        ) : !lead.assignedToId && user?.id ? (
+                          <button
+                            onClick={() => handleAssign(lead.id, user.id)}
+                            className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3 h-3" />Assign to me
+                          </button>
+                        ) : lead.assignedToId ? (
+                          <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                            <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || "Assigned"}
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell
                         className="text-muted-foreground text-xs"
