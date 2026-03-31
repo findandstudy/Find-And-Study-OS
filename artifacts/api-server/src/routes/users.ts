@@ -11,7 +11,7 @@ const router: IRouter = Router();
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive"];
 
-router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { role, search, page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
