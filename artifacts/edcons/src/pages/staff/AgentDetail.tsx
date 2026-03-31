@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink
+  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare, Send
 } from "lucide-react";
+import { QuickContactDialog } from "@/components/QuickContact";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -30,6 +31,8 @@ export default function AgentDetailPage() {
   const agentId = params?.id ? parseInt(params.id, 10) : null;
 
   const [tab, setTab] = useState("leads");
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
 
   const { data: agent, isLoading: agentLoading } = useQuery<any>({
     queryKey: ["agent-detail", agentId],
@@ -91,14 +94,14 @@ export default function AgentDetailPage() {
                   {agent.contactPerson && <p className="text-sm text-muted-foreground">{agent.contactPerson}</p>}
                   <div className="flex flex-wrap gap-4 mt-3 text-sm">
                     {agent.email && (
-                      <a href={`mailto:${agent.email}`} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                      <button onClick={() => { setContactChannel("email"); setContactOpen(true); }} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
                         <Mail className="w-3.5 h-3.5" /> {agent.email}
-                      </a>
+                      </button>
                     )}
                     {agent.phone && (
-                      <a href={`tel:${agent.phone}`} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+                      <button onClick={() => { setContactChannel("whatsapp"); setContactOpen(true); }} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
                         <Phone className="w-3.5 h-3.5" /> {agent.phone}
-                      </a>
+                      </button>
                     )}
                     {agent.country && (
                       <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -114,6 +117,20 @@ export default function AgentDetailPage() {
                 </div>
               </div>
             </div>
+
+            {agent && (
+              <QuickContactDialog
+                open={contactOpen}
+                onClose={() => setContactOpen(false)}
+                channel={contactChannel}
+                setChannel={setContactChannel}
+                name={agent.companyName || agent.contactPerson || "Agent"}
+                email={agent.email}
+                phone={agent.phone}
+                entityType="agent"
+                entityId={agentId!}
+              />
+            )}
 
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="grid w-full grid-cols-3">
