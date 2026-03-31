@@ -121,10 +121,10 @@ export default function StaffDashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
-            { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, trend: "+12%", color: "text-blue-500", bg: "bg-blue-500/10" },
-            { label: "Active Applications", value: stats?.activeApplications || 0, icon: FileText, trend: "+5%", color: "text-purple-500", bg: "bg-purple-500/10" },
-            { label: "Enrolled Students", value: stats?.totalStudents || 0, icon: GraduationCap, trend: "+18%", color: "text-green-500", bg: "bg-green-500/10" },
-            { label: "Pending Documents", value: stats?.pendingDocuments || 0, icon: Clock, trend: "-2%", color: "text-amber-500", bg: "bg-amber-500/10", reverse: true },
+            { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+            { label: "Active Applications", value: stats?.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
+            { label: "Enrolled Students", value: (stats as any)?.enrolledCount || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
+            { label: "Pending Documents", value: stats?.pendingDocuments || 0, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
           ].map((stat, i) => (
             <Card key={i} className="p-6 border-none shadow-lg shadow-black/5 hover:-translate-y-1 transition-transform duration-300">
               <div className="flex items-start justify-between">
@@ -136,12 +136,25 @@ export default function StaffDashboard() {
                   <stat.icon className={`w-6 h-6 ${stat.color}`} />
                 </div>
               </div>
-              <div className="mt-4 flex items-center text-sm">
-                <span className={`font-semibold flex items-center ${stat.reverse ? 'text-destructive' : 'text-emerald-500'}`}>
-                  <ArrowUpRight className="w-4 h-4 mr-1" />
-                  {stat.trend}
-                </span>
-                <span className="text-muted-foreground ml-2">vs last month</span>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {[
+            { label: "Confirmed Commission", value: `$${((stats as any)?.confirmedCommission || 0).toLocaleString()}`, icon: CreditCard, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+            { label: "Collected", value: `$${((stats as any)?.collectedCommission || 0).toLocaleString()}`, icon: DollarSign, color: "text-teal-500", bg: "bg-teal-500/10" },
+            { label: "Pending Commission", value: `$${((stats as any)?.pendingCommissions || 0).toLocaleString()}`, icon: Clock, color: "text-orange-500", bg: "bg-orange-500/10" },
+          ].map((stat, i) => (
+            <Card key={i} className="p-6 border-none shadow-lg shadow-black/5 hover:-translate-y-1 transition-transform duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">{stat.label}</p>
+                  <h3 className="text-2xl font-display font-bold text-foreground">{isLoading ? "..." : stat.value}</h3>
+                </div>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.bg}`}>
+                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                </div>
               </div>
             </Card>
           ))}

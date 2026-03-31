@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, invoicesTable, commissionsTable } from "@workspace/db";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 
@@ -32,7 +32,22 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES), async (r
   const [{ pending }] = await db
     .select({ pending: sql<number>`coalesce(sum(university_commission_amount), 0)` })
     .from(commissionsTable)
-    .where(sql`status NOT IN ('collected','paid')`);
+    .where(sql`status NOT IN ('collected_full','settled','excluded')`);
+
+  const [{ confirmedCommission }] = await db
+    .select({ confirmedCommission: sql<number>`coalesce(sum(CAST(university_commission_amount AS numeric)), 0)` })
+    .from(commissionsTable)
+    .where(sql`status IN ('confirmed','collected_partial','collected_full','settled')`);
+
+  const [{ collectedCommission }] = await db
+    .select({ collectedCommission: sql<number>`coalesce(sum(CAST(university_collected AS numeric)), 0)` })
+    .from(commissionsTable)
+    .where(sql`status != 'excluded'`);
+
+  const [{ enrolledCount }] = await db
+    .select({ enrolledCount: sql<number>`count(*)` })
+    .from(applicationsTable)
+    .where(sql`stage = 'enrolled' AND deleted_at IS NULL`);
 
   res.json({
     totalLeads: Number(leads),
@@ -43,6 +58,9 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES), async (r
     pendingDocuments: Number(pendingDocs),
     totalRevenue: Number(revenue),
     pendingCommissions: Number(pending),
+    confirmedCommission: Number(confirmedCommission),
+    collectedCommission: Number(collectedCommission),
+    enrolledCount: Number(enrolledCount),
   });
 });
 
