@@ -37,6 +37,23 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
       const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
       if (!studentRec) { res.json([]); return; }
       conditions.push(eq(documentsTable.studentId, studentRec.id));
+    } else if (isAgentRole(user.role)) {
+      if (studentId) {
+        const visibleIds = await getAgentVisibleIds(user.id, user.role);
+        const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+        if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+          res.json([]);
+          return;
+        }
+      } else {
+        const visibleIds = await getAgentVisibleIds(user.id, user.role);
+        const agentStudents = await db.select({ id: studentsTable.id }).from(studentsTable).where(
+          inArray(studentsTable.agentId, visibleIds.length > 0 ? visibleIds : [0])
+        );
+        const studentIds = agentStudents.map(s => s.id);
+        if (studentIds.length === 0) { res.json([]); return; }
+        conditions.push(inArray(documentsTable.studentId, studentIds));
+      }
     } else {
       res.status(403).json({ error: "Access denied" });
       return;
@@ -159,6 +176,16 @@ router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
     if (user.role === "student") {
       const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
       if (!studentRec || studentRec.id !== doc.studentId) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+    } else if (isAgentRole(user.role)) {
+      if (doc.studentId) {
+        const visibleIds = await getAgentVisibleIds(user.id, user.role);
+        const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+        if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+          res.status(403).json({ error: "Access denied" }); return;
+        }
+      } else {
         res.status(403).json({ error: "Access denied" }); return;
       }
     } else {
