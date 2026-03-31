@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -19,7 +19,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
 import OriginBadge from "@/components/OriginBadge";
@@ -646,6 +647,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   const { data: allCountries = [] } = useCountries();
   const [inputVal, setInputVal] = useState(value);
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setInputVal(value); }, [value]);
 
@@ -653,49 +655,124 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
     ? allCountries.filter(c => c.name.toLowerCase().includes(inputVal.toLowerCase()))
     : allCountries;
 
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative cursor-text" onClick={() => setOpen(true)}>
-          <Input
-            value={inputVal}
-            onChange={e => { setInputVal(e.target.value); onChange(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-            placeholder="Select or type..."
-            autoComplete="off"
-          />
+    <div className="relative" ref={containerRef}>
+      <Input
+        value={inputVal}
+        onChange={e => { setInputVal(e.target.value); onChange(e.target.value); if (!open) setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Select or type..."
+        autoComplete="off"
+      />
+      {open && (
+        <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.map(c => (
+            <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
+              onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
+              <CountryFlag code={c.code} size="sm" />
+              {c.name}
+            </button>
+          ))}
         </div>
-      </PopoverTrigger>
-      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] max-h-48 overflow-y-auto" align="start" onOpenAutoFocus={e => e.preventDefault()}>
-        {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{inputVal ? "No match — custom value OK" : "No countries loaded"}</div>}
-        {filtered.map(c => (
-          <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
-            onMouseDown={e => { e.preventDefault(); onChange(c.name); setInputVal(c.name); setOpen(false); }}>
-            <CountryFlag code={c.code} size="sm" />
-            {c.name}
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   );
 }
 
-function CountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: destinations = [] } = useQuery<Array<{ id: number; name: string; country: string; flagUrl?: string | null }>>({
+    queryKey: ["destinations-active"],
+    queryFn: async () => {
+      return customFetch(`/api/public/destinations`);
+    },
+    staleTime: 5 * 60_000,
+  });
   const { data: allCountries = [] } = useCountries();
-  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
+  const activeDestinations = useMemo(() => {
+    const destCountries = new Set(destinations.map(d => d.country || d.name));
+    return allCountries.filter(c => destCountries.has(c.name));
+  }, [allCountries, destinations]);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [localSelected, setLocalSelected] = useState<string[]>(() =>
+    value ? value.split(",").map(s => s.trim()).filter(Boolean) : []
+  );
+
+  useEffect(() => {
+    const parsed = value ? value.split(",").map(s => s.trim()).filter(Boolean) : [];
+    setLocalSelected(prev => {
+      if (prev.join(",") === parsed.join(",")) return prev;
+      return parsed;
+    });
+  }, [value]);
+
+  function toggle(name: string) {
+    setLocalSelected(prev => {
+      const next = prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name];
+      onChange(next.join(", "));
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    const timer = setTimeout(() => document.addEventListener("click", handleClick), 0);
+    return () => { clearTimeout(timer); document.removeEventListener("click", handleClick); };
+  }, [open]);
 
   return (
-    <Select value={value || "__clear"} onValueChange={v => onChange(v === "__clear" ? "" : v)}>
-      <SelectTrigger><SelectValue placeholder="Select destination..." /></SelectTrigger>
-      <SelectContent className="max-h-60">
-        <SelectItem value="__clear" className="text-muted-foreground">— None —</SelectItem>
-        {activeDestinations.map(c => (
-          <SelectItem key={c.id} value={c.name}>
-            <span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
+      >
+        <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
+          {localSelected.length === 0 ? "Select countries..." : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+      {localSelected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {localSelected.map(name => {
+            const c = activeDestinations.find(d => d.name === name);
+            return (
+              <span key={name} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                {c && <CountryFlag code={c.code} size="sm" />}
+                {name}
+                <button type="button" className="ml-0.5 hover:text-destructive" onClick={(e) => { e.stopPropagation(); toggle(name); }}><X className="w-3 h-3" /></button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {open && (
+        <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">No active destinations</div>}
+          {activeDestinations.map(c => (
+            <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${localSelected.includes(c.name) ? "bg-primary/10 font-medium" : ""}`}
+              onClick={e => { e.preventDefault(); e.stopPropagation(); toggle(c.name); }}>
+              <Checkbox checked={localSelected.includes(c.name)} className="pointer-events-none" />
+              <CountryFlag code={c.code} size="sm" />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -801,7 +878,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           </div>
           <div className="space-y-1.5">
             <Label>Interested Country</Label>
-            <CountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
+            <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label>Estimated Value (USD)</Label>

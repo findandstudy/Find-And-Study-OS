@@ -359,10 +359,21 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   );
 }
 
-/* ── MultiCountrySelect (active destinations, multi-select) ── */
+/* ── MultiCountrySelect (active destinations from Course Finder, multi-select) ── */
 function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: destinations = [] } = useQuery<Array<{ id: number; name: string; country: string; flagUrl?: string | null }>>({
+    queryKey: ["destinations-active"],
+    queryFn: async () => {
+      const res = await apiFetch(`${BASE_URL}/api/public/destinations`);
+      return res.data ?? res;
+    },
+    staleTime: 5 * 60_000,
+  });
   const { data: allCountries = [] } = useCountries();
-  const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
+  const activeDestinations = useMemo(() => {
+    const destCountries = new Set(destinations.map(d => d.country || d.name));
+    return allCountries.filter(c => destCountries.has(c.name));
+  }, [allCountries, destinations]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [localSelected, setLocalSelected] = useState<string[]>(() =>
