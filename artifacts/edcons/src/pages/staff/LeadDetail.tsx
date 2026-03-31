@@ -671,7 +671,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
         value={open ? searchVal : value}
         onChange={e => { setSearchVal(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => { setSearchVal(""); setOpen(true); }}
-        placeholder="Select or type..."
+        placeholder={value || "Select or type..."}
         autoComplete="off"
       />
       {open && (
