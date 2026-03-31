@@ -164,6 +164,20 @@ export default function CourseFinder() {
   const canUsePdfMarkup = user && ["super_admin", "admin", "manager", "agent", "sub_agent"].includes(user.role);
   const canExportExcel = user && ["super_admin", "admin"].includes(user.role);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("programId");
+    if (pid) {
+      apiFetch(`${BASE_URL}/api/course-finder?programId=${pid}&limit=1`)
+        .then((res: any) => {
+          const prog = res?.data?.[0];
+          if (prog) setSelectedProgram(prog);
+        })
+        .catch(() => {});
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const { data: filterOptions } = useQuery<FilterOptions>({
     queryKey: ["course-finder-filters"],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/filters`),

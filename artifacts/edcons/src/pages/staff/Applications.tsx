@@ -254,7 +254,10 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
         </div>
         {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
         {app.programName && (
-          <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">{app.programName}</p>
+          <p
+            className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md hover:bg-primary/15 hover:underline cursor-pointer transition-colors"
+            onClick={(e) => { e.stopPropagation(); if (app.programId) setLoc(`/staff/course-finder?programId=${app.programId}`); }}
+          >{app.programName}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
           {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
@@ -1315,7 +1318,7 @@ export default function ApplicationsPage() {
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.programName || "-"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/course-finder?programId=${app.programId}`); }}>{app.programName || "-"}</span> : (app.programName || "-")}</TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
                         <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>

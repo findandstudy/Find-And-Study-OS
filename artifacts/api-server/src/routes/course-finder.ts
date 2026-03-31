@@ -9,12 +9,16 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 const router: IRouter = Router();
 
 router.get("/course-finder", async (req, res): Promise<void> => {
-  const { country, city, universityType, universityId, level, language, search, intake, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
+  const { country, city, universityType, universityId, programId, level, language, search, intake, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(1000, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [eq(programsTable.isActive, true)];
+  if (programId) {
+    const pid = parseInt(programId, 10);
+    if (!isNaN(pid)) conditions.push(eq(programsTable.id, pid));
+  }
   if (country) {
     const vals = country.split(",").map(s => s.trim()).filter(Boolean);
     if (vals.length === 1) conditions.push(eq(universitiesTable.country, vals[0]));
