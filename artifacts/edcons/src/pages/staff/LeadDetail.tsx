@@ -690,18 +690,17 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
 }
 
 function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: destinations = [] } = useQuery<Array<{ id: number; name: string; country: string; flagUrl?: string | null }>>({
-    queryKey: ["destinations-active"],
-    queryFn: async () => {
-      return customFetch(`/api/public/destinations`);
-    },
+  const { data: cfFilters } = useQuery<{ countries: string[] }>({
+    queryKey: ["course-finder-filters"],
+    queryFn: () => customFetch("/api/course-finder/filters"),
     staleTime: 5 * 60_000,
   });
+  const cfCountryNames = cfFilters?.countries ?? [];
   const { data: allCountries = [] } = useCountries();
   const activeDestinations = useMemo(() => {
-    const destCountries = new Set(destinations.map(d => d.country || d.name));
-    return allCountries.filter(c => destCountries.has(c.name));
-  }, [allCountries, destinations]);
+    const nameSet = new Set(cfCountryNames);
+    return allCountries.filter(c => nameSet.has(c.name));
+  }, [allCountries, cfCountryNames]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [localSelected, setLocalSelected] = useState<string[]>(() =>

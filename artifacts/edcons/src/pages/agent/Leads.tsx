@@ -359,21 +359,22 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   );
 }
 
-/* ── MultiCountrySelect (active destinations from Course Finder, multi-select) ── */
+/* ── MultiCountrySelect (countries from Course Finder – universities with active programs) ── */
 function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: destinations = [] } = useQuery<Array<{ id: number; name: string; country: string; flagUrl?: string | null }>>({
-    queryKey: ["destinations-active"],
+  const { data: cfFilters } = useQuery<{ countries: string[] }>({
+    queryKey: ["course-finder-filters"],
     queryFn: async () => {
-      const res = await apiFetch(`${BASE_URL}/api/public/destinations`);
-      return res.data ?? res;
+      const res = await apiFetch(`${BASE_URL}/api/course-finder/filters`);
+      return res;
     },
     staleTime: 5 * 60_000,
   });
+  const cfCountryNames = cfFilters?.countries ?? [];
   const { data: allCountries = [] } = useCountries();
   const activeDestinations = useMemo(() => {
-    const destCountries = new Set(destinations.map(d => d.country || d.name));
-    return allCountries.filter(c => destCountries.has(c.name));
-  }, [allCountries, destinations]);
+    const nameSet = new Set(cfCountryNames);
+    return allCountries.filter(c => nameSet.has(c.name));
+  }, [allCountries, cfCountryNames]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [localSelected, setLocalSelected] = useState<string[]>(() =>
