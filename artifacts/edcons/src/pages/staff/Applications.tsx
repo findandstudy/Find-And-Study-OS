@@ -29,7 +29,7 @@ import {
   Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
   User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
   Eye, Stamp, CheckCircle, XCircle, Trophy, MessageSquare, Mail,
-  UserPlus, UserCheck2, Download,
+  UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -217,12 +217,99 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
 
 type ColVariant = "won" | "lost" | undefined;
 
+function ensureUrl(u?: string | null) {
+  if (!u) return null;
+  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+}
+
+function UniversityInfoPopup({ universityId, onClose }: { universityId: number; onClose: () => void }) {
+  const { data: uni, isLoading } = useQuery<any>({
+    queryKey: ["university-info", universityId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/universities/${universityId}`),
+    enabled: !!universityId,
+  });
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+        ) : uni ? (
+          <>
+            <DialogHeader>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
+                  {uni.logoUrl ? (
+                    <img src={uni.logoUrl} alt={uni.name} className="w-full h-full object-contain p-1" />
+                  ) : (
+                    <Building2 className="w-8 h-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg">{uni.name}</DialogTitle>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {uni.universityType && <Badge variant="secondary" className="text-xs">{uni.universityType}</Badge>}
+                    {uni.status && (
+                      <Badge variant="outline" className={`text-xs ${uni.status === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
+                        {uni.status === "open" ? "Open" : "Closed"}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="space-y-4 mt-3">
+              {uni.description && <p className="text-sm text-muted-foreground leading-relaxed">{uni.description}</p>}
+              <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Location</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {uni.country && <div><span className="text-muted-foreground text-xs">Country</span><p className="font-medium">{uni.country}</p></div>}
+                  {uni.city && <div><span className="text-muted-foreground text-xs">City</span><p className="font-medium">{uni.city}</p></div>}
+                </div>
+                {uni.address && <div><span className="text-muted-foreground text-xs">Address</span><p className="text-sm font-medium">{uni.address}</p></div>}
+              </div>
+              {(uni.qsRanking || uni.timesRanking || uni.ranking) && (
+                <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><Award className="w-4 h-4 text-primary" /> Rankings</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {uni.qsRanking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.qsRanking}</p><p className="text-[10px] text-muted-foreground font-medium">QS World</p></div>}
+                    {uni.timesRanking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.timesRanking}</p><p className="text-[10px] text-muted-foreground font-medium">Times HE</p></div>}
+                    {uni.ranking && <div className="text-center bg-white rounded-lg p-2 border"><p className="text-lg font-bold text-primary">#{uni.ranking}</p><p className="text-[10px] text-muted-foreground font-medium">National</p></div>}
+                  </div>
+                </div>
+              )}
+              {(uni.contactName || uni.contactEmail || uni.contactPhone) && (
+                <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><User className="w-4 h-4 text-primary" /> Contact</h4>
+                  <div className="space-y-2">
+                    {uni.contactName && <div className="flex items-center gap-2 text-sm"><User className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium">{uni.contactName}</span></div>}
+                    {uni.contactEmail && <a href={`mailto:${uni.contactEmail}`} className="flex items-center gap-2 text-sm text-primary hover:underline"><Mail className="w-3.5 h-3.5" />{uni.contactEmail}</a>}
+                    {uni.contactPhone && <a href={`tel:${uni.contactPhone}`} className="flex items-center gap-2 text-sm text-primary hover:underline"><MessageSquare className="w-3.5 h-3.5" />{uni.contactPhone}</a>}
+                  </div>
+                </div>
+              )}
+              {ensureUrl(uni.website) && (
+                <a href={ensureUrl(uni.website)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
+                  <Globe className="w-4 h-4" /> Visit Website <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground py-8 text-center">University information not available.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── DraggableAppCard ─────────────────────────────────────── */
 function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [uniInfoOpen, setUniInfoOpen] = useState(false);
   const [, setLoc] = useLocation();
 
   const cardBg =
@@ -252,7 +339,12 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
             {app.studentFirstName} {app.studentLastName}
           </h4>
         </div>
-        {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
+        {app.universityName && (
+          <p
+            className="text-xs text-muted-foreground truncate hover:text-primary hover:underline cursor-pointer transition-colors"
+            onClick={(e) => { e.stopPropagation(); if (app.universityId) setUniInfoOpen(true); }}
+          >{app.universityName}</p>
+        )}
         {app.programName && (
           <p
             className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md hover:bg-primary/15 hover:underline cursor-pointer transition-colors"
@@ -322,6 +414,9 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
         hideEmail={!app.studentEmail}
         hideWhatsApp={!app.studentPhone}
       />
+      {uniInfoOpen && app.universityId && (
+        <UniversityInfoPopup universityId={app.universityId} onClose={() => setUniInfoOpen(false)} />
+      )}
     </div>
   );
 }
@@ -994,6 +1089,7 @@ export default function ApplicationsPage() {
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
   const [editApp, setEditApp] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [tableUniInfoId, setTableUniInfoId] = useState<number | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -1317,7 +1413,7 @@ export default function ApplicationsPage() {
                         <TableCell className="font-medium"><span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>{app.studentFirstName} {app.studentLastName}</span></TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : (app.universityName || "-")}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/course-finder?programId=${app.programId}`); }}>{app.programName || "-"}</span> : (app.programName || "-")}</TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
@@ -1370,6 +1466,9 @@ export default function ApplicationsPage() {
             queryClient.invalidateQueries({ queryKey: [`/api/applications/${docUploadDialog.appId}`] });
           }}
         />
+      )}
+      {tableUniInfoId && (
+        <UniversityInfoPopup universityId={tableUniInfoId} onClose={() => setTableUniInfoId(null)} />
       )}
     </DashboardLayout>
   );
