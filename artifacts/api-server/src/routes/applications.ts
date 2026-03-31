@@ -4,7 +4,7 @@ import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
-import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
+import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, getCancelledStageKey } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 
@@ -24,6 +24,39 @@ const APP_PATCH_FIELDS = [
   "serviceFeeAmount", "applicationFee", "depositFee", "advancedFee",
   "languageFee", "currency", "notes", "season",
 ];
+
+async function autoCancelSiblingApplications(wonAppId: number, studentId: number) {
+  const cancelledKey = await getCancelledStageKey();
+  const cancelledCommStatus = await getCommissionFinanceStatus(cancelledKey);
+  const cancelledSfStatus = await getServiceFeeFinanceStatus(cancelledKey);
+
+  const siblings = await db.select().from(applicationsTable)
+    .where(and(eq(applicationsTable.studentId, studentId), sql`${applicationsTable.id} != ${wonAppId}`));
+
+  for (const sib of siblings) {
+    const sibWon = await isWonStage(sib.stage);
+    if (sibWon) continue;
+    const alreadyCancelled = sib.stage === cancelledKey;
+    if (alreadyCancelled) continue;
+
+    await db.update(applicationsTable).set({ stage: cancelledKey }).where(eq(applicationsTable.id, sib.id));
+
+    const existingComms = await db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, sib.id));
+    for (const comm of existingComms) {
+      if (cancelledCommStatus === "excluded" && !["collected_partial", "collected_full", "settled"].includes(comm.status)) {
+        await db.update(commissionsTable).set({ status: "excluded" }).where(eq(commissionsTable.id, comm.id));
+      }
+    }
+
+    const existingSFs = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, sib.id));
+    for (const sf of existingSFs) {
+      const hasPaid = !!sf.firstInstallmentPaidAt || !!sf.secondInstallmentPaidAt;
+      if (cancelledSfStatus === "excluded" && !hasPaid) {
+        await db.update(serviceFeesTable).set({ financeStatus: "excluded" }).where(eq(serviceFeesTable.id, sf.id));
+      }
+    }
+  }
+}
 
 router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const { studentId, agentId, stage, season, page = "1", limit = "20" } = req.query as Record<string, string>;
@@ -522,6 +555,13 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
+  if (updates.stage !== undefined) {
+    const wonNow = await isWonStage(String(updates.stage));
+    if (wonNow) {
+      await autoCancelSiblingApplications(id, app.studentId);
+    }
+  }
+
   await logAudit(req.user!.id, "update_application", "application", id, updates, req.ip);
 
   if (updates.stage !== undefined) {
@@ -634,6 +674,10 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
             await db.update(serviceFeesTable).set({ financeStatus: "potential" }).where(eq(serviceFeesTable.id, sf.id));
           }
         }
+      }
+      const wonNow = await isWonStage(stage);
+      if (wonNow) {
+        await autoCancelSiblingApplications(app.id, app.studentId);
       }
       await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);
       updated++;

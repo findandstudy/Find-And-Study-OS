@@ -85,6 +85,22 @@ export async function getServiceFeeFinanceStatus(stage: string): Promise<"potent
   return "potential";
 }
 
+export async function isWonStage(stage: string): Promise<boolean> {
+  const variants = await loadStageVariants();
+  if (variants.size > 0) {
+    return variants.get(stage) === "won";
+  }
+  return LEGACY_CONFIRMED_COMMISSION.has(stage);
+}
+
+export async function getCancelledStageKey(): Promise<string> {
+  const variants = await loadStageVariants();
+  for (const [key, variant] of variants) {
+    if (key === "cancelled") return key;
+  }
+  return "cancelled";
+}
+
 export async function shouldHaveCommission(stage: string): Promise<boolean> {
   const status = await getCommissionFinanceStatus(stage);
   return status !== "excluded";
