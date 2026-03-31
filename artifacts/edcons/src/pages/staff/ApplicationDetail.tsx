@@ -25,9 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
-import { OriginSection } from "@/components/OriginBadge";
+import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
-import OriginBadge from "@/components/OriginBadge";
 
 const STUDY_LEVELS = [
   { value: "associate", label: "Associate" },
