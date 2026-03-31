@@ -110,7 +110,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
       ? snapshotDiscountedFee
       : snapshotTuitionFee;
 
-    const commFinStatus = getCommissionFinanceStatus(stage);
+    const commFinStatus = await getCommissionFinanceStatus(stage);
     if (commFinStatus !== "excluded") {
       const uCommAmount = commissionBaseFee && snapshotCommissionRate
         ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
@@ -137,7 +137,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
       });
     }
 
-    const sfFinStatus = getServiceFeeFinanceStatus(stage);
+    const sfFinStatus = await getServiceFeeFinanceStatus(stage);
     if (sfFinStatus !== "excluded") {
       const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
       const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;

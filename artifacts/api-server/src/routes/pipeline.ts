@@ -3,6 +3,7 @@ import { db, pipelineStagesTable } from "@workspace/db";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { clearStageFinanceCache } from "../lib/stageFinance";
 
 const router: IRouter = Router();
 
@@ -135,6 +136,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       return rows;
     });
 
+    clearStageFinanceCache();
     res.json(inserted.sort((a, b) => a.sortOrder - b.sortOrder));
   } catch (err: any) {
     console.error("Failed to save pipeline stages:", err);

@@ -206,7 +206,7 @@ async function backfillMissingCommissions() {
 
     let created = 0;
     for (const app of appsWithoutComm) {
-      const commStatus = getCommissionFinanceStatus(app.stage);
+      const commStatus = await getCommissionFinanceStatus(app.stage);
       if (commStatus === "excluded") continue;
 
       const baseFee = (app.discountedFee != null && !isNaN(app.discountedFee))

@@ -239,7 +239,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     ? snapshotDiscountedFee
     : snapshotTuitionFee;
 
-  const commFinStatus = getCommissionFinanceStatus(stage);
+  const commFinStatus = await getCommissionFinanceStatus(stage);
   if (commFinStatus !== "excluded") {
     const existingComm = await db.select({ id: commissionsTable.id }).from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
     if (existingComm.length === 0) {
@@ -269,7 +269,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     }
   }
 
-  const sfFinStatus = getServiceFeeFinanceStatus(stage);
+  const sfFinStatus = await getServiceFeeFinanceStatus(stage);
   if (sfFinStatus !== "excluded") {
     const existingSF = await db.select({ id: serviceFeesTable.id }).from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
     if (existingSF.length === 0) {
@@ -441,8 +441,8 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   if (updates.stage !== undefined) {
     const newStage = updates.stage as string;
-    const commStatus = getCommissionFinanceStatus(newStage);
-    const sfStatus = getServiceFeeFinanceStatus(newStage);
+    const commStatus = await getCommissionFinanceStatus(newStage);
+    const sfStatus = await getServiceFeeFinanceStatus(newStage);
 
     const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
 

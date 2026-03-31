@@ -1,41 +1,96 @@
-const POTENTIAL_STAGES = [
-  "inquiry", "documents_collected", "app_fee_paid", "submitted",
-  "missing_docs", "awaiting_offer", "offer_received", "upload_payment",
-  "awaiting_final", "final_acceptance", "acceptance_letter",
-  "visa_applied", "visa_approved", "student_card",
-];
+import { db, pipelineStagesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
-const CONFIRMED_STAGE = "enrolled";
-
-const EXCLUDED_COMMISSION_STAGES = [
+const LEGACY_EXCLUDED_COMMISSION = new Set([
   "rejected", "all_registered", "cancelled", "visa_reject", "refound", "100scholar",
-];
+]);
+const LEGACY_CONFIRMED_COMMISSION = new Set(["enrolled"]);
 
-const EXCLUDED_SERVICE_FEE_STAGES = [
+const LEGACY_EXCLUDED_SERVICE_FEE = new Set([
   "rejected", "all_registered", "cancelled", "refound",
-];
+]);
+const LEGACY_CONFIRMED_SERVICE_FEE = new Set(["enrolled", "100scholar", "visa_reject"]);
 
-const CONFIRMED_SERVICE_FEE_STAGES = ["100scholar", "visa_reject"];
+let stageVariantCache: Map<string, string | null> = new Map();
+let cacheTimestamp = 0;
+const CACHE_TTL = 60_000;
 
-export function getCommissionFinanceStatus(stage: string): "potential" | "confirmed" | "excluded" {
-  if (POTENTIAL_STAGES.includes(stage)) return "potential";
-  if (stage === CONFIRMED_STAGE) return "confirmed";
-  if (EXCLUDED_COMMISSION_STAGES.includes(stage)) return "excluded";
+async function loadStageVariants(): Promise<Map<string, string | null>> {
+  const now = Date.now();
+  if (now - cacheTimestamp < CACHE_TTL && stageVariantCache.size > 0) {
+    return stageVariantCache;
+  }
+
+  try {
+    const stages = await db
+      .select({ key: pipelineStagesTable.key, variant: pipelineStagesTable.variant })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.entityType, "application"));
+
+    const map = new Map<string, string | null>();
+    for (const s of stages) {
+      map.set(s.key, s.variant);
+    }
+
+    if (map.size > 0) {
+      stageVariantCache = map;
+      cacheTimestamp = now;
+    }
+    return map;
+  } catch {
+    return stageVariantCache;
+  }
+}
+
+export function clearStageFinanceCache() {
+  cacheTimestamp = 0;
+  stageVariantCache.clear();
+}
+
+function resolveFromVariant(variant: string | null | undefined): "potential" | "confirmed" | "excluded" | null {
+  if (variant === "won") return "confirmed";
+  if (variant === "partial_won") return "potential";
+  if (variant === "lost") return "excluded";
+  if (variant === "none_finance") return "excluded";
+  return null;
+}
+
+export async function getCommissionFinanceStatus(stage: string): Promise<"potential" | "confirmed" | "excluded"> {
+  const variants = await loadStageVariants();
+
+  if (variants.size > 0) {
+    const variant = variants.get(stage);
+    const result = resolveFromVariant(variant);
+    if (result !== null) return result;
+    if (variants.has(stage)) return "potential";
+  }
+
+  if (LEGACY_CONFIRMED_COMMISSION.has(stage)) return "confirmed";
+  if (LEGACY_EXCLUDED_COMMISSION.has(stage)) return "excluded";
   return "potential";
 }
 
-export function getServiceFeeFinanceStatus(stage: string): "potential" | "confirmed" | "excluded" {
-  if (POTENTIAL_STAGES.includes(stage)) return "potential";
-  if (stage === CONFIRMED_STAGE) return "confirmed";
-  if (CONFIRMED_SERVICE_FEE_STAGES.includes(stage)) return "confirmed";
-  if (EXCLUDED_SERVICE_FEE_STAGES.includes(stage)) return "excluded";
+export async function getServiceFeeFinanceStatus(stage: string): Promise<"potential" | "confirmed" | "excluded"> {
+  const variants = await loadStageVariants();
+
+  if (variants.size > 0) {
+    const variant = variants.get(stage);
+    const result = resolveFromVariant(variant);
+    if (result !== null) return result;
+    if (variants.has(stage)) return "potential";
+  }
+
+  if (LEGACY_CONFIRMED_SERVICE_FEE.has(stage)) return "confirmed";
+  if (LEGACY_EXCLUDED_SERVICE_FEE.has(stage)) return "excluded";
   return "potential";
 }
 
-export function shouldHaveCommission(stage: string): boolean {
-  return !EXCLUDED_COMMISSION_STAGES.includes(stage);
+export async function shouldHaveCommission(stage: string): Promise<boolean> {
+  const status = await getCommissionFinanceStatus(stage);
+  return status !== "excluded";
 }
 
-export function shouldHaveServiceFee(stage: string): boolean {
-  return !EXCLUDED_SERVICE_FEE_STAGES.includes(stage);
+export async function shouldHaveServiceFee(stage: string): Promise<boolean> {
+  const status = await getServiceFeeFinanceStatus(stage);
+  return status !== "excluded";
 }
