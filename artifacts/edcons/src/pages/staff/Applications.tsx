@@ -29,7 +29,7 @@ import {
   Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
   User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
   Eye, Stamp, CheckCircle, XCircle, Trophy, MessageSquare, Mail,
-  UserPlus, UserCheck2,
+  UserPlus, UserCheck2, Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -1218,6 +1218,11 @@ export default function ApplicationsPage() {
               entityLabel="applications"
               moveLabel="Move Stage"
             />
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); a.href = `${BASE_URL}/api/export/applications?season=${encodeURIComponent(season || "")}`; a.click(); }}>
+                <Download className="w-3.5 h-3.5" /> Excel
+              </Button>
+            )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> New Application
             </Button>

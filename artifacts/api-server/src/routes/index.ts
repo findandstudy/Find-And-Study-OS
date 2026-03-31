@@ -28,6 +28,7 @@ import embedRouter from "./embed";
 import publicApplyRouter from "./public-apply";
 import destinationsRouter from "./destinations";
 import quickLinksRouter from "./quickLinks";
+import exportRouter from "./export";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(embedRouter);
 router.use(publicApplyRouter);
 router.use(destinationsRouter);
 router.use(quickLinksRouter);
+router.use(exportRouter);
 
 export default router;

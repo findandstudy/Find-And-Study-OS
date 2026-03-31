@@ -2176,6 +2176,11 @@ export default function StudentsPage() {
               entityLabel="students"
               moveLabel="Move Status"
             />
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); a.href = `${BASE_URL}/api/export/students?season=${encodeURIComponent(season || "")}`; a.click(); }}>
+                <Download className="w-3.5 h-3.5" /> Excel
+              </Button>
+            )}
             <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
               <FileUp className="w-4 h-4" /> Bulk Import
             </Button>

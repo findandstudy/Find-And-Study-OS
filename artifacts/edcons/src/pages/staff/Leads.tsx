@@ -12,7 +12,7 @@ import {
   Plus, Search, Filter, Eye, TrendingUp, X, UserCheck2,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
-  MessageSquare, Mail, UserPlus,
+  MessageSquare, Mail, UserPlus, Download,
 } from "lucide-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Input } from "@/components/ui/input";
@@ -1167,6 +1167,11 @@ export default function LeadsPage() {
               moveLabel="Move Status"
             />
 
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); a.href = `${BASE_URL}/api/export/leads?season=${encodeURIComponent(season || "")}`; a.click(); }}>
+                <Download className="w-3.5 h-3.5" /> Excel
+              </Button>
+            )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Lead
             </Button>
