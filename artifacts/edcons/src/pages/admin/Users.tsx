@@ -125,7 +125,7 @@ function UsersTab() {
   const users: any[] = (usersResp as any)?.data || usersResp || [];
   const [roles, setRoles] = useState<RoleData[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en" });
+  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "" });
   const [creating, setCreating] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
@@ -173,15 +173,17 @@ function UsersTab() {
     }
     setCreating(true);
     try {
-      const { phoneCode, phone, ...rest } = createForm;
+      const { phoneCode, phone, password, ...rest } = createForm;
+      const payload: Record<string, string> = { ...rest, phone: phone ? `${phoneCode}${phone}` : "" };
+      if (password) payload.password = password;
       await customFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "" }),
+        body: JSON.stringify(payload),
       });
       toast({ title: "User created successfully" });
       setCreateOpen(false);
-      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en" });
+      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "" });
       refetch();
     } catch (err: any) {
       toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
@@ -545,6 +547,12 @@ function UsersTab() {
                 <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="555 123 4567" className="flex-1" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Password</Label>
+              <Input type="password" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="Min. 6 characters" />
+              <p className="text-[11px] text-muted-foreground">Leave empty to create without password (user can set via forgot password)</p>
             </div>
           </div>
           <DialogFooter>
