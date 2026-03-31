@@ -270,7 +270,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     if (req.body.assignedTo !== undefined) {
       if (existing.assignedToId !== null) {
         allowedFields = allowedFields.filter(f => f !== "assignedTo");
-      } else if (req.body.assignedTo !== user.id) {
+      } else if (Number(req.body.assignedTo) !== user.id) {
         allowedFields = allowedFields.filter(f => f !== "assignedTo");
       }
     }

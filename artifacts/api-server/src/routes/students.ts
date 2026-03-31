@@ -380,7 +380,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     if (req.body.assignedToId !== undefined) {
       if (existing.assignedToId !== null) {
         allowedFields = allowedFields.filter(f => f !== "assignedToId");
-      } else if (req.body.assignedToId !== req.user!.id) {
+      } else if (Number(req.body.assignedToId) !== req.user!.id) {
         allowedFields = allowedFields.filter(f => f !== "assignedToId");
       }
     }
