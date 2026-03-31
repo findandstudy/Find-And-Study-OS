@@ -223,6 +223,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [, setLoc] = useLocation();
 
   const cardBg =
     variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
@@ -244,7 +245,10 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
     >
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex justify-between items-start mb-1.5">
-          <h4 className="font-bold text-sm text-foreground line-clamp-1">
+          <h4
+            className="font-bold text-sm text-foreground line-clamp-1 hover:text-primary hover:underline cursor-pointer transition-colors"
+            onClick={(e) => { e.stopPropagation(); if (app.studentId) setLoc(`/staff/students/${app.studentId}`); }}
+          >
             {app.studentFirstName} {app.studentLastName}
           </h4>
         </div>
@@ -1307,7 +1311,7 @@ export default function ApplicationsPage() {
                     return (
                       <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/staff/applications/${app.id}`)}>
                         <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
-                        <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
+                        <TableCell className="font-medium"><span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>{app.studentFirstName} {app.studentLastName}</span></TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
