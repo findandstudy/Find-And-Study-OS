@@ -277,7 +277,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         return;
       }
 
-      await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && k.includes("document")) });
+      await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
       setUploadOpen(false);
     } finally {
       setUploading(false);
@@ -313,7 +313,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         return;
       }
 
-      await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && k.includes("document")) });
+      await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
     } finally {
       setPhotoUploading(false);
     }
