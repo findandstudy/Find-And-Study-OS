@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
+import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,24 +69,40 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const isAgent = basePath === "/agent";
   const [noteText, setNoteText] = useState("");
   const [editOpen, setEditOpen] = useState(false);
+  const [stageDocUpload, setStageDocUpload] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
   const { user: authUser } = useAuth();
 
+  const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
   const { data: app, isLoading } = useGetApplication(id);
   const { data: notes = [] } = useGetApplicationNotes(id);
   const { stages: pipelineStages } = usePipelineStages("application");
   const updateApp = useUpdateApplication();
   const addNote = useAddApplicationNote();
 
-  function handleStageChange(stage: string) {
-    updateApp.mutate(
-      { id, data: { stage } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
-          toast({ title: "Stage updated" });
-        },
+  async function handleStageChange(stage: string) {
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
+      const res = await fetch(`${BASE_URL}/api/applications/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ stage }),
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
+        toast({ title: "Stage updated" });
+        return;
       }
-    );
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        const stageLabel = pipelineStages.find(s => s.key === stage)?.label ?? stage;
+        setStageDocUpload({ targetStage: stage, targetStageLabel: stageLabel });
+      } else {
+        toast({ title: "Error", description: body.error || "Could not update stage", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Could not update stage", variant: "destructive" });
+    }
   }
 
   function handleAddNote() {
@@ -311,6 +328,18 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           }}
         />
       )}
+      {stageDocUpload && (
+        <StageDocUploadDialog
+          open={!!stageDocUpload}
+          onClose={() => setStageDocUpload(null)}
+          applicationId={id}
+          targetStage={stageDocUpload.targetStage}
+          targetStageLabel={stageDocUpload.targetStageLabel}
+          onUploaded={() => {
+            queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -332,22 +361,40 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
     scholarship: app?.scholarship || "",
     notes: app?.notes || "",
   });
+  const [docUploadDialog, setDocUploadDialog] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
+  const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-  function handleSave() {
+  async function handleSave() {
     const data: Record<string, any> = {};
     for (const [key, val] of Object.entries(form)) {
       if (val !== (app?.[key] || "")) data[key] = val || null;
     }
     if (Object.keys(data).length === 0) { onClose(); return; }
-    updateApp.mutate(
-      { id: app.id, data },
-      {
-        onSuccess: () => { onSaved(); onClose(); },
+
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
+      const res = await fetch(`${BASE_URL}/api/applications/${app.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        onSaved();
+        onClose();
+        return;
       }
-    );
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        const stageLabel = stages.find((s: any) => s.key === data.stage)?.label ?? data.stage;
+        setDocUploadDialog({ targetStage: data.stage, targetStageLabel: stageLabel });
+      }
+    } catch {
+    }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
@@ -417,6 +464,17 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {docUploadDialog && (
+      <StageDocUploadDialog
+        open={!!docUploadDialog}
+        onClose={() => setDocUploadDialog(null)}
+        applicationId={app.id}
+        targetStage={docUploadDialog.targetStage}
+        targetStageLabel={docUploadDialog.targetStageLabel}
+        onUploaded={() => { onSaved(); onClose(); }}
+      />
+    )}
+    </>
   );
 }
 

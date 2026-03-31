@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -9,6 +9,12 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
+
+const DOC_REQUIRED_STAGES = [
+  "app_fee_paid", "offer_received", "acceptance_letter",
+  "final_acceptance", "upload_payment", "visa_approved",
+  "student_card",
+];
 
 const APP_PATCH_FIELDS = [
   "stage", "universityId", "programId", "agentId", "assignedToId",
@@ -119,6 +125,10 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       totalPages: Math.ceil(Number(count) / limitNum),
     },
   });
+});
+
+router.get("/applications/doc-required-stages", requireAuth, (_req, res) => {
+  res.json(DOC_REQUIRED_STAGES);
 });
 
 router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
@@ -398,6 +408,25 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
+  }
+
+  if (updates.stage && DOC_REQUIRED_STAGES.includes(updates.stage as string)) {
+    const targetStage = updates.stage as string;
+    const existingDocs = await db.select({ id: applicationStageDocumentsTable.id })
+      .from(applicationStageDocumentsTable)
+      .where(and(
+        eq(applicationStageDocumentsTable.applicationId, id),
+        eq(applicationStageDocumentsTable.stage, targetStage),
+        eq(applicationStageDocumentsTable.isMissingDocNote, false),
+      ));
+    if (existingDocs.length === 0) {
+      res.status(422).json({
+        error: "Required documents must be uploaded before moving to this stage",
+        code: "DOCS_REQUIRED",
+        requiredStage: targetStage,
+      });
+      return;
+    }
   }
 
   const conditions = [eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)];

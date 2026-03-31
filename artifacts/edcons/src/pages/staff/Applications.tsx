@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
+import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -415,6 +416,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     programId: "", programName: "", intake: "", instructionLanguage: "",
     tuitionFee: "", notes: "",
   });
+  const [docUploadDialog, setDocUploadDialog] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -491,7 +493,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
   }
 
-  function handleSave() {
+  async function handleSave() {
     const fee = parseFloat(form.tuitionFee);
     const payload: any = {
       stage: form.stage,
@@ -506,13 +508,38 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
       tuitionFee: form.tuitionFee && !isNaN(fee) ? fee : null,
       notes: form.notes || null,
     };
-    updateApp.mutate(payload);
+
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
+      const res = await fetch(`${BASE_URL}/api/applications/${app.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        toast({ title: "Application updated" });
+        queryClient.invalidateQueries({ queryKey: ["applications"] });
+        onClose();
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        const stageLabel = stages.find(s => s.key === form.stage)?.label ?? form.stage;
+        setDocUploadDialog({ targetStage: form.stage, targetStageLabel: stageLabel });
+      } else {
+        toast({ title: "Error", description: body.error || "Failed to update", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    }
   }
 
   const selectedProgForFee = programs.find(p => String(p.id) === form.programId);
   const hasDiscountedFee = selectedProgForFee != null && selectedProgForFee.discountedFee != null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Edit Application</DialogTitle></DialogHeader>
@@ -610,6 +637,20 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {docUploadDialog && app && (
+      <StageDocUploadDialog
+        open={!!docUploadDialog}
+        onClose={() => setDocUploadDialog(null)}
+        applicationId={app.id}
+        targetStage={docUploadDialog.targetStage}
+        targetStageLabel={docUploadDialog.targetStageLabel}
+        onUploaded={() => {
+          queryClient.invalidateQueries({ queryKey: ["applications"] });
+          onClose();
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -948,6 +989,7 @@ export default function ApplicationsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1089,19 +1131,28 @@ export default function ApplicationsPage() {
     const app = allApps.find((a: any) => a.id === appId);
     if (!app || app.stage === targetStage) return;
 
-    apiFetch(`${BASE_URL}/api/applications/${appId}`, {
+    const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
+
+    fetch(`${BASE_URL}/api/applications/${appId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-csrf-token": document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "" },
+      credentials: "include",
       body: JSON.stringify({ stage: targetStage }),
-    }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
-      const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
-      toast({ title: `Application moved → ${colLabel}` });
+    }).then(async (res) => {
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["applications"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
+        toast({ title: `Application moved → ${colLabel}` });
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        setDocUploadDialog({ appId, targetStage, targetStageLabel: colLabel });
+      } else {
+        toast({ title: "Error", description: body.error || "Could not move application", variant: "destructive" });
+      }
     }).catch(() => {
       toast({ title: "Error", description: "Could not move application", variant: "destructive" });
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
     });
   };
 
@@ -1269,6 +1320,19 @@ export default function ApplicationsPage() {
       <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
       <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />
+      {docUploadDialog && (
+        <StageDocUploadDialog
+          open={!!docUploadDialog}
+          onClose={() => setDocUploadDialog(null)}
+          applicationId={docUploadDialog.appId}
+          targetStage={docUploadDialog.targetStage}
+          targetStageLabel={docUploadDialog.targetStageLabel}
+          onUploaded={() => {
+            queryClient.invalidateQueries({ queryKey: ["applications"] });
+            queryClient.invalidateQueries({ queryKey: [`/api/applications/${docUploadDialog.appId}`] });
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }
