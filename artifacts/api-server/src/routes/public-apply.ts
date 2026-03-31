@@ -159,14 +159,12 @@ async function createApplicationForStudent(studentId: number, programId: number 
     }
 
     try {
-      const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
+      const appMadeStages = await db.select({ key: pipelineStagesTable.key, label: pipelineStagesTable.label })
         .from(pipelineStagesTable)
-        .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
+        .where(eq(pipelineStagesTable.entityType, "student"));
+      const appMadeStage = appMadeStages.find(s => s.key === "done") || appMadeStages.find(s => s.label?.toLowerCase().includes("application made"));
       if (appMadeStage) {
-        const [stu] = await db.select({ status: studentsTable.status }).from(studentsTable).where(eq(studentsTable.id, studentId));
-        if (stu && (stu.status === "active" || stu.status === "inactive")) {
-          await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, studentId));
-        }
+        await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, studentId));
       }
     } catch {}
 
