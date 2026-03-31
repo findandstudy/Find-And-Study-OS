@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import OriginBadge from "@/components/OriginBadge";
 import { CountryFlag } from "@/components/CountryFlag";
+import { OriginBadge } from "@/components/OriginBadge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -440,7 +440,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
         )}
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
           {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
-          <OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} />
+          <OriginBadge originType={app.originType || "direct"} originDisplayName={app.originDisplayName} />
           {app.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
             <div className="flex items-center gap-1 ml-auto">
               <TrendingUp className="w-3 h-3 text-emerald-500" />
@@ -878,8 +878,8 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 }
 
 /* ── FilterPopover ────────────────────────────────────────── */
-type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; origin: string };
-const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "all", dateRange: "all", origin: "all" };
+type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string };
+const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "all", dateRange: "all", originType: "all" };
 
 function isDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -990,7 +990,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Origin</Label>
-          <Select value={filters.origin} onValueChange={v => onChange({ ...filters, origin: v })}>
+          <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
@@ -1008,6 +1008,18 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="unassigned">Unassigned</SelectItem>
               {staffUsersList.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Origin</Label>
+          <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="direct">Direct</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1278,7 +1290,7 @@ export default function ApplicationsPage() {
       if (filters.assignedTo === "unassigned") { if (a.assignedToId) return false; }
       else if (String(a.assignedToId) !== filters.assignedTo) return false;
     }
-    if (filters.origin !== "all" && (a.originType || "direct") !== filters.origin) return false;
+    if (filters.originType !== "all" && (a.originType || "direct") !== filters.originType) return false;
     if (filters.dateRange !== "all" && a.createdAt && !isDateInRange(a.createdAt, filters.dateRange)) return false;
     if (search) {
       const q = search.toLowerCase();

@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import OriginBadge from "@/components/OriginBadge";
+import { OriginSection } from "@/components/OriginBadge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -451,6 +451,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     <InfoRow icon={<Home className="w-4 h-4" />} label="Address" value={student?.address} />
                   </div>
                 )}
+                <div className="pt-2 border-t">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Origin</p>
+                  <OriginSection originType={(student as any)?.originType || "direct"} originDisplayName={(student as any)?.originDisplayName} originLeadId={(student as any)?.originLeadId} />
+                </div>
               </div>
 
               <div className="space-y-4">

@@ -7,7 +7,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, getCancelledStageKey } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
-import { inferOriginFromAgentId, inferOriginFromUser } from "../lib/originHelper";
+import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
 
 const router: IRouter = Router();
 
@@ -250,6 +250,16 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     }
   }
 
+  const [studentOriginRec] = await db.select({
+    originType: studentsTable.originType,
+    originEntityType: studentsTable.originEntityType,
+    originEntityId: studentsTable.originEntityId,
+    originDisplayName: studentsTable.originDisplayName,
+  }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+  const origin: OriginMeta = studentOriginRec
+    ? { originType: studentOriginRec.originType as any, originEntityType: studentOriginRec.originEntityType, originEntityId: studentOriginRec.originEntityId, originDisplayName: studentOriginRec.originDisplayName }
+    : await inferOriginFromUser(user);
+
   const [app] = await db.insert(applicationsTable).values({
     studentId, stage,
     season: season || currentYear,
@@ -275,10 +285,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     languageFee: snapshotLanguageFee,
     currency: snapshotCurrency,
     notes: notes || null,
-    originType: studentRec2?.originType || "direct",
-    originEntityType: studentRec2?.originEntityType || null,
-    originEntityId: studentRec2?.originEntityId || null,
-    originDisplayName: studentRec2?.originDisplayName || "Find And Study",
+    ...origin,
     originStudentId: parseInt(studentId, 10),
   }).returning();
 
@@ -808,6 +815,31 @@ router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES),
     isInternal: isInternal === true,
   }).returning();
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
+});
+
+router.patch("/applications/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { originType, originEntityType, originEntityId, originDisplayName } = req.body;
+  if (!originType || !["direct", "agent", "sub_agent"].includes(originType)) {
+    res.status(400).json({ error: "originType must be direct, agent, or sub_agent" });
+    return;
+  }
+  const [existing] = await db.select().from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
+
+  const oldOrigin = { originType: existing.originType, originEntityType: existing.originEntityType, originEntityId: existing.originEntityId, originDisplayName: existing.originDisplayName };
+
+  const [updated] = await db.update(applicationsTable).set({
+    originType,
+    originEntityType: originEntityType || null,
+    originEntityId: originEntityId || null,
+    originDisplayName: originDisplayName || null,
+    originLocked: true,
+  }).where(eq(applicationsTable.id, id)).returning();
+
+  await logAudit(req.user!.id, "override_origin", "application", id, { old: oldOrigin, new: { originType, originEntityType, originEntityId, originDisplayName } }, req.ip);
+  res.json(updated);
 });
 
 export default router;

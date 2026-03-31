@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
+import { OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
 import OriginBadge from "@/components/OriginBadge";
 
@@ -219,6 +220,11 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   )}
                 </div>
               )}
+
+              <div className="pt-3 border-t">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Origin</p>
+                <OriginSection originType={(app as any)?.originType || "direct"} originDisplayName={(app as any)?.originDisplayName} originStudentId={(app as any)?.originStudentId} />
+              </div>
 
               {app?.notes && (
                 <div className="pt-3 border-t">

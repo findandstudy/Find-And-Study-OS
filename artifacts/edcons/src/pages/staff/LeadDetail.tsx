@@ -23,7 +23,7 @@ import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, R
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
-import OriginBadge from "@/components/OriginBadge";
+import { OriginSection } from "@/components/OriginBadge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -335,6 +335,11 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Estimated Budget" value={lead?.estimatedValue ? `$${Number(lead.estimatedValue).toLocaleString()}` : undefined} />
                 </div>
               )}
+
+              <div className="pt-2 border-t">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Origin</p>
+                <OriginSection originType={lead?.originType || "direct"} originDisplayName={lead?.originDisplayName} />
+              </div>
 
               {lead?.notes && (
                 <div className="pt-2 border-t">

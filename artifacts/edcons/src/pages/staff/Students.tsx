@@ -12,7 +12,6 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import OriginBadge from "@/components/OriginBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,28 +29,9 @@ import {
   Trophy, XCircle, MessageSquare, Mail, Building2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
-import { BulkActionBar } from "@/components/BulkActionBar";
-import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
-import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { useDroppable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
+import { OriginBadge } from "@/components/OriginBadge";
+import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1445,7 +1425,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
           {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
-          <OriginBadge originType={student.originType} originDisplayName={student.originDisplayName} />
+          <OriginBadge originType={student.originType || "direct"} originDisplayName={student.originDisplayName} />
         </div>
       </div>
       {student.agentName && (
@@ -1818,8 +1798,8 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
   );
 }
 
-type StuFilters = { status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string; origin: string };
-const DEFAULT_STU_FILTERS: StuFilters = { status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", origin: "all" };
+type StuFilters = { status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string; originType: string };
+const DEFAULT_STU_FILTERS: StuFilters = { status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", originType: "all" };
 
 function stuIsDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -1906,7 +1886,7 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Origin</Label>
-          <Select value={filters.origin} onValueChange={v => onChange({ ...filters, origin: v })}>
+          <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
@@ -1940,6 +1920,18 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="agent">Agent</SelectItem>
               <SelectItem value="staff">Staff</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Origin</Label>
+          <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="direct">Direct</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -2056,7 +2048,7 @@ export default function StudentsPage() {
       if (filters.agent === "none") { if (s.agentId) return false; }
       else if (String(s.agentId) !== filters.agent) return false;
     }
-    if (filters.origin !== "all" && (s.originType || "direct") !== filters.origin) return false;
+    if (filters.originType !== "all" && (s.originType || "direct") !== filters.originType) return false;
     if (filters.dateRange !== "all" && s.createdAt && !stuIsDateInRange(s.createdAt, filters.dateRange)) return false;
     if (filters.followupRange !== "all") {
       if (filters.followupRange === "none") { if (s.nextFollowup) return false; }

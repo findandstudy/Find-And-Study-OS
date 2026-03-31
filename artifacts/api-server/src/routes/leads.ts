@@ -7,7 +7,7 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
-import { inferOriginFromUser, inferOriginFromAgentId, directOrigin } from "../lib/originHelper";
+import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 
 const router: IRouter = Router();
 
@@ -84,6 +84,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   }
 
   const origin = await inferOriginFromAgentId(agent.id);
+
   await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
@@ -201,7 +202,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   }
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
-    : await inferOriginFromUser(user.role, user.id, (user as any).managingAgentId);
+    : await inferOriginFromUser(user);
   const [lead] = await db.insert(leadsTable).values({
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status, email,
     phone, nationality: nationality || null,
@@ -480,6 +481,13 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       if (!existingByEmail.gpa && studentValues.gpa) mergeUpdates.gpa = studentValues.gpa;
       if (!existingByEmail.languageScore && studentValues.languageScore) mergeUpdates.languageScore = studentValues.languageScore;
       if (!existingByEmail.graduationYear && studentValues.graduationYear) mergeUpdates.graduationYear = studentValues.graduationYear;
+      if (!existingByEmail.originLeadId) mergeUpdates.originLeadId = lead.id;
+      if (existingByEmail.originType === "direct" && lead.originType !== "direct") {
+        mergeUpdates.originType = lead.originType;
+        mergeUpdates.originEntityType = lead.originEntityType;
+        mergeUpdates.originEntityId = lead.originEntityId;
+        mergeUpdates.originDisplayName = lead.originDisplayName;
+      }
 
       if (Object.keys(mergeUpdates).length > 0) {
         await db.update(studentsTable).set(mergeUpdates).where(eq(studentsTable.id, existingByEmail.id));
@@ -727,6 +735,31 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), asy
     .orderBy(asc(followUpsTable.scheduledAt))
     .limit(20);
   res.json(data);
+});
+
+router.patch("/leads/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { originType, originEntityType, originEntityId, originDisplayName } = req.body;
+  if (!originType || !["direct", "agent", "sub_agent"].includes(originType)) {
+    res.status(400).json({ error: "originType must be direct, agent, or sub_agent" });
+    return;
+  }
+  const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  const oldOrigin = { originType: existing.originType, originEntityType: existing.originEntityType, originEntityId: existing.originEntityId, originDisplayName: existing.originDisplayName };
+
+  const [updated] = await db.update(leadsTable).set({
+    originType,
+    originEntityType: originEntityType || null,
+    originEntityId: originEntityId || null,
+    originDisplayName: originDisplayName || null,
+    originLocked: true,
+  }).where(eq(leadsTable.id, id)).returning();
+
+  await logAudit(req.user!.id, "override_origin", "lead", id, { old: oldOrigin, new: { originType, originEntityType, originEntityId, originDisplayName } }, req.ip);
+  res.json(updated);
 });
 
 export default router;

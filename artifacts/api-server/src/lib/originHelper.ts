@@ -1,61 +1,115 @@
-import { db, agentsTable } from "@workspace/db";
+import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { STAFF_ROLES } from "./roles";
 
-export interface OriginMeta {
+export type OriginMeta = {
   originType: "direct" | "agent" | "sub_agent";
   originEntityType: string | null;
   originEntityId: number | null;
   originDisplayName: string | null;
-}
+};
 
-const STAFF_SET = new Set<string>(STAFF_ROLES as unknown as string[]);
+const DIRECT_ROLES = [
+  "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
+];
 
-function agentDisplayName(agent: { companyName: string | null; businessName: string | null; firstName: string; lastName: string }): string {
-  return agent.companyName || agent.businessName || `${agent.firstName} ${agent.lastName}`;
-}
-
-export async function inferOriginFromUser(userRole: string, userId: number, managingAgentId?: number | null): Promise<OriginMeta> {
-  if (STAFF_SET.has(userRole) || userRole === "student") {
-    return { originType: "direct", originEntityType: null, originEntityId: null, originDisplayName: "Find And Study" };
+export async function inferOriginFromUser(user: {
+  id: number;
+  role: string;
+  managingAgentId?: number | null;
+}): Promise<OriginMeta> {
+  if (DIRECT_ROLES.includes(user.role)) {
+    return {
+      originType: "direct",
+      originEntityType: null,
+      originEntityId: null,
+      originDisplayName: "Find And Study",
+    };
   }
 
-  if (userRole === "agent_staff") {
+  if (user.role === "agent_staff") {
+    const managingAgentId = user.managingAgentId;
     if (!managingAgentId) {
-      return { originType: "direct", originEntityType: null, originEntityId: null, originDisplayName: "Find And Study" };
+      const [staffUser] = await db
+        .select({ managingAgentId: usersTable.managingAgentId })
+        .from(usersTable)
+        .where(eq(usersTable.id, user.id));
+      if (staffUser?.managingAgentId) {
+        return inferOriginFromAgentId(staffUser.managingAgentId);
+      }
+    } else {
+      return inferOriginFromAgentId(managingAgentId);
     }
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, managingAgentId));
-    if (!agent) return { originType: "direct", originEntityType: null, originEntityId: null, originDisplayName: "Find And Study" };
-    if (agent.parentAgentId) {
-      return { originType: "sub_agent", originEntityType: "agent", originEntityId: agent.id, originDisplayName: agentDisplayName(agent) };
-    }
-    return { originType: "agent", originEntityType: "agent", originEntityId: agent.id, originDisplayName: agentDisplayName(agent) };
+    return directOrigin();
   }
 
-  if (userRole === "sub_agent") {
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
-    if (!agent) return { originType: "sub_agent", originEntityType: null, originEntityId: null, originDisplayName: null };
-    return { originType: "sub_agent", originEntityType: "agent", originEntityId: agent.id, originDisplayName: agentDisplayName(agent) };
+  if (user.role === "agent" || user.role === "sub_agent") {
+    const [agentRec] = await db
+      .select({
+        id: agentsTable.id,
+        parentAgentId: agentsTable.parentAgentId,
+        companyName: agentsTable.companyName,
+        businessName: agentsTable.businessName,
+        firstName: agentsTable.firstName,
+        lastName: agentsTable.lastName,
+        branch: agentsTable.branch,
+      })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, user.id));
+
+    if (!agentRec) return directOrigin();
+
+    return buildOriginFromAgent(agentRec);
   }
 
-  if (userRole === "agent") {
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
-    if (!agent) return { originType: "agent", originEntityType: null, originEntityId: null, originDisplayName: null };
-    return { originType: "agent", originEntityType: "agent", originEntityId: agent.id, originDisplayName: agentDisplayName(agent) };
-  }
-
-  return { originType: "direct", originEntityType: null, originEntityId: null, originDisplayName: "Find And Study" };
+  return directOrigin();
 }
 
 export async function inferOriginFromAgentId(agentId: number): Promise<OriginMeta> {
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-  if (!agent) return { originType: "agent", originEntityType: "agent", originEntityId: agentId, originDisplayName: null };
-  if (agent.parentAgentId) {
-    return { originType: "sub_agent", originEntityType: "agent", originEntityId: agent.id, originDisplayName: agentDisplayName(agent) };
-  }
-  return { originType: "agent", originEntityType: "agent", originEntityId: agent.id, originDisplayName: agentDisplayName(agent) };
+  const [agentRec] = await db
+    .select({
+      id: agentsTable.id,
+      parentAgentId: agentsTable.parentAgentId,
+      companyName: agentsTable.companyName,
+      businessName: agentsTable.businessName,
+      firstName: agentsTable.firstName,
+      lastName: agentsTable.lastName,
+      branch: agentsTable.branch,
+    })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+
+  if (!agentRec) return directOrigin();
+  return buildOriginFromAgent(agentRec);
+}
+
+function buildOriginFromAgent(agent: {
+  id: number;
+  parentAgentId: number | null;
+  companyName: string | null;
+  businessName: string | null;
+  firstName: string;
+  lastName: string;
+  branch: string | null;
+}): OriginMeta {
+  const isSubAgent = !!agent.parentAgentId;
+  const displayName =
+    agent.companyName || agent.businessName || `${agent.firstName} ${agent.lastName}`.trim();
+  const name = isSubAgent && agent.branch ? `${displayName} (${agent.branch})` : displayName;
+
+  return {
+    originType: isSubAgent ? "sub_agent" : "agent",
+    originEntityType: "agent",
+    originEntityId: agent.id,
+    originDisplayName: name,
+  };
 }
 
 export function directOrigin(): OriginMeta {
-  return { originType: "direct", originEntityType: null, originEntityId: null, originDisplayName: "Find And Study" };
+  return {
+    originType: "direct",
+    originEntityType: null,
+    originEntityId: null,
+    originDisplayName: "Find And Study",
+  };
 }
+

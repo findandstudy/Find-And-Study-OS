@@ -1,34 +1,57 @@
 import { Home, Briefcase, Users } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+type OriginType = "direct" | "agent" | "sub_agent";
+
+const ORIGIN_CONFIG: Record<OriginType, { icon: typeof Home; color: string; label: string }> = {
+  direct: {
+    icon: Home,
+    color: "bg-blue-100 text-blue-700 border-blue-200",
+    label: "Direct",
+  },
+  agent: {
+    icon: Briefcase,
+    color: "bg-violet-100 text-violet-700 border-violet-200",
+    label: "Agent",
+  },
+  sub_agent: {
+    icon: Users,
+    color: "bg-amber-100 text-amber-700 border-amber-200",
+    label: "Sub-Agent",
+  },
+};
+
 interface OriginBadgeProps {
   originType?: string | null;
   originDisplayName?: string | null;
-  className?: string;
+  size?: "sm" | "md";
 }
 
-const config: Record<string, { icon: typeof Home; label: string; bg: string; text: string; border: string }> = {
-  direct: { icon: Home, label: "Direct", bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  agent: { icon: Briefcase, label: "Agent", bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
-  sub_agent: { icon: Users, label: "Sub-Agent", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-};
-
-export default function OriginBadge({ originType, originDisplayName, className = "" }: OriginBadgeProps) {
+export function OriginBadge({ originType, originDisplayName, size = "sm" }: OriginBadgeProps) {
   if (!originType) return null;
-  const c = config[originType] || config.direct;
-  const Icon = c.icon;
+
+  const config = ORIGIN_CONFIG[originType as OriginType];
+  if (!config) return null;
+
+  const Icon = config.icon;
   const displayText = originType === "direct"
-    ? c.label
+    ? config.label
     : originDisplayName
-    ? `${c.label} · ${originDisplayName}`
-    : c.label;
+      ? `${config.label} · ${originDisplayName}`
+      : config.label;
+
+  const isSm = size === "sm";
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border max-w-[160px] ${c.bg} ${c.text} ${c.border} ${className}`}>
-            <Icon className="w-2.5 h-2.5 flex-shrink-0" />
+          <span
+            className={`inline-flex items-center gap-1 rounded-full border font-medium truncate ${config.color} ${
+              isSm ? "text-[10px] px-1.5 py-0.5 max-w-[140px]" : "text-xs px-2 py-0.5 max-w-[180px]"
+            }`}
+          >
+            <Icon className={isSm ? "w-3 h-3 shrink-0" : "w-3.5 h-3.5 shrink-0"} />
             <span className="truncate">{displayText}</span>
           </span>
         </TooltipTrigger>
@@ -39,3 +62,43 @@ export default function OriginBadge({ originType, originDisplayName, className =
     </TooltipProvider>
   );
 }
+
+export function OriginSection({
+  originType,
+  originDisplayName,
+  originLeadId,
+  originStudentId,
+}: {
+  originType?: string | null;
+  originDisplayName?: string | null;
+  originLeadId?: number | null;
+  originStudentId?: number | null;
+}) {
+  if (!originType) return null;
+
+  const config = ORIGIN_CONFIG[originType as OriginType];
+  if (!config) return null;
+
+  const Icon = config.icon;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full border font-medium px-2.5 py-1 text-xs ${config.color}`}>
+          <Icon className="w-3.5 h-3.5" />
+          {config.label}
+        </span>
+        {originDisplayName && originType !== "direct" && (
+          <span className="text-sm text-muted-foreground">{originDisplayName}</span>
+        )}
+      </div>
+      {originLeadId && (
+        <p className="text-xs text-muted-foreground">Converted from Lead #{originLeadId}</p>
+      )}
+      {originStudentId && (
+        <p className="text-xs text-muted-foreground">Inherited from Student #{originStudentId}</p>
+      )}
+    </div>
+  );
+}
+

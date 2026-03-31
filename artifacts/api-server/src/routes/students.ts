@@ -7,7 +7,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
-import { inferOriginFromUser, inferOriginFromAgentId } from "../lib/originHelper";
+import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 
 const router: IRouter = Router();
 
@@ -220,7 +220,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   const user = req.user!;
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
-    : await inferOriginFromUser(user.role, user.id, (user as any).managingAgentId);
+    : await inferOriginFromUser(user);
   const [student] = await db.insert(studentsTable).values({
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
     email: email || null,
@@ -510,6 +510,31 @@ router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (
   if (!deleted) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
   res.status(204).end();
+});
+
+router.patch("/students/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { originType, originEntityType, originEntityId, originDisplayName } = req.body;
+  if (!originType || !["direct", "agent", "sub_agent"].includes(originType)) {
+    res.status(400).json({ error: "originType must be direct, agent, or sub_agent" });
+    return;
+  }
+  const [existing] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "Student not found" }); return; }
+
+  const oldOrigin = { originType: existing.originType, originEntityType: existing.originEntityType, originEntityId: existing.originEntityId, originDisplayName: existing.originDisplayName };
+
+  const [updated] = await db.update(studentsTable).set({
+    originType,
+    originEntityType: originEntityType || null,
+    originEntityId: originEntityId || null,
+    originDisplayName: originDisplayName || null,
+    originLocked: true,
+  }).where(eq(studentsTable.id, id)).returning();
+
+  await logAudit(req.user!.id, "override_origin", "student", id, { old: oldOrigin, new: { originType, originEntityType, originEntityId, originDisplayName } }, req.ip);
+  res.json(updated);
 });
 
 export default router;
