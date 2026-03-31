@@ -1408,9 +1408,11 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
   const [, setLoc] = useLocation();
 
+  const isDirect = !student.originType || student.originType === "direct";
   const cardBg =
     variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
     variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    isDirect ? "bg-blue-50 border-blue-200 hover:border-blue-300 hover:shadow-md" :
     "bg-card border-border hover:shadow-md";
 
   function openContact(ch: "email" | "whatsapp" | "internal") {
