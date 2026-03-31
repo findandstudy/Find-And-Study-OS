@@ -77,8 +77,8 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: A
   const isAdmin = ADMIN_ROLES.includes(userRole);
 
   function getCategoryLabel(category: string): string {
-    const translated = t(`documents.appDocLabel_${category}`);
-    if (translated !== `documents.appDocLabel_${category}`) return translated;
+    const translated = t(`apply.appDocLabel_${category}`);
+    if (translated !== `apply.appDocLabel_${category}`) return translated;
     return FALLBACK_LABELS[category] || category;
   }
 
@@ -86,7 +86,7 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: A
     <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
       <h2 className="font-semibold text-foreground flex items-center gap-2">
         <FileText className="w-4 h-4 text-muted-foreground" />
-        {t("documents.applicationDocuments")}
+        {t("apply.applicationDocuments")}
       </h2>
 
       <div className="space-y-3">
