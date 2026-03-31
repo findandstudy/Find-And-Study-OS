@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
+import { RowActionsMenu } from "@/components/RowActionsMenu";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -2299,10 +2300,23 @@ export default function StudentsPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => { setSelectedIds(new Set([student.id])); setDeleteOpen(true); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
+                        <RowActionsMenu
+                          entityType="student"
+                          entityId={student.id}
+                          entityName={`${student.firstName} ${student.lastName}`}
+                          currentAgentId={student.agentId}
+                          currentAgentName={student.agentName}
+                          currentAssignedToId={student.assignedToId}
+                          staffUsersMap={staffUsersMap}
+                          staffUsersList={staffUsersList}
+                          currentUserId={user?.id}
+                          isAdmin={isAdmin}
+                          userId={student.userId}
+                          onEdit={() => setEditStudent(student)}
+                          onDelete={() => { setSelectedIds(new Set([student.id])); setDeleteOpen(true); }}
+                          onAssign={(uid) => handleAssign(student.id, uid)}
+                          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/students"] })}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}

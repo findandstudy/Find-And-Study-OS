@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
+import { RowActionsMenu } from "@/components/RowActionsMenu";
 import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -1527,10 +1528,22 @@ export default function ApplicationsPage() {
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => setEditApp(app)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                          </div>
+                          <RowActionsMenu
+                            entityType="application"
+                            entityId={app.id}
+                            entityName={`${app.studentFirstName} ${app.studentLastName}`}
+                            currentAgentId={app.agentId}
+                            currentAgentName={app.agentName}
+                            currentAssignedToId={app.assignedToId}
+                            staffUsersMap={staffUsersMap}
+                            staffUsersList={staffUsersList}
+                            currentUserId={user?.id}
+                            isAdmin={isAdmin}
+                            onEdit={() => setEditApp(app)}
+                            onDelete={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }}
+                            onAssign={(uid) => handleAssign(app.id, uid)}
+                            onRefresh={() => queryClient.invalidateQueries({ queryKey: ["applications"] })}
+                          />
                         </TableCell>
                       </TableRow>
                     );

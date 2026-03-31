@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
+import { RowActionsMenu } from "@/components/RowActionsMenu";
 import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -1371,22 +1372,22 @@ export default function LeadsPage() {
                         {formatDate(lead.createdAt)}
                       </TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setEditLead(lead)}
-                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Edit lead"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); }}
-                            className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                            title="Delete lead"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <RowActionsMenu
+                          entityType="lead"
+                          entityId={lead.id}
+                          entityName={`${lead.firstName} ${lead.lastName}`}
+                          currentAgentId={lead.agentId}
+                          currentAgentName={lead.agentName}
+                          currentAssignedToId={lead.assignedToId}
+                          staffUsersMap={staffUsersMap}
+                          staffUsersList={staffUsersList}
+                          currentUserId={user?.id}
+                          isAdmin={isAdmin}
+                          onEdit={() => setEditLead(lead)}
+                          onDelete={() => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); }}
+                          onAssign={(uid) => handleAssign(lead.id, uid)}
+                          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
