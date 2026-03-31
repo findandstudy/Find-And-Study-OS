@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, index, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -25,6 +25,7 @@ export const notesTable = pgTable("notes", {
   authorId: integer("author_id").notNull().references(() => usersTable.id, { onDelete: "restrict" }),
   resourceType: text("resource_type").notNull(),
   resourceId: integer("resource_id").notNull(),
+  isInternal: boolean("is_internal").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("notes_author_id_idx").on(table.authorId),

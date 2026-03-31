@@ -768,10 +768,15 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asy
 
 router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
+
+  const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")];
+
+  const isInternalFilter = internal === "true";
+  conditions.push(eq(notesTable.isInternal, isInternalFilter));
 
   const notes = await db
     .select({
@@ -779,11 +784,12 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), 
       content: notesTable.content,
       authorId: notesTable.authorId,
       authorName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      isInternal: notesTable.isInternal,
       createdAt: notesTable.createdAt,
     })
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
-    .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")))
+    .where(and(...conditions))
     .orderBy(desc(notesTable.createdAt))
     .limit(limitNum)
     .offset(offset);
@@ -792,13 +798,14 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), 
 
 router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const { content } = req.body;
+  const { content, isInternal } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
   const [note] = await db.insert(notesTable).values({
     content: String(content).slice(0, 5000),
     authorId: req.user!.id,
     resourceType: "application",
     resourceId: id,
+    isInternal: isInternal === true,
   }).returning();
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
 });
