@@ -29,7 +29,7 @@ import {
   Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
   User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
   Eye, Stamp, CheckCircle, XCircle, Trophy, MessageSquare, Mail,
-  UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe,
+  UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe, DollarSign,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -303,6 +303,88 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
   );
 }
 
+function ProgramInfoPopup({ programId, onClose }: { programId: number; onClose: () => void }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["program-info", programId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder?programId=${programId}&limit=1`),
+    enabled: !!programId,
+  });
+  const p = Array.isArray(data?.data) ? data.data[0] : Array.isArray(data) ? data[0] : null;
+
+  const fmtCur = (v: any, cur = "USD") => v != null && v !== "" ? `$${Number(v).toLocaleString()}` : null;
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+        ) : p ? (
+          <>
+            <DialogHeader>
+              <div className="flex items-start gap-3">
+                <div className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
+                  {p.universityLogoUrl ? (
+                    <img src={p.universityLogoUrl} alt={p.universityName} className="w-full h-full object-contain p-1" />
+                  ) : (
+                    <Building2 className="w-7 h-7 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-muted-foreground">{p.universityName}</p>
+                  <DialogTitle className="text-lg">{p.name}</DialogTitle>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {p.degree && <Badge variant="secondary" className="text-xs">{p.degree}</Badge>}
+                    {p.universityStatus && (
+                      <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
+                        {p.universityStatus}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="space-y-4 mt-3">
+              <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2"><GraduationCap className="w-4 h-4 text-primary" /> Program Details</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-muted-foreground text-xs">Program Name</span><p className="font-medium">{p.name}</p></div>
+                  {p.degree && <div><span className="text-muted-foreground text-xs">Degree / Level</span><p className="font-medium">{p.degree}</p></div>}
+                  {p.language && <div><span className="text-muted-foreground text-xs">Language</span><p className="font-medium">{p.language}</p></div>}
+                  {p.duration && <div><span className="text-muted-foreground text-xs">Duration</span><p className="font-medium">{p.duration}</p></div>}
+                  {p.intakes && <div><span className="text-muted-foreground text-xs">Intakes</span><p className="font-medium">{p.intakes}</p></div>}
+                  {p.field && <div><span className="text-muted-foreground text-xs">Field of Study</span><p className="font-medium">{p.field}</p></div>}
+                </div>
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> University</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {p.universityName && <div><span className="text-muted-foreground text-xs">University</span><p className="font-medium">{p.universityName}</p></div>}
+                  {p.universityCountry && <div><span className="text-muted-foreground text-xs">Country</span><p className="font-medium">{p.universityCountry}</p></div>}
+                  {p.universityCity && <div><span className="text-muted-foreground text-xs">City</span><p className="font-medium">{p.universityCity}</p></div>}
+                  {p.universityStatus && <div><span className="text-muted-foreground text-xs">Status</span><p className="font-medium">{p.universityStatus}</p></div>}
+                </div>
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> Fees & Finance</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {fmtCur(p.tuitionFee) && <div><span className="text-muted-foreground text-xs">Tuition Fee</span><p className="font-medium">{fmtCur(p.tuitionFee)}</p></div>}
+                  {p.feeType && <div><span className="text-muted-foreground text-xs">Fee Type</span><p className="font-medium">{p.feeType}</p></div>}
+                  {fmtCur(p.applicationFee) && <div><span className="text-muted-foreground text-xs">Application Fee</span><p className="font-medium">{fmtCur(p.applicationFee)}</p></div>}
+                  {fmtCur(p.depositFee) && <div><span className="text-muted-foreground text-xs">Deposit Fee</span><p className="font-medium">{fmtCur(p.depositFee)}</p></div>}
+                  {fmtCur(p.serviceFeeAmount) && <div><span className="text-muted-foreground text-xs">Service Fee</span><p className="font-medium">{fmtCur(p.serviceFeeAmount)}</p></div>}
+                  {fmtCur(p.commissionAmount) && <div><span className="text-muted-foreground text-xs">Commission</span><p className="font-medium text-emerald-600">{fmtCur(p.commissionAmount)}</p></div>}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground py-8 text-center">Program information not available.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── DraggableAppCard ─────────────────────────────────────── */
 function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
@@ -310,6 +392,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
   const [uniInfoOpen, setUniInfoOpen] = useState(false);
+  const [progInfoId, setProgInfoId] = useState<number | null>(null);
   const [, setLoc] = useLocation();
 
   const cardBg =
@@ -348,7 +431,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
         {app.programName && (
           <p
             className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md hover:bg-primary/15 hover:underline cursor-pointer transition-colors"
-            onClick={(e) => { e.stopPropagation(); if (app.programId) setLoc(`/staff/course-finder?programId=${app.programId}`); }}
+            onClick={(e) => { e.stopPropagation(); if (app.programId) setProgInfoId(app.programId); }}
           >{app.programName}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
@@ -427,6 +510,9 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       />
       {uniInfoOpen && app.universityId && (
         <UniversityInfoPopup universityId={app.universityId} onClose={() => setUniInfoOpen(false)} />
+      )}
+      {progInfoId && (
+        <ProgramInfoPopup programId={progInfoId} onClose={() => setProgInfoId(null)} />
       )}
     </div>
   );
@@ -1101,6 +1187,7 @@ export default function ApplicationsPage() {
   const [editApp, setEditApp] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [tableUniInfoId, setTableUniInfoId] = useState<number | null>(null);
+  const [tableProgInfoId, setTableProgInfoId] = useState<number | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -1425,7 +1512,7 @@ export default function ApplicationsPage() {
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : (app.universityName || "-")}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/course-finder?programId=${app.programId}`); }}>{app.programName || "-"}</span> : (app.programName || "-")}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>{app.programName || "-"}</span> : (app.programName || "-")}</TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
                         <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>
@@ -1480,6 +1567,9 @@ export default function ApplicationsPage() {
       )}
       {tableUniInfoId && (
         <UniversityInfoPopup universityId={tableUniInfoId} onClose={() => setTableUniInfoId(null)} />
+      )}
+      {tableProgInfoId && (
+        <ProgramInfoPopup programId={tableProgInfoId} onClose={() => setTableProgInfoId(null)} />
       )}
     </DashboardLayout>
   );
