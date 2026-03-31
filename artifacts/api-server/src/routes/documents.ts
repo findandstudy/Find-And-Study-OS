@@ -190,9 +190,29 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
+  const [existingDoc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   const [doc] = await db.update(documentsTable).set(updates).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt))).returning();
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
   await logAudit(req.user!.id, "update_document", "document", id, updates, req.ip);
+
+  if (updates.status && existingDoc && updates.status !== existingDoc.status) {
+    const recipientIds: number[] = [];
+    if (doc.studentId) {
+      const [student] = await db.select({ userId: studentsTable.userId, assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+      if (student?.userId) recipientIds.push(student.userId);
+      if (student?.assignedToId) recipientIds.push(student.assignedToId);
+    }
+    dispatchNotification({
+      event: "document.status_changed",
+      title: "Document Status Updated",
+      body: `Document "${doc.name}" status changed to "${updates.status}".`,
+      actionUrl: doc.studentId ? `/staff/students/${doc.studentId}` : `/staff/documents`,
+      icon: "FileCheck",
+      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+      templateVars: { documentName: doc.name, documentType: doc.type || "", newStatus: String(updates.status) },
+    }).catch(() => {});
+  }
+
   res.json(doc);
 });
 

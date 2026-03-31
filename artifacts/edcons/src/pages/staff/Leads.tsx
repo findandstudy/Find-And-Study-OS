@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import OriginBadge from "@/components/OriginBadge";
 import { CountryFlag } from "@/components/CountryFlag";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -159,6 +160,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || "No contact info"}</p>
+        <OriginBadge originType={lead.originType} originDisplayName={lead.originDisplayName} className="mt-1" />
         {lead.interestedProgram && (
           <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
             {lead.interestedProgram}
@@ -328,8 +330,8 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
 
 
 /* ── FilterPopover ────────────────────────────────────────── */
-type LeadFilters = { source: string; status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string };
-const DEFAULT_LEAD_FILTERS: LeadFilters = { source: "all", status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all" };
+type LeadFilters = { source: string; status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string; origin: string };
+const DEFAULT_LEAD_FILTERS: LeadFilters = { source: "all", status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", origin: "all" };
 
 function leadIsDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -429,6 +431,19 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="none">No Agent</SelectItem>
               {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Origin</Label>
+          <Select value={filters.origin} onValueChange={v => onChange({ ...filters, origin: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="direct">Direct</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -921,6 +936,7 @@ export default function LeadsPage() {
       if (filters.agent === "none") { if (l.agentId) return false; }
       else if (String(l.agentId) !== filters.agent) return false;
     }
+    if (filters.origin !== "all" && (l.originType || "direct") !== filters.origin) return false;
     if (filters.dateRange !== "all" && l.createdAt && !leadIsDateInRange(l.createdAt, filters.dateRange)) return false;
     if (filters.followupRange !== "all") {
       if (filters.followupRange === "none") { if (l.nextFollowup) return false; }
@@ -1306,7 +1322,10 @@ export default function LeadsPage() {
                         className="font-medium"
                         onClick={() => setLocation(`/staff/leads/${lead.id}`)}
                       >
-                        {lead.firstName} {lead.lastName}
+                        <div className="flex items-center gap-1.5">
+                          <span>{lead.firstName} {lead.lastName}</span>
+                          <OriginBadge originType={lead.originType} originDisplayName={lead.originDisplayName} />
+                        </div>
                       </TableCell>
                       <TableCell
                         className="text-muted-foreground"

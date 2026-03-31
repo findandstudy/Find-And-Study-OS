@@ -7,6 +7,7 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { inferOriginFromUser, inferOriginFromAgentId, directOrigin } from "../lib/originHelper";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     res.status(400).json({ error: "Invalid email address" });
     return;
   }
+  const origin = directOrigin();
   const [lead] = await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
@@ -54,6 +56,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
     source: "website",
     status: "new",
+    ...origin,
   }).returning();
   res.status(201).json({ success: true, message: "Inquiry submitted successfully", leadId: lead.id });
 });
@@ -80,6 +83,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     return;
   }
 
+  const origin = await inferOriginFromAgentId(agent.id);
   await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
@@ -88,6 +92,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     source: "web_form",
     status: "new",
     agentId: agent.id,
+    ...origin,
   });
 
   const accept = req.headers.accept || "";
@@ -100,7 +105,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { status, search, season, page = "1", limit = "20", agentId: agentIdFilter } = req.query as Record<string, string>;
+  const { status, search, season, page = "1", limit = "20", agentId: agentIdFilter, originType: originFilter } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -109,6 +114,9 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
   if (agentIdFilter) conditions.push(eq(leadsTable.agentId, parseInt(agentIdFilter, 10)));
+  if (originFilter && ["direct", "agent", "sub_agent"].includes(originFilter)) {
+    conditions.push(eq(leadsTable.originType, originFilter));
+  }
 
   if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
@@ -191,6 +199,9 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     const agentRec = await getAgentRecord(user.id, user.role);
     resolvedAgentId = agentRec?.id || null;
   }
+  const origin = resolvedAgentId
+    ? await inferOriginFromAgentId(resolvedAgentId)
+    : await inferOriginFromUser(user.role, user.id, (user as any).managingAgentId);
   const [lead] = await db.insert(leadsTable).values({
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status, email,
     phone, nationality: nationality || null,
@@ -200,6 +211,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     assignedToId: assignedTo || null,
     agentId: resolvedAgentId,
     season: season || currentYear,
+    ...origin,
   }).returning();
   await logAudit(user.id, "create_lead", "lead", lead.id, {}, req.ip);
 
@@ -286,6 +298,16 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       }
     }
   }
+  if (isAdmin && req.body.originType !== undefined) {
+    const validOrigin = ["direct", "agent", "sub_agent"];
+    if (validOrigin.includes(req.body.originType)) {
+      updates["originType"] = req.body.originType;
+      updates["originEntityType"] = req.body.originEntityType ?? null;
+      updates["originEntityId"] = req.body.originEntityId ?? null;
+      updates["originDisplayName"] = req.body.originDisplayName ?? null;
+      updates["originLocked"] = true;
+    }
+  }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -318,6 +340,30 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       recipientUserIds: [updates.assignedToId as number],
       templateVars: { firstName: lead.firstName, lastName: lead.lastName },
     }).catch(() => {});
+  }
+
+  if (updates.agentId !== undefined && updates.agentId !== existing.agentId) {
+    if (updates.agentId) {
+      dispatchNotification({
+        event: "lead.agent_linked",
+        title: "Lead Linked to Agent",
+        body: `Lead ${lead.firstName} ${lead.lastName} has been linked to an agent.`,
+        actionUrl: `/staff/leads/${lead.id}`,
+        icon: "Building2",
+        recipientUserIds: lead.assignedToId ? [lead.assignedToId] : undefined,
+        templateVars: { firstName: lead.firstName, lastName: lead.lastName },
+      }).catch(() => {});
+    } else {
+      dispatchNotification({
+        event: "lead.agent_unlinked",
+        title: "Lead Unlinked from Agent",
+        body: `Lead ${lead.firstName} ${lead.lastName} has been unlinked from their agent.`,
+        actionUrl: `/staff/leads/${lead.id}`,
+        icon: "Unlink",
+        recipientUserIds: lead.assignedToId ? [lead.assignedToId] : undefined,
+        templateVars: { firstName: lead.firstName, lastName: lead.lastName },
+      }).catch(() => {});
+    }
   }
 
   res.json(lead);
@@ -409,6 +455,12 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     graduationYear: aiData.graduationYear ? parseInt(String(aiData.graduationYear), 10) || null : null,
     gpa: s(aiData.gpa) || null,
     languageScore: s(aiData.languageScore) || null,
+    originType: lead.originType || "direct",
+    originEntityType: lead.originEntityType || null,
+    originEntityId: lead.originEntityId || null,
+    originDisplayName: lead.originDisplayName || "Find And Study",
+    originLocked: true,
+    originLeadId: lead.id,
   };
 
   if (lead.email) {
@@ -479,7 +531,11 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       .where(and(eq(applicationsTable.studentId, studentId), eq(applicationsTable.programId, programId)));
     if (existingApp) return;
 
-    const [studentRec] = await db.select({ assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId }).from(studentsTable).where(eq(studentsTable.id, studentId));
+    const [studentRec] = await db.select({
+      assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId,
+      originType: studentsTable.originType, originEntityType: studentsTable.originEntityType,
+      originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
+    }).from(studentsTable).where(eq(studentsTable.id, studentId));
 
     await db.insert(applicationsTable).values({
       studentId,
@@ -497,6 +553,11 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       season: "2026",
       assignedToId: studentRec?.assignedToId || null,
       agentId: studentRec?.agentId || null,
+      originType: studentRec?.originType || "direct",
+      originEntityType: studentRec?.originEntityType || null,
+      originEntityId: studentRec?.originEntityId || null,
+      originDisplayName: studentRec?.originDisplayName || "Find And Study",
+      originStudentId: studentId,
     });
   } catch (err) {
     console.error("Failed to create application from submission:", err);

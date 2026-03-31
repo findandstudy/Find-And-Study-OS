@@ -1,4 +1,5 @@
 import { pgTable, text, serial, timestamp, integer, numeric, boolean, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -23,6 +24,11 @@ export const leadsTable = pgTable("leads", {
   notes: text("notes"),
   estimatedValue: numeric("estimated_value", { precision: 12, scale: 2 }),
   convertedStudentId: integer("converted_student_id").references(() => studentsTable.id, { onDelete: "set null" }),
+  originType: text("origin_type").default("direct"),
+  originEntityType: text("origin_entity_type"),
+  originEntityId: integer("origin_entity_id"),
+  originDisplayName: text("origin_display_name"),
+  originLocked: boolean("origin_locked").default(false),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -31,6 +37,7 @@ export const leadsTable = pgTable("leads", {
   index("leads_assigned_to_id_idx").on(table.assignedToId),
   index("leads_status_idx").on(table.status),
   index("leads_season_idx").on(table.season),
+  index("leads_origin_type_idx").on(table.originType),
 ]);
 
 export const followUpsTable = pgTable("follow_ups", {

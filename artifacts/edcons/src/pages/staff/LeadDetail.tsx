@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil } from "lucide-react";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
+import OriginBadge from "@/components/OriginBadge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -554,6 +555,45 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     <UserPlus className="w-3.5 h-3.5 mr-1.5" />
                     {assigning ? "Assigning..." : "Assign to Me"}
                   </Button>
+                </div>
+              )}
+            </div>
+            )}
+
+            {!isAgent && (
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                Origin
+              </h2>
+              {isLoading ? (
+                <Skeleton className="h-8 w-32" />
+              ) : (
+                <div className="space-y-2">
+                  <OriginBadge originType={lead?.originType || "direct"} originDisplayName={lead?.originDisplayName} className="text-xs" />
+                  {isAdmin && (
+                    <Select
+                      value={lead?.originType || "direct"}
+                      onValueChange={(val) => {
+                        updateLead.mutate({
+                          id: lead!.id,
+                          data: {
+                            originType: val,
+                            originDisplayName: val === "direct" ? "Find And Study" : null,
+                          },
+                        } as any);
+                      }}
+                    >
+                      <SelectTrigger className="w-full h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="direct">Direct</SelectItem>
+                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               )}
             </div>

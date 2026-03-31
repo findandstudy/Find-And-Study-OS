@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import OriginBadge from "@/components/OriginBadge";
 import { CountryFlag } from "@/components/CountryFlag";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -435,10 +436,11 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
             onClick={(e) => { e.stopPropagation(); if (app.programId) setProgInfoId(app.programId); }}
           >{app.programName}</p>
         )}
-        <div className="mt-2 flex items-center justify-between">
+        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
           {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
+          <OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} />
           {app.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 ml-auto">
               <TrendingUp className="w-3 h-3 text-emerald-500" />
               <span className="text-xs font-semibold text-emerald-600">{formatCurrency(parseFloat(app.commissionAmount))}</span>
             </div>
@@ -874,8 +876,8 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 }
 
 /* ── FilterPopover ────────────────────────────────────────── */
-type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string };
-const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "all", dateRange: "all" };
+type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; origin: string };
+const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "all", dateRange: "all", origin: "all" };
 
 function isDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -981,6 +983,18 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="none">No Agent (Staff)</SelectItem>
               {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Origin</Label>
+          <Select value={filters.origin} onValueChange={v => onChange({ ...filters, origin: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="direct">Direct</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1262,6 +1276,7 @@ export default function ApplicationsPage() {
       if (filters.assignedTo === "unassigned") { if (a.assignedToId) return false; }
       else if (String(a.assignedToId) !== filters.assignedTo) return false;
     }
+    if (filters.origin !== "all" && (a.originType || "direct") !== filters.origin) return false;
     if (filters.dateRange !== "all" && a.createdAt && !isDateInRange(a.createdAt, filters.dateRange)) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -1509,7 +1524,7 @@ export default function ApplicationsPage() {
                     return (
                       <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/staff/applications/${app.id}`)}>
                         <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
-                        <TableCell className="font-medium"><span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>{app.studentFirstName} {app.studentLastName}</span></TableCell>
+                        <TableCell className="font-medium"><div className="flex items-center gap-1.5"><span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>{app.studentFirstName} {app.studentLastName}</span><OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} /></div></TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : (app.universityName || "-")}</TableCell>

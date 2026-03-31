@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { useAuth } from "@/hooks/use-auth";
+import OriginBadge from "@/components/OriginBadge";
 
 const STUDY_LEVELS = [
   { value: "associate", label: "Associate" },
@@ -71,6 +72,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [stageDocUpload, setStageDocUpload] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
   const { user: authUser } = useAuth();
+  const isAdmin = authUser && ["super_admin", "admin", "manager"].includes(authUser.role);
 
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
   const { data: app, isLoading } = useGetApplication(id);
@@ -300,6 +302,45 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   hideWhatsApp={isAgent}
                 />
               </div>
+            )}
+
+            {!isAgent && (
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                Origin
+              </h2>
+              {isLoading ? (
+                <Skeleton className="h-8 w-32" />
+              ) : (
+                <div className="space-y-2">
+                  <OriginBadge originType={app?.originType || "direct"} originDisplayName={app?.originDisplayName} className="text-xs" />
+                  {isAdmin && (
+                    <Select
+                      value={app?.originType || "direct"}
+                      onValueChange={(val) => {
+                        updateApp.mutate({
+                          id: app!.id,
+                          data: {
+                            originType: val,
+                            originDisplayName: val === "direct" ? "Find And Study" : null,
+                          },
+                        } as any);
+                      }}
+                    >
+                      <SelectTrigger className="w-full h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="direct">Direct</SelectItem>
+                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+            </div>
             )}
 
             {app?.studentId && (

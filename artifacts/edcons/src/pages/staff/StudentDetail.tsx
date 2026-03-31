@@ -21,7 +21,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import OriginBadge from "@/components/OriginBadge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -116,6 +118,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   }, [documents]);
 
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadType, setUploadType] = useState("passport");
@@ -481,6 +485,49 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     </div>
                   )}
                 </div>
+
+                {!isAgent && (
+                <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <Globe className="w-4 h-4" />
+                    Origin
+                  </h2>
+                  {isLoading ? (
+                    <Skeleton className="h-8 w-32" />
+                  ) : (
+                    <div className="space-y-2">
+                      <OriginBadge originType={student?.originType || "direct"} originDisplayName={student?.originDisplayName} className="text-xs" />
+                      {isAdmin && (
+                        <Select
+                          value={student?.originType || "direct"}
+                          onValueChange={(val) => {
+                            customFetch(`/api/students/${id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                originType: val,
+                                originDisplayName: val === "direct" ? "Find And Study" : null,
+                              }),
+                            }).then(() => {
+                              qc.invalidateQueries({ queryKey: ["getStudent"] });
+                              toast({ title: "Origin updated" });
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="w-full h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="direct">Direct</SelectItem>
+                            <SelectItem value="agent">Agent</SelectItem>
+                            <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )}
+                </div>
+                )}
               </div>
             </div>
 

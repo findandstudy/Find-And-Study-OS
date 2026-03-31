@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { studentsTable } from "./students";
@@ -33,6 +33,12 @@ export const applicationsTable = pgTable("applications", {
   languageFee: real("language_fee"),
   currency: text("currency").default("USD"),
   notes: text("notes"),
+  originType: text("origin_type").default("direct"),
+  originEntityType: text("origin_entity_type"),
+  originEntityId: integer("origin_entity_id"),
+  originDisplayName: text("origin_display_name"),
+  originLocked: boolean("origin_locked").default(false),
+  originStudentId: integer("origin_student_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -44,6 +50,7 @@ export const applicationsTable = pgTable("applications", {
   index("applications_assigned_to_id_idx").on(table.assignedToId),
   index("applications_stage_idx").on(table.stage),
   index("applications_season_idx").on(table.season),
+  index("applications_origin_type_idx").on(table.originType),
 ]);
 
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });

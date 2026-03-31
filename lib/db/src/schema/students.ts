@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -32,6 +32,12 @@ export const studentsTable = pgTable("students", {
   photoUrl: text("photo_url"),
   notes: text("notes"),
   nextFollowup: timestamp("next_followup", { withTimezone: true }),
+  originType: text("origin_type").default("direct"),
+  originEntityType: text("origin_entity_type"),
+  originEntityId: integer("origin_entity_id"),
+  originDisplayName: text("origin_display_name"),
+  originLocked: boolean("origin_locked").default(false),
+  originLeadId: integer("origin_lead_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -42,6 +48,7 @@ export const studentsTable = pgTable("students", {
   index("students_status_idx").on(table.status),
   index("students_season_idx").on(table.season),
   index("students_user_id_idx").on(table.userId),
+  index("students_origin_type_idx").on(table.originType),
 ]);
 
 export const insertStudentSchema = createInsertSchema(studentsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });

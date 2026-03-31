@@ -7,6 +7,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, getCancelledStageKey } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { inferOriginFromAgentId, inferOriginFromUser } from "../lib/originHelper";
 
 const router: IRouter = Router();
 
@@ -59,7 +60,7 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
 }
 
 router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const { studentId, agentId, stage, season, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { studentId, agentId, stage, season, page = "1", limit = "20", originType: originFilter } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -70,6 +71,9 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   const conditions = [isNull(applicationsTable.deletedAt)];
 
   if (season) conditions.push(eq(applicationsTable.season, season));
+  if (originFilter && ["direct", "agent", "sub_agent"].includes(originFilter)) {
+    conditions.push(eq(applicationsTable.originType, originFilter));
+  }
 
   if (isStaff) {
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
@@ -191,7 +195,12 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       return;
     }
   }
-  const [studentRec2] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+  const [studentRec2] = await db.select({
+    firstName: studentsTable.firstName, lastName: studentsTable.lastName,
+    assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId,
+    originType: studentsTable.originType, originEntityType: studentsTable.originEntityType,
+    originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
+  }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
   const studentFullName = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : null;
 
   let snapshotTuitionFee = tuitionFee ? Number(tuitionFee) : null;
@@ -266,6 +275,11 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     languageFee: snapshotLanguageFee,
     currency: snapshotCurrency,
     notes: notes || null,
+    originType: studentRec2?.originType || "direct",
+    originEntityType: studentRec2?.originEntityType || null,
+    originEntityId: studentRec2?.originEntityId || null,
+    originDisplayName: studentRec2?.originDisplayName || "Find And Study",
+    originStudentId: parseInt(studentId, 10),
   }).returning();
 
   const commissionBaseFee = (snapshotDiscountedFee != null && !isNaN(snapshotDiscountedFee))
@@ -438,6 +452,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   for (const key of allowedFields) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
+  if (isAdmin && req.body.originType !== undefined) {
+    const validOrigin = ["direct", "agent", "sub_agent"];
+    if (validOrigin.includes(req.body.originType)) {
+      updates["originType"] = req.body.originType;
+      updates["originEntityType"] = req.body.originEntityType ?? null;
+      updates["originEntityId"] = req.body.originEntityId ?? null;
+      updates["originDisplayName"] = req.body.originDisplayName ?? null;
+      updates["originLocked"] = true;
+    }
+  }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -461,6 +485,8 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       return;
     }
   }
+
+  const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   const conditions = [eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)];
   if (!isStaff) {
@@ -570,6 +596,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const sName3 = studentRec3 ? `${studentRec3.firstName || ""} ${studentRec3.lastName || ""}`.trim() : "";
     const recipientIds: number[] = [];
     if (studentRec3?.userId) recipientIds.push(studentRec3.userId);
+    if (app.assignedToId) recipientIds.push(app.assignedToId);
 
     dispatchNotification({
       event: "application.stage_changed",
@@ -580,6 +607,46 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
       templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageStr },
     }).catch(() => {});
+  }
+
+  if (updates.assignedToId && preUpdateApp && updates.assignedToId !== preUpdateApp.assignedToId) {
+    const [studentRec4] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+    const sName4 = studentRec4 ? `${studentRec4.firstName || ""} ${studentRec4.lastName || ""}`.trim() : "student";
+    dispatchNotification({
+      event: "application.assigned",
+      title: "Application Assigned to You",
+      body: `Application for ${sName4} — ${app.universityName || "University"} has been assigned to you.`,
+      actionUrl: `/staff/applications/${app.id}`,
+      icon: "UserCheck",
+      recipientUserIds: [updates.assignedToId as number],
+      templateVars: { studentName: sName4, universityName: app.universityName || "", programName: app.programName || "" },
+    }).catch(() => {});
+  }
+
+  if (updates.agentId !== undefined && preUpdateApp && updates.agentId !== preUpdateApp.agentId) {
+    const [studentRec5] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+    const sName5 = studentRec5 ? `${studentRec5.firstName || ""} ${studentRec5.lastName || ""}`.trim() : "student";
+    if (updates.agentId) {
+      dispatchNotification({
+        event: "application.agent_linked",
+        title: "Application Linked to Agent",
+        body: `Application for ${sName5} — ${app.universityName || "University"} has been linked to an agent.`,
+        actionUrl: `/staff/applications/${app.id}`,
+        icon: "Building2",
+        recipientUserIds: app.assignedToId ? [app.assignedToId] : undefined,
+        templateVars: { studentName: sName5, universityName: app.universityName || "" },
+      }).catch(() => {});
+    } else {
+      dispatchNotification({
+        event: "application.agent_unlinked",
+        title: "Application Unlinked from Agent",
+        body: `Application for ${sName5} — ${app.universityName || "University"} has been unlinked from their agent.`,
+        actionUrl: `/staff/applications/${app.id}`,
+        icon: "Unlink",
+        recipientUserIds: app.assignedToId ? [app.assignedToId] : undefined,
+        templateVars: { studentName: sName5, universityName: app.universityName || "" },
+      }).catch(() => {});
+    }
   }
 
   res.json(app);

@@ -7,6 +7,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { inferOriginFromUser, inferOriginFromAgentId } from "../lib/originHelper";
 
 const router: IRouter = Router();
 
@@ -97,7 +98,7 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
 
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { agentId, status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { agentId, status, search, season, page = "1", limit = "20", originType: originFilter } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -108,6 +109,9 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   if (status) conditions.push(eq(studentsTable.status, status));
   if (agentId && STAFF_ROLES.includes(user.role as any)) {
     conditions.push(eq(studentsTable.agentId, parseInt(agentId, 10)));
+  }
+  if (originFilter && ["direct", "agent", "sub_agent"].includes(originFilter)) {
+    conditions.push(eq(studentsTable.originType, originFilter));
   }
   if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
@@ -213,6 +217,10 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     resolvedAgentId = agentRec.id;
   }
 
+  const user = req.user!;
+  const origin = resolvedAgentId
+    ? await inferOriginFromAgentId(resolvedAgentId)
+    : await inferOriginFromUser(user.role, user.id, (user as any).managingAgentId);
   const [student] = await db.insert(studentsTable).values({
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
     email: email || null,
@@ -233,6 +241,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     gpa: gpa || null,
     languageScore: languageScore || null,
     season: season || String(new Date().getFullYear()),
+    ...origin,
   }).returning();
 
   await logAudit(req.user!.id, "create_student", "student", student.id, { firstName, lastName }, req.ip);
@@ -256,6 +265,8 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
     return;
   }
 
+  const bulkUser = req.user!;
+  const bulkOrigin = await inferOriginFromUser(bulkUser.role, bulkUser.id, (bulkUser as any).managingAgentId);
   const inserted: any[] = [];
   const errors: any[] = [];
 
@@ -293,6 +304,7 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
         graduationYear: s.graduationYear ? parseInt(String(s.graduationYear), 10) : null,
         gpa: s.gpa || null,
         languageScore: s.languageScore || null,
+        ...bulkOrigin,
       }).returning();
       inserted.push(student);
     } catch (err: any) {
@@ -389,6 +401,16 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   for (const key of allowedFields) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
+  if (isAdmin && req.body.originType !== undefined) {
+    const validOrigin = ["direct", "agent", "sub_agent"];
+    if (validOrigin.includes(req.body.originType)) {
+      updates["originType"] = req.body.originType;
+      updates["originEntityType"] = req.body.originEntityType ?? null;
+      updates["originEntityId"] = req.body.originEntityId ?? null;
+      updates["originDisplayName"] = req.body.originDisplayName ?? null;
+      updates["originLocked"] = true;
+    }
+  }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -412,8 +434,44 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
       actionUrl: `/staff/students/${student.id}`,
       icon: "UserCheck",
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+      templateVars: { firstName: student.firstName, lastName: student.lastName, oldStatus: existing.status || "", newStatus: String(updates.status) },
+    }).catch(() => {});
+  }
+
+  if (updates.assignedToId && updates.assignedToId !== existing.assignedToId) {
+    dispatchNotification({
+      event: "student.assigned",
+      title: "Student Assigned to You",
+      body: `Student ${student.firstName} ${student.lastName} has been assigned to you.`,
+      actionUrl: `/staff/students/${student.id}`,
+      icon: "UserCheck",
+      recipientUserIds: [updates.assignedToId as number],
       templateVars: { firstName: student.firstName, lastName: student.lastName },
     }).catch(() => {});
+  }
+
+  if (updates.agentId !== undefined && updates.agentId !== existing.agentId) {
+    if (updates.agentId) {
+      dispatchNotification({
+        event: "student.agent_linked",
+        title: "Student Linked to Agent",
+        body: `Student ${student.firstName} ${student.lastName} has been linked to an agent.`,
+        actionUrl: `/staff/students/${student.id}`,
+        icon: "Building2",
+        recipientUserIds: student.assignedToId ? [student.assignedToId] : undefined,
+        templateVars: { firstName: student.firstName, lastName: student.lastName },
+      }).catch(() => {});
+    } else {
+      dispatchNotification({
+        event: "student.agent_unlinked",
+        title: "Student Unlinked from Agent",
+        body: `Student ${student.firstName} ${student.lastName} has been unlinked from their agent.`,
+        actionUrl: `/staff/students/${student.id}`,
+        icon: "Unlink",
+        recipientUserIds: student.assignedToId ? [student.assignedToId] : undefined,
+        templateVars: { firstName: student.firstName, lastName: student.lastName },
+      }).catch(() => {});
+    }
   }
 
   res.json(student);

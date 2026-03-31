@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Bell, Check, CheckCheck, X, MessageCircle, FileText,
-  Users, DollarSign, AlertCircle, Megaphone, Mail, ChevronRight
+  Users, DollarSign, AlertCircle, Megaphone, Mail, ChevronRight,
+  UserCheck, Building2, FileCheck, Unlink,
 } from "lucide-react";
 
 interface NotificationItem {
@@ -21,9 +22,21 @@ interface NotificationItem {
 }
 
 const typeIcons: Record<string, any> = {
+  "lead.assigned": UserCheck,
+  "lead.agent_linked": Building2,
+  "lead.agent_unlinked": Unlink,
   "lead.": Users,
+  "application.assigned": UserCheck,
+  "application.agent_linked": Building2,
+  "application.agent_unlinked": Unlink,
   "application.": FileText,
+  "student.assigned": UserCheck,
+  "student.agent_linked": Building2,
+  "student.agent_unlinked": Unlink,
+  "student.document_uploaded": FileCheck,
   "student.": Users,
+  "document.status_changed": FileCheck,
+  "document.": FileText,
   "finance.": DollarSign,
   "agent.": Users,
   "system.": AlertCircle,

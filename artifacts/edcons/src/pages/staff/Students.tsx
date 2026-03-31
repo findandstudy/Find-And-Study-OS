@@ -12,6 +12,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import OriginBadge from "@/components/OriginBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1431,7 +1432,10 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
             <p className="text-xs text-muted-foreground truncate">{student.email || student.phone || "No contact"}</p>
           </div>
         </div>
-        {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
+        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+          {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
+          <OriginBadge originType={student.originType} originDisplayName={student.originDisplayName} />
+        </div>
       </div>
       {student.agentName && (
         <div className="px-4 pb-1.5">
@@ -1803,8 +1807,8 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
   );
 }
 
-type StuFilters = { status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string };
-const DEFAULT_STU_FILTERS: StuFilters = { status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all" };
+type StuFilters = { status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string; origin: string };
+const DEFAULT_STU_FILTERS: StuFilters = { status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", origin: "all" };
 
 function stuIsDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -1886,6 +1890,18 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="none">No Agent</SelectItem>
               {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Origin</Label>
+          <Select value={filters.origin} onValueChange={v => onChange({ ...filters, origin: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="direct">Direct</SelectItem>
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -2029,6 +2045,7 @@ export default function StudentsPage() {
       if (filters.agent === "none") { if (s.agentId) return false; }
       else if (String(s.agentId) !== filters.agent) return false;
     }
+    if (filters.origin !== "all" && (s.originType || "direct") !== filters.origin) return false;
     if (filters.dateRange !== "all" && s.createdAt && !stuIsDateInRange(s.createdAt, filters.dateRange)) return false;
     if (filters.followupRange !== "all") {
       if (filters.followupRange === "none") { if (s.nextFollowup) return false; }
@@ -2265,7 +2282,10 @@ export default function StudentsPage() {
                         <div className="flex items-center gap-2">
                           <StudentAvatar student={student} />
                           <div>
-                            <p className="text-sm font-semibold">{student.firstName} {student.lastName}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-semibold">{student.firstName} {student.lastName}</p>
+                              <OriginBadge originType={student.originType} originDisplayName={student.originDisplayName} />
+                            </div>
                             {student.phone && <p className="text-xs text-muted-foreground">{student.phone}</p>}
                           </div>
                         </div>
