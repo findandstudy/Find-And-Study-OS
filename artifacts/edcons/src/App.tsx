@@ -61,6 +61,7 @@ const ApplicationDetail = lazy(() => import("@/pages/staff/ApplicationDetail"));
 const StaffDocuments = lazy(() => import("@/pages/staff/Documents"));
 const StaffCourseFinder = lazy(() => import("@/pages/staff/CourseFinder"));
 const StaffAgents = lazy(() => import("@/pages/staff/Agents"));
+const StaffAgentDetail = lazy(() => import("@/pages/staff/AgentDetail"));
 const StaffMessages = lazy(() => import("@/pages/staff/Messages"));
 
 const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
@@ -224,6 +225,9 @@ function Router() {
         </Route>
         <Route path="/staff/course-finder">
           <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]} requiredPermission="course_finder"><StaffCourseFinder /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/agents/:id">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffAgentDetail /></ProtectedRoute>
         </Route>
         <Route path="/staff/agents">
           <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>

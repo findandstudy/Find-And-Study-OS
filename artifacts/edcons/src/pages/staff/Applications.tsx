@@ -361,6 +361,17 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
           )}
         </div>
       </div>
+      {app.agentName && (
+        <div className="px-4 pb-1.5">
+          <span
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate"
+            onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${app.agentId}`); }}
+            title={`Agent: ${app.agentName}`}
+          >
+            <Building2 className="w-3 h-3 shrink-0" />{app.agentName}
+          </span>
+        </div>
+      )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
           {onAssign && staffUsersList ? (

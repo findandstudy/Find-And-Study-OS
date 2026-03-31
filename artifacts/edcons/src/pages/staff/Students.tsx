@@ -25,7 +25,7 @@ import {
   Users, Download, Eye, Loader2, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   ChevronRight, Filter, UserCheck, UserX, UserMinus, UserPlus,
-  Trophy, XCircle, MessageSquare, Mail,
+  Trophy, XCircle, MessageSquare, Mail, Building2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -1404,6 +1404,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [, setLoc] = useLocation();
 
   const cardBg =
     variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
@@ -1431,6 +1432,17 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
         </div>
         {student.nationality && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{student.nationality}</span>}
       </div>
+      {student.agentName && (
+        <div className="px-4 pb-1.5">
+          <span
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate"
+            onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${student.agentId}`); }}
+            title={`Agent: ${student.agentName}`}
+          >
+            <Building2 className="w-3 h-3 shrink-0" />{student.agentName}
+          </span>
+        </div>
+      )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
           {onAssign && isAdmin && staffUsersList ? (

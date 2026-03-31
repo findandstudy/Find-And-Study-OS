@@ -100,7 +100,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { status, search, season, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { status, search, season, page = "1", limit = "20", agentId: agentIdFilter } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -108,6 +108,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const conditions = [];
   if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
+  if (agentIdFilter) conditions.push(eq(leadsTable.agentId, parseInt(agentIdFilter, 10)));
 
   if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);

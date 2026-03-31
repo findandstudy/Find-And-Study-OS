@@ -12,7 +12,7 @@ import {
   Plus, Search, Filter, Eye, TrendingUp, X, UserCheck2,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
-  MessageSquare, Mail, UserPlus, Download,
+  MessageSquare, Mail, UserPlus, Download, Building2,
 } from "lucide-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Input } from "@/components/ui/input";
@@ -126,6 +126,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [, setLoc] = useLocation();
 
   const cardBg =
     variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
@@ -171,6 +172,17 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
           </div>
         )}
       </div>
+      {lead.agentName && (
+        <div className="px-4 pb-1.5">
+          <span
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate"
+            onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${lead.agentId}`); }}
+            title={`Agent: ${lead.agentName}`}
+          >
+            <Building2 className="w-3 h-3 shrink-0" />{lead.agentName}
+          </span>
+        </div>
+      )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
           {onAssign && isAdmin && staffUsersList ? (
