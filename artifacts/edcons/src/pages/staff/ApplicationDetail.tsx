@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
+import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
 import { useAuth } from "@/hooks/use-auth";
 import OriginBadge from "@/components/OriginBadge";
 
@@ -209,12 +210,20 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
             </div>
 
             {app && authUser && (
-              <StageDocumentsPanel
-                applicationId={id}
-                currentStage={app.stage}
-                userRole={authUser.role}
-                userId={authUser.id}
-              />
+              <>
+                <ApplicationDocumentsPanel
+                  applicationId={id}
+                  userRole={authUser.role}
+                  userId={authUser.id}
+                />
+                <StageDocumentsPanel
+                  applicationId={id}
+                  currentStage={app.stage}
+                  userRole={authUser.role}
+                  userId={authUser.id}
+                  excludeStages={APPLICATION_DOC_STAGES}
+                />
+              </>
             )}
 
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">

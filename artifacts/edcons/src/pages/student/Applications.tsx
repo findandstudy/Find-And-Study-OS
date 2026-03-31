@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FileText, GraduationCap, MapPin, Calendar, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
+import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle; step: number }> = {
   inquiry:              { label: "Inquiry Received",    color: "bg-slate-100 text-slate-700 border-slate-200",    icon: AlertCircle, step: 1 },
@@ -144,11 +145,16 @@ export default function StudentApplications() {
                     </div>
                   )}
 
-                  <div className="px-6 py-4 border-t border-border/50">
+                  <div className="px-6 py-4 border-t border-border/50 space-y-4">
+                    <ApplicationDocumentsPanel
+                      applicationId={app.id}
+                      userRole="student"
+                    />
                     <StageDocumentsPanel
                       applicationId={app.id}
                       currentStage={app.stage}
                       userRole="student"
+                      excludeStages={APPLICATION_DOC_STAGES}
                     />
                   </div>
                 </Card>

@@ -307,7 +307,16 @@
     "docLabel_sop": "SOP",
     "docSub_ifAvailable": "If available",
     "docSub_ifRequired": "If required",
-    "docSub_recognition": "Recognition"
+    "docSub_recognition": "Recognition",
+    "applicationDocuments": "Application Documents",
+    "appDocLabel_app_fee_paid": "Application Fee Receipt",
+    "appDocLabel_deposit_paid": "Deposit Paid Receipt",
+    "appDocLabel_offer_received": "Offer Letter",
+    "appDocLabel_acceptance_letter": "Acceptance Letter",
+    "appDocLabel_final_acceptance": "Final Acceptance Letter",
+    "appDocLabel_student_card": "Student Card Upload",
+    "appDocLabel_visa_approved": "Visa OK",
+    "appDocLabel_visa_reject": "Visa Reject"
   },
   "dashboard": {
     "portal": "Portal",

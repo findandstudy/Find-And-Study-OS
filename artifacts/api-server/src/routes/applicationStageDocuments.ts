@@ -9,7 +9,7 @@ import { validateUploadedFile, sanitizeFileName } from "../lib/fileUploadValidat
 const router: IRouter = Router();
 
 const EVERYONE_UPLOAD_STAGES = [
-  "app_fee_paid", "missing_docs", "upload_payment",
+  "app_fee_paid", "missing_docs", "upload_payment", "deposit_paid",
   "visa_approved", "student_card", "visa_reject",
 ];
 

@@ -2,39 +2,47 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Upload, FileText, Trash2, Download, Plus, X,
-  AlertTriangle, ChevronDown, ChevronRight, Save,
+  Upload, FileText, Trash2, Download,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-
-const EVERYONE_UPLOAD_STAGES = [
-  "app_fee_paid", "missing_docs", "upload_payment", "deposit_paid",
-  "visa_approved", "student_card", "visa_reject",
-];
 
 const ADMIN_ONLY_UPLOAD_STAGES = [
   "offer_received", "acceptance_letter", "final_acceptance",
 ];
 
-const ALL_DOC_STAGES = [...EVERYONE_UPLOAD_STAGES, ...ADMIN_ONLY_UPLOAD_STAGES];
+export const APPLICATION_DOC_STAGES = [
+  "app_fee_paid", "deposit_paid", "upload_payment",
+  "offer_received", "acceptance_letter", "final_acceptance",
+  "student_card", "visa_approved", "visa_reject",
+];
 
-const STAGE_LABELS: Record<string, string> = {
-  app_fee_paid: "Application Fee Paid",
-  missing_docs: "Missing Documents",
-  upload_payment: "Upload Payment",
+const APPLICATION_DOC_CATEGORIES = [
+  "app_fee_paid",
+  "deposit_paid",
+  "offer_received",
+  "acceptance_letter",
+  "final_acceptance",
+  "student_card",
+  "visa_approved",
+  "visa_reject",
+];
+
+const FALLBACK_LABELS: Record<string, string> = {
+  app_fee_paid: "Application Fee Receipt",
   deposit_paid: "Deposit Paid Receipt",
-  visa_approved: "Visa OK",
-  student_card: "Student Card Upload",
-  visa_reject: "Visa Reject",
-  offer_received: "Offer",
+  offer_received: "Offer Letter",
   acceptance_letter: "Acceptance Letter",
   final_acceptance: "Final Acceptance Letter",
+  student_card: "Student Card Upload",
+  visa_approved: "Visa OK",
+  visa_reject: "Visa Reject",
 };
 
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -51,17 +59,14 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-interface StageDocumentsPanelProps {
+interface ApplicationDocumentsPanelProps {
   applicationId: number;
-  currentStage: string;
   userRole: string;
   userId?: number;
-  excludeStages?: string[];
 }
 
-export function StageDocumentsPanel({ applicationId, currentStage, userRole, userId, excludeStages }: StageDocumentsPanelProps) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
+export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: ApplicationDocumentsPanelProps) {
+  const { t } = useI18n();
 
   const { data: allDocs = [] } = useQuery({
     queryKey: [`app-stage-docs-${applicationId}`],
@@ -69,73 +74,61 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
     staleTime: 15_000,
   });
 
-  const { data: missingNotes = [] } = useQuery({
-    queryKey: [`app-missing-notes-${applicationId}`],
-    queryFn: () => customFetch(`${BASE_URL}/api/applications/${applicationId}/missing-doc-notes`),
-    staleTime: 15_000,
-  });
-
   const isAdmin = ADMIN_ROLES.includes(userRole);
-  const isStaff = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"].includes(userRole);
 
-  const relevantStages = ALL_DOC_STAGES.filter(stage => {
-    if (excludeStages?.includes(stage)) return false;
-    const docs = (allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote);
-    const notes = stage === "missing_docs" ? (missingNotes as any[]) : [];
-    return docs.length > 0 || notes.length > 0 || stage === currentStage;
-  });
-
-  if (relevantStages.length === 0) return null;
+  function getCategoryLabel(category: string): string {
+    const translated = t(`documents.appDocLabel_${category}`);
+    if (translated !== `documents.appDocLabel_${category}`) return translated;
+    return FALLBACK_LABELS[category] || category;
+  }
 
   return (
     <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
       <h2 className="font-semibold text-foreground flex items-center gap-2">
         <FileText className="w-4 h-4 text-muted-foreground" />
-        Stage Documents
+        {t("documents.applicationDocuments")}
       </h2>
 
       <div className="space-y-3">
-        {relevantStages.map(stage => (
-          <StageSection
-            key={stage}
-            applicationId={applicationId}
-            stage={stage}
-            docs={(allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote)}
-            missingNotes={stage === "missing_docs" ? (missingNotes as any[]) : []}
-            userRole={userRole}
-            userId={userId}
-            isAdmin={isAdmin}
-            isStaff={isStaff}
-            isCurrent={stage === currentStage}
-          />
-        ))}
+        {APPLICATION_DOC_CATEGORIES.map(category => {
+          const docs = (allDocs as any[]).filter(
+            (d: any) => (d.stage === category || (category === "deposit_paid" && d.stage === "upload_payment")) && !d.isMissingDocNote
+          );
+          return (
+            <CategorySection
+              key={category}
+              applicationId={applicationId}
+              category={category}
+              label={getCategoryLabel(category)}
+              docs={docs}
+              userId={userId}
+              isAdmin={isAdmin}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function StageSection({
-  applicationId, stage, docs, missingNotes, userRole, userId, isAdmin, isStaff, isCurrent,
+function CategorySection({
+  applicationId, category, label, docs, userId, isAdmin,
 }: {
   applicationId: number;
-  stage: string;
+  category: string;
+  label: string;
   docs: any[];
-  missingNotes: any[];
-  userRole: string;
   userId?: number;
   isAdmin: boolean;
-  isStaff: boolean;
-  isCurrent: boolean;
 }) {
-  const [expanded, setExpanded] = useState(isCurrent || docs.length > 0 || missingNotes.length > 0);
+  const [expanded, setExpanded] = useState(docs.length > 0);
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  const canUpload = ADMIN_ONLY_UPLOAD_STAGES.includes(stage)
-    ? isAdmin
-    : true;
+  const isAdminOnly = ADMIN_ONLY_UPLOAD_STAGES.includes(category);
+  const canUpload = isAdminOnly ? isAdmin : true;
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -144,7 +137,7 @@ function StageSection({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stage,
+          stage: category,
           fileName: file.name,
           fileData: base64,
           mimeType: file.type,
@@ -175,7 +168,7 @@ function StageSection({
     if (!file) return;
     const validation = validateFile(file);
     if (!validation.valid) {
-      toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
+      toast({ title: "File error", description: validation.message, variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -194,9 +187,6 @@ function StageSection({
     a.click();
   }
 
-  const isAdminOnlyStage = ADMIN_ONLY_UPLOAD_STAGES.includes(stage);
-  const stageLabel = STAGE_LABELS[stage] || stage;
-
   return (
     <div className="border rounded-xl overflow-hidden">
       <button
@@ -205,14 +195,11 @@ function StageSection({
       >
         <div className="flex items-center gap-2">
           {expanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          <span className="text-sm font-medium">{stageLabel}</span>
+          <span className="text-sm font-medium">{label}</span>
           {docs.length > 0 && (
             <Badge variant="secondary" className="text-xs px-1.5 py-0">{docs.length}</Badge>
           )}
-          {isCurrent && (
-            <Badge className="text-xs px-1.5 py-0 bg-primary/10 text-primary border-0">Current</Badge>
-          )}
-          {isAdminOnlyStage && (
+          {isAdminOnly && (
             <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">Admin Upload</Badge>
           )}
         </div>
@@ -220,14 +207,6 @@ function StageSection({
 
       {expanded && (
         <div className="px-3 pb-3 space-y-2">
-          {stage === "missing_docs" && (
-            <MissingDocsSection
-              applicationId={applicationId}
-              notes={missingNotes}
-              isAdmin={isAdmin}
-            />
-          )}
-
           {docs.length > 0 ? (
             <div className="space-y-1.5">
               {docs.map((doc: any) => (
@@ -267,9 +246,7 @@ function StageSection({
               ))}
             </div>
           ) : (
-            stage !== "missing_docs" && (
-              <p className="text-xs text-muted-foreground py-1">No documents uploaded for this stage yet.</p>
-            )
+            <p className="text-xs text-muted-foreground py-1">No documents uploaded yet.</p>
           )}
 
           {canUpload && (
@@ -295,115 +272,6 @@ function StageSection({
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-function MissingDocsSection({
-  applicationId, notes, isAdmin,
-}: {
-  applicationId: number;
-  notes: any[];
-  isAdmin: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [items, setItems] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
-  const qc = useQueryClient();
-
-  function startEdit() {
-    setItems(notes.length > 0 ? notes.map((n: any) => n.fileName) : [""]);
-    setEditing(true);
-  }
-
-  function addItem() {
-    setItems([...items, ""]);
-  }
-
-  function removeItem(idx: number) {
-    setItems(items.filter((_, i) => i !== idx));
-  }
-
-  function updateItem(idx: number, val: string) {
-    const updated = [...items];
-    updated[idx] = val;
-    setItems(updated);
-  }
-
-  async function handleSave() {
-    const filtered = items.filter(i => i.trim());
-    if (filtered.length === 0) {
-      toast({ title: "Add at least one missing document note", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    try {
-      await customFetch(`${BASE_URL}/api/applications/${applicationId}/missing-doc-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: filtered }),
-      });
-      qc.invalidateQueries({ queryKey: [`app-missing-notes-${applicationId}`] });
-      toast({ title: "Missing documents updated" });
-      setEditing(false);
-    } catch (err: any) {
-      toast({ title: "Failed to save", description: err?.message, variant: "destructive" });
-    }
-    setSaving(false);
-  }
-
-  return (
-    <div className="border rounded-lg p-2.5 bg-amber-50/50 dark:bg-amber-950/20 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-          <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Required Documents</span>
-        </div>
-        {isAdmin && !editing && (
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2" onClick={startEdit}>
-            <Plus className="w-3 h-3" /> Edit List
-          </Button>
-        )}
-      </div>
-
-      {editing ? (
-        <div className="space-y-1.5">
-          {items.map((item, idx) => (
-            <div key={idx} className="flex gap-1.5">
-              <Input
-                value={item}
-                onChange={e => updateItem(idx, e.target.value)}
-                placeholder="Document name..."
-                className="h-7 text-xs"
-              />
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeItem(idx)}>
-                <X className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addItem}>
-              <Plus className="w-3 h-3" /> Add
-            </Button>
-            <Button size="sm" className="h-7 text-xs gap-1" onClick={handleSave} disabled={saving}>
-              <Save className="w-3 h-3" /> {saving ? "Saving..." : "Save"}
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
-          </div>
-        </div>
-      ) : notes.length > 0 ? (
-        <ul className="space-y-0.5">
-          {notes.map((note: any) => (
-            <li key={note.id} className="text-xs text-foreground flex items-center gap-1.5 py-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-              {note.fileName}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">No missing documents specified yet.</p>
       )}
     </div>
   );

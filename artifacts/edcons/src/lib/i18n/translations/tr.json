@@ -307,7 +307,16 @@
     "docLabel_sop": "Niyet Mektubu",
     "docSub_ifAvailable": "Varsa",
     "docSub_ifRequired": "Gerekirse",
-    "docSub_recognition": "Tanınma"
+    "docSub_recognition": "Tanınma",
+    "applicationDocuments": "Başvuru Belgeleri",
+    "appDocLabel_app_fee_paid": "Başvuru Ücreti Makbuzu",
+    "appDocLabel_deposit_paid": "Depozito Ödeme Makbuzu",
+    "appDocLabel_offer_received": "Kabul Mektubu",
+    "appDocLabel_acceptance_letter": "Kabul Belgesi",
+    "appDocLabel_final_acceptance": "Kesin Kabul Mektubu",
+    "appDocLabel_student_card": "Öğrenci Kartı Yükleme",
+    "appDocLabel_visa_approved": "Vize Onay",
+    "appDocLabel_visa_reject": "Vize Red"
   },
   "dashboard": {
     "portal": "Portal",

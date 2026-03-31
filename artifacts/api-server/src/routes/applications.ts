@@ -13,7 +13,7 @@ const router: IRouter = Router();
 
 const DOC_REQUIRED_STAGES = [
   "app_fee_paid", "offer_received", "acceptance_letter",
-  "final_acceptance", "upload_payment", "visa_approved",
+  "final_acceptance", "upload_payment", "deposit_paid", "visa_approved",
   "student_card",
 ];
 

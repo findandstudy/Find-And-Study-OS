@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
+import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
 import {
   DndContext,
   DragOverlay,
@@ -536,12 +537,20 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
           </div>
         </div>
         {app && authUser && (
-          <StageDocumentsPanel
-            applicationId={app.id}
-            currentStage={form.stage || app.stage}
-            userRole={authUser.role}
-            userId={authUser.id}
-          />
+          <>
+            <ApplicationDocumentsPanel
+              applicationId={app.id}
+              userRole={authUser.role}
+              userId={authUser.id}
+            />
+            <StageDocumentsPanel
+              applicationId={app.id}
+              currentStage={form.stage || app.stage}
+              userRole={authUser.role}
+              userId={authUser.id}
+              excludeStages={APPLICATION_DOC_STAGES}
+            />
+          </>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
