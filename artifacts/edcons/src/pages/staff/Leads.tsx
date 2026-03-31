@@ -1201,7 +1201,7 @@ export default function LeadsPage() {
                 onDragEnd={handleDragEnd}
               >
                 {columns.map((col) => {
-                  const columnLeads = filteredLeads.filter((l: any) => l.status === col.id);
+                  const columnLeads = filteredLeads.filter((l: any) => l.status === col.id).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                   return (
                     <DroppableColumn
                       key={col.id}

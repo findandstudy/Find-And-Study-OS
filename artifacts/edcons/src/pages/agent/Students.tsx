@@ -1690,7 +1690,7 @@ export default function AgentStudentsPage() {
           <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
             <div className="flex gap-5 h-full min-w-max px-1">
               {pipelineStages.map((ps, idx) => {
-                  const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key);
+                  const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                   return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/agent/students/${id}`)} />;
                 })}
             </div>

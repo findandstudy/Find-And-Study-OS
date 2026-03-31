@@ -1440,7 +1440,7 @@ export default function ApplicationsPage() {
                 onDragEnd={handleDragEnd}
               >
                 {pipelineStages.map(s => {
-                  const stageApps = filteredApps.filter((a: any) => a.stage === s.key);
+                  const stageApps = filteredApps.filter((a: any) => a.stage === s.key).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                   return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} />;
                 })}
 
