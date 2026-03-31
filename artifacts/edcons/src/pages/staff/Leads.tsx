@@ -47,8 +47,14 @@ import { CSS } from "@dnd-kit/utilities";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { BulkActionBar } from "@/components/BulkActionBar";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+function getCsrfToken(): string {
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
 
 async function apiFetch(url: string) {
   const r = await fetch(url, { credentials: "include" });
@@ -978,24 +984,36 @@ export default function LeadsPage() {
 
   async function handleBulkDelete() {
     setDeleteInProgress(true);
-    const ids = Array.from(selectedIds);
-    let failed = 0;
-    for (const id of ids) {
-      try {
-        await deleteLead.mutateAsync({ id });
-      } catch {
-        failed++;
-      }
-    }
-    setDeleteInProgress(false);
-    setDeleteOpen(false);
+    try {
+      const res = await fetch(`${BASE_URL}/api/leads/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      toast({ title: `${data.updated} lead${data.updated !== 1 ? "s" : ""} deleted` });
+    } catch { toast({ title: "Some leads could not be deleted", variant: "destructive" }); }
+    setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+  }
+
+  async function handleBulkAssign(userId: number) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/leads/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      toast({ title: `${data.updated} lead${data.updated !== 1 ? "s" : ""} assigned` });
+    } catch { toast({ title: "Could not assign leads", variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-    if (failed === 0) {
-      toast({ title: `${ids.length} lead${ids.length > 1 ? "s" : ""} deleted` });
-    } else {
-      toast({ title: "Some leads could not be deleted", variant: "destructive" });
-    }
+  }
+
+  async function handleBulkMove(status: string) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/leads/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", status }) });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      toast({ title: `${data.updated} lead${data.updated !== 1 ? "s" : ""} moved` });
+    } catch { toast({ title: "Could not move leads", variant: "destructive" }); }
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
   }
 
   const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
@@ -1138,12 +1156,16 @@ export default function LeadsPage() {
               </button>
             </div>
 
-            {selectedIds.size > 0 && (
-              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1" />
-                Delete ({selectedIds.size})
-              </Button>
-            )}
+            <BulkActionBar
+              selectedCount={selectedIds.size}
+              onDelete={() => setDeleteOpen(true)}
+              onAssign={handleBulkAssign}
+              onMove={handleBulkMove}
+              stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
+              staffUsers={staffUsersList}
+              entityLabel="leads"
+              moveLabel="Move Status"
+            />
 
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Lead

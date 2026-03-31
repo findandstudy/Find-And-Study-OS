@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { BulkActionBar } from "@/components/BulkActionBar";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import {
@@ -2063,18 +2064,34 @@ export default function StudentsPage() {
 
   async function handleBulkDelete() {
     setDeleteInProgress(true);
-    const ids = Array.from(selectedIds);
-    let failed = 0;
-    for (const id of ids) {
-      try {
-        const res = await fetch(`${BASE_URL}/api/students/${id}`, { method: "DELETE", credentials: "include" });
-        if (!res.ok) failed++;
-      } catch { failed++; }
-    }
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
+      if (!res.ok) throw new Error("Failed");
+      const d = await res.json();
+      toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} deleted` });
+    } catch { toast({ title: "Some could not be deleted", variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     invalidate();
-    if (failed === 0) toast({ title: `${ids.length} student${ids.length > 1 ? "s" : ""} deleted` });
-    else toast({ title: "Some could not be deleted", variant: "destructive" });
+  }
+
+  async function handleBulkAssign(userId: number) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
+      if (!res.ok) throw new Error("Failed");
+      const d = await res.json();
+      toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} assigned` });
+    } catch { toast({ title: "Could not assign students", variant: "destructive" }); }
+    setSelectedIds(new Set()); invalidate();
+  }
+
+  async function handleBulkMoveStatus(status: string) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", status }) });
+      if (!res.ok) throw new Error("Failed");
+      const d = await res.json();
+      toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} moved` });
+    } catch { toast({ title: "Could not move students", variant: "destructive" }); }
+    setSelectedIds(new Set()); invalidate();
   }
 
   const allStuColumnIds = new Set(pipelineStages.map(s => s.key));
@@ -2149,11 +2166,16 @@ export default function StudentsPage() {
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
             </div>
-            {selectedIds.size > 0 && (
-              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
-              </Button>
-            )}
+            <BulkActionBar
+              selectedCount={selectedIds.size}
+              onDelete={() => setDeleteOpen(true)}
+              onAssign={handleBulkAssign}
+              onMove={handleBulkMoveStatus}
+              stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
+              staffUsers={staffUsersList}
+              entityLabel="students"
+              moveLabel="Move Status"
+            />
             <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
               <FileUp className="w-4 h-4" /> Bulk Import
             </Button>

@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { BulkActionBar } from "@/components/BulkActionBar";
 import {
   DndContext,
   DragOverlay,
@@ -1160,13 +1161,33 @@ export default function ApplicationsPage() {
 
   async function handleBulkDelete() {
     setDeleteInProgress(true);
-    const ids = Array.from(selectedIds);
-    let failed = 0;
-    for (const id of ids) { try { await deleteApp.mutateAsync(id); } catch { failed++; } }
+    try {
+      const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
+      const d = res as any;
+      toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} deleted` });
+    } catch { toast({ title: "Some could not be deleted", variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
-    if (failed === 0) toast({ title: `${ids.length} application${ids.length > 1 ? "s" : ""} deleted` });
-    else toast({ title: "Some could not be deleted", variant: "destructive" });
+  }
+
+  async function handleBulkAssign(userId: number) {
+    try {
+      const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
+      const d = res as any;
+      toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} assigned` });
+    } catch { toast({ title: "Could not assign applications", variant: "destructive" }); }
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["applications"] });
+  }
+
+  async function handleBulkMoveStage(stage: string) {
+    try {
+      const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", stage }) });
+      const d = res as any;
+      toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} moved` });
+    } catch { toast({ title: "Could not move applications", variant: "destructive" }); }
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["applications"] });
   }
 
   return (
@@ -1187,11 +1208,16 @@ export default function ApplicationsPage() {
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
             </div>
-            {selectedIds.size > 0 && (
-              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
-              </Button>
-            )}
+            <BulkActionBar
+              selectedCount={selectedIds.size}
+              onDelete={() => setDeleteOpen(true)}
+              onAssign={handleBulkAssign}
+              onMove={handleBulkMoveStage}
+              stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
+              staffUsers={staffUsersList}
+              entityLabel="applications"
+              moveLabel="Move Stage"
+            />
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> New Application
             </Button>

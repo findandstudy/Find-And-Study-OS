@@ -419,6 +419,30 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   res.json(student);
 });
 
+router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const { ids, action, assignedToId, status } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  let updated = 0;
+  if (action === "delete") {
+    const result = await db.update(studentsTable).set({ deletedAt: new Date() }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+    updated = result.rowCount ?? numericIds.length;
+    for (const id of numericIds) await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
+  } else if (action === "assign" && assignedToId !== undefined) {
+    const result = await db.update(studentsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+    updated = result.rowCount ?? numericIds.length;
+    await logAudit(req.user!.id, "bulk_assign_students", "student", null, { ids: numericIds, assignedToId }, req.ip);
+  } else if (action === "move" && status) {
+    const result = await db.update(studentsTable).set({ status }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+    updated = result.rowCount ?? numericIds.length;
+    await logAudit(req.user!.id, "bulk_move_students", "student", null, { ids: numericIds, status }, req.ip);
+  } else {
+    res.status(400).json({ error: "Missing required fields for action" }); return;
+  }
+  res.json({ success: true, updated });
+});
+
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [deleted] = await db.update(studentsTable)

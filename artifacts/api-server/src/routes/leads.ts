@@ -330,6 +330,30 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req
   res.sendStatus(204);
 });
 
+router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const { ids, action, assignedToId, status } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  let updated = 0;
+  if (action === "delete") {
+    const result = await db.delete(leadsTable).where(inArray(leadsTable.id, numericIds));
+    updated = result.rowCount ?? numericIds.length;
+    for (const id of numericIds) await logAudit(req.user!.id, "delete_lead", "lead", id, {}, req.ip);
+  } else if (action === "assign" && assignedToId !== undefined) {
+    const result = await db.update(leadsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(inArray(leadsTable.id, numericIds));
+    updated = result.rowCount ?? numericIds.length;
+    await logAudit(req.user!.id, "bulk_assign_leads", "lead", null, { ids: numericIds, assignedToId }, req.ip);
+  } else if (action === "move" && status) {
+    const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));
+    updated = result.rowCount ?? numericIds.length;
+    await logAudit(req.user!.id, "bulk_move_leads", "lead", null, { ids: numericIds, status }, req.ip);
+  } else {
+    res.status(400).json({ error: "Missing required fields for action" }); return;
+  }
+  res.json({ success: true, updated });
+});
+
 router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const id = parseInt(req.params.id, 10);

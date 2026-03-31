@@ -545,6 +545,105 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   res.json(app);
 });
 
+router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const { ids, action, assignedToId, stage } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  let updated = 0;
+  if (action === "delete") {
+    const result = await db.update(applicationsTable).set({ deletedAt: new Date() }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    updated = result.rowCount ?? numericIds.length;
+    for (const id of numericIds) await logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
+  } else if (action === "assign" && assignedToId !== undefined) {
+    const result = await db.update(applicationsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    updated = result.rowCount ?? numericIds.length;
+    await logAudit(req.user!.id, "bulk_assign_applications", "application", null, { ids: numericIds, assignedToId }, req.ip);
+  } else if (action === "move" && stage) {
+    const apps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    for (const app of apps) {
+      await db.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
+      const commStatus = await getCommissionFinanceStatus(stage);
+      const sfStatus = await getServiceFeeFinanceStatus(stage);
+      const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
+      const existingComms = await db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
+      if (existingComms.length === 0 && commStatus !== "excluded") {
+        const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+        const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
+        const baseFee = (app.discountedFee != null && !isNaN(app.discountedFee)) ? app.discountedFee : app.tuitionFee;
+        const uCommAmt = baseFee && app.commissionRate ? (baseFee * app.commissionRate) / 100 : 0;
+        const agentComm = await resolveAgentCommission(app.agentId, uCommAmt);
+        await db.insert(commissionsTable).values({
+          applicationId: app.id, studentId: app.studentId, agentId: agentComm.agentId,
+          studentName: sName, universityName: app.universityName || null,
+          programName: app.programName || null, season: app.season || String(new Date().getFullYear()),
+          currency: app.currency || "USD", status: commStatus,
+          programFee: baseFee ? String(baseFee) : null,
+          universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
+          universityCommissionAmount: uCommAmt > 0 ? String(uCommAmt) : null,
+          agentCommissionRate: agentComm.agentCommissionRate,
+          agentCommissionAmount: agentComm.agentCommissionAmount,
+          subAgentId: agentComm.subAgentId,
+          subAgentCommissionRate: agentComm.subAgentCommissionRate,
+          subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
+          ...(commStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
+        });
+      }
+      for (const comm of existingComms) {
+        if (commStatus === "excluded") {
+          if (!["collected_partial", "collected_full", "settled"].includes(comm.status)) {
+            await db.update(commissionsTable).set({ status: "excluded" }).where(eq(commissionsTable.id, comm.id));
+          }
+        } else if (commStatus === "confirmed") {
+          if (comm.status === "potential" || comm.status === "excluded") {
+            await db.update(commissionsTable).set({ status: "confirmed", confirmedAt: new Date().toISOString() }).where(eq(commissionsTable.id, comm.id));
+          }
+        } else {
+          if (comm.status === "confirmed" && toNum(comm.universityCollected) <= 0) {
+            await db.update(commissionsTable).set({ status: "potential", confirmedAt: null }).where(eq(commissionsTable.id, comm.id));
+          }
+          if (comm.status === "excluded") {
+            await db.update(commissionsTable).set({ status: "potential" }).where(eq(commissionsTable.id, comm.id));
+          }
+        }
+      }
+      const existingSFs = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
+      if (existingSFs.length === 0 && sfStatus !== "excluded") {
+        const [studentRec2] = existingComms.length > 0 ? [null] : await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
+        const sName2 = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : (existingComms[0]?.studentName || null);
+        const sfAmt = app.serviceFeeAmount ? String(app.serviceFeeAmount) : "0";
+        const sfHalf = app.serviceFeeAmount ? String(app.serviceFeeAmount / 2) : null;
+        await db.insert(serviceFeesTable).values({
+          applicationId: app.id, studentId: app.studentId, agentId: app.agentId,
+          studentName: sName2, universityName: app.universityName || null,
+          season: app.season || String(new Date().getFullYear()),
+          currency: app.currency || "USD",
+          totalAmount: sfAmt,
+          firstInstallmentAmount: sfHalf, secondInstallmentAmount: sfHalf,
+          financeStatus: sfStatus, status: "pending",
+        });
+      }
+      for (const sf of existingSFs) {
+        const hasPaid = !!sf.firstInstallmentPaidAt || !!sf.secondInstallmentPaidAt;
+        if (sfStatus === "excluded") {
+          if (!hasPaid) await db.update(serviceFeesTable).set({ financeStatus: "excluded" }).where(eq(serviceFeesTable.id, sf.id));
+        } else if (sfStatus === "confirmed") {
+          await db.update(serviceFeesTable).set({ financeStatus: "confirmed" }).where(eq(serviceFeesTable.id, sf.id));
+        } else {
+          if ((sf.financeStatus === "excluded" || sf.financeStatus === "confirmed") && !hasPaid) {
+            await db.update(serviceFeesTable).set({ financeStatus: "potential" }).where(eq(serviceFeesTable.id, sf.id));
+          }
+        }
+      }
+      await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);
+      updated++;
+    }
+  } else {
+    res.status(400).json({ error: "Missing required fields for action" }); return;
+  }
+  res.json({ success: true, updated });
+});
+
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [deleted] = await db.update(applicationsTable)
