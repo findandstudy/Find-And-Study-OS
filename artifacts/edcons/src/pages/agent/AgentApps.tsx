@@ -921,11 +921,6 @@ export default function AgentAppsPage() {
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
             </div>
-            {selectedIds.size > 0 && (
-              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
-              </Button>
-            )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> New Application
             </Button>
@@ -983,7 +978,6 @@ export default function AgentAppsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
                     <SortHeader label="Student" sortKey="student" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Stage" sortKey="stage" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
@@ -993,22 +987,20 @@ export default function AgentAppsPage() {
                     <SortHeader label="Intake" sortKey="intake" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Commission" sortKey="fee" currentSort={sort} onSort={handleSort} />
                     <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
-                    <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
                   ) : pagedApps.length === 0 ? (
-                    <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
                   ) : pagedApps.map((app: any) => {
                     const sm = stageMap[app.stage];
                     const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
                     const stageLabel = sm?.label || app.stage;
                     const levelLabel = STUDY_LEVELS.find(l => l.value === app.level)?.label || app.level || "-";
                     return (
-                      <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/agent/applications/${app.id}`)}>
-                        <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
+                      <TableRow key={app.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setLocation(`/agent/applications/${app.id}`)}>
                         <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
@@ -1018,12 +1010,6 @@ export default function AgentAppsPage() {
                         <TableCell>{app.intake || "-"}</TableCell>
                         <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>
-                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => setEditApp(app)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                          </div>
-                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -1041,8 +1027,6 @@ export default function AgentAppsPage() {
         )}
       </div>
 
-      <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
-      <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />
     </DashboardLayout>
   );
