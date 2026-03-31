@@ -416,7 +416,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
   if (lead.convertedStudentId) {
-    const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.id, lead.convertedStudentId));
+    const [existing] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, lead.convertedStudentId), isNull(studentsTable.deletedAt)));
     if (existing) {
       const wonStages = await db.select().from(pipelineStagesTable)
         .where(and(eq(pipelineStagesTable.entityType, "lead"), eq(pipelineStagesTable.variant, "won")));
@@ -427,6 +427,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       res.json({ student: existing, merged: false, alreadyConverted: true });
       return;
     }
+    await db.update(leadsTable).set({ convertedStudentId: null }).where(eq(leadsTable.id, id));
   }
 
   const embedSubmissions = await db.select().from(embedSubmissionsTable).where(eq(embedSubmissionsTable.leadId, lead.id));
@@ -464,7 +465,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   };
 
   if (lead.email) {
-    const [existingByEmail] = await db.select().from(studentsTable).where(eq(studentsTable.email, lead.email));
+    const [existingByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, lead.email), isNull(studentsTable.deletedAt)));
     if (existingByEmail) {
       const mergeUpdates: any = {};
       if (!existingByEmail.assignedToId && lead.assignedToId) mergeUpdates.assignedToId = lead.assignedToId;

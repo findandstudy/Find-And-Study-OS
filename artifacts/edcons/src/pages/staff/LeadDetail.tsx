@@ -201,9 +201,15 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     convertLead.mutate(
       { id },
       {
-        onSuccess: (student: any) => {
-          toast({ title: "Lead converted to student" });
-          setLocation(`${basePath}/students/${student.id}`);
+        onSuccess: (result: any) => {
+          const studentData = result?.student || result;
+          const studentName = `${studentData?.firstName || ""} ${studentData?.lastName || ""}`.trim();
+          toast({
+            title: "Lead converted to student",
+            description: result?.merged ? `Merged with existing student: ${studentName}` : `New student created: ${studentName}`,
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+          setLocation(`${basePath}/leads`);
         },
         onError: () => {
           toast({ title: "Conversion failed", variant: "destructive" });
