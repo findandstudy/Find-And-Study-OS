@@ -415,11 +415,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         <Tabs defaultValue="profile">
           <TabsList className="rounded-xl bg-secondary/60">
             <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="applications">
-              Applications {applications.length > 0 && `(${applications.length})`}
-            </TabsTrigger>
             <TabsTrigger value="documents">
               Documents {documents.length > 0 && `(${documents.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="applications">
+              Applications {applications.length > 0 && `(${applications.length})`}
             </TabsTrigger>
           </TabsList>
 
