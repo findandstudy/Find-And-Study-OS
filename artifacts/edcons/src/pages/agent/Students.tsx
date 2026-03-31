@@ -1675,11 +1675,6 @@ export default function AgentStudentsPage() {
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
             </div>
-            {selectedIds.size > 0 && (
-              <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1" /> Delete ({selectedIds.size})
-              </Button>
-            )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Student
             </Button>
@@ -1703,7 +1698,6 @@ export default function AgentStudentsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
                     <StuSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Nationality" sortKey="nationality" currentSort={sort} onSort={handleSort} />
@@ -1715,12 +1709,11 @@ export default function AgentStudentsPage() {
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
                   ) : pagedStudents.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
                   ) : pagedStudents.map((student: any) => (
-                    <TableRow key={student.id} className={`cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(student.id) ? "bg-primary/5" : ""}`}>
-                      <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(student.id)} onCheckedChange={() => toggleSelect(student.id)} /></TableCell>
+                    <TableRow key={student.id} className="cursor-pointer hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>
                         <div className="flex items-center gap-2">
                           <StudentAvatar student={student} />
@@ -1740,7 +1733,6 @@ export default function AgentStudentsPage() {
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => { setSelectedIds(new Set([student.id])); setDeleteOpen(true); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1760,7 +1752,6 @@ export default function AgentStudentsPage() {
       </div>
 
       <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} stages={pipelineStages} />
-      <StuDeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} defaultStatus={pipelineStages[0]?.key} />
     </DashboardLayout>
   );
