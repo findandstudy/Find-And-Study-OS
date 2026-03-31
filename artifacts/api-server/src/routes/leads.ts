@@ -371,6 +371,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     phone: lead.phone || null,
     nationality: lead.nationality || s(aiData.nationality) || null,
     agentId: (lead as any).agentId || null,
+    assignedToId: lead.assignedToId || null,
     status: "active",
     motherName: s(aiData.motherName) || null,
     fatherName: s(aiData.fatherName) || null,
@@ -389,6 +390,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const [existingByEmail] = await db.select().from(studentsTable).where(eq(studentsTable.email, lead.email));
     if (existingByEmail) {
       const mergeUpdates: any = {};
+      if (!existingByEmail.assignedToId && lead.assignedToId) mergeUpdates.assignedToId = lead.assignedToId;
       if (!existingByEmail.motherName && studentValues.motherName) mergeUpdates.motherName = studentValues.motherName;
       if (!existingByEmail.fatherName && studentValues.fatherName) mergeUpdates.fatherName = studentValues.fatherName;
       if (!existingByEmail.passportNumber && studentValues.passportNumber) mergeUpdates.passportNumber = studentValues.passportNumber;
@@ -452,6 +454,8 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       .where(and(eq(applicationsTable.studentId, studentId), eq(applicationsTable.programId, programId)));
     if (existingApp) return;
 
+    const [studentRec] = await db.select({ assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId }).from(studentsTable).where(eq(studentsTable.id, studentId));
+
     await db.insert(applicationsTable).values({
       studentId,
       programId: program.id,
@@ -466,6 +470,8 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       scholarship: program.scholarship || null,
       stage: "inquiry",
       season: "2026",
+      assignedToId: studentRec?.assignedToId || null,
+      agentId: studentRec?.agentId || null,
     });
   } catch (err) {
     console.error("Failed to create application from submission:", err);

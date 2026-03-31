@@ -148,7 +148,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       return;
     }
   }
-  const [studentRec2] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+  const [studentRec2] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
   const studentFullName = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : null;
 
   let snapshotTuitionFee = tuitionFee ? Number(tuitionFee) : null;
@@ -204,6 +204,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     universityId: snapshotUniversityId || null,
     programId: programId || null,
     agentId: resolvedAgentId,
+    assignedToId: studentRec2?.assignedToId || null,
     universityName: snapshotUniversityName,
     country: snapshotCountry,
     programName: snapshotProgramName,
