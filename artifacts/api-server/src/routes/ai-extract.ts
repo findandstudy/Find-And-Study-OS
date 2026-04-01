@@ -34,7 +34,7 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
   "firstName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
   "lastName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
   "dateOfBirth": "YYYY-MM-DD format or null",
-  "nationality": "demonym/adjective form string (e.g. 'Afghan' not 'Afghanistan', 'Turkish' not 'Turkey', 'Iranian' not 'Iran', 'Pakistani' not 'Pakistan', 'Indian' not 'India') or null",
+  "nationality": "country name string (e.g. 'Afghanistan' not 'Afghan', 'Turkey' not 'Turkish', 'Iran' not 'Iranian', 'Pakistan' not 'Pakistani', 'Uzbekistan' not 'Uzbek', 'India' not 'Indian') or null",
   "passportNumber": "string or null",
   "passportIssueDate": "YYYY-MM-DD format or null",
   "passportExpiry": "YYYY-MM-DD format or null",
@@ -67,7 +67,7 @@ Rules:
 - For diplomas: extract school name, graduation year, GPA, student name, parent names if visible
 - For transcripts: extract school name, GPA, graduation year, student name, courses if relevant
 - For photos: only set confidence to "low", documentType to "photo", everything else null
-- For nationality: always return the demonym/adjective form (e.g. "Afghan" not "Afghanistan", "Turkish" not "Turkey", "Iranian" not "Iran", "Pakistani" not "Pakistan", "Indian" not "India"). Convert any country name to its demonym form.
+- For nationality: always return the full country name (e.g. "Afghanistan" not "Afghan", "Turkey" not "Turkish", "Iran" not "Iranian", "Pakistan" not "Pakistani", "Uzbekistan" not "Uzbek", "India" not "Indian"). Convert any demonym/adjective form to the full country name.
 - Always normalize dates to YYYY-MM-DD format
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;

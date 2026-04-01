@@ -1,106 +1,89 @@
-export const COUNTRY_TO_DEMONYM: Record<string, string> = {
-  "Afghanistan": "Afghan", "Albania": "Albanian", "Algeria": "Algerian", "United States": "American", "USA": "American", "America": "American",
-  "Andorra": "Andorran", "Angola": "Angolan", "Antigua and Barbuda": "Antiguan", "Argentina": "Argentine",
-  "Armenia": "Armenian", "Australia": "Australian", "Austria": "Austrian", "Azerbaijan": "Azerbaijani",
-  "Bahamas": "Bahamian", "Bahrain": "Bahraini", "Bangladesh": "Bangladeshi", "Barbados": "Barbadian",
-  "Belarus": "Belarusian", "Belgium": "Belgian", "Belize": "Belizean", "Benin": "Beninese",
-  "Bhutan": "Bhutanese", "Bolivia": "Bolivian", "Bosnia and Herzegovina": "Bosnian", "Bosnia": "Bosnian",
-  "Botswana": "Botswanan", "Brazil": "Brazilian", "Brunei": "Bruneian", "Bulgaria": "Bulgarian",
-  "Burkina Faso": "Burkinabe", "Myanmar": "Burmese", "Burma": "Burmese", "Burundi": "Burundian",
-  "Cabo Verde": "Cabo Verdean", "Cape Verde": "Cabo Verdean", "Cambodia": "Cambodian", "Cameroon": "Cameroonian",
-  "Canada": "Canadian", "Central African Republic": "Central African", "Chad": "Chadian", "Chile": "Chilean",
-  "China": "Chinese", "Colombia": "Colombian", "Comoros": "Comorian", "Congo": "Congolese",
-  "Costa Rica": "Costa Rican", "Croatia": "Croatian", "Cuba": "Cuban", "Cyprus": "Cypriot",
-  "Czech Republic": "Czech", "Czechia": "Czech", "Denmark": "Danish", "Djibouti": "Djiboutian",
-  "Dominican Republic": "Dominican", "Netherlands": "Dutch", "Holland": "Dutch",
-  "East Timor": "East Timorese", "Timor-Leste": "East Timorese", "Ecuador": "Ecuadorian",
-  "Egypt": "Egyptian", "United Arab Emirates": "Emirati", "UAE": "Emirati",
-  "Equatorial Guinea": "Equatorial Guinean", "Eritrea": "Eritrean", "Estonia": "Estonian",
-  "Eswatini": "Eswatini", "Swaziland": "Eswatini", "Ethiopia": "Ethiopian",
-  "Fiji": "Fijian", "Philippines": "Filipino", "Finland": "Finnish", "France": "French",
-  "Gabon": "Gabonese", "Gambia": "Gambian", "Georgia": "Georgian", "Germany": "German",
-  "Ghana": "Ghanaian", "Greece": "Greek", "Grenada": "Grenadian", "Guatemala": "Guatemalan",
-  "Guinea": "Guinean", "Guyana": "Guyanese", "Haiti": "Haitian", "Honduras": "Honduran",
-  "Hungary": "Hungarian", "Iceland": "Icelandic", "India": "Indian", "Indonesia": "Indonesian",
-  "Iran": "Iranian", "Iraq": "Iraqi", "Ireland": "Irish", "Israel": "Israeli", "Italy": "Italian",
-  "Ivory Coast": "Ivorian", "Côte d'Ivoire": "Ivorian", "Jamaica": "Jamaican", "Japan": "Japanese",
-  "Jordan": "Jordanian", "Kazakhstan": "Kazakh", "Kenya": "Kenyan", "Kiribati": "Kiribati",
-  "Kosovo": "Kosovar", "Kuwait": "Kuwaiti", "Kyrgyzstan": "Kyrgyz", "Laos": "Lao",
-  "Latvia": "Latvian", "Lebanon": "Lebanese", "Liberia": "Liberian", "Libya": "Libyan",
-  "Liechtenstein": "Liechtenstein", "Lithuania": "Lithuanian", "Luxembourg": "Luxembourgish",
-  "Madagascar": "Malagasy", "Malawi": "Malawian", "Malaysia": "Malaysian", "Maldives": "Maldivian",
-  "Mali": "Malian", "Malta": "Maltese", "Marshall Islands": "Marshallese", "Mauritania": "Mauritanian",
-  "Mauritius": "Mauritian", "Mexico": "Mexican", "Micronesia": "Micronesian", "Moldova": "Moldovan",
-  "Monaco": "Monacan", "Mongolia": "Mongolian", "Montenegro": "Montenegrin", "Morocco": "Moroccan",
-  "Mozambique": "Mozambican", "Namibia": "Namibian", "Nauru": "Nauruan", "Nepal": "Nepali",
-  "New Zealand": "New Zealander", "Nicaragua": "Nicaraguan", "Nigeria": "Nigerian", "Niger": "Nigerien",
-  "North Korea": "North Korean", "North Macedonia": "North Macedonian", "Norway": "Norwegian",
-  "Oman": "Omani", "Pakistan": "Pakistani", "Palau": "Palauan", "Palestine": "Palestinian",
-  "Panama": "Panamanian", "Papua New Guinea": "Papua New Guinean", "Paraguay": "Paraguayan",
-  "Peru": "Peruvian", "Poland": "Polish", "Portugal": "Portuguese", "Qatar": "Qatari",
-  "Romania": "Romanian", "Russia": "Russian", "Rwanda": "Rwandan",
-  "Saint Kitts and Nevis": "Saint Kitts and Nevis", "Saint Lucia": "Saint Lucian",
-  "El Salvador": "Salvadoran", "Samoa": "Samoan", "San Marino": "San Marinese",
-  "São Tomé and Príncipe": "Sao Tomean", "Saudi Arabia": "Saudi", "Senegal": "Senegalese",
-  "Serbia": "Serbian", "Seychelles": "Seychellois", "Sierra Leone": "Sierra Leonean",
-  "Singapore": "Singaporean", "Slovakia": "Slovak", "Slovenia": "Slovenian",
-  "Solomon Islands": "Solomon Islander", "Somalia": "Somali", "South Africa": "South African",
-  "South Korea": "South Korean", "Korea": "South Korean", "South Sudan": "South Sudanese",
-  "Spain": "Spanish", "Sri Lanka": "Sri Lankan", "Sudan": "Sudanese", "Suriname": "Surinamese",
-  "Sweden": "Swedish", "Switzerland": "Swiss", "Syria": "Syrian", "Tajikistan": "Tajik",
-  "Tanzania": "Tanzanian", "Thailand": "Thai", "Togo": "Togolese", "Tonga": "Tongan",
-  "Trinidad and Tobago": "Trinidadian", "Tunisia": "Tunisian", "Turkey": "Turkish", "Türkiye": "Turkish",
-  "Turkmenistan": "Turkmen", "Tuvalu": "Tuvaluan", "Uganda": "Ugandan", "Ukraine": "Ukrainian",
-  "Uruguay": "Uruguayan", "Uzbekistan": "Uzbek", "Vanuatu": "Vanuatuan", "Venezuela": "Venezuelan",
-  "Vietnam": "Vietnamese", "Viet Nam": "Vietnamese", "Yemen": "Yemeni", "Zambia": "Zambian", "Zimbabwe": "Zimbabwean",
-  "United Kingdom": "British", "UK": "British", "England": "British", "Scotland": "British",
+export const DEMONYM_TO_COUNTRY: Record<string, string> = {
+  "Afghan": "Afghanistan", "Albanian": "Albania", "Algerian": "Algeria", "American": "United States",
+  "Andorran": "Andorra", "Angolan": "Angola", "Antiguan": "Antigua and Barbuda", "Argentine": "Argentina",
+  "Armenian": "Armenia", "Australian": "Australia", "Austrian": "Austria", "Azerbaijani": "Azerbaijan",
+  "Bahamian": "Bahamas", "Bahraini": "Bahrain", "Bangladeshi": "Bangladesh", "Barbadian": "Barbados",
+  "Belarusian": "Belarus", "Belgian": "Belgium", "Belizean": "Belize", "Beninese": "Benin",
+  "Bhutanese": "Bhutan", "Bolivian": "Bolivia", "Bosnian": "Bosnia and Herzegovina",
+  "Botswanan": "Botswana", "Brazilian": "Brazil", "Bruneian": "Brunei", "Bulgarian": "Bulgaria",
+  "Burkinabe": "Burkina Faso", "Burmese": "Myanmar", "Burundian": "Burundi",
+  "Cabo Verdean": "Cabo Verde", "Cambodian": "Cambodia", "Cameroonian": "Cameroon",
+  "Canadian": "Canada", "Central African": "Central African Republic", "Chadian": "Chad", "Chilean": "Chile",
+  "Chinese": "China", "Colombian": "Colombia", "Comorian": "Comoros", "Congolese": "Congo",
+  "Costa Rican": "Costa Rica", "Croatian": "Croatia", "Cuban": "Cuba", "Cypriot": "Cyprus",
+  "Czech": "Czech Republic", "Danish": "Denmark", "Djiboutian": "Djibouti",
+  "Dominican": "Dominican Republic", "Dutch": "Netherlands",
+  "East Timorese": "East Timor", "Ecuadorian": "Ecuador",
+  "Egyptian": "Egypt", "Emirati": "United Arab Emirates",
+  "Equatorial Guinean": "Equatorial Guinea", "Eritrean": "Eritrea", "Estonian": "Estonia",
+  "Eswatini": "Eswatini", "Ethiopian": "Ethiopia",
+  "Fijian": "Fiji", "Filipino": "Philippines", "Finnish": "Finland", "French": "France",
+  "Gabonese": "Gabon", "Gambian": "Gambia", "Georgian": "Georgia", "German": "Germany",
+  "Ghanaian": "Ghana", "Greek": "Greece", "Grenadian": "Grenada", "Guatemalan": "Guatemala",
+  "Guinean": "Guinea", "Guyanese": "Guyana", "Haitian": "Haiti", "Honduran": "Honduras",
+  "Hungarian": "Hungary", "Icelandic": "Iceland", "Indian": "India", "Indonesian": "Indonesia",
+  "Iranian": "Iran", "Iraqi": "Iraq", "Irish": "Ireland", "Israeli": "Israel", "Italian": "Italy",
+  "Ivorian": "Ivory Coast", "Jamaican": "Jamaica", "Japanese": "Japan",
+  "Jordanian": "Jordan", "Kazakh": "Kazakhstan", "Kenyan": "Kenya", "Kiribati": "Kiribati",
+  "Kosovar": "Kosovo", "Kuwaiti": "Kuwait", "Kyrgyz": "Kyrgyzstan", "Lao": "Laos",
+  "Latvian": "Latvia", "Lebanese": "Lebanon", "Liberian": "Liberia", "Libyan": "Libya",
+  "Liechtenstein": "Liechtenstein", "Lithuanian": "Lithuania", "Luxembourgish": "Luxembourg",
+  "Malagasy": "Madagascar", "Malawian": "Malawi", "Malaysian": "Malaysia", "Maldivian": "Maldives",
+  "Malian": "Mali", "Maltese": "Malta", "Marshallese": "Marshall Islands", "Mauritanian": "Mauritania",
+  "Mauritian": "Mauritius", "Mexican": "Mexico", "Micronesian": "Micronesia", "Moldovan": "Moldova",
+  "Monacan": "Monaco", "Mongolian": "Mongolia", "Montenegrin": "Montenegro", "Moroccan": "Morocco",
+  "Mozambican": "Mozambique", "Namibian": "Namibia", "Nauruan": "Nauru", "Nepali": "Nepal",
+  "New Zealander": "New Zealand", "Nicaraguan": "Nicaragua", "Nigerian": "Nigeria", "Nigerien": "Niger",
+  "North Korean": "North Korea", "North Macedonian": "North Macedonia", "Norwegian": "Norway",
+  "Omani": "Oman", "Pakistani": "Pakistan", "Palauan": "Palau", "Palestinian": "Palestine",
+  "Panamanian": "Panama", "Papua New Guinean": "Papua New Guinea", "Paraguayan": "Paraguay",
+  "Peruvian": "Peru", "Polish": "Poland", "Portuguese": "Portugal", "Qatari": "Qatar",
+  "Romanian": "Romania", "Russian": "Russia", "Rwandan": "Rwanda",
+  "Saint Kitts and Nevis": "Saint Kitts and Nevis", "Saint Lucian": "Saint Lucia",
+  "Salvadoran": "El Salvador", "Samoan": "Samoa", "San Marinese": "San Marino",
+  "Sao Tomean": "São Tomé and Príncipe", "Saudi": "Saudi Arabia", "Senegalese": "Senegal",
+  "Serbian": "Serbia", "Seychellois": "Seychelles", "Sierra Leonean": "Sierra Leone",
+  "Singaporean": "Singapore", "Slovak": "Slovakia", "Slovenian": "Slovenia",
+  "Solomon Islander": "Solomon Islands", "Somali": "Somalia", "South African": "South Africa",
+  "South Korean": "South Korea", "South Sudanese": "South Sudan",
+  "Spanish": "Spain", "Sri Lankan": "Sri Lanka", "Sudanese": "Sudan", "Surinamese": "Suriname",
+  "Swedish": "Sweden", "Swiss": "Switzerland", "Syrian": "Syria", "Tajik": "Tajikistan",
+  "Tanzanian": "Tanzania", "Thai": "Thailand", "Togolese": "Togo", "Tongan": "Tonga",
+  "Trinidadian": "Trinidad and Tobago", "Tunisian": "Tunisia", "Turkish": "Turkey",
+  "Turkmen": "Turkmenistan", "Tuvaluan": "Tuvalu", "Ugandan": "Uganda", "Ukrainian": "Ukraine",
+  "Uruguayan": "Uruguay", "Uzbek": "Uzbekistan", "Vanuatuan": "Vanuatu", "Venezuelan": "Venezuela",
+  "Vietnamese": "Vietnam", "Yemeni": "Yemen", "Zambian": "Zambia", "Zimbabwean": "Zimbabwe",
+  "British": "United Kingdom",
 };
 
-export function normalizeNationality(value: string): string {
+export function normalizeNationality(value: string, countryList?: string[]): string {
   if (!value) return value;
   const trimmed = value.trim();
-  if (ALL_NATIONALITIES.includes(trimmed)) return trimmed;
-  const mapped = COUNTRY_TO_DEMONYM[trimmed];
+
+  if (countryList && countryList.length > 0) {
+    if (countryList.includes(trimmed)) return trimmed;
+    const exactCountry = DEMONYM_TO_COUNTRY[trimmed];
+    if (exactCountry && countryList.includes(exactCountry)) return exactCountry;
+    const lower = trimmed.toLowerCase();
+    for (const [demonym, country] of Object.entries(DEMONYM_TO_COUNTRY)) {
+      if (demonym.toLowerCase() === lower && countryList.includes(country)) return country;
+    }
+    for (const c of countryList) {
+      if (c.toLowerCase() === lower) return c;
+    }
+    return trimmed;
+  }
+
+  const mapped = DEMONYM_TO_COUNTRY[trimmed];
   if (mapped) return mapped;
   const lower = trimmed.toLowerCase();
-  for (const [country, demonym] of Object.entries(COUNTRY_TO_DEMONYM)) {
-    if (country.toLowerCase() === lower) return demonym;
-  }
-  for (const nat of ALL_NATIONALITIES) {
-    if (nat.toLowerCase() === lower) return nat;
+  for (const [demonym, country] of Object.entries(DEMONYM_TO_COUNTRY)) {
+    if (demonym.toLowerCase() === lower) return country;
   }
   return trimmed;
 }
 
-export const ALL_NATIONALITIES = [
-  "Afghan", "Albanian", "Algerian", "American", "Andorran", "Angolan", "Antiguan", "Argentine",
-  "Armenian", "Australian", "Austrian", "Azerbaijani", "Bahamian", "Bahraini", "Bangladeshi",
-  "Barbadian", "Belarusian", "Belgian", "Belizean", "Beninese", "Bhutanese", "Bolivian",
-  "Bosnian", "Botswanan", "Brazilian", "Bruneian", "Bulgarian", "Burkinabe", "Burmese",
-  "Burundian", "Cabo Verdean", "Cambodian", "Cameroonian", "Canadian", "Central African",
-  "Chadian", "Chilean", "Chinese", "Colombian", "Comorian", "Congolese", "Costa Rican",
-  "Croatian", "Cuban", "Cypriot", "Czech", "Danish", "Djiboutian", "Dominican", "Dutch",
-  "East Timorese", "Ecuadorian", "Egyptian", "Emirati", "Equatorial Guinean", "Eritrean",
-  "Estonian", "Eswatini", "Ethiopian", "Fijian", "Filipino", "Finnish", "French", "Gabonese",
-  "Gambian", "Georgian", "German", "Ghanaian", "Greek", "Grenadian", "Guatemalan", "Guinean",
-  "Guyanese", "Haitian", "Honduran", "Hungarian", "Icelandic", "Indian", "Indonesian", "Iranian",
-  "Iraqi", "Irish", "Israeli", "Italian", "Ivorian", "Jamaican", "Japanese", "Jordanian",
-  "Kazakh", "Kenyan", "Kiribati", "Kosovar", "Kuwaiti", "Kyrgyz", "Lao", "Latvian", "Lebanese",
-  "Liberian", "Libyan", "Liechtenstein", "Lithuanian", "Luxembourgish", "Malagasy", "Malawian",
-  "Malaysian", "Maldivian", "Malian", "Maltese", "Marshallese", "Mauritanian", "Mauritian",
-  "Mexican", "Micronesian", "Moldovan", "Monacan", "Mongolian", "Montenegrin", "Moroccan",
-  "Mozambican", "Namibian", "Nauruan", "Nepali", "New Zealander", "Nicaraguan", "Nigerian",
-  "Nigerien", "North Korean", "North Macedonian", "Norwegian", "Omani", "Pakistani", "Palauan",
-  "Palestinian", "Panamanian", "Papua New Guinean", "Paraguayan", "Peruvian", "Polish",
-  "Portuguese", "Qatari", "Romanian", "Russian", "Rwandan", "Saint Kitts and Nevis",
-  "Saint Lucian", "Salvadoran", "Samoan", "San Marinese", "Sao Tomean", "Saudi", "Senegalese",
-  "Serbian", "Seychellois", "Sierra Leonean", "Singaporean", "Slovak", "Slovenian",
-  "Solomon Islander", "Somali", "South African", "South Korean", "South Sudanese", "Spanish",
-  "Sri Lankan", "Sudanese", "Surinamese", "Swedish", "Swiss", "Syrian", "Tajik", "Tanzanian",
-  "Thai", "Togolese", "Tongan", "Trinidadian", "Tunisian", "Turkish", "Turkmen", "Tuvaluan",
-  "Ugandan", "Ukrainian", "Uruguayan", "Uzbek", "Vanuatuan", "Venezuelan", "Vietnamese",
-  "Yemeni", "Zambian", "Zimbabwean",
-];
+export const FALLBACK_COUNTRIES = Object.values(DEMONYM_TO_COUNTRY).sort();
 
 export const PHONE_CODES = [
   { code: "+93", country: "AF", label: "🇦🇫 +93" },

@@ -20,7 +20,7 @@ import {
   ArrowUp, ArrowDown, Sparkles, CheckCircle2, AlertCircle, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ALL_NATIONALITIES } from "@/lib/nationalities";
+import { normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
@@ -1617,6 +1617,15 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
     address: "", highSchool: "", graduationYear: "", gpa: "",
   });
   const [reviewExtracted, setReviewExtracted] = useState<Set<string>>(new Set());
+  const [allCountries, setAllCountries] = useState<Array<{ id: number; name: string; flagEmoji?: string | null }>>([]);
+
+  useEffect(() => {
+    if (p && allCountries.length === 0) {
+      fetch(`${BASE_URL}/api/countries?limit=500`).then(r => r.json()).then(d => {
+        if (d?.data) setAllCountries(d.data);
+      }).catch(() => {});
+    }
+  }, [p]);
 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
   const currentDocs = LEVEL_DOCS[level];
@@ -1693,8 +1702,12 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
       ["gpa", "gpa"],
     ];
     for (const [fk, ek] of mapping) {
-      const val = aiData[ek];
+      let val = aiData[ek];
       if (val != null && val !== "" && val !== "null") {
+        if (fk === "nationality") {
+          const countryNames = allCountries.map(c => c.name);
+          val = normalizeNationality(String(val), countryNames);
+        }
         newForm[fk] = String(val);
         ex.add(fk);
       }
@@ -2148,7 +2161,9 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                     <select value={reviewForm.nationality} onChange={e => setReviewForm(f => ({ ...f, nationality: e.target.value }))}
                       className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${reviewExtracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
                       <option value="">Select nationality</option>
-                      {ALL_NATIONALITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {allCountries.length > 0
+                        ? allCountries.map(c => <option key={c.id} value={c.name}>{c.flagEmoji ? `${c.flagEmoji} ${c.name}` : c.name}</option>)
+                        : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1.5">

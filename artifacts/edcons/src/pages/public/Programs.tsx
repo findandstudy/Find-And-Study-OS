@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
-import { ALL_NATIONALITIES, PHONE_CODES, normalizeNationality } from "@/lib/nationalities";
+import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
@@ -309,6 +309,15 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const [leadId, setLeadId] = useState<number | null>(null);
   const [creatingLead, setCreatingLead] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [allCountries, setAllCountries] = useState<Array<{ id: number; name: string; code?: string; flagEmoji?: string | null }>>([]);
+
+  useEffect(() => {
+    if (open && allCountries.length === 0) {
+      fetch(`${import.meta.env.BASE_URL}api/countries?limit=500`).then(r => r.json()).then(d => {
+        if (d?.data) setAllCountries(d.data);
+      }).catch(() => {});
+    }
+  }, [open]);
 
   const docTypes = getDocTypesForDegree(program?.degree);
   const requiredDocs = docTypes.filter(d => d.required);
@@ -435,7 +444,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       let val = data[ek];
       if (val != null && val !== "") {
         if (fk === "nationality") {
-          val = normalizeNationality(String(val));
+          const countryNames = allCountries.map(c => c.name);
+          val = normalizeNationality(String(val), countryNames);
         }
         (newForm as any)[fk] = String(val);
         newExtracted.add(fk);
@@ -780,7 +790,9 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 <select value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
                   className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
                   <option value="">{t("apply.selectNationality")}</option>
-                  {ALL_NATIONALITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {allCountries.length > 0
+                    ? allCountries.map(c => <option key={c.id} value={c.name}>{c.flagEmoji ? `${c.flagEmoji} ${c.name}` : c.name}</option>)
+                    : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
