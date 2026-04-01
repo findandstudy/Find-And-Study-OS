@@ -584,7 +584,7 @@ function InfoRow({
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-medium text-foreground truncate">{value || "—"}</p>
+        <p className="font-medium text-foreground break-words">{value || "—"}</p>
       </div>
     </div>
   );

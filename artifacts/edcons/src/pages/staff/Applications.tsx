@@ -1560,7 +1560,7 @@ export default function ApplicationsPage() {
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : (app.universityName || "-")}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>{app.programName || "-"}</span> : (app.programName || "-")}</TableCell>
+                        <TableCell className="max-w-[250px]">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.programName || ""} onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>{app.programName || "-"}</span> : <span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span>}</TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
                         <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>

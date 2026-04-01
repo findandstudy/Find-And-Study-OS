@@ -168,7 +168,7 @@ export default function AgentDetailPage() {
                             <TableCell className="text-muted-foreground">{l.phone || "-"}</TableCell>
                             <TableCell><Badge variant="outline" className="text-xs">{l.source || "-"}</Badge></TableCell>
                             <TableCell><Badge variant="secondary" className="text-xs">{l.stage || "-"}</Badge></TableCell>
-                            <TableCell className="max-w-[200px] truncate text-muted-foreground">{l.interestedProgram || "-"}</TableCell>
+                            <TableCell className="max-w-[250px] text-muted-foreground"><span className="line-clamp-2" title={l.interestedProgram || ""}>{l.interestedProgram || "-"}</span></TableCell>
                             <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/leads/${l.id}`); }}>View</Button></TableCell>
                           </TableRow>
                         ))}
@@ -238,7 +238,7 @@ export default function AgentDetailPage() {
                           <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/staff/applications/${a.id}`)}>
                             <TableCell className="font-medium">{a.studentFirstName} {a.studentLastName}</TableCell>
                             <TableCell className="text-muted-foreground max-w-[150px] truncate">{a.universityName || "-"}</TableCell>
-                            <TableCell className="text-muted-foreground max-w-[200px] truncate">{a.programName || "-"}</TableCell>
+                            <TableCell className="text-muted-foreground max-w-[250px]"><span className="line-clamp-2" title={a.programName || ""}>{a.programName || "-"}</span></TableCell>
                             <TableCell><Badge variant="secondary" className="text-xs">{a.stage || "-"}</Badge></TableCell>
                             <TableCell>{a.country || "-"}</TableCell>
                             <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/applications/${a.id}`); }}>View</Button></TableCell>

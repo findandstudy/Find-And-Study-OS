@@ -226,7 +226,7 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
         </div>
         {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
         {app.programName && (
-          <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">{app.programName}</p>
+          <p className="text-xs font-medium text-primary mt-1.5 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">{app.programName}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
           {app.country && <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">{app.country}</span>}
@@ -1014,7 +1014,7 @@ export default function AgentAppsPage() {
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.programName || "-"}</TableCell>
+                        <TableCell className="max-w-[250px]"><span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span></TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>
                         <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>
