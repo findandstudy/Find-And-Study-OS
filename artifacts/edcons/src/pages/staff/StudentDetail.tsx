@@ -305,8 +305,36 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     return raw.split(",").map((s: string) => s.trim()).filter(Boolean);
   }, [appProgramId, filteredPrograms]);
 
+  const hasExistingAppAtSameLevel = useMemo(() => {
+    if (!appProgramId) return false;
+    const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
+    if (!prog?.degree) return false;
+
+    function toCanonicalLevel(raw: string): string | null {
+      const s = raw.toLowerCase().replace(/['''`\s._-]/g, "");
+      if (s.includes("prebachelor")) return "pre_bachelors";
+      if (s.includes("premaster")) return "pre_masters";
+      if (s.includes("associate")) return "associate";
+      if (s.includes("bachelor") || s === "undergraduate") return "bachelors";
+      if (s.includes("master") || s === "postgraduate") return "masters";
+      if (s.includes("doctor") || s.includes("phd") || s.includes("doctorate")) return "phd";
+      if (s.includes("language")) return "language";
+      if (s.includes("foundation")) return "foundation";
+      return null;
+    }
+
+    const selectedLevel = toCanonicalLevel(prog.degree);
+    if (!selectedLevel) return false;
+
+    return applications.some((app: any) => {
+      const appLevel = toCanonicalLevel(app.level || app.degree || "");
+      return appLevel === selectedLevel;
+    });
+  }, [appProgramId, filteredPrograms, applications]);
+
   const missingDocs = useMemo(() => {
     if (!appProgramId) return [];
+    if (hasExistingAppAtSameLevel) return [];
     const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
     const { keys, labels } = getRequiredDocsForDegree(prog?.degree);
     const rawTypes = documents.map((d: any) => (d.type || "").toLowerCase());
@@ -319,7 +347,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     return keys
       .filter(k => !studentDocTypes.has(k))
       .map(k => labels[k] || k);
-  }, [appProgramId, filteredPrograms, documents]);
+  }, [appProgramId, filteredPrograms, documents, hasExistingAppAtSameLevel]);
 
   useEffect(() => { setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }, [appCountry]);
   useEffect(() => { setAppProgramId(""); setAppIntake(""); }, [appUniversityId]);
@@ -810,6 +838,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     />
                   </div>
                 </div>
+                {hasExistingAppAtSameLevel && appProgramId && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-medium text-blue-700">Documents already on file from a previous application at the same level.</p>
+                  </div>
+                )}
                 {missingDocs.length > 0 && appProgramId && (
                   <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                     <p className="text-sm font-medium text-red-700 mb-1">Missing required documents:</p>
