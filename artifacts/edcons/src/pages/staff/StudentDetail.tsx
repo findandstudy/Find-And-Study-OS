@@ -237,7 +237,19 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     setUploadOpen(true);
   }
 
+  function getAcceptForType(t: string) {
+    return t === "photo" ? ".jpg,.jpeg,.png" : ".jpg,.jpeg,.png,.pdf";
+  }
+
   function handleFileSelect(file: File) {
+    const allowed = uploadType === "photo"
+      ? ["image/jpeg", "image/png"]
+      : ["image/jpeg", "image/png", "application/pdf"];
+    if (!allowed.includes(file.type)) {
+      const exts = uploadType === "photo" ? "JPG, JPEG, PNG" : "JPG, JPEG, PNG, PDF";
+      toast({ title: "Invalid file type", description: `Only ${exts} files are allowed.`, variant: "destructive" });
+      return;
+    }
     setUploadFile(file);
     if (!uploadName) {
       const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
@@ -376,7 +388,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <input
               ref={photoInputRef}
               type="file"
-              accept="image/*"
+              accept=".jpg,.jpeg,.png"
               className="hidden"
               onChange={e => {
                 const file = e.target.files?.[0];
@@ -768,6 +780,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               <Label className="text-xs font-medium text-muted-foreground">Document Type</Label>
               <Select value={uploadType} onValueChange={v => {
                 setUploadType(v);
+                setUploadFile(null);
                 const type = (DOC_TYPES.find(d => d.key === v)?.label ?? "document").toLowerCase();
                 const first = (student?.firstName ?? "").toLowerCase();
                 const last = (student?.lastName ?? "").toLowerCase();
@@ -829,14 +842,14 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
                     <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG — max 10 MB</p>
+                    <p className="text-xs text-muted-foreground mt-1">{uploadType === "photo" ? "JPG, PNG — max 10 MB" : "PDF, JPG, PNG — max 10 MB"}</p>
                   </>
                 )}
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,.pdf"
+                accept={getAcceptForType(uploadType)}
                 className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0];
