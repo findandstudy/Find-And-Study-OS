@@ -237,7 +237,7 @@ export default function AgentDetailPage() {
                         {apps.map((a: any) => (
                           <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/staff/applications/${a.id}`)}>
                             <TableCell className="font-medium">{a.studentFirstName} {a.studentLastName}</TableCell>
-                            <TableCell className="text-muted-foreground max-w-[150px] truncate">{a.universityName || "-"}</TableCell>
+                            <TableCell className="text-muted-foreground max-w-[250px]"><span className="line-clamp-2" title={a.universityName || ""}>{a.universityName || "-"}</span></TableCell>
                             <TableCell className="text-muted-foreground max-w-[250px]"><span className="line-clamp-2" title={a.programName || ""}>{a.programName || "-"}</span></TableCell>
                             <TableCell><Badge variant="secondary" className="text-xs">{a.stage || "-"}</Badge></TableCell>
                             <TableCell>{a.country || "-"}</TableCell>

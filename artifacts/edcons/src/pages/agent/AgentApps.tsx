@@ -224,7 +224,7 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
             {app.studentFirstName} {app.studentLastName}
           </h4>
         </div>
-        {app.universityName && <p className="text-xs text-muted-foreground truncate">{app.universityName}</p>}
+        {app.universityName && <p className="text-xs text-muted-foreground">{app.universityName}</p>}
         {app.programName && (
           <p className="text-xs font-medium text-primary mt-1.5 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">{app.programName}</p>
         )}
@@ -958,9 +958,9 @@ export default function AgentAppsPage() {
                           {activeCard.studentFirstName} {activeCard.studentLastName}
                         </h4>
                       </div>
-                      {activeCard.universityName && <p className="text-xs text-muted-foreground truncate">{activeCard.universityName}</p>}
+                      {activeCard.universityName && <p className="text-xs text-muted-foreground">{activeCard.universityName}</p>}
                       {activeCard.programName && (
-                        <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
+                        <p className="text-xs font-medium text-primary mt-1.5 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">
                           {activeCard.programName}
                         </p>
                       )}
@@ -1013,7 +1013,7 @@ export default function AgentAppsPage() {
                         <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.universityName || "-"}</TableCell>
+                        <TableCell className="max-w-[250px]"><span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span></TableCell>
                         <TableCell className="max-w-[250px]"><span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span></TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>

@@ -428,13 +428,13 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
         </div>
         {app.universityName && (
           <p
-            className="text-xs text-muted-foreground truncate hover:text-primary hover:underline cursor-pointer transition-colors"
+            className="text-xs text-muted-foreground hover:text-primary hover:underline cursor-pointer transition-colors"
             onClick={(e) => { e.stopPropagation(); if (app.universityId) setUniInfoOpen(true); }}
           >{app.universityName}</p>
         )}
         {app.programName && (
           <p
-            className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md hover:bg-primary/15 hover:underline cursor-pointer transition-colors"
+            className="text-xs font-medium text-primary mt-1.5 bg-primary/5 block max-w-full px-2 py-1 rounded-md hover:bg-primary/15 hover:underline cursor-pointer transition-colors leading-relaxed"
             onClick={(e) => { e.stopPropagation(); if (app.programId) setProgInfoId(app.programId); }}
           >{app.programName}</p>
         )}
@@ -1500,9 +1500,9 @@ export default function ApplicationsPage() {
                           {activeCard.studentFirstName} {activeCard.studentLastName}
                         </h4>
                       </div>
-                      {activeCard.universityName && <p className="text-xs text-muted-foreground truncate">{activeCard.universityName}</p>}
+                      {activeCard.universityName && <p className="text-xs text-muted-foreground">{activeCard.universityName}</p>}
                       {activeCard.programName && (
-                        <p className="text-xs font-medium text-primary mt-1.5 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
+                        <p className="text-xs font-medium text-primary mt-1.5 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">
                           {activeCard.programName}
                         </p>
                       )}
@@ -1559,7 +1559,7 @@ export default function ApplicationsPage() {
                         <TableCell className="font-medium"><div className="flex items-center gap-1.5"><span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>{app.studentFirstName} {app.studentLastName}</span><OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} /></div></TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : (app.universityName || "-")}</TableCell>
+                        <TableCell className="max-w-[250px]">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.universityName || ""} onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : <span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span>}</TableCell>
                         <TableCell className="max-w-[250px]">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.programName || ""} onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>{app.programName || "-"}</span> : <span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span>}</TableCell>
                         <TableCell>{levelLabel}</TableCell>
                         <TableCell>{app.intake || "-"}</TableCell>

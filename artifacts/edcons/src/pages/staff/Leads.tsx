@@ -164,7 +164,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
         <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || "No contact info"}</p>
         <OriginBadge originType={lead.originType || "direct"} originDisplayName={lead.originDisplayName} className="mt-1" />
         {lead.interestedProgram && (
-          <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
+          <p className="text-xs font-medium text-primary mt-2 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">
             {lead.interestedProgram}
           </p>
         )}
@@ -1347,7 +1347,7 @@ export default function LeadsPage() {
                         {activeCard.email || activeCard.phone || "No contact info"}
                       </p>
                       {activeCard.interestedProgram && (
-                        <p className="text-xs font-medium text-primary mt-2 truncate bg-primary/5 block max-w-full px-2 py-1 rounded-md">
+                        <p className="text-xs font-medium text-primary mt-2 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">
                           {activeCard.interestedProgram}
                         </p>
                       )}
@@ -1447,10 +1447,10 @@ export default function LeadsPage() {
                         {lead.source?.replace(/_/g, " ") || "-"}
                       </TableCell>
                       <TableCell
-                        className="max-w-[150px] truncate"
+                        className="max-w-[250px]"
                         onClick={() => setLocation(`/staff/leads/${lead.id}`)}
                       >
-                        {lead.interestedProgram || "-"}
+                        <span className="line-clamp-2" title={lead.interestedProgram || ""}>{lead.interestedProgram || "-"}</span>
                       </TableCell>
                       <TableCell onClick={() => setLocation(`/staff/leads/${lead.id}`)}>
                         {lead.interestedCountry || "-"}
