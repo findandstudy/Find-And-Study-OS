@@ -224,6 +224,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
   }).returning();
 
   dispatchNotification({
+    actorUserId: req.user!.id,
     event: "agent.sub_agent_added",
     title: "Sub-Agent Added",
     body: `A new sub-agent ${firstName} ${lastName} has been added.`,
@@ -729,6 +730,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   }).returning();
 
   dispatchNotification({
+    actorUserId: req.user!.id,
     event: "agent.new_registration",
     title: "New Agent Registration",
     body: `A new agent ${firstName} ${lastName} (${companyName || "N/A"}) has been registered.`,

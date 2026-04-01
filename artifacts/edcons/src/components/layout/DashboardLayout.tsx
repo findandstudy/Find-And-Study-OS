@@ -256,6 +256,17 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const totalUnreadMessages = (isStaff ? (unreadMsgData || 0) : 0) + (isStudent ? (studentUnreadData || 0) : 0);
 
+  const { data: sectionCounts } = useQuery<Record<string, number>>({
+    queryKey: ["notification-section-counts"],
+    enabled: isStaff || isAgentRole,
+    queryFn: async () => {
+      const res = await customFetch<Record<string, number>>("/api/notifications/section-counts");
+      return (res as any) || {};
+    },
+    refetchInterval: 15000,
+    staleTime: 10000,
+  });
+
   if (isLoading || !user) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -332,6 +343,21 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                 {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
                                   <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
                                     {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
+                                  </span>
+                                )}
+                                {item.url.endsWith("/leads") && (sectionCounts?.leads || 0) > 0 && (
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                    {(sectionCounts?.leads || 0) > 99 ? "99+" : sectionCounts?.leads}
+                                  </span>
+                                )}
+                                {item.url.endsWith("/students") && (sectionCounts?.students || 0) > 0 && (
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                    {(sectionCounts?.students || 0) > 99 ? "99+" : sectionCounts?.students}
+                                  </span>
+                                )}
+                                {item.url.endsWith("/applications") && (sectionCounts?.applications || 0) > 0 && (
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                    {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
                                   </span>
                                 )}
                               </a>

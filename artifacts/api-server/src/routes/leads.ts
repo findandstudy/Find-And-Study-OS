@@ -133,6 +133,12 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
         isNull(leadsTable.assignedToId)
       )
     );
+    conditions.push(
+      or(
+        eq(leadsTable.originType, "direct"),
+        isNull(leadsTable.originType)
+      )
+    );
   }
 
   if (search) {
@@ -217,6 +223,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   await logAudit(user.id, "create_lead", "lead", lead.id, {}, req.ip);
 
   dispatchNotification({
+    actorUserId: req.user!.id,
     event: "lead.created",
     title: "New Lead Created",
     body: `${lead.firstName} ${lead.lastName} has been added as a new lead.`,
@@ -242,6 +249,10 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
     if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    if (lead.originType && lead.originType !== "direct") {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -273,6 +284,10 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
     if (existing.assignedToId !== null && existing.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    if (existing.originType && existing.originType !== "direct") {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -321,6 +336,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 
   if (updates.status && updates.status !== existing.status) {
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "lead.stage_changed",
       title: "Lead Stage Changed",
       body: `Lead ${lead.firstName} ${lead.lastName} moved from "${existing.status}" to "${updates.status}".`,
@@ -333,6 +349,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 
   if (updates.assignedToId && updates.assignedToId !== existing.assignedToId) {
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "lead.assigned",
       title: "Lead Assigned to You",
       body: `Lead ${lead.firstName} ${lead.lastName} has been assigned to you.`,
@@ -346,6 +363,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   if (updates.agentId !== undefined && updates.agentId !== existing.agentId) {
     if (updates.agentId) {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "lead.agent_linked",
         title: "Lead Linked to Agent",
         body: `Lead ${lead.firstName} ${lead.lastName} has been linked to an agent.`,
@@ -356,6 +374,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       }).catch(() => {});
     } else {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "lead.agent_unlinked",
         title: "Lead Unlinked from Agent",
         body: `Lead ${lead.firstName} ${lead.lastName} has been unlinked from their agent.`,
@@ -645,6 +664,7 @@ router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
     }
     if (recipientIds.length > 0) {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "note.created",
         title: "New Note Added",
         body: `A note was added to lead ${lead.firstName} ${lead.lastName}`,

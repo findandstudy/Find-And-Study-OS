@@ -262,6 +262,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   await logAudit(req.user!.id, "create_student", "student", student.id, { firstName, lastName }, req.ip);
 
   dispatchNotification({
+    actorUserId: req.user!.id,
     event: "student.created",
     title: "New Student Registered",
     body: `${student.firstName} ${student.lastName} has been registered as a new student.`,
@@ -443,6 +444,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     if (student.assignedToId) recipientIds.push(student.assignedToId);
     if (student.userId) recipientIds.push(student.userId);
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "student.status_changed",
       title: "Student Status Changed",
       body: `Student ${student.firstName} ${student.lastName} status changed from "${existing.status}" to "${updates.status}".`,
@@ -455,6 +457,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
 
   if (updates.assignedToId && updates.assignedToId !== existing.assignedToId) {
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "student.assigned",
       title: "Student Assigned to You",
       body: `Student ${student.firstName} ${student.lastName} has been assigned to you.`,
@@ -468,6 +471,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   if (updates.agentId !== undefined && updates.agentId !== existing.agentId) {
     if (updates.agentId) {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "student.agent_linked",
         title: "Student Linked to Agent",
         body: `Student ${student.firstName} ${student.lastName} has been linked to an agent.`,
@@ -478,6 +482,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
       }).catch(() => {});
     } else {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "student.agent_unlinked",
         title: "Student Unlinked from Agent",
         body: `Student ${student.firstName} ${student.lastName} has been unlinked from their agent.`,
@@ -709,6 +714,7 @@ router.post("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...A
     }
     if (recipientIds.length > 0) {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "note.created",
         title: "New Note Added",
         body: `A note was added to student ${student.firstName} ${student.lastName}`,

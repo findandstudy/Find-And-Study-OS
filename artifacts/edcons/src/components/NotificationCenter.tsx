@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Bell, Check, CheckCheck, X, MessageCircle, FileText,
   Users, DollarSign, AlertCircle, Megaphone, Mail, ChevronRight,
@@ -61,6 +62,18 @@ function timeAgo(dateStr: string) {
   return `${days}d ago`;
 }
 
+function resolveActionUrl(url: string | null, role: string | undefined): string | null {
+  if (!url) return null;
+  const agentRoles = ["agent", "sub_agent", "agent_staff"];
+  if (agentRoles.includes(role || "")) {
+    return url.replace(/^\/staff\//, "/agent/");
+  }
+  if (role === "student") {
+    return url.replace(/^\/staff\//, "/student/");
+  }
+  return url;
+}
+
 export function NotificationCenter() {
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
@@ -68,6 +81,7 @@ export function NotificationCenter() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth(true);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const fetchUnreadCount = useCallback(async () => {
@@ -170,7 +184,8 @@ export function NotificationCenter() {
                       key={n.id}
                       onClick={() => {
                         if (!n.isRead) markRead(n.id);
-                        if (n.actionUrl) { setLocation(n.actionUrl); setOpen(false); }
+                        const resolvedUrl = resolveActionUrl(n.actionUrl, user?.role);
+                        if (resolvedUrl) { setLocation(resolvedUrl); setOpen(false); }
                       }}
                       className={`flex items-start gap-3 px-4 py-3 border-b border-border/30 cursor-pointer transition-colors hover:bg-secondary/50 ${!n.isRead ? "bg-primary/5" : ""}`}
                     >
@@ -182,9 +197,14 @@ export function NotificationCenter() {
                         {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>}
                         <p className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</p>
                       </div>
-                      {!n.isRead && (
-                        <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />
-                      )}
+                      <div className="flex flex-col items-center gap-1 shrink-0 mt-1">
+                        {!n.isRead && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                        {n.actionUrl && (
+                          <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
+                        )}
+                      </div>
                     </div>
                   );
                 })

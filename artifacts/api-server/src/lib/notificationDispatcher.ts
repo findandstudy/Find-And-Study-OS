@@ -9,6 +9,7 @@ interface DispatchContext {
   actionUrl?: string;
   icon?: string;
   recipientUserIds?: number[];
+  actorUserId?: number;
   data?: Record<string, unknown>;
   emailOverride?: {
     subject: string;
@@ -119,6 +120,10 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
           ));
         userIds = users.map(u => u.id);
       }
+    }
+
+    if (ctx.actorUserId) {
+      userIds = userIds.filter(id => id !== ctx.actorUserId);
     }
 
     if (userIds.length === 0) return;

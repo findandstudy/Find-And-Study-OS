@@ -141,6 +141,7 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
   await logAudit(req.user!.id, "create_commission", "commission", commission.id, { studentName, universityName }, req.ip);
 
   dispatchNotification({
+    actorUserId: req.user!.id,
     event: "finance.commission_confirmed",
     title: "Commission Created",
     body: `A new commission has been created for ${studentName || "student"} — ${universityName || "University"}.`,

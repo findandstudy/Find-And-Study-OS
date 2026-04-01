@@ -362,6 +362,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
 
   dispatchNotification({
+    actorUserId: req.user!.id,
     event: "application.created",
     title: "New Application Created",
     body: `A new application has been created for ${studentFullName || "a student"} — ${snapshotUniversityName || "University"} / ${snapshotProgramName || "Program"}.`,
@@ -606,6 +607,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     if (app.assignedToId) recipientIds.push(app.assignedToId);
 
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "application.stage_changed",
       title: "Application Status Changed",
       body: `Application for ${sName3 || "student"} — ${app.universityName || "University"} has moved to "${stageStr}".`,
@@ -620,6 +622,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const [studentRec4] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
     const sName4 = studentRec4 ? `${studentRec4.firstName || ""} ${studentRec4.lastName || ""}`.trim() : "student";
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "application.assigned",
       title: "Application Assigned to You",
       body: `Application for ${sName4} — ${app.universityName || "University"} has been assigned to you.`,
@@ -635,6 +638,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const sName5 = studentRec5 ? `${studentRec5.firstName || ""} ${studentRec5.lastName || ""}`.trim() : "student";
     if (updates.agentId) {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "application.agent_linked",
         title: "Application Linked to Agent",
         body: `Application for ${sName5} — ${app.universityName || "University"} has been linked to an agent.`,
@@ -645,6 +649,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }).catch(() => {});
     } else {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "application.agent_unlinked",
         title: "Application Unlinked from Agent",
         body: `Application for ${sName5} — ${app.universityName || "University"} has been unlinked from their agent.`,
@@ -842,6 +847,7 @@ router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, 
     }
     if (recipientIds.length > 0) {
       dispatchNotification({
+    actorUserId: req.user!.id,
         event: "note.created",
         title: "New Note Added",
         body: `A note was added to application #${id}`,

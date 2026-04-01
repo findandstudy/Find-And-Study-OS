@@ -167,6 +167,7 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     const recipientIds: number[] = [];
     if (studentRec?.assignedToId) recipientIds.push(studentRec.assignedToId);
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "student.document_uploaded",
       title: "Document Uploaded",
       body: `A new document "${doc.name}" (${doc.type}) has been uploaded.`,
@@ -246,6 +247,7 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
       if (student?.assignedToId) recipientIds.push(student.assignedToId);
     }
     dispatchNotification({
+    actorUserId: req.user!.id,
       event: "document.status_changed",
       title: "Document Status Updated",
       body: `Document "${doc.name}" status changed to "${updates.status}".`,

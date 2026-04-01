@@ -67,6 +67,34 @@ router.get("/notifications/unread-count", requireAuth, async (req, res): Promise
   res.json({ count: Number(count) });
 });
 
+router.get("/notifications/section-counts", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const rows = await db
+    .select({
+      type: notificationsTable.type,
+      actionUrl: notificationsTable.actionUrl,
+      data: notificationsTable.data,
+    })
+    .from(notificationsTable)
+    .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, false)));
+
+  const sections: Record<string, number> = { leads: 0, students: 0, applications: 0 };
+  for (const row of rows) {
+    const t = row.type || "";
+    const url = row.actionUrl || "";
+    const resourceType = (row.data as any)?.resourceType || "";
+
+    if (t.startsWith("lead.") || resourceType === "lead" || url.includes("/leads/")) {
+      sections.leads++;
+    } else if (t.startsWith("student.") || t.startsWith("document.") || resourceType === "student" || url.includes("/students/")) {
+      sections.students++;
+    } else if (t.startsWith("application.") || resourceType === "application" || url.includes("/applications/")) {
+      sections.applications++;
+    }
+  }
+  res.json(sections);
+});
+
 router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const userId = req.user!.id;
