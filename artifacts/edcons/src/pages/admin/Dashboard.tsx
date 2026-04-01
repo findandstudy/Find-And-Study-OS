@@ -10,15 +10,6 @@ import { Link } from "wouter";
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 function isOverdue(d: string) { return new Date(d) < new Date(); }
 
-const chartData = [
-  { name: 'Jan', leads: 65, apps: 28, revenue: 45000 },
-  { name: 'Feb', leads: 78, apps: 35, revenue: 52000 },
-  { name: 'Mar', leads: 90, apps: 42, revenue: 61000 },
-  { name: 'Apr', leads: 81, apps: 38, revenue: 58000 },
-  { name: 'May', leads: 112, apps: 55, revenue: 73000 },
-  { name: 'Jun', leads: 95, apps: 48, revenue: 67000 },
-  { name: 'Jul', leads: 128, apps: 62, revenue: 84000 },
-];
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#22c55e', '#f59e0b'];
 
@@ -73,6 +64,12 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
+
+  const { data: growthData = [] } = useQuery<any[]>({
+    queryKey: ["/api/stats/growth"],
+    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()),
+  });
+
   const { data: upcomingFollowUps = [] } = useQuery<any[]>({
     queryKey: ["/api/follow-ups/upcoming"],
     queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()),
@@ -98,10 +95,10 @@ export default function AdminDashboard() {
 
   const s: any = stats || {};
   const statCards = [
-    { label: "Total Leads", value: s.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10", trend: "+12%" },
-    { label: "Active Applications", value: s.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10", trend: "+8%" },
-    { label: "Students Enrolled", value: s.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10", trend: "+22%" },
-    { label: "Revenue (Month)", value: `$${(s.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10", trend: "+15%" },
+    { label: "Total Leads", value: s.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "Active Applications", value: s.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
+    { label: "Students Enrolled", value: s.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
+    { label: "Revenue (Month)", value: `$${(s.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10" },
   ];
 
   return (
@@ -126,9 +123,6 @@ export default function AdminDashboard() {
                 <div className={`w-12 h-12 rounded-xl ${s.bg} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                   <s.icon className={`w-6 h-6 ${s.color}`} />
                 </div>
-                <Badge variant="secondary" className="text-emerald-600 bg-emerald-50">
-                  <TrendingUp className="w-3 h-3 mr-1" />{s.trend}
-                </Badge>
               </div>
               <p className="text-sm font-medium text-muted-foreground">{s.label}</p>
               <p className="text-3xl font-display font-bold text-foreground mt-1">
@@ -143,11 +137,11 @@ export default function AdminDashboard() {
           <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-display font-bold text-lg">Lead & Application Trends</h3>
-              <Badge variant="outline">Last 7 months</Badge>
+              <Badge variant="outline">Last 6 months</Badge>
             </div>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="admLeads" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25}/>
@@ -163,7 +157,7 @@ export default function AdminDashboard() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                   <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }} />
                   <Area type="monotone" dataKey="leads" name="Leads" stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#admLeads)" />
-                  <Area type="monotone" dataKey="apps" name="Applications" stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
+                  <Area type="monotone" dataKey="applications" name="Applications" stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -324,24 +318,19 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        {/* Revenue Chart */}
         <Card className="p-6 border-none shadow-lg shadow-black/5">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="font-display font-bold text-lg">Monthly Revenue</h3>
-            <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm bg-emerald-50 px-3 py-1.5 rounded-full">
-              <Activity className="w-4 h-4" /> +24% YoY
-            </div>
+            <h3 className="font-display font-bold text-lg">Monthly Students</h3>
+            <Badge variant="outline">Last 6 months</Badge>
           </div>
           <div className="h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <BarChart data={growthData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                  tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
-                  formatter={(v: number) => [`$${v.toLocaleString()}`, 'Revenue']} />
-                <Bar dataKey="revenue" name="Revenue" radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }} />
+                <Bar dataKey="students" name="Students" radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
               </BarChart>
             </ResponsiveContainer>
           </div>

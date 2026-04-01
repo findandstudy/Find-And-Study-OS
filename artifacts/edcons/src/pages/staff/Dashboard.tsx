@@ -59,20 +59,16 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
   "message.mention": MessageCircle,
 };
 
-const mockChartData = [
-  { name: 'Jan', leads: 400, students: 240 },
-  { name: 'Feb', leads: 300, students: 139 },
-  { name: 'Mar', leads: 200, students: 980 },
-  { name: 'Apr', leads: 278, students: 390 },
-  { name: 'May', leads: 189, students: 480 },
-  { name: 'Jun', leads: 239, students: 380 },
-  { name: 'Jul', leads: 349, students: 430 },
-];
 
 function isOverdue(d: string) { return new Date(d) < new Date(); }
 
 export default function StaffDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
+
+  const { data: growthData = [] } = useQuery<any[]>({
+    queryKey: ["/api/stats/growth"],
+    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()),
+  });
 
   const { data: upcomingFollowUps = [] } = useQuery<any[]>({
     queryKey: ["/api/follow-ups/upcoming"],
@@ -145,7 +141,7 @@ export default function StaffDashboard() {
             <h3 className="font-display font-bold text-lg mb-6">Growth Overview</h3>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>

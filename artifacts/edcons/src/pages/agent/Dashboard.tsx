@@ -2,11 +2,12 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useListApplications } from "@workspace/api-client-react";
+import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useLocation } from "wouter";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import {
   Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell,
   UserPlus, FileText, FileCheck, DollarSign, CreditCard, CalendarClock,
@@ -68,8 +69,12 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 export default function AgentDashboard() {
   const { user } = useAuth(true);
   const [, setLocation] = useLocation();
-  const { data: appsResp } = useListApplications(undefined, { query: { queryKey: ["agent-dash-apps"] } as any });
-  const applications: any[] = (appsResp as any)?.data || appsResp || [];
+  const { data: stats, isLoading: statsLoading } = useGetOverviewStats();
+
+  const { data: growthData = [] } = useQuery<any[]>({
+    queryKey: ["/api/stats/growth"],
+    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()),
+  });
 
   const { data: agentProfile } = useQuery<any>({
     queryKey: ["/api/agents/me"],
@@ -102,8 +107,7 @@ export default function AgentDashboard() {
   });
   const quickLinks: any[] = quickLinksData?.data || [];
 
-  const enrolled = applications.filter(a => a.stage === "enrolled").length;
-  const inProgress = applications.filter(a => !["enrolled", "rejected"].includes(a.stage)).length;
+  const s: any = stats || {};
   const assignedStaff = agentProfile?.assignedStaff;
   const parentAgent = agentProfile?.parentAgent;
   const contactPerson = user?.role === "sub_agent" ? parentAgent : assignedStaff;
@@ -120,20 +124,46 @@ export default function AgentDashboard() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "Total Students", value: applications.length, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-            { label: "In Progress", value: inProgress, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
-            { label: "Enrolled", value: enrolled, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10" },
-            { label: "Conversion Rate", value: applications.length > 0 ? `${Math.round((enrolled / applications.length) * 100)}%` : "—", icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10" },
-          ].map((s, i) => (
+            { label: "Total Students", value: s.totalStudents || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+            { label: "Active Applications", value: s.activeApplications || 0, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
+            { label: "Enrolled", value: s.enrolledStudents || 0, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10" },
+            { label: "Total Leads", value: s.totalLeads || 0, icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10" },
+          ].map((st, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
-              <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mb-3`}>
-                <s.icon className={`w-5 h-5 ${s.color}`} />
+              <div className={`w-10 h-10 rounded-xl ${st.bg} flex items-center justify-center mb-3`}>
+                <st.icon className={`w-5 h-5 ${st.color}`} />
               </div>
-              <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
-              <p className="text-2xl font-display font-bold text-foreground mt-1">{s.value}</p>
+              <p className="text-xs text-muted-foreground font-medium">{st.label}</p>
+              <p className="text-2xl font-display font-bold text-foreground mt-1">{statsLoading ? "..." : st.value}</p>
             </Card>
           ))}
         </div>
+
+        <Card className="p-6 border-none shadow-lg shadow-black/5">
+          <h3 className="font-display font-bold text-lg mb-6">Growth Overview</h3>
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="agentLeads" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="agentStudents" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }} />
+                <Area type="monotone" dataKey="students" name="Students" stroke="#22c55e" strokeWidth={2.5} fillOpacity={1} fill="url(#agentStudents)" />
+                <Area type="monotone" dataKey="applications" name="Applications" stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#agentLeads)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {contactPerson && (
