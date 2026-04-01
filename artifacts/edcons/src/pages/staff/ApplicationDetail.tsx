@@ -29,12 +29,22 @@ import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
 
 const STUDY_LEVELS = [
+  { value: "pre_bachelors", label: "Associate" },
   { value: "associate", label: "Associate" },
+  { value: "Associate", label: "Associate" },
   { value: "bachelors", label: "Bachelor's" },
+  { value: "Bachelor", label: "Bachelor's" },
+  { value: "pre_masters", label: "Pre-Masters" },
   { value: "masters", label: "Master's" },
+  { value: "Master", label: "Master's" },
   { value: "doctorate", label: "Doctorate" },
+  { value: "Ph.D", label: "Doctorate" },
+  { value: "phd", label: "Doctorate" },
   { value: "language", label: "Language" },
+  { value: "Language Course", label: "Language" },
   { value: "foundation", label: "Foundation" },
+  { value: "Foundation", label: "Foundation" },
+  { value: "Pathway Programs", label: "Pathway" },
 ];
 
 function formatCurrency(v: number | string | null | undefined) {

@@ -80,12 +80,19 @@ function getStageColor(stage: PipelineStage, index: number): string {
 }
 
 const STUDY_LEVELS = [
-  { value: "Bachelor", label: "Bachelor" },
-  { value: "Master", label: "Master" },
-  { value: "Ph.D", label: "Ph.D" },
+  { value: "pre_bachelors", label: "Associate" },
   { value: "Associate", label: "Associate" },
+  { value: "Bachelor", label: "Bachelor" },
+  { value: "bachelors", label: "Bachelor" },
+  { value: "Master", label: "Master" },
+  { value: "masters", label: "Master" },
+  { value: "Ph.D", label: "Ph.D" },
+  { value: "phd", label: "Ph.D" },
+  { value: "pre_masters", label: "Pre-Masters" },
   { value: "Language Course", label: "Language Course" },
+  { value: "language", label: "Language Course" },
   { value: "Foundation", label: "Foundation" },
+  { value: "foundation", label: "Foundation" },
   { value: "Pathway Programs", label: "Pathway Programs" },
 ];
 

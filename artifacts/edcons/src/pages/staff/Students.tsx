@@ -996,7 +996,7 @@ function AddStudentModal({
                         <SelectValue placeholder="Select level..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pre_bachelors">Pre-Bachelors</SelectItem>
+                        <SelectItem value="pre_bachelors">Associate</SelectItem>
                         <SelectItem value="bachelors">Bachelors</SelectItem>
                         <SelectItem value="pre_masters">Pre-Masters</SelectItem>
                         <SelectItem value="masters">Masters</SelectItem>
@@ -1762,7 +1762,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                     <SelectValue placeholder="Select level..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pre_bachelors">Pre-Bachelors</SelectItem>
+                    <SelectItem value="pre_bachelors">Associate</SelectItem>
                     <SelectItem value="bachelors">Bachelors</SelectItem>
                     <SelectItem value="pre_masters">Pre-Masters</SelectItem>
                     <SelectItem value="masters">Masters</SelectItem>
