@@ -678,6 +678,7 @@ router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), as
       createdById: followUpsTable.createdById,
       createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
       createdAt: followUpsTable.createdAt,
+      updatedAt: followUpsTable.updatedAt,
     })
     .from(followUpsTable)
     .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
@@ -696,11 +697,20 @@ router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), a
     res.status(400).json({ error: "title and scheduledAt are required" });
     return;
   }
+  const scheduledDate = new Date(scheduledAt);
+  if (isNaN(scheduledDate.getTime())) {
+    res.status(400).json({ error: "Invalid date" });
+    return;
+  }
+  if (scheduledDate < new Date()) {
+    res.status(400).json({ error: "Cannot schedule follow-ups in the past" });
+    return;
+  }
   const [followUp] = await db.insert(followUpsTable).values({
     leadId: id,
     resourceType: "lead",
     title: String(title).slice(0, 500),
-    scheduledAt: new Date(scheduledAt),
+    scheduledAt: scheduledDate,
     notes: notes ? String(notes).slice(0, 2000) : null,
     createdById: req.user!.id,
     assignedToId: req.user!.id,
@@ -717,16 +727,46 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
     updates.completed = completed;
     updates.completedAt = completed ? new Date() : null;
   }
-  if (title !== undefined) updates.title = title;
-  if (scheduledAt !== undefined) updates.scheduledAt = new Date(scheduledAt);
-  if (notes !== undefined) updates.notes = notes;
+  if (title !== undefined) updates.title = String(title).slice(0, 500);
+  if (scheduledAt !== undefined) {
+    const scheduledDate = new Date(scheduledAt);
+    if (isNaN(scheduledDate.getTime())) {
+      res.status(400).json({ error: "Invalid date" });
+      return;
+    }
+    if (scheduledDate < new Date()) {
+      res.status(400).json({ error: "Cannot schedule follow-ups in the past" });
+      return;
+    }
+    updates.scheduledAt = scheduledDate;
+  }
+  if (notes !== undefined) updates.notes = notes ? String(notes).slice(0, 2000) : null;
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields" });
     return;
   }
+  updates.updatedAt = new Date();
   const [followUp] = await db.update(followUpsTable).set(updates).where(eq(followUpsTable.id, id)).returning();
   if (!followUp) { res.status(404).json({ error: "Follow-up not found" }); return; }
-  res.json(followUp);
+  const [enriched] = await db
+    .select({
+      id: followUpsTable.id,
+      leadId: followUpsTable.leadId,
+      studentId: followUpsTable.studentId,
+      title: followUpsTable.title,
+      scheduledAt: followUpsTable.scheduledAt,
+      completed: followUpsTable.completed,
+      completedAt: followUpsTable.completedAt,
+      notes: followUpsTable.notes,
+      createdById: followUpsTable.createdById,
+      createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      createdAt: followUpsTable.createdAt,
+      updatedAt: followUpsTable.updatedAt,
+    })
+    .from(followUpsTable)
+    .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
+    .where(eq(followUpsTable.id, id));
+  res.json(enriched || followUp);
 });
 
 router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {

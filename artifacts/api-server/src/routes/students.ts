@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, desc, inArray, isNotNull } from "drizzle-orm";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -720,6 +720,66 @@ router.post("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...A
   }
 
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
+});
+
+router.get("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const data = await db
+    .select({
+      id: followUpsTable.id,
+      studentId: followUpsTable.studentId,
+      title: followUpsTable.title,
+      scheduledAt: followUpsTable.scheduledAt,
+      completed: followUpsTable.completed,
+      completedAt: followUpsTable.completedAt,
+      notes: followUpsTable.notes,
+      createdById: followUpsTable.createdById,
+      createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      createdAt: followUpsTable.createdAt,
+      updatedAt: followUpsTable.updatedAt,
+    })
+    .from(followUpsTable)
+    .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
+    .where(eq(followUpsTable.studentId, id))
+    .orderBy(asc(followUpsTable.scheduledAt))
+    .limit(limitNum)
+    .offset(offset);
+  res.json(data);
+});
+
+router.post("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { title, scheduledAt, notes } = req.body;
+  if (!title?.trim() || !scheduledAt) {
+    res.status(400).json({ error: "title and scheduledAt are required" });
+    return;
+  }
+  const scheduledDate = new Date(scheduledAt);
+  if (isNaN(scheduledDate.getTime())) {
+    res.status(400).json({ error: "Invalid date" });
+    return;
+  }
+  if (scheduledDate < new Date()) {
+    res.status(400).json({ error: "Cannot schedule follow-ups in the past" });
+    return;
+  }
+  const [followUp] = await db.insert(followUpsTable).values({
+    studentId: id,
+    resourceType: "student",
+    title: String(title).slice(0, 500),
+    scheduledAt: scheduledDate,
+    notes: notes ? String(notes).slice(0, 2000) : null,
+    createdById: req.user!.id,
+    assignedToId: req.user!.id,
+  }).returning();
+  res.status(201).json(followUp);
 });
 
 export default router;

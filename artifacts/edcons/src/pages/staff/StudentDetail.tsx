@@ -7,7 +7,7 @@ import {
   useListDocuments,
   customFetch,
 } from "@workspace/api-client-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -153,6 +154,102 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         qc.invalidateQueries({ queryKey: [`/api/students/${id}/notes`, noteTab] });
       }
     } catch {}
+  }
+
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [fuTitle, setFuTitle] = useState("");
+  const [fuDate, setFuDate] = useState("");
+  const [fuTime, setFuTime] = useState("10:00");
+  const [fuNotes, setFuNotes] = useState("");
+  const [editingFuId, setEditingFuId] = useState<number | null>(null);
+
+  const { data: followUps = [] } = useQuery<any[]>({
+    queryKey: [`/api/students/${id}/follow-ups`],
+    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/follow-ups`, { credentials: "include" }).then(r => r.json()).then(d => Array.isArray(d) ? d : []),
+    enabled: !!id && !!isStaffUser,
+  });
+
+  const createFollowUp = useMutation({
+    mutationFn: (body: any) =>
+      fetch(`${BASE_URL}/api/students/${id}/follow-ups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || "Failed"); }); return r.json(); }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/students/${id}/follow-ups`] });
+      resetFollowUpForm();
+      toast({ title: "Follow-up scheduled" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleFollowUp = useMutation({
+    mutationFn: ({ fuId, completed }: { fuId: number; completed: boolean }) =>
+      fetch(`${BASE_URL}/api/follow-ups/${fuId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ completed }),
+      }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/students/${id}/follow-ups`] });
+      toast({ title: "Follow-up updated" });
+    },
+  });
+
+  const editFollowUp = useMutation({
+    mutationFn: ({ fuId, body }: { fuId: number; body: any }) =>
+      fetch(`${BASE_URL}/api/follow-ups/${fuId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || "Failed"); }); return r.json(); }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/students/${id}/follow-ups`] });
+      resetFollowUpForm();
+      toast({ title: "Follow-up updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function resetFollowUpForm() {
+    setShowFollowUpForm(false);
+    setEditingFuId(null);
+    setFuTitle("");
+    setFuDate("");
+    setFuTime("10:00");
+    setFuNotes("");
+  }
+
+  function handleCreateFollowUp() {
+    if (!fuTitle.trim() || !fuDate) return;
+    const scheduledAt = new Date(`${fuDate}T${fuTime}`).toISOString();
+    if (editingFuId) {
+      editFollowUp.mutate({ fuId: editingFuId, body: { title: fuTitle, scheduledAt, notes: fuNotes || null } });
+    } else {
+      createFollowUp.mutate({ title: fuTitle, scheduledAt, notes: fuNotes || undefined });
+    }
+  }
+
+  function startEditFollowUp(fu: any) {
+    setEditingFuId(fu.id);
+    setFuTitle(fu.title);
+    const d = new Date(fu.scheduledAt);
+    setFuDate(d.toISOString().slice(0, 10));
+    setFuTime(d.toTimeString().slice(0, 5));
+    setFuNotes(fu.notes || "");
+    setShowFollowUpForm(true);
+  }
+
+  function isOverdue(scheduledAt: string) {
+    return new Date(scheduledAt) < new Date();
   }
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -472,6 +569,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <TabsTrigger value="applications">
               Applications {applications.length > 0 && `(${applications.length})`}
             </TabsTrigger>
+            {isStaffUser && (
+              <TabsTrigger value="followups">
+                Follow-ups {(followUps as any[]).length > 0 && `(${(followUps as any[]).length})`}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -861,6 +963,144 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               )}
             </div>
           </TabsContent>
+
+          {isStaffUser && (
+            <TabsContent value="followups" className="mt-4">
+              <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-primary" />
+                    <h2 className="font-semibold text-foreground">Follow-ups</h2>
+                    <span className="text-xs text-muted-foreground">({(followUps as any[]).length})</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => { resetFollowUpForm(); setShowFollowUpForm(!showFollowUpForm); }}
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add
+                  </Button>
+                </div>
+
+                {showFollowUpForm && (
+                  <div className="bg-secondary/30 rounded-xl p-4 space-y-3 border">
+                    <Input
+                      placeholder="Follow-up title (e.g. Call about admission)"
+                      value={fuTitle}
+                      onChange={e => setFuTitle(e.target.value)}
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        type="date"
+                        value={fuDate}
+                        onChange={e => setFuDate(e.target.value)}
+                        min={new Date().toISOString().slice(0, 10)}
+                      />
+                      <Input
+                        type="time"
+                        value={fuTime}
+                        onChange={e => setFuTime(e.target.value)}
+                      />
+                    </div>
+                    <Textarea
+                      placeholder="Notes (optional)"
+                      value={fuNotes}
+                      onChange={e => setFuNotes(e.target.value)}
+                      className="resize-none min-h-[60px]"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="ghost" size="sm" onClick={resetFollowUpForm}>Cancel</Button>
+                      <Button
+                        size="sm"
+                        onClick={handleCreateFollowUp}
+                        disabled={(editingFuId ? editFollowUp.isPending : createFollowUp.isPending) || !fuTitle.trim() || !fuDate}
+                      >
+                        {editingFuId ? "Save" : "Schedule"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {(followUps as any[]).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No follow-ups scheduled.</p>
+                  ) : (
+                    (followUps as any[]).map((fu: any) => (
+                      <div
+                        key={fu.id}
+                        className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                          fu.completed
+                            ? "bg-green-50/50 border-green-200"
+                            : isOverdue(fu.scheduledAt)
+                            ? "bg-red-50/50 border-red-200"
+                            : "bg-secondary/30 border-border"
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleFollowUp.mutate({ fuId: fu.id, completed: !fu.completed })}
+                          className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            fu.completed
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-muted-foreground/40 hover:border-primary"
+                          }`}
+                        >
+                          {fu.completed && <CheckCircle2 className="w-3 h-3" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className={`text-sm font-medium ${fu.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                              {fu.title}
+                            </p>
+                            {!fu.completed && (
+                              <button
+                                onClick={() => startEditFollowUp(fu)}
+                                className="shrink-0 p-1 rounded hover:bg-secondary transition-colors"
+                              >
+                                <Pencil className="w-3 h-3 text-muted-foreground" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Clock className="w-3 h-3 text-muted-foreground" />
+                            <span className={`text-xs ${
+                              fu.completed ? "text-muted-foreground" : isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"
+                            }`}>
+                              {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              {" "}
+                              {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                              {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
+                            </span>
+                          </div>
+                          {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            {fu.createdByName && (
+                              <span className="text-xs text-muted-foreground/60">by {fu.createdByName}</span>
+                            )}
+                            {fu.createdAt && (
+                              <span className="text-xs text-muted-foreground/50">
+                                {new Date(fu.createdAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                {" "}
+                                {new Date(fu.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                            {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
+                              <span className="text-xs text-amber-500/70">
+                                (edited {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                {" "}
+                                {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
