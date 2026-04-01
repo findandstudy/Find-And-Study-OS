@@ -52,6 +52,7 @@ import {
   EyeOff,
   Shield,
 } from "lucide-react";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 type StaffMember = {
   id: number;
@@ -428,28 +429,28 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
           <DialogTitle>Add Staff Member</DialogTitle>
           <DialogDescription>Create a new team member with specific permissions</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4 pt-2">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">First Name *</Label>
-              <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-9" />
+              <Input autoComplete="off" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-9" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Last Name *</Label>
-              <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-9" />
+              <Input autoComplete="off" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-9" />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <Mail className="w-3 h-3" /> Email *
             </Label>
-            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-9" />
+            <Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-9" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <Phone className="w-3 h-3" /> Phone
             </Label>
-            <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+90 555 123 4567" className="h-9" />
+            <PhoneInput value={form.phone} onChange={phone => setForm(f => ({ ...f, phone }))} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -458,6 +459,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
             <div className="relative">
               <Input
                 type={showPw ? "text" : "password"}
+                autoComplete="new-password"
                 value={form.password}
                 onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                 placeholder="Min 6 characters"
@@ -537,7 +539,7 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <Phone className="w-3 h-3" /> Phone
             </Label>
-            <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="h-9" />
+            <PhoneInput value={form.phone} onChange={phone => setForm(f => ({ ...f, phone }))} />
           </div>
 
           <div className="border-t border-border/50 pt-4">
