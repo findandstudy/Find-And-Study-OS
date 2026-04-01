@@ -1990,6 +1990,8 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   experience_letters: "Experience Letters",
   other_certificates_documents: "Other Certificates/Documents",
   ielts_pte_gre_gmat_toefl_duolingo: "IELTS/PTE/GRE/GMAT/TOEFL/Duolingo",
+  photo: "Photo",
+  diploma_recognition: "Diploma Recognition",
 };
 
 const STUDENT_DOC_LEVELS = [

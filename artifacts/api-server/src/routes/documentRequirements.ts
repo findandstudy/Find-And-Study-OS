@@ -31,6 +31,8 @@ const DEFAULT_DOCUMENT_TYPES = [
   "experience_letters",
   "other_certificates_documents",
   "ielts_pte_gre_gmat_toefl_duolingo",
+  "photo",
+  "diploma_recognition",
 ];
 
 router.get("/document-requirements", requireAuth, async (_req, res): Promise<void> => {
