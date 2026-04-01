@@ -76,14 +76,18 @@ export default defineConfig({
 
           if (
             id.includes("react-dom") ||
-            (id.includes("/react/") && !id.includes("lucide-react")) ||
+            (id.includes("/react/") && !id.includes("lucide-react"))
+          ) {
+            return "vendor-react";
+          }
+          if (
             id.includes("@radix-ui") ||
             id.includes("class-variance-authority") ||
             id.includes("clsx") ||
             id.includes("tailwind-merge") ||
             id.includes("cmdk")
           ) {
-            return "vendor-react";
+            return "vendor-ui";
           }
           if (id.includes("@tanstack")) {
             return "vendor-tanstack";
@@ -102,6 +106,19 @@ export default defineConfig({
           }
           if (id.includes("wouter") || id.includes("zod")) {
             return "vendor-core";
+          }
+          if (
+            id.includes("date-fns") ||
+            id.includes("@internationalized") ||
+            id.includes("react-day-picker")
+          ) {
+            return "vendor-date";
+          }
+          if (
+            id.includes("@dnd-kit") ||
+            id.includes("@floating-ui")
+          ) {
+            return "vendor-dnd";
           }
         },
       },

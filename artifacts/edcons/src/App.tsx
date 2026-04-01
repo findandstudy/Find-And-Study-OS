@@ -16,6 +16,29 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
 
+function lazyRetry<T extends { default: React.ComponentType<any> }>(
+  factory: () => Promise<T>,
+  retries = 2
+): React.LazyExoticComponent<T["default"]> {
+  return lazy(() => {
+    const attempt = (remaining: number): Promise<T> =>
+      factory().catch((err: Error) => {
+        if (remaining <= 0) {
+          const reloaded = sessionStorage.getItem("chunk_reload");
+          if (!reloaded) {
+            sessionStorage.setItem("chunk_reload", "1");
+            window.location.reload();
+          }
+          throw err;
+        }
+        return new Promise<T>((resolve) =>
+          setTimeout(() => resolve(attempt(remaining - 1)), 800)
+        );
+      });
+    return attempt(retries);
+  });
+}
+
 class LazyErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
     super(props);
@@ -23,6 +46,9 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
   }
   static getDerivedStateFromError() {
     return { hasError: true };
+  }
+  componentDidMount() {
+    sessionStorage.removeItem("chunk_reload");
   }
   render() {
     if (this.state.hasError) {
@@ -42,50 +68,50 @@ class LazyErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
   }
 }
 
-const About = lazy(() => import("@/pages/public/About"));
-const Countries = lazy(() => import("@/pages/public/Countries"));
-const CountryDetail = lazy(() => import("@/pages/public/CountryDetail"));
-const Programs = lazy(() => import("@/pages/public/Programs"));
-const Blog = lazy(() => import("@/pages/public/Blog"));
-const Contact = lazy(() => import("@/pages/public/Contact"));
+const About = lazyRetry(() => import("@/pages/public/About"));
+const Countries = lazyRetry(() => import("@/pages/public/Countries"));
+const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
+const Programs = lazyRetry(() => import("@/pages/public/Programs"));
+const Blog = lazyRetry(() => import("@/pages/public/Blog"));
+const Contact = lazyRetry(() => import("@/pages/public/Contact"));
 
-const StaffDashboard = lazy(() => import("@/pages/staff/Dashboard"));
-const StaffLeads = lazy(() => import("@/pages/staff/Leads"));
-const StaffStudents = lazy(() => import("@/pages/staff/Students"));
-const StaffApplications = lazy(() => import("@/pages/staff/Applications"));
-const StaffFinance = lazy(() => import("@/pages/staff/Finance"));
-const StaffSettings = lazy(() => import("@/pages/staff/Settings"));
-const LeadDetail = lazy(() => import("@/pages/staff/LeadDetail"));
-const StudentDetail = lazy(() => import("@/pages/staff/StudentDetail"));
-const ApplicationDetail = lazy(() => import("@/pages/staff/ApplicationDetail"));
-const StaffDocuments = lazy(() => import("@/pages/staff/Documents"));
-const StaffCourseFinder = lazy(() => import("@/pages/staff/CourseFinder"));
-const StaffAgents = lazy(() => import("@/pages/staff/Agents"));
-const StaffAgentDetail = lazy(() => import("@/pages/staff/AgentDetail"));
-const StaffMessages = lazy(() => import("@/pages/staff/Messages"));
+const StaffDashboard = lazyRetry(() => import("@/pages/staff/Dashboard"));
+const StaffLeads = lazyRetry(() => import("@/pages/staff/Leads"));
+const StaffStudents = lazyRetry(() => import("@/pages/staff/Students"));
+const StaffApplications = lazyRetry(() => import("@/pages/staff/Applications"));
+const StaffFinance = lazyRetry(() => import("@/pages/staff/Finance"));
+const StaffSettings = lazyRetry(() => import("@/pages/staff/Settings"));
+const LeadDetail = lazyRetry(() => import("@/pages/staff/LeadDetail"));
+const StudentDetail = lazyRetry(() => import("@/pages/staff/StudentDetail"));
+const ApplicationDetail = lazyRetry(() => import("@/pages/staff/ApplicationDetail"));
+const StaffDocuments = lazyRetry(() => import("@/pages/staff/Documents"));
+const StaffCourseFinder = lazyRetry(() => import("@/pages/staff/CourseFinder"));
+const StaffAgents = lazyRetry(() => import("@/pages/staff/Agents"));
+const StaffAgentDetail = lazyRetry(() => import("@/pages/staff/AgentDetail"));
+const StaffMessages = lazyRetry(() => import("@/pages/staff/Messages"));
 
-const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
-const AdminUsers = lazy(() => import("@/pages/admin/Users"));
-const AdminCatalog = lazy(() => import("@/pages/admin/Catalog"));
-const AdminAuditLog = lazy(() => import("@/pages/admin/AuditLog"));
-const AdminActivity = lazy(() => import("@/pages/admin/Activity"));
-const AdminEmbeds = lazy(() => import("@/pages/admin/Embeds"));
+const AdminDashboard = lazyRetry(() => import("@/pages/admin/Dashboard"));
+const AdminUsers = lazyRetry(() => import("@/pages/admin/Users"));
+const AdminCatalog = lazyRetry(() => import("@/pages/admin/Catalog"));
+const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
+const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
+const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
 
-const StudentDashboard = lazy(() => import("@/pages/student/Dashboard"));
-const StudentApplications = lazy(() => import("@/pages/student/Applications"));
-const StudentWishlist = lazy(() => import("@/pages/student/Wishlist"));
-const StudentMessages = lazy(() => import("@/pages/student/Messages"));
-const StudentAccount = lazy(() => import("@/pages/student/Account"));
+const StudentDashboard = lazyRetry(() => import("@/pages/student/Dashboard"));
+const StudentApplications = lazyRetry(() => import("@/pages/student/Applications"));
+const StudentWishlist = lazyRetry(() => import("@/pages/student/Wishlist"));
+const StudentMessages = lazyRetry(() => import("@/pages/student/Messages"));
+const StudentAccount = lazyRetry(() => import("@/pages/student/Account"));
 
-const AgentDashboard = lazy(() => import("@/pages/agent/Dashboard"));
-const AgentApps = lazy(() => import("@/pages/agent/AgentApps"));
-const AgentLeads = lazy(() => import("@/pages/agent/Leads"));
-const AgentStudents = lazy(() => import("@/pages/agent/Students"));
-const AgentCommissions = lazy(() => import("@/pages/agent/Commissions"));
-const AgentAccount = lazy(() => import("@/pages/agent/Account"));
-const AgentSubAgents = lazy(() => import("@/pages/agent/SubAgents"));
-const AgentMessages = lazy(() => import("@/pages/agent/Messages"));
-const AgentTeam = lazy(() => import("@/pages/agent/Team"));
+const AgentDashboard = lazyRetry(() => import("@/pages/agent/Dashboard"));
+const AgentApps = lazyRetry(() => import("@/pages/agent/AgentApps"));
+const AgentLeads = lazyRetry(() => import("@/pages/agent/Leads"));
+const AgentStudents = lazyRetry(() => import("@/pages/agent/Students"));
+const AgentCommissions = lazyRetry(() => import("@/pages/agent/Commissions"));
+const AgentAccount = lazyRetry(() => import("@/pages/agent/Account"));
+const AgentSubAgents = lazyRetry(() => import("@/pages/agent/SubAgents"));
+const AgentMessages = lazyRetry(() => import("@/pages/agent/Messages"));
+const AgentTeam = lazyRetry(() => import("@/pages/agent/Team"));
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
@@ -95,8 +121,10 @@ const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 2,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 15,
       retry: 1,
+      refetchOnWindowFocus: false,
     },
   },
 });
