@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
-import { ALL_NATIONALITIES, PHONE_CODES } from "@/lib/nationalities";
+import { ALL_NATIONALITIES, PHONE_CODES, normalizeNationality } from "@/lib/nationalities";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
@@ -432,8 +432,11 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     ];
 
     for (const [fk, ek] of mapping) {
-      const val = data[ek];
+      let val = data[ek];
       if (val != null && val !== "") {
+        if (fk === "nationality") {
+          val = normalizeNationality(String(val));
+        }
         (newForm as any)[fk] = String(val);
         newExtracted.add(fk);
       }
