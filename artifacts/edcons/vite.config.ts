@@ -67,21 +67,15 @@ export default defineConfig({
 
           if (
             id.includes("react-dom") ||
-            (id.includes("/react/") && !id.includes("lucide-react"))
-          ) {
-            return "vendor-react";
-          }
-          if (
+            (id.includes("/react/") && !id.includes("lucide-react")) ||
             id.includes("@radix-ui") ||
             id.includes("class-variance-authority") ||
             id.includes("clsx") ||
             id.includes("tailwind-merge") ||
-            id.includes("cmdk")
+            id.includes("cmdk") ||
+            id.includes("@tanstack")
           ) {
-            return "vendor-ui";
-          }
-          if (id.includes("@tanstack")) {
-            return "vendor-tanstack";
+            return "vendor-react";
           }
           if (id.includes("lucide-react")) {
             return "vendor-icons";
