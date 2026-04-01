@@ -1,6 +1,6 @@
 import express from "express";
 import app from "./app";
-import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable } from "@workspace/db";
+import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable, documentRequirementsTable } from "@workspace/db";
 import { eq, isNull, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
@@ -320,12 +320,56 @@ async function seedClaudeIntegration() {
   }
 }
 
+async function seedDocumentRequirements() {
+  try {
+    const existing = await db.select({ id: documentRequirementsTable.id }).from(documentRequirementsTable).limit(1);
+    if (existing.length > 0) return;
+    const LEVELS = ["pre_bachelors", "bachelors", "pre_masters", "masters", "phd", "others"];
+    const TYPES = [
+      "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
+      "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
+      "diploma_certificate", "diploma_transcript",
+      "bachelors_certificate", "bachelors_transcript",
+      "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
+      "masters_certificate", "masters_transcript",
+      "masters_provisional_certificate", "masters_transcript_all_semesters",
+      "passport", "cv", "lor", "sop", "essay", "experience_letters",
+      "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
+    ];
+    const rows: any[] = [];
+    for (let i = 0; i < TYPES.length; i++) {
+      const dt = TYPES[i];
+      for (const level of LEVELS) {
+        let enabled = false, mandatory = false;
+        if (dt === "passport") { enabled = true; mandatory = true; }
+        else if (dt === "diploma_certificate" || dt === "diploma_transcript") {
+          if (level === "pre_bachelors" || level === "others") { enabled = true; mandatory = true; }
+        } else if (dt === "bachelors_certificate" || dt === "bachelors_transcript") {
+          if (level === "pre_masters" || level === "masters") { enabled = true; mandatory = true; }
+        } else if (dt === "bachelors_transcript_all_semesters") {
+          if (level === "masters") { enabled = true; }
+        } else if (dt === "masters_certificate" || dt === "masters_transcript") {
+          if (level === "phd") { enabled = true; mandatory = true; }
+        } else if (dt === "other_certificates_documents" || dt === "ielts_pte_gre_gmat_toefl_duolingo") {
+          enabled = true;
+        } else if (dt === "sop") { enabled = true; }
+        rows.push({ documentType: dt, level, enabled, mandatory, sortOrder: i });
+      }
+    }
+    await db.insert(documentRequirementsTable).values(rows);
+    console.log("[seed] Document requirements seeded:", rows.length, "rows");
+  } catch (err) {
+    console.error("[seed] seedDocumentRequirements error:", err);
+  }
+}
+
 (async () => {
   await ensureSuperAdmin();
   await ensureAgentUser();
   await runSeedSQL();
   await linkAgentUser();
   await seedClaudeIntegration();
+  await seedDocumentRequirements();
   await backfillMissingCommissions();
   await backfillStudentAppStatus();
   const { startEmailWorker } = await import("./lib/email");

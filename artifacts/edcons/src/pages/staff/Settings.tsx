@@ -179,7 +179,7 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
   );
 }
 
-type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "webtolead" | "advanced";
+type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "studentDocuments" | "integrations" | "quicklinks" | "webtolead" | "advanced";
 
 interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
 
@@ -195,6 +195,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "seo", label: "SEO & Social", icon: SearchIcon, group: "organization", managerOnly: true },
   { id: "email", label: "Email Branding", icon: Mail, group: "organization", managerOnly: true },
   { id: "documents", label: "Documents / PDF", icon: FileText, group: "organization", managerOnly: true },
+  { id: "studentDocuments", label: "Student Documents", icon: FileText, group: "organization", managerOnly: true },
   { id: "integrations", label: "Integrations", icon: Plug, group: "organization", managerOnly: true },
   { id: "quicklinks", label: "Quick Links", icon: LinkIcon, group: "organization", managerOnly: true },
   { id: "webtolead", label: "Web to Lead", icon: ExternalLink, group: "organization", superAdminOnly: true },
@@ -414,6 +415,7 @@ export default function SettingsPage() {
       case "seo": return isManager ? SeoTab() : null;
       case "email": return isManager ? EmailBrandingTab() : null;
       case "documents": return isManager ? DocumentsTab() : null;
+      case "studentDocuments": return isManager ? <StudentDocumentsTab /> : null;
       case "integrations": return isManager ? IntegrationsTab() : null;
       case "quicklinks": return isManager ? <QuickLinksTab /> : null;
       case "webtolead": return isSuperAdmin ? <WebToLeadTab /> : null;
@@ -1959,6 +1961,179 @@ function QuickLinksTab() {
             <p>Choose a target to control which users see each link: Agent, Sub Agent, Staff, or Student.</p>
             <p>Changes are reflected immediately on user dashboards — no restart needed.</p>
           </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  high_school_diploma_translation: "High School Diploma (Translation)",
+  class_10th_ssc_marks_sheet: "Class 10th/SSC Marks Sheet",
+  class_12th_hsc_certificate: "Class 12th/+2/HSC Certificate",
+  class_12th_hsc_marks_sheet: "Class 12th/+2/HSC Marks Sheet",
+  diploma_certificate: "Diploma Certificate",
+  diploma_transcript: "Diploma Transcript",
+  bachelors_certificate: "Bachelors Certificate",
+  bachelors_transcript: "Bachelors Transcript",
+  bachelors_provisional_certificate: "Bachelors Provisional Certificate",
+  bachelors_transcript_all_semesters: "Bachelors Transcript (All Semesters)",
+  masters_certificate: "Masters Certificate",
+  masters_transcript: "Masters Transcript",
+  masters_provisional_certificate: "Masters Provisional Certificate",
+  masters_transcript_all_semesters: "Masters Transcript (All Semesters)",
+  passport: "Passport",
+  cv: "CV",
+  lor: "LOR",
+  sop: "SOP",
+  essay: "Essay",
+  experience_letters: "Experience Letters",
+  other_certificates_documents: "Other Certificates/Documents",
+  ielts_pte_gre_gmat_toefl_duolingo: "IELTS/PTE/GRE/GMAT/TOEFL/Duolingo",
+};
+
+const STUDENT_DOC_LEVELS = [
+  { key: "pre_bachelors", label: "Pre-Bachelors" },
+  { key: "bachelors", label: "Bachelors" },
+  { key: "pre_masters", label: "Pre-Masters" },
+  { key: "masters", label: "Masters" },
+  { key: "phd", label: "Ph.D" },
+  { key: "others", label: "Others" },
+];
+
+const STUDENT_DOC_TYPES = Object.keys(DOC_TYPE_LABELS);
+
+function StudentDocumentsTab() {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [reqs, setReqs] = useState<Record<string, { enabled: boolean; mandatory: boolean }>>({});
+
+  const { data: requirements, isLoading } = useQuery({
+    queryKey: ["document-requirements"],
+    queryFn: async () => {
+      const res: any = await customFetch(`/api/document-requirements`);
+      return res as any[];
+    },
+  });
+
+  useEffect(() => {
+    if (requirements && Array.isArray(requirements)) {
+      const map: Record<string, { enabled: boolean; mandatory: boolean }> = {};
+      for (const r of requirements) {
+        map[`${r.documentType}__${r.level}`] = { enabled: r.enabled, mandatory: r.mandatory };
+      }
+      setReqs(map);
+    }
+  }, [requirements]);
+
+  const getReq = (docType: string, level: string) => {
+    return reqs[`${docType}__${level}`] || { enabled: false, mandatory: false };
+  };
+
+  const setReq = (docType: string, level: string, field: "enabled" | "mandatory", value: boolean) => {
+    const key = `${docType}__${level}`;
+    const prev = reqs[key] || { enabled: false, mandatory: false };
+    if (field === "enabled" && !value) {
+      setReqs(r => ({ ...r, [key]: { enabled: false, mandatory: false } }));
+    } else if (field === "mandatory" && value) {
+      setReqs(r => ({ ...r, [key]: { ...prev, enabled: true, mandatory: true } }));
+    } else {
+      setReqs(r => ({ ...r, [key]: { ...prev, [field]: value } }));
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload: any[] = [];
+      for (const dt of STUDENT_DOC_TYPES) {
+        for (const level of STUDENT_DOC_LEVELS) {
+          const r = getReq(dt, level.key);
+          payload.push({ documentType: dt, level: level.key, enabled: r.enabled, mandatory: r.mandatory });
+        }
+      }
+      await customFetch(`/api/document-requirements`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requirements: payload }),
+      });
+      toast({ title: "Saved", description: "Document requirements updated successfully." });
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to save document requirements.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-display font-semibold text-lg">Student Document Requirements</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enable document upload options based on student overseas study level.
+            </p>
+          </div>
+          <Button onClick={handleSave} disabled={saving} className="rounded-xl gap-2">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Changes
+          </Button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left py-3 px-4 font-semibold min-w-[250px]">Document</th>
+                {STUDENT_DOC_LEVELS.map(l => (
+                  <th key={l.key} className="text-center py-3 px-3 font-semibold min-w-[120px]">{l.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {STUDENT_DOC_TYPES.map((dt, idx) => (
+                <tr key={dt} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                  <td className="py-3 px-4 font-medium text-sm border-b">{DOC_TYPE_LABELS[dt]}</td>
+                  {STUDENT_DOC_LEVELS.map(level => {
+                    const r = getReq(dt, level.key);
+                    return (
+                      <td key={level.key} className="py-2 px-3 border-b">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={r.enabled}
+                              onChange={e => setReq(dt, level.key, "enabled", e.target.checked)}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-muted-foreground">Enable</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={r.mandatory}
+                              onChange={e => setReq(dt, level.key, "mandatory", e.target.checked)}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-muted-foreground">Mandatory</span>
+                          </label>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>

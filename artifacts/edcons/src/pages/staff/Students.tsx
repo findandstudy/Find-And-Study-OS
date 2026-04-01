@@ -175,6 +175,7 @@ const EMPTY_FORM = {
   universityBachelor: "", universityMaster: "",
   languageScore: "",
   notes: "",
+  interestedLevel: "",
 };
 
 const GRADING_SYSTEMS = [
@@ -744,6 +745,7 @@ function AddStudentModal({
           gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null,
           languageScore: form.languageScore || null,
           notes: form.notes || null,
+          interestedLevel: form.interestedLevel || null,
           status: defaultStatus || "active",
         } as any,
       },
@@ -987,6 +989,22 @@ function AddStudentModal({
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 space-y-1.5">
+                    <Label className="font-semibold text-sm">Interested Level</Label>
+                    <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
+                      <SelectTrigger className="rounded-xl h-9">
+                        <SelectValue placeholder="Select level..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pre_bachelors">Pre-Bachelors</SelectItem>
+                        <SelectItem value="bachelors">Bachelors</SelectItem>
+                        <SelectItem value="pre_masters">Pre-Masters</SelectItem>
+                        <SelectItem value="masters">Masters</SelectItem>
+                        <SelectItem value="phd">Ph.D</SelectItem>
+                        <SelectItem value="others">Others</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="col-span-2">
                     <FormField label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" aiExtracted={ef.has("highSchool")} />
                   </div>
@@ -1565,7 +1583,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     motherName: "", fatherName: "", address: "",
     highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
     universityBachelor: "", universityMaster: "",
-    languageScore: "", notes: "",
+    languageScore: "", notes: "", interestedLevel: "",
   });
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
@@ -1616,6 +1634,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         universityMaster: student.universityMaster || "",
         languageScore: student.languageScore || "",
         notes: student.notes || "",
+        interestedLevel: student.interestedLevel || "",
       });
     }
   }, [open, student]);
@@ -1643,6 +1662,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           passportExpiry: form.passportExpiry,
           motherName: form.motherName, fatherName: form.fatherName,
           address: form.address, highSchool: form.highSchool,
+          interestedLevel: form.interestedLevel || null,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
           gpa, universityBachelor: form.universityBachelor,
           universityMaster: form.universityMaster,
@@ -1735,6 +1755,22 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-1.5">
+                <Label className="font-semibold text-sm">Interested Level</Label>
+                <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
+                  <SelectTrigger className="rounded-xl h-9">
+                    <SelectValue placeholder="Select level..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pre_bachelors">Pre-Bachelors</SelectItem>
+                    <SelectItem value="bachelors">Bachelors</SelectItem>
+                    <SelectItem value="pre_masters">Pre-Masters</SelectItem>
+                    <SelectItem value="masters">Masters</SelectItem>
+                    <SelectItem value="phd">Ph.D</SelectItem>
+                    <SelectItem value="others">Others</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
               <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
               <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />

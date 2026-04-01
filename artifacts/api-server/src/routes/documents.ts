@@ -6,6 +6,8 @@ import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
+import archiver from "archiver";
+import { PDFDocument } from "pdf-lib";
 
 const router: IRouter = Router();
 
@@ -302,6 +304,98 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
   await db.update(documentsTable).set({ deletedAt: new Date() }).where(eq(documentsTable.id, id));
   await logAudit(req.user!.id, "delete_document", "document", id, { name: doc.name }, req.ip);
   res.sendStatus(204);
+});
+
+router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+  const studentId = parseInt(req.params.studentId, 10);
+  if (isNaN(studentId)) { res.status(400).json({ error: "Invalid studentId" }); return; }
+
+  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, studentId));
+  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+
+  if (isAgentRole(req.user!.role)) {
+    const visibleIds = await getAgentVisibleIds(req.user!.id, req.user!.role);
+    if (!student.agentId || !visibleIds.includes(student.agentId)) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  }
+
+  const docs = await db.select().from(documentsTable).where(
+    and(eq(documentsTable.studentId, studentId), isNull(documentsTable.deletedAt))
+  );
+
+  if (docs.length === 0) {
+    res.status(404).json({ error: "No documents found for this student" });
+    return;
+  }
+
+  const studentName = `${student.firstName}_${student.lastName}`.replace(/\s+/g, "_");
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${studentName}_documents.zip"`);
+
+  const archive = archiver("zip", { zlib: { level: 5 } });
+  archive.pipe(res);
+
+  for (const doc of docs) {
+    if (doc.fileData) {
+      const ext = doc.mimeType === "application/pdf" ? ".pdf" : doc.mimeType === "image/png" ? ".png" : ".jpg";
+      const safeName = (doc.name || doc.type || "document").replace(/[^a-zA-Z0-9_\-]/g, "_");
+      archive.append(Buffer.from(doc.fileData, "base64"), { name: `${safeName}_${doc.id}${ext}` });
+    }
+  }
+
+  await archive.finalize();
+});
+
+router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+  const { documentIds, studentId } = req.body;
+
+  if (!Array.isArray(documentIds) || documentIds.length < 2) {
+    res.status(400).json({ error: "At least 2 document IDs are required" });
+    return;
+  }
+
+  const numericIds = documentIds.map((id: any) => parseInt(id, 10)).filter((id: number) => !isNaN(id));
+  const docs = await db.select().from(documentsTable).where(
+    and(inArray(documentsTable.id, numericIds), isNull(documentsTable.deletedAt))
+  );
+
+  const pdfDocs = docs.filter(d => d.fileData && d.mimeType === "application/pdf");
+  if (pdfDocs.length < 2) {
+    res.status(400).json({ error: "At least 2 PDF documents are required for merge" });
+    return;
+  }
+
+  if (isAgentRole(req.user!.role) && studentId) {
+    const visibleIds = await getAgentVisibleIds(req.user!.id, req.user!.role);
+    const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+    if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  }
+
+  try {
+    const mergedPdf = await PDFDocument.create();
+
+    for (const doc of pdfDocs) {
+      const pdfBytes = Buffer.from(doc.fileData!, "base64");
+      const sourcePdf = await PDFDocument.load(pdfBytes);
+      const pages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
+      for (const page of pages) {
+        mergedPdf.addPage(page);
+      }
+    }
+
+    const mergedBytes = await mergedPdf.save();
+    const base64 = Buffer.from(mergedBytes).toString("base64");
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="merged_documents.pdf"`);
+    res.send(Buffer.from(mergedBytes));
+  } catch (err) {
+    console.error("[DOCUMENTS] PDF merge error:", err);
+    res.status(500).json({ error: "Failed to merge PDFs" });
+  }
 });
 
 router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {

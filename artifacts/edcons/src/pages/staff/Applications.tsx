@@ -1092,7 +1092,18 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   const createApplication = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: () => { toast({ title: "Application created" }); handleClose(); onSuccess(); },
-    onError: (err: any) => { toast({ title: "Failed", description: err?.message, variant: "destructive" }); },
+    onError: (err: any) => {
+      let desc = err?.message || "Failed";
+      try {
+        const parsed = JSON.parse(desc);
+        if (parsed?.missingFields) {
+          desc = `Student is missing required fields: ${parsed.missingFields.join(", ")}. Please complete the student profile first.`;
+        } else if (parsed?.error) {
+          desc = parsed.error;
+        }
+      } catch {}
+      toast({ title: "Failed", description: desc, variant: "destructive" });
+    },
   });
 
   function handleClose() { setSelectedStudent(null); setForm({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" }); onClose(); }

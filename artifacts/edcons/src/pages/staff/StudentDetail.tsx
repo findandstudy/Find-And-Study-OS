@@ -352,7 +352,14 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       setShowNewApp(false);
       setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake("");
     } catch (err: any) {
-      toast({ title: "Failed", description: err.message || "Could not create application", variant: "destructive" });
+      let desc = err.message || "Could not create application";
+      const errData = err?.data;
+      if (errData?.missingFields) {
+        desc = `Student is missing required fields: ${errData.missingFields.join(", ")}. Please complete the student profile first.`;
+      } else if (errData?.error) {
+        desc = errData.error;
+      }
+      toast({ title: "Failed", description: desc, variant: "destructive" });
     } finally {
       setAppSubmitting(false);
     }
@@ -872,96 +879,13 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-muted-foreground">{documents.length} documents</p>
-              <Button size="sm" onClick={openUpload}>
-                <Upload className="w-4 h-4 mr-2" />
-                Upload Docs
-              </Button>
-            </div>
-
-            <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
-              {documents.length === 0 ? (
-                <div
-                  className="p-16 text-center text-muted-foreground cursor-pointer hover:bg-secondary/30 transition-colors"
-                  onClick={openUpload}
-                >
-                  <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">No documents yet</p>
-                  <p className="text-xs mt-1">Click to upload documents</p>
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-secondary/50">
-                    <tr>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Name</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Type</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Status</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Uploaded</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">File</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {documents.map((doc: any) => (
-                      <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors">
-                        <td className="px-4 py-3 font-medium">{doc.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground capitalize">{doc.type}</td>
-                        <td className="px-4 py-3">
-                          <Badge className="capitalize text-xs px-2 py-0.5 border-0 rounded-full bg-secondary text-secondary-foreground">
-                            {doc.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {new Date(doc.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          {doc.fileData && (
-                            <button
-                              onClick={() => {
-                                const mimeType = doc.mimeType || "application/octet-stream";
-                                const filename = buildDownloadFilename(doc.type, student?.firstName ?? "", student?.lastName ?? "", mimeType);
-                                const link = document.createElement("a");
-                                link.href = `data:${mimeType};base64,${doc.fileData}`;
-                                link.download = filename;
-                                link.click();
-                              }}
-                              className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                              Download
-                            </button>
-                          )}
-                          {doc.fileUrl && !doc.fileData && (
-                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                              View
-                            </a>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={async () => {
-                              if (!confirm("Are you sure you want to delete this document?")) return;
-                              const resp = await apiFetch(`${BASE_URL}/api/documents/${doc.id}`, {
-                                method: "DELETE",
-                              });
-                              if (resp.ok) {
-                                await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student"))) });
-                              }
-                            }}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
-                            title="Delete document"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+            <StudentDocumentsSection
+              studentId={id}
+              student={student}
+              documents={documents}
+              openUpload={openUpload}
+              qc={qc}
+            />
           </TabsContent>
 
           {isStaffUser && (
@@ -1313,7 +1237,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
     motherName: "", fatherName: "", address: "",
     highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
     universityBachelor: "", universityMaster: "",
-    languageScore: "", notes: "",
+    languageScore: "", notes: "", interestedLevel: "",
   });
   const [saving, setSaving] = useState(false);
   const qc = useQueryClient();
@@ -1347,6 +1271,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
         universityMaster: student.universityMaster || "",
         languageScore: student.languageScore || "",
         notes: student.notes || "",
+        interestedLevel: student.interestedLevel || "",
       });
     }
   }, [open, student]);
@@ -1378,6 +1303,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           gpa, universityBachelor: form.universityBachelor,
           universityMaster: form.universityMaster,
           languageScore: form.languageScore, notes: form.notes,
+          interestedLevel: form.interestedLevel || null,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1460,6 +1386,22 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Education</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5 col-span-2">
+                <Label className="font-semibold text-sm">Interested Level</Label>
+                <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
+                  <SelectTrigger className="rounded-xl h-9">
+                    <SelectValue placeholder="Select level..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pre_bachelors">Pre-Bachelors</SelectItem>
+                    <SelectItem value="bachelors">Bachelors</SelectItem>
+                    <SelectItem value="pre_masters">Pre-Masters</SelectItem>
+                    <SelectItem value="masters">Masters</SelectItem>
+                    <SelectItem value="phd">Ph.D</SelectItem>
+                    <SelectItem value="others">Others</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
               <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
               <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
@@ -1543,4 +1485,294 @@ async function fileToBase64(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+const DETAIL_DOC_TYPE_LABELS: Record<string, string> = {
+  high_school_diploma_translation: "High School Diploma (Translation)",
+  class_10th_ssc_marks_sheet: "Class 10th/SSC Marks Sheet",
+  class_12th_hsc_certificate: "Class 12th/+2/HSC Certificate",
+  class_12th_hsc_marks_sheet: "Class 12th/+2/HSC Marks Sheet",
+  diploma_certificate: "Diploma Certificate",
+  diploma_transcript: "Diploma Transcript",
+  bachelors_certificate: "Bachelors Certificate",
+  bachelors_transcript: "Bachelors Transcript",
+  bachelors_provisional_certificate: "Bachelors Provisional Certificate",
+  bachelors_transcript_all_semesters: "Bachelors Transcript (All Semesters)",
+  masters_certificate: "Masters Certificate",
+  masters_transcript: "Masters Transcript",
+  masters_provisional_certificate: "Masters Provisional Certificate",
+  masters_transcript_all_semesters: "Masters Transcript (All Semesters)",
+  passport: "Passport",
+  cv: "CV",
+  lor: "LOR",
+  sop: "SOP",
+  essay: "Essay",
+  experience_letters: "Experience Letters",
+  other_certificates_documents: "Other Certificates/Documents",
+  ielts_pte_gre_gmat_toefl_duolingo: "IELTS/PTE/GRE/GMAT/TOEFL/Duolingo",
+};
+
+function StudentDocumentsSection({ studentId, student, documents, openUpload, qc }: {
+  studentId: number;
+  student: any;
+  documents: any[];
+  openUpload: () => void;
+  qc: any;
+}) {
+  const { toast } = useToast();
+  const [downloadingZip, setDownloadingZip] = useState(false);
+  const [mergingPdf, setMergingPdf] = useState(false);
+  const [selectedForMerge, setSelectedForMerge] = useState<number[]>([]);
+
+  const { data: docRequirements } = useQuery({
+    queryKey: ["document-requirements"],
+    queryFn: async () => {
+      const res: any = await customFetch(`/api/document-requirements`);
+      return res as any[];
+    },
+  });
+
+  const level = student?.interestedLevel;
+  const requiredDocs = useMemo(() => {
+    if (!docRequirements || !level) return [];
+    return docRequirements
+      .filter((r: any) => r.level === level && r.enabled)
+      .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+  }, [docRequirements, level]);
+
+  const mandatoryMissing = useMemo(() => {
+    if (!requiredDocs.length) return [];
+    const uploadedTypes = new Set(documents.map((d: any) => (d.type || "").toLowerCase()));
+    return requiredDocs
+      .filter((r: any) => r.mandatory && !uploadedTypes.has(r.documentType))
+      .map((r: any) => DETAIL_DOC_TYPE_LABELS[r.documentType] || r.documentType);
+  }, [requiredDocs, documents]);
+
+  const handleZipDownload = async () => {
+    setDownloadingZip(true);
+    try {
+      const resp = await fetch(`${BASE_URL}/api/documents/download-zip/${studentId}`, { credentials: "include" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Download failed" }));
+        toast({ title: "Error", description: err.error || "Download failed", variant: "destructive" });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${student?.firstName || "student"}_${student?.lastName || "docs"}_documents.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Error", description: "Failed to download ZIP", variant: "destructive" });
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  const handleMergePdf = async () => {
+    if (selectedForMerge.length < 2) {
+      toast({ title: "Select PDFs", description: "Select at least 2 PDF documents to merge.", variant: "destructive" });
+      return;
+    }
+    setMergingPdf(true);
+    try {
+      const resp = await fetch(`${BASE_URL}/api/documents/merge-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ documentIds: selectedForMerge, studentId }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Merge failed" }));
+        toast({ title: "Error", description: err.error || "Merge failed", variant: "destructive" });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "merged_documents.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Success", description: "PDFs merged and downloaded." });
+      setSelectedForMerge([]);
+    } catch {
+      toast({ title: "Error", description: "Failed to merge PDFs", variant: "destructive" });
+    } finally {
+      setMergingPdf(false);
+    }
+  };
+
+  const toggleMergeSelection = (docId: number) => {
+    setSelectedForMerge(prev =>
+      prev.includes(docId) ? prev.filter(id => id !== docId) : [...prev, docId]
+    );
+  };
+
+  const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf");
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p className="text-sm text-muted-foreground">{documents.length} documents</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {documents.length > 0 && (
+            <Button size="sm" variant="outline" onClick={handleZipDownload} disabled={downloadingZip}>
+              {downloadingZip ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              Download ZIP
+            </Button>
+          )}
+          {pdfDocs.length >= 2 && (
+            <Button size="sm" variant="outline" onClick={handleMergePdf} disabled={mergingPdf || selectedForMerge.length < 2}>
+              {mergingPdf ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+              Merge PDFs ({selectedForMerge.length})
+            </Button>
+          )}
+          <Button size="sm" onClick={openUpload}>
+            <Upload className="w-4 h-4 mr-2" />
+            Upload Docs
+          </Button>
+        </div>
+      </div>
+
+      {level && requiredDocs.length > 0 && (
+        <div className="mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <GraduationCap className="w-4 h-4 text-blue-600" />
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+              Required Documents for {level.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {requiredDocs.map((r: any) => {
+              const uploaded = documents.some((d: any) => (d.type || "").toLowerCase() === r.documentType);
+              return (
+                <Badge
+                  key={r.id}
+                  variant={uploaded ? "default" : "outline"}
+                  className={`text-xs ${uploaded ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : r.mandatory ? "border-red-300 text-red-600 dark:border-red-700 dark:text-red-400" : "border-gray-300 text-gray-500"}`}
+                >
+                  {uploaded && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                  {DETAIL_DOC_TYPE_LABELS[r.documentType] || r.documentType}
+                  {r.mandatory && !uploaded && " *"}
+                </Badge>
+              );
+            })}
+          </div>
+          {mandatoryMissing.length > 0 && (
+            <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+              Missing mandatory: {mandatoryMissing.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+
+      {!level && (
+        <div className="mb-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Set the student's "Interested Level" in the Edit form to see level-specific required documents.
+          </p>
+        </div>
+      )}
+
+      <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
+        {documents.length === 0 ? (
+          <div
+            className="p-16 text-center text-muted-foreground cursor-pointer hover:bg-secondary/30 transition-colors"
+            onClick={openUpload}
+          >
+            <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">No documents yet</p>
+            <p className="text-xs mt-1">Click to upload documents</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/50">
+              <tr>
+                {pdfDocs.length >= 2 && (
+                  <th className="text-center px-2 py-3 w-8">
+                    <span className="text-xs text-muted-foreground">PDF</span>
+                  </th>
+                )}
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Name</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Type</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Status</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Uploaded</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">File</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents.map((doc: any) => (
+                <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors">
+                  {pdfDocs.length >= 2 && (
+                    <td className="px-2 py-3 text-center">
+                      {doc.mimeType === "application/pdf" && (
+                        <input
+                          type="checkbox"
+                          checked={selectedForMerge.includes(doc.id)}
+                          onChange={() => toggleMergeSelection(doc.id)}
+                          className="rounded border-gray-300"
+                        />
+                      )}
+                    </td>
+                  )}
+                  <td className="px-4 py-3 font-medium">{doc.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground capitalize">{DETAIL_DOC_TYPE_LABELS[doc.type] || doc.type}</td>
+                  <td className="px-4 py-3">
+                    <Badge className="capitalize text-xs px-2 py-0.5 border-0 rounded-full bg-secondary text-secondary-foreground">
+                      {doc.status}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {new Date(doc.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {doc.fileData && (
+                      <button
+                        onClick={() => {
+                          const mimeType = doc.mimeType || "application/octet-stream";
+                          const filename = buildDownloadFilename(doc.type, student?.firstName ?? "", student?.lastName ?? "", mimeType);
+                          const link = document.createElement("a");
+                          link.href = `data:${mimeType};base64,${doc.fileData}`;
+                          link.download = filename;
+                          link.click();
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download
+                      </button>
+                    )}
+                    {doc.fileUrl && !doc.fileData && (
+                      <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
+                        View
+                      </a>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={async () => {
+                        if (!confirm("Are you sure you want to delete this document?")) return;
+                        const resp = await apiFetch(`${BASE_URL}/api/documents/${doc.id}`, { method: "DELETE" });
+                        if (resp.ok) {
+                          await qc.invalidateQueries({ predicate: (q: any) => q.queryKey.some((k: any) => typeof k === "string" && (k.includes("document") || k.includes("student"))) });
+                        }
+                      }}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                      title="Delete document"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
 }

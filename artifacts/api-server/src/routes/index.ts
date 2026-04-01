@@ -29,6 +29,7 @@ import publicApplyRouter from "./public-apply";
 import destinationsRouter from "./destinations";
 import quickLinksRouter from "./quickLinks";
 import exportRouter from "./export";
+import documentRequirementsRouter from "./documentRequirements";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(publicApplyRouter);
 router.use(destinationsRouter);
 router.use(quickLinksRouter);
 router.use(exportRouter);
+router.use(documentRequirementsRouter);
 
 export default router;

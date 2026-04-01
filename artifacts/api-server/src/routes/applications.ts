@@ -195,13 +195,27 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       return;
     }
   }
-  const [studentRec2] = await db.select({
-    firstName: studentsTable.firstName, lastName: studentsTable.lastName,
-    assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId,
-    originType: studentsTable.originType, originEntityType: studentsTable.originEntityType,
-    originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
-  }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
-  const studentFullName = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : null;
+  const [studentFull] = await db.select().from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+  if (!studentFull) {
+    res.status(404).json({ error: "Student not found" });
+    return;
+  }
+  const missingFields: string[] = [];
+  if (!studentFull.firstName) missingFields.push("firstName");
+  if (!studentFull.lastName) missingFields.push("lastName");
+  if (!studentFull.email) missingFields.push("email");
+  if (!studentFull.phone) missingFields.push("phone");
+  if (!studentFull.nationality) missingFields.push("nationality");
+  if (!studentFull.passportNumber) missingFields.push("passportNumber");
+  if (missingFields.length > 0) {
+    res.status(422).json({
+      error: "Student is missing required information for application creation",
+      missingFields,
+    });
+    return;
+  }
+  const studentRec2 = studentFull;
+  const studentFullName = `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim();
 
   let snapshotTuitionFee = tuitionFee ? Number(tuitionFee) : null;
   let snapshotDiscountedFee: number | null = null;

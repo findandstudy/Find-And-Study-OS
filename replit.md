@@ -66,3 +66,11 @@ A comprehensive security audit was performed. Key fixes applied:
 - **PII Logging (2026-03-31):** Email addresses and verification codes are now masked in production logs (auth.ts)
 - **Reports:** `AUDIT_REPORT.md` (full findings), `AUTHORIZATION_AUDIT.md` (endpoint-by-endpoint auth matrix)
 - **Remaining:** `dangerouslySetInnerHTML` in chart (low risk), sequential DB queries in POST /applications (perf), synchronous audit log writes (perf)
+
+## Document Management System (2026-04-01)
+
+- **Document Requirements by Level:** `document_requirements` table stores per-level (pre_bachelors, bachelors, pre_masters, masters, phd, others) document requirements (22 doc types × 6 levels = 132 rows). Admin configures via Settings > Student Documents tab (checkbox grid for enable/mandatory per doc type per level).
+- **Student Interested Level:** `interestedLevel` column on students table, editable in Add Student modal, Edit Student dialogs (both in Students.tsx pipeline and StudentDetail.tsx).
+- **ZIP Download:** `GET /api/documents/download-zip/:studentId` streams a ZIP archive of all student documents.
+- **PDF Merge:** `POST /api/documents/merge-pdf` merges selected documents into a single PDF using pdf-lib.
+- **Application Creation Validation:** POST /api/applications validates student has firstName, lastName, email, phone, nationality, passportNumber before allowing creation. Returns 422 with `missingFields` array. Frontend shows descriptive error toast.

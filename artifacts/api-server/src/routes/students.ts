@@ -19,7 +19,7 @@ const STUDENT_PATCH_FIELDS = [
   "status", "agentId", "assignedToId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
   "universityBachelor", "universityMaster",
-  "photoUrl", "nextFollowup",
+  "photoUrl", "nextFollowup", "interestedLevel",
 ];
 
 router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
@@ -194,6 +194,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     motherName, fatherName, address,
     agentId, userId, notes,
     highSchool, graduationYear, gpa, languageScore, season,
+    interestedLevel,
   } = req.body;
 
   if (!firstName || !lastName) {
@@ -264,6 +265,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     graduationYear: graduationYear ? parseInt(String(graduationYear), 10) : null,
     gpa: gpa || null,
     languageScore: languageScore || null,
+    interestedLevel: interestedLevel || null,
     season: season || String(new Date().getFullYear()),
     ...origin,
   }).returning();
