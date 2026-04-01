@@ -1,8 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { db, usersTable, emailVerificationCodesTable } from "@workspace/db";
-import { eq, and, gt, sql } from "drizzle-orm";
+import { db, usersTable, emailVerificationCodesTable, studentsTable } from "@workspace/db";
+import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
 import {
   clearSession,
@@ -194,9 +194,35 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
   if (existing) {
+    if (existing.role !== "student") {
+      res.status(409).json({ error: "This email is already in use by a staff/admin account" });
+      return;
+    }
+
+    const [archivedStudent] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, existing.id), isNotNull(studentsTable.deletedAt)));
+    if (archivedStudent) {
+      const hash = await bcrypt.hash(password, 10);
+      await db.update(usersTable).set({ passwordHash: hash, isActive: false, emailVerified: false, firstName: firstName.trim(), lastName: lastName.trim(), phone: phone?.trim() || null }).where(eq(usersTable.id, existing.id));
+      await db.update(studentsTable).set({ deletedAt: null }).where(eq(studentsTable.id, archivedStudent.id));
+
+      const code = generateVerificationCode();
+      await db.insert(emailVerificationCodesTable).values({ email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) });
+      console.log(`[EMAIL VERIFICATION] Archived student restored, code sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
+      try {
+        const emailContent = buildVerificationCodeEmail(firstName.trim(), code);
+        await sendEmail(normalizedEmail, emailContent);
+      } catch (err) {
+        console.error("[EMAIL VERIFICATION] Failed to send verification email:", err);
+      }
+      res.status(201).json({ message: "Account restored. Please verify your email.", requiresVerification: true, email: normalizedEmail });
+      return;
+    }
+
     res.status(409).json({ error: "An account with this email already exists" });
     return;
   }
+
+  const [archivedStudentByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
 
   const hash = await bcrypt.hash(password, 10);
   const [user] = await db.insert(usersTable).values({
@@ -210,6 +236,11 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     emailVerified: false,
     language: "en",
   }).returning();
+
+  if (archivedStudentByEmail) {
+    await db.update(studentsTable).set({ deletedAt: null, userId: user.id }).where(eq(studentsTable.id, archivedStudentByEmail.id));
+    console.log(`[AUTH REGISTER] Restored archived student #${archivedStudentByEmail.id} for new user #${user.id}`);
+  }
 
   const code = generateVerificationCode();
   await db.insert(emailVerificationCodesTable).values({

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, desc, inArray } from "drizzle-orm";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, desc, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -216,6 +216,20 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       return;
     }
     resolvedAgentId = agentRec.id;
+  }
+
+  if (email) {
+    const normalizedEmail = email.toLowerCase().trim();
+    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+    if (existingUser && existingUser.role !== "student") {
+      res.status(409).json({ error: "This email is already in use by a staff/admin account. Same email cannot be used across different roles." });
+      return;
+    }
+    const [existingStudent] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNull(studentsTable.deletedAt)));
+    if (existingStudent) {
+      res.status(409).json({ error: "A student with this email already exists" });
+      return;
+    }
   }
 
   const user = req.user!;
@@ -485,9 +499,23 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
-    const result = await db.update(studentsTable).set({ deletedAt: new Date() }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
-    updated = result.rowCount ?? numericIds.length;
-    for (const id of numericIds) await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
+    const studentsToArchive = await db.select({ id: studentsTable.id, userId: studentsTable.userId }).from(studentsTable).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+    const archiveIds = studentsToArchive.map(s => s.id);
+    if (archiveIds.length > 0) {
+      const apps = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(inArray(applicationsTable.studentId, archiveIds));
+      const appIds = apps.map(a => a.id);
+      if (appIds.length > 0) {
+        await db.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.studentId, archiveIds), inArray(documentsTable.applicationId, appIds)));
+        await db.delete(applicationsTable).where(inArray(applicationsTable.id, appIds));
+      }
+      const result = await db.update(studentsTable).set({ deletedAt: new Date() }).where(inArray(studentsTable.id, archiveIds));
+      updated = result.rowCount ?? archiveIds.length;
+      const userIdsToDeactivate = studentsToArchive.filter(s => s.userId).map(s => s.userId!);
+      if (userIdsToDeactivate.length > 0) {
+        await db.update(usersTable).set({ isActive: false }).where(inArray(usersTable.id, userIdsToDeactivate));
+      }
+    }
+    for (const id of archiveIds) await logAudit(req.user!.id, "archive_student", "student", id, null, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(studentsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
@@ -504,12 +532,26 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
 
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [deleted] = await db.update(studentsTable)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)))
-    .returning();
-  if (!deleted) { res.status(404).json({ error: "Student not found" }); return; }
-  await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
+  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+
+  const apps = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(eq(applicationsTable.studentId, id));
+  const appIds = apps.map(a => a.id);
+
+  if (appIds.length > 0) {
+    await db.update(documentsTable)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(documentsTable.studentId, id), inArray(documentsTable.applicationId, appIds)));
+    await db.delete(applicationsTable).where(inArray(applicationsTable.id, appIds));
+  }
+
+  await db.update(studentsTable).set({ deletedAt: new Date() }).where(eq(studentsTable.id, id));
+
+  if (student.userId) {
+    await db.update(usersTable).set({ isActive: false }).where(eq(usersTable.id, student.userId));
+  }
+
+  await logAudit(req.user!.id, "archive_student", "student", id, null, req.ip);
   res.status(204).end();
 });
 
@@ -562,6 +604,10 @@ router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLE
     }
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, student.email));
     if (existingUser) {
+      if (existingUser.role !== "student") {
+        res.status(409).json({ error: "This email is already in use by a non-student account. Cannot link." });
+        return;
+      }
       await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, existingUser.id));
       await db.update(studentsTable).set({ userId: existingUser.id }).where(eq(studentsTable.id, id));
       await logAudit(req.user!.id, "set_password", "student", id, { userId: existingUser.id, linkedExisting: true }, req.ip);

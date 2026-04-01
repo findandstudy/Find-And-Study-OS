@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, rolesTable } from "@workspace/db";
+import { db, usersTable, rolesTable, studentsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -76,9 +76,14 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     return;
   }
 
-  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
+  const normalizedEmail = email.toLowerCase().trim();
+  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
   if (existingUser) {
-    res.status(409).json({ error: "A user with this email already exists" });
+    if (existingUser.role !== role) {
+      res.status(409).json({ error: `This email is already in use by a ${existingUser.role} account. Same email cannot be used across different roles.` });
+    } else {
+      res.status(409).json({ error: "A user with this email already exists" });
+    }
     return;
   }
 
@@ -94,7 +99,7 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
   const [user] = await db
     .insert(usersTable)
     .values({
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       firstName, lastName, role,
       phone: phone || null,
       language: language || "en",

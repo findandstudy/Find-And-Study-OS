@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
 import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
@@ -206,7 +206,28 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     let resultAppId: number | null = null;
 
     if (existingUser) {
+      if (existingUser.role !== "student") {
+        res.status(409).json({ error: "This email is already in use by a staff account. Please use a different email." });
+        return;
+      }
+
       let [existingStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, existingUser.id));
+
+      if (existingStudent && existingStudent.deletedAt) {
+        await db.update(studentsTable).set({ deletedAt: null }).where(eq(studentsTable.id, existingStudent.id));
+        await db.update(usersTable).set({ isActive: true }).where(eq(usersTable.id, existingUser.id));
+        console.log(`[PUBLIC-APPLY] Restored archived student #${existingStudent.id} for user ${normalizedEmail}`);
+      }
+
+      if (!existingStudent) {
+        const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
+        if (archivedByEmail) {
+          await db.update(studentsTable).set({ deletedAt: null, userId: existingUser.id }).where(eq(studentsTable.id, archivedByEmail.id));
+          existingStudent = { ...archivedByEmail, deletedAt: null, userId: existingUser.id } as any;
+          console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} by email match`);
+        }
+      }
+
       if (!existingStudent) {
         [existingStudent] = await db.insert(studentsTable).values({
           userId: existingUser.id,
@@ -257,6 +278,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
       console.log(`[PUBLIC-APPLY] Existing user ${normalizedEmail}, created application for student #${existingStudent.id}`);
     } else {
+      const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
+
       const passwordToken = generateSecureToken();
       const verificationToken = generateSecureToken();
 
@@ -275,24 +298,31 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         createdFromSource: "public_apply",
       }).returning();
 
-      const [newStudent] = await db.insert(studentsTable).values({
-        userId: newUser.id,
-        firstName: s(firstName, 100)!,
-        lastName: s(lastName, 100)!,
-        email: normalizedEmail,
-        phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
-        nationality: nationality || null,
-        dateOfBirth: s(dateOfBirth, 20),
-        motherName: s(motherName, 100),
-        fatherName: s(fatherName, 100),
-        passportNumber: s(passportNumber, 50),
-        passportIssueDate: s(passportIssueDate, 20),
-        passportExpiry: s(passportExpiry, 20),
-        address: s(address, 300),
-        highSchool: s(highSchool, 200),
-        graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
-        gpa: s(gpa, 20),
-      }).returning();
+      let newStudent: any;
+      if (archivedByEmail) {
+        await db.update(studentsTable).set({ deletedAt: null, userId: newUser.id }).where(eq(studentsTable.id, archivedByEmail.id));
+        newStudent = { ...archivedByEmail, deletedAt: null, userId: newUser.id };
+        console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} for new user ${normalizedEmail}`);
+      } else {
+        [newStudent] = await db.insert(studentsTable).values({
+          userId: newUser.id,
+          firstName: s(firstName, 100)!,
+          lastName: s(lastName, 100)!,
+          email: normalizedEmail,
+          phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+          nationality: nationality || null,
+          dateOfBirth: s(dateOfBirth, 20),
+          motherName: s(motherName, 100),
+          fatherName: s(fatherName, 100),
+          passportNumber: s(passportNumber, 50),
+          passportIssueDate: s(passportIssueDate, 20),
+          passportExpiry: s(passportExpiry, 20),
+          address: s(address, 300),
+          highSchool: s(highSchool, 200),
+          graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
+          gpa: s(gpa, 20),
+        }).returning();
+      }
 
       resultStudentId = newStudent.id;
       resultAppId = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
