@@ -194,9 +194,8 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : "http://localhost:5000";
+  const { getAppBaseUrl } = await import("../lib/email.js");
+  const baseUrl = getAppBaseUrl();
   const loginUrl = `${baseUrl}/login`;
 
   try {
@@ -268,7 +267,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       resultStudentId = existingStudent.id;
       resultAppId = await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
 
-      const emailContent = buildExistingAccountEmail({
+      const emailContent = await buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
         loginUrl,
         programName: programName || undefined,
@@ -330,7 +329,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
 
-      const emailContent = buildWelcomeEmail({
+      const emailContent = await buildWelcomeEmail({
         firstName: s(firstName, 100) || "Student",
         email: normalizedEmail,
         setPasswordUrl,

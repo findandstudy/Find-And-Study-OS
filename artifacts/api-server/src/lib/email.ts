@@ -132,7 +132,110 @@ export function generateSecureToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-export function buildWelcomeEmail(params: {
+interface EmailBranding {
+  logoUrl: string | null;
+  primaryColor: string;
+  buttonColor: string;
+  companyName: string;
+}
+
+let brandingCache: { data: EmailBranding; fetchedAt: number } | null = null;
+const BRANDING_TTL = 120_000;
+
+export async function getEmailBranding(): Promise<EmailBranding> {
+  if (brandingCache && Date.now() - brandingCache.fetchedAt < BRANDING_TTL) {
+    return brandingCache.data;
+  }
+  try {
+    const [settings] = await db.select({
+      emailLogoUrl: settingsTable.emailLogoUrl,
+      logoUrl: settingsTable.logoUrl,
+      logoSquareUrl: settingsTable.logoSquareUrl,
+      emailButtonColor: settingsTable.emailButtonColor,
+      themePrimary: settingsTable.themePrimary,
+      companyName: settingsTable.companyName,
+    }).from(settingsTable);
+
+    const baseUrl = getAppBaseUrl();
+    let logoUrl: string | null = null;
+    const rawLogo = settings?.emailLogoUrl || settings?.logoSquareUrl || settings?.logoUrl || null;
+    if (rawLogo) {
+      logoUrl = rawLogo.startsWith("http") ? rawLogo : `${baseUrl}${rawLogo.startsWith("/") ? "" : "/"}${rawLogo}`;
+    }
+
+    const data: EmailBranding = {
+      logoUrl,
+      primaryColor: settings?.emailButtonColor || settings?.themePrimary || "#1e3a5f",
+      buttonColor: settings?.emailButtonColor || settings?.themePrimary || "#1e3a5f",
+      companyName: settings?.companyName || "Find & Study",
+    };
+    brandingCache = { data, fetchedAt: Date.now() };
+    return data;
+  } catch (err) {
+    console.error("[EMAIL] Failed to load branding:", err);
+    return { logoUrl: null, primaryColor: "#1e3a5f", buttonColor: "#1e3a5f", companyName: "Find & Study" };
+  }
+}
+
+export function getAppBaseUrl(): string {
+  if (process.env.REPLIT_DEPLOYMENT_URL) {
+    return `https://${process.env.REPLIT_DEPLOYMENT_URL}`;
+  }
+  if (process.env.REPLIT_DOMAINS) {
+    const firstDomain = process.env.REPLIT_DOMAINS.split(",")[0].trim();
+    if (firstDomain) return `https://${firstDomain}`;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return "http://localhost:5000";
+}
+
+function emailHeader(brand: EmailBranding, subtitle?: string): string {
+  const logoHtml = brand.logoUrl
+    ? `<img src="${brand.logoUrl}" alt="${brand.companyName}" style="max-height:48px;max-width:200px;margin:0 auto 8px;" />`
+    : `<h1 style="margin:0 0 4px;color:#fff;font-size:24px;font-weight:700;">${brand.companyName}</h1>`;
+  const subtitleHtml = subtitle
+    ? `<p style="margin:4px 0 0;color:rgba(255,255,255,.85);font-size:14px;">${subtitle}</p>`
+    : "";
+  return `<div style="background:linear-gradient(135deg,${brand.primaryColor},${lightenColor(brand.primaryColor, 15)});padding:28px 32px;text-align:center;">
+      ${logoHtml}
+      ${subtitleHtml}
+    </div>`;
+}
+
+function lightenColor(hex: string, percent: number): string {
+  const h = hex.replace("#", "");
+  const num = parseInt(h, 16);
+  if (isNaN(num)) return hex;
+  const r = Math.min(255, ((num >> 16) & 0xff) + Math.round(255 * percent / 100));
+  const g = Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * percent / 100));
+  const b = Math.min(255, (num & 0xff) + Math.round(255 * percent / 100));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+function emailShell(brand: EmailBranding, subtitle: string | undefined, bodyHtml: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
+    ${emailHeader(brand, subtitle)}
+    <div style="padding:32px;">
+      ${bodyHtml}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function emailButton(label: string, url: string, color: string): string {
+  return `<div style="text-align:center;margin:0 0 16px;">
+        <a href="${url}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">${label}</a>
+      </div>`;
+}
+
+export async function buildWelcomeEmail(params: {
   firstName: string;
   email: string;
   setPasswordUrl: string;
@@ -140,8 +243,9 @@ export function buildWelcomeEmail(params: {
   loginUrl: string;
   programName?: string;
   universityName?: string;
-}): { subject: string; html: string; text: string } {
+}): Promise<{ subject: string; html: string; text: string }> {
   const { firstName, email, setPasswordUrl, verifyEmailUrl, loginUrl, programName, universityName } = params;
+  const brand = await getEmailBranding();
 
   const subject = "Your Application Has Been Received - Set Up Your Account";
 
@@ -150,16 +254,7 @@ export function buildWelcomeEmail(params: {
        ${universityName ? `<p style="margin:0 0 8px;color:#374151;font-size:14px;"><strong>University:</strong> ${universityName}</p>` : ""}`
     : "";
 
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
-    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:24px;">Find & Study</h1>
-      <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Your Global Education Journey</p>
-    </div>
-    <div style="padding:32px;">
+  const body = `
       <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Welcome, ${firstName}!</h2>
       <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
         Your application has been received and is being reviewed by our team. We have created an account for you so you can track your application progress.
@@ -169,28 +264,20 @@ export function buildWelcomeEmail(params: {
         <p style="margin:0 0 4px;color:#166534;font-size:13px;font-weight:600;">Your Login Email</p>
         <p style="margin:0;color:#15803d;font-size:15px;font-weight:700;">${email}</p>
       </div>
-      <div style="text-align:center;margin:0 0 16px;">
-        <a href="${setPasswordUrl}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Set Your Password</a>
-      </div>
-      <div style="text-align:center;margin:0 0 16px;">
-        <a href="${verifyEmailUrl}" style="display:inline-block;background:#10b981;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Verify Your Email</a>
-      </div>
-      <div style="text-align:center;margin:0 0 24px;">
-        <a href="${loginUrl}" style="display:inline-block;background:#374151;color:#fff;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;">Go to Login Page</a>
-      </div>
+      ${emailButton("Set Your Password", setPasswordUrl, brand.buttonColor)}
+      ${emailButton("Verify Your Email", verifyEmailUrl, "#10b981")}
+      ${emailButton("Go to Login Page", loginUrl, "#374151")}
       <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or copy these links into your browser:</p>
-      <p style="margin:0 0 4px;color:#6b7280;font-size:12px;word-break:break-all;">Set Password: ${setPasswordUrl}</p>
-      <p style="margin:0 0 4px;color:#6b7280;font-size:12px;word-break:break-all;">Verify Email: ${verifyEmailUrl}</p>
-      <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;">Login: ${loginUrl}</p>
+      <p style="margin:0 0 4px;color:#6b7280;font-size:12px;word-break:break-all;">Set Password: <a href="${setPasswordUrl}" style="color:${brand.buttonColor};">${setPasswordUrl}</a></p>
+      <p style="margin:0 0 4px;color:#6b7280;font-size:12px;word-break:break-all;">Verify Email: <a href="${verifyEmailUrl}" style="color:${brand.buttonColor};">${verifyEmailUrl}</a></p>
+      <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;">Login: <a href="${loginUrl}" style="color:${brand.buttonColor};">${loginUrl}</a></p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
       <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
         The password setup link expires in 48 hours.<br/>
         If you did not apply, you can safely ignore this email.
-      </p>
-    </div>
-  </div>
-</body>
-</html>`;
+      </p>`;
+
+  const html = emailShell(brand, "Your Global Education Journey", body);
 
   const text = `Welcome, ${firstName}!
 
@@ -210,13 +297,14 @@ The password setup link expires in 48 hours.`;
   return { subject, html, text };
 }
 
-export function buildExistingAccountEmail(params: {
+export async function buildExistingAccountEmail(params: {
   firstName: string;
   loginUrl: string;
   programName?: string;
   universityName?: string;
-}): { subject: string; html: string; text: string } {
+}): Promise<{ subject: string; html: string; text: string }> {
   const { firstName, loginUrl, programName, universityName } = params;
+  const brand = await getEmailBranding();
 
   const subject = "New Application Received";
 
@@ -225,32 +313,19 @@ export function buildExistingAccountEmail(params: {
        ${universityName ? `<p style="margin:0 0 8px;color:#374151;font-size:14px;"><strong>University:</strong> ${universityName}</p>` : ""}`
     : "";
 
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
-    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:24px;">Find & Study</h1>
-      <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Your Global Education Journey</p>
-    </div>
-    <div style="padding:32px;">
+  const body = `
       <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">New Application Received</h2>
       <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
         Hi ${firstName}, your new application has been received and is being reviewed by our team. You can log in to your existing account to track its progress.
       </p>
       ${applicationInfo ? `<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:0 0 24px;">${applicationInfo}</div>` : ""}
-      <div style="text-align:center;margin:0 0 24px;">
-        <a href="${loginUrl}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Log In to Your Account</a>
-      </div>
+      ${emailButton("Log In to Your Account", loginUrl, brand.buttonColor)}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
       <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
         If you did not submit this application, please contact us immediately.
-      </p>
-    </div>
-  </div>
-</body>
-</html>`;
+      </p>`;
+
+  const html = emailShell(brand, "Your Global Education Journey", body);
 
   const text = `Hi ${firstName},
 
@@ -264,35 +339,24 @@ Log in to track your application: ${loginUrl}`;
   return { subject, html, text };
 }
 
-export function buildVerificationEmail(params: {
+export async function buildVerificationEmail(params: {
   firstName: string;
   verifyEmailUrl: string;
-}): { subject: string; html: string; text: string } {
+}): Promise<{ subject: string; html: string; text: string }> {
   const { firstName, verifyEmailUrl } = params;
+  const brand = await getEmailBranding();
 
   const subject = "Verify Your Email Address";
 
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
-    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:24px;">Find & Study</h1>
-    </div>
-    <div style="padding:32px;">
+  const body = `
       <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Verify Your Email</h2>
       <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
         Hi ${firstName}, please click the button below to verify your email address.
       </p>
-      <div style="text-align:center;margin:0 0 24px;">
-        <a href="${verifyEmailUrl}" style="display:inline-block;background:#10b981;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Verify Email Address</a>
-      </div>
-      <p style="margin:0;color:#6b7280;font-size:12px;word-break:break-all;">Or copy: ${verifyEmailUrl}</p>
-    </div>
-  </div>
-</body>
-</html>`;
+      ${emailButton("Verify Email Address", verifyEmailUrl, "#10b981")}
+      <p style="margin:0;color:#6b7280;font-size:12px;word-break:break-all;">Or copy: <a href="${verifyEmailUrl}" style="color:${brand.buttonColor};">${verifyEmailUrl}</a></p>`;
+
+  const html = emailShell(brand, undefined, body);
 
   const text = `Hi ${firstName},
 
@@ -301,42 +365,30 @@ Please verify your email by visiting: ${verifyEmailUrl}`;
   return { subject, html, text };
 }
 
-export function buildPasswordResetEmail(params: {
+export async function buildPasswordResetEmail(params: {
   firstName: string;
   resetUrl: string;
-}): { subject: string; html: string; text: string } {
+}): Promise<{ subject: string; html: string; text: string }> {
   const { firstName, resetUrl } = params;
+  const brand = await getEmailBranding();
 
-  const subject = "Reset Your Password — Find & Study";
+  const subject = `Reset Your Password — ${brand.companyName}`;
 
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
-    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:24px;">Find & Study</h1>
-      <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Password Reset Request</p>
-    </div>
-    <div style="padding:32px;">
+  const body = `
       <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Reset Your Password</h2>
       <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
         Hi ${firstName}, we received a request to reset your password. Click the button below to set a new password.
       </p>
-      <div style="text-align:center;margin:0 0 24px;">
-        <a href="${resetUrl}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Reset Password</a>
-      </div>
+      ${emailButton("Reset Password", resetUrl, brand.buttonColor)}
       <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Or copy this link into your browser:</p>
-      <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;">${resetUrl}</p>
+      <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;"><a href="${resetUrl}" style="color:${brand.buttonColor};">${resetUrl}</a></p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
       <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
         This link expires in 1 hour.<br/>
         If you did not request a password reset, you can safely ignore this email.
-      </p>
-    </div>
-  </div>
-</body>
-</html>`;
+      </p>`;
+
+  const html = emailShell(brand, "Password Reset Request", body);
 
   const text = `Hi ${firstName},
 

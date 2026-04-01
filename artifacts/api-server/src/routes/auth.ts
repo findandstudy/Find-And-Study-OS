@@ -396,7 +396,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     return;
   }
 
-  const { generateSecureToken, buildPasswordResetEmail, sendEmail } = await import("../lib/email");
+  const { generateSecureToken, buildPasswordResetEmail, sendEmail, getAppBaseUrl } = await import("../lib/email");
   const resetToken = generateSecureToken();
   const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
   const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
@@ -406,12 +406,10 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     .set({ passwordResetToken: tokenHash, passwordResetExpires: resetExpires })
     .where(eq(usersTable.id, user.id));
 
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : "http://localhost:5000";
+  const baseUrl = getAppBaseUrl();
   const resetUrl = `${baseUrl}/login?token=${resetToken}`;
 
-  const emailContent = buildPasswordResetEmail({
+  const emailContent = await buildPasswordResetEmail({
     firstName: user.firstName || "User",
     resetUrl,
   });
@@ -528,8 +526,7 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
     return;
   }
 
-  const { generateSecureToken } = await import("../lib/email");
-  const { buildVerificationEmail, sendEmail } = await import("../lib/email");
+  const { generateSecureToken, buildVerificationEmail, sendEmail, getAppBaseUrl } = await import("../lib/email");
 
   const verificationToken = generateSecureToken();
   await db
@@ -537,12 +534,10 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
     .set({ emailVerificationToken: verificationToken })
     .where(eq(usersTable.id, user.id));
 
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : "http://localhost:5000";
+  const baseUrl = getAppBaseUrl();
   const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;
 
-  const emailContent = buildVerificationEmail({
+  const emailContent = await buildVerificationEmail({
     firstName: user.firstName || "Student",
     verifyEmailUrl,
   });
