@@ -25,6 +25,23 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.onerror = function(msg, src, line, col, err) {
+        var d = document.getElementById('root');
+        if (d && !d.children.length) {
+          d.innerHTML = '<div style="padding:40px;font-family:sans-serif"><h2 style="color:red">App Error</h2><pre style="white-space:pre-wrap;max-width:800px">' +
+            msg + '\n\nSource: ' + src + ':' + line + ':' + col +
+            (err && err.stack ? '\n\nStack:\n' + err.stack : '') + '</pre></div>';
+        }
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        var d = document.getElementById('root');
+        if (d && !d.children.length) {
+          d.innerHTML = '<div style="padding:40px;font-family:sans-serif"><h2 style="color:red">App Error (Promise)</h2><pre style="white-space:pre-wrap;max-width:800px">' +
+            (e.reason && e.reason.stack ? e.reason.stack : String(e.reason)) + '</pre></div>';
+        }
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
