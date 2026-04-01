@@ -12,8 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  MoreHorizontal, Pencil, Trash2, UserPlus, Building2, Unlink, LogIn, Loader2, Search, Eye,
+  MoreHorizontal, Pencil, Trash2, UserPlus, Building2, Unlink, LogIn, Loader2, Search, Eye, KeyRound, EyeOff,
 } from "lucide-react";
+import { Label } from "@/components/ui/label";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -48,6 +49,7 @@ export function RowActionsMenu({
   const [linkAgentOpen, setLinkAgentOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
+  const [setPasswordOpen, setSetPasswordOpen] = useState(false);
 
   const assignedName = currentAssignedToId && staffUsersMap ? staffUsersMap[currentAssignedToId] : null;
 
@@ -129,12 +131,17 @@ export function RowActionsMenu({
             </>
           )}
 
-          {entityType === "student" && userId && isAdmin && (
+          {entityType === "student" && isAdmin && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleImpersonate} disabled={impersonating}>
-                <LogIn className="w-3.5 h-3.5 mr-2" /> Login as Student
+              <DropdownMenuItem onClick={() => setSetPasswordOpen(true)}>
+                <KeyRound className="w-3.5 h-3.5 mr-2" /> Set Password
               </DropdownMenuItem>
+              {userId && (
+                <DropdownMenuItem onClick={handleImpersonate} disabled={impersonating}>
+                  <LogIn className="w-3.5 h-3.5 mr-2" /> Login as Student
+                </DropdownMenuItem>
+              )}
             </>
           )}
 
@@ -162,6 +169,15 @@ export function RowActionsMenu({
           currentAssignedToId={currentAssignedToId}
           currentUserId={currentUserId}
           onAssign={(uid) => { onAssign(uid); setAssignOpen(false); }}
+        />
+      )}
+
+      {entityType === "student" && (
+        <SetPasswordDialog
+          open={setPasswordOpen}
+          onClose={() => setSetPasswordOpen(false)}
+          studentId={entityId}
+          entityName={entityName}
         />
       )}
     </>
@@ -332,6 +348,106 @@ function AssignStaffDialog({ open, onClose, staffUsersList, currentAssignedToId,
         <DialogFooter>
           <Button variant="outline" onClick={() => { onClose(); setSearch(""); }}>Cancel</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SetPasswordDialog({ open, onClose, studentId, entityName }: {
+  open: boolean;
+  onClose: () => void;
+  studentId: number;
+  entityName: string;
+}) {
+  const { toast } = useToast();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  function handleClose() {
+    onClose();
+    setPassword("");
+    setConfirmPassword("");
+    setShowPw(false);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!password || password.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/students/${studentId}/set-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error || "Failed to set password");
+      }
+      toast({ title: "Password updated", description: `Password has been set for ${entityName}` });
+      handleClose();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="w-5 h-5" /> Set Password
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">Set a new password for <strong>{entityName}</strong></p>
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">New Password *</Label>
+            <div className="relative">
+              <Input
+                type={showPw ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Min 6 characters"
+                className="h-9 pr-10"
+              />
+              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Confirm Password *</Label>
+            <Input
+              type={showPw ? "text" : "password"}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+              className="h-9"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={saving}>Cancel</Button>
+            <Button type="submit" disabled={saving} className="gap-2">
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Set Password
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

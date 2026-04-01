@@ -8,6 +8,7 @@ import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
+import bcrypt from "bcryptjs";
 
 const router: IRouter = Router();
 
@@ -535,6 +536,51 @@ router.patch("/students/:id/origin", requireAuth, requireRole("super_admin", "ad
 
   await logAudit(req.user!.id, "override_origin", "student", id, { old: oldOrigin, new: { originType, originEntityType, originEntityId, originDisplayName } }, req.ip);
   res.json(updated);
+});
+
+router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
+  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+
+  const hash = await bcrypt.hash(password, 10);
+
+  if (student.userId) {
+    await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, student.userId));
+    await logAudit(req.user!.id, "set_password", "student", id, { userId: student.userId }, req.ip);
+    res.json({ success: true, userId: student.userId });
+  } else {
+    if (!student.email) {
+      res.status(400).json({ error: "Student has no email address. Please add an email first." });
+      return;
+    }
+    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, student.email));
+    if (existingUser) {
+      await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, existingUser.id));
+      await db.update(studentsTable).set({ userId: existingUser.id }).where(eq(studentsTable.id, id));
+      await logAudit(req.user!.id, "set_password", "student", id, { userId: existingUser.id, linkedExisting: true }, req.ip);
+      res.json({ success: true, userId: existingUser.id });
+    } else {
+      const [newUser] = await db.insert(usersTable).values({
+        email: student.email,
+        passwordHash: hash,
+        firstName: student.firstName || "",
+        lastName: student.lastName || "",
+        role: "student",
+        isActive: true,
+        phone: student.phone || null,
+      }).returning();
+      await db.update(studentsTable).set({ userId: newUser.id }).where(eq(studentsTable.id, id));
+      await logAudit(req.user!.id, "set_password", "student", id, { userId: newUser.id, createdUser: true }, req.ip);
+      res.json({ success: true, userId: newUser.id, userCreated: true });
+    }
+  }
 });
 
 export default router;
