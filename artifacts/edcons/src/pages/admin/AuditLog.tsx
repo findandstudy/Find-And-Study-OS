@@ -148,7 +148,7 @@ export default function AdminAuditLog() {
                           <User className="w-3.5 h-3.5 text-primary" />
                         </div>
                         <span className="text-sm font-medium text-foreground">
-                          {log.userId ? `#${log.userId}` : "System"}
+                          {log.userName || (log.userId ? `User #${log.userId}` : "System")}
                         </span>
                       </div>
                     </td>
