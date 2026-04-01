@@ -159,10 +159,14 @@ export default function AdminAuditLog() {
                     </td>
                     <td className="px-5 py-4 text-sm text-foreground capitalize">
                       {log.resource}
-                      {log.resourceId ? <span className="text-muted-foreground ml-1">#{log.resourceId}</span> : null}
+                      {log.resourceId ? (
+                        log.resourceDisplayName
+                          ? <span className="text-muted-foreground ml-1">— {log.resourceDisplayName}</span>
+                          : <span className="text-muted-foreground ml-1">#{log.resourceId}</span>
+                      ) : null}
                     </td>
-                    <td className="px-5 py-4 text-xs text-muted-foreground max-w-[260px] truncate font-mono">
-                      {formatChanges(log.changes)}
+                    <td className="px-5 py-4 text-xs text-muted-foreground max-w-[300px] font-mono">
+                      <span className="line-clamp-2" title={formatChanges(log.changes)}>{formatChanges(log.changes)}</span>
                     </td>
                     <td className="px-5 py-4 text-xs text-muted-foreground font-mono">
                       {log.ipAddress || "—"}
