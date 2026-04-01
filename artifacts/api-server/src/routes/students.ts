@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -627,6 +627,99 @@ router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLE
       res.json({ success: true, userId: newUser.id, userCreated: true });
     }
   }
+});
+
+router.get("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES, "student"), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const userRole = req.user!.role;
+  const isStaff = ["super_admin", "admin", "manager", "staff"].includes(userRole);
+
+  if (userRole === "student") {
+    const [student] = await db.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.id, id), eq(studentsTable.userId, req.user!.id), isNull(studentsTable.deletedAt)));
+    if (!student) { res.status(403).json({ error: "Access denied" }); return; }
+  }
+
+  const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "student")];
+
+  if (!isStaff || internal !== "true") {
+    conditions.push(eq(notesTable.isInternal, false));
+  } else {
+    conditions.push(eq(notesTable.isInternal, true));
+  }
+
+  const notes = await db
+    .select({
+      id: notesTable.id,
+      content: notesTable.content,
+      authorId: notesTable.authorId,
+      authorName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      isInternal: notesTable.isInternal,
+      createdAt: notesTable.createdAt,
+    })
+    .from(notesTable)
+    .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
+    .where(and(...conditions))
+    .orderBy(desc(notesTable.createdAt))
+    .limit(limitNum)
+    .offset(offset);
+  res.json(notes);
+});
+
+router.post("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { content, isInternal } = req.body;
+  if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
+
+  const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
+
+  const [note] = await db.insert(notesTable).values({
+    content: String(content).slice(0, 5000),
+    authorId: req.user!.id,
+    resourceType: "student",
+    resourceId: id,
+    isInternal: isStaff && isInternal === true,
+  }).returning();
+
+  const [student] = await db.select({
+    assignedToId: studentsTable.assignedToId,
+    agentId: studentsTable.agentId,
+    firstName: studentsTable.firstName,
+    lastName: studentsTable.lastName,
+  }).from(studentsTable).where(eq(studentsTable.id, id));
+
+  if (student) {
+    const recipientIds: number[] = [];
+    if (student.assignedToId && student.assignedToId !== req.user!.id) {
+      recipientIds.push(student.assignedToId);
+    }
+    if (student.agentId) {
+      const [agent] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
+        .where(eq(agentsTable.id, student.agentId));
+      if (agent?.userId && agent.userId !== req.user!.id && !recipientIds.includes(agent.userId)) {
+        recipientIds.push(agent.userId);
+      }
+    }
+    if (recipientIds.length > 0) {
+      dispatchNotification({
+        event: "note.created",
+        title: "New Note Added",
+        body: `A note was added to student ${student.firstName} ${student.lastName}`,
+        actionUrl: `/staff/students/${id}`,
+        recipientUserIds: recipientIds,
+        data: { resourceType: "student", resourceId: id },
+      });
+    }
+  }
+
+  res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
 });
 
 export default router;

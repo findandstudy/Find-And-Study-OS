@@ -5,8 +5,6 @@ import {
   useGetLead,
   useUpdateLead,
   useConvertLead,
-  useGetLeadNotes,
-  useAddLeadNote,
   customFetch,
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -102,13 +100,24 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
+  const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isAgent = basePath === "/agent";
+  const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
 
   const { data: lead, isLoading } = useGetLead(id) as { data: any; isLoading: boolean };
-  const { data: notes = [] } = useGetLeadNotes(id);
+  const { data: generalNotes = [] } = useQuery<any[]>({
+    queryKey: [`/api/leads/${id}/notes`, "general"],
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id,
+  });
+  const { data: internalNotes = [] } = useQuery<any[]>({
+    queryKey: [`/api/leads/${id}/notes`, "internal"],
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=true`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id && !!isStaffUser,
+  });
+  const activeNotes = noteTab === "internal" ? internalNotes : generalNotes;
   const updateLead = useUpdateLead();
   const convertLead = useConvertLead();
-  const addNote = useAddLeadNote();
 
   const { data: staffUsersData } = useQuery<any>({
     queryKey: ["/api/users"],
@@ -219,17 +228,21 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     );
   }
 
-  function handleAddNote() {
+  async function handleAddNote() {
     if (!noteText.trim()) return;
-    addNote.mutate(
-      { id, data: { content: noteText } },
-      {
-        onSuccess: () => {
-          setNoteText("");
-          queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`] });
-        },
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
+      const resp = await fetch(`${BASE}/api/leads/${id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ content: noteText, isInternal: noteTab === "internal" }),
+      });
+      if (resp.ok) {
+        setNoteText("");
+        queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`, noteTab] });
       }
-    );
+    } catch {}
   }
 
   function handleCreateFollowUp() {
@@ -462,15 +475,31 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-semibold text-foreground">Notes</h2>
-                <span className="text-xs text-muted-foreground">({(notes as any[]).length})</span>
+              </div>
+
+              <div className="flex gap-1 border-b">
+                <button
+                  onClick={() => setNoteTab("general")}
+                  className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "general" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                >
+                  General ({generalNotes.length})
+                </button>
+                {isStaffUser && (
+                  <button
+                    onClick={() => setNoteTab("internal")}
+                    className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "internal" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    🔒 Private ({internalNotes.length})
+                  </button>
+                )}
               </div>
 
               <div className="space-y-3 max-h-60 overflow-y-auto">
-                {(notes as any[]).length === 0 ? (
+                {activeNotes.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No notes yet.</p>
                 ) : (
-                  (notes as any[]).map((note: any) => (
-                    <div key={note.id} className="bg-secondary/50 rounded-xl p-3">
+                  activeNotes.map((note: any) => (
+                    <div key={note.id} className={`rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
                       <p className="text-sm text-foreground">{note.content}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
@@ -480,21 +509,23 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 )}
               </div>
 
-              <div className="flex gap-2 pt-2 border-t">
-                <Textarea
-                  placeholder="Add a note..."
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  className="resize-none min-h-[72px]"
-                />
-                <Button
-                  onClick={handleAddNote}
-                  disabled={addNote.isPending || !noteText.trim()}
-                  className="self-end"
-                >
-                  Add
-                </Button>
-              </div>
+              {(noteTab === "general" || isStaffUser) && (
+                <div className="flex gap-2 pt-2 border-t">
+                  <Textarea
+                    placeholder={noteTab === "internal" ? "Add a private note (only visible to staff)..." : "Add a note..."}
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    className={`resize-none min-h-[72px] ${noteTab === "internal" ? "border-orange-300 focus-visible:ring-orange-400" : ""}`}
+                  />
+                  <Button
+                    onClick={handleAddNote}
+                    disabled={!noteText.trim()}
+                    className={`self-end ${noteTab === "internal" ? "bg-orange-500 hover:bg-orange-600" : ""}`}
+                  >
+                    Add
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 

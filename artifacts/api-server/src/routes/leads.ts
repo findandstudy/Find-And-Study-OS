@@ -573,13 +573,22 @@ async function createApplicationFromSubmission(studentId: number, submission: an
   }
 }
 
-router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
+
+  const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
+  const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "lead")];
+
+  if (!isStaff || internal !== "true") {
+    conditions.push(eq(notesTable.isInternal, false));
+  } else {
+    conditions.push(eq(notesTable.isInternal, true));
+  }
 
   const notes = await db
     .select({
@@ -587,28 +596,65 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (
       content: notesTable.content,
       authorId: notesTable.authorId,
       authorName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      isInternal: notesTable.isInternal,
       createdAt: notesTable.createdAt,
     })
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
-    .where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "lead")))
+    .where(and(...conditions))
     .orderBy(desc(notesTable.createdAt))
     .limit(limitNum)
     .offset(offset);
   res.json(notes);
 });
 
-router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const { content } = req.body;
+  const { content, isInternal } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
+
+  const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
+
   const [note] = await db.insert(notesTable).values({
     content: String(content).slice(0, 5000),
     authorId: req.user!.id,
     resourceType: "lead",
     resourceId: id,
+    isInternal: isStaff && isInternal === true,
   }).returning();
+
+  const [lead] = await db.select({
+    assignedToId: leadsTable.assignedToId,
+    agentId: leadsTable.agentId,
+    firstName: leadsTable.firstName,
+    lastName: leadsTable.lastName,
+  }).from(leadsTable).where(eq(leadsTable.id, id));
+
+  if (lead) {
+    const recipientIds: number[] = [];
+    if (lead.assignedToId && lead.assignedToId !== req.user!.id) {
+      recipientIds.push(lead.assignedToId);
+    }
+    if (lead.agentId) {
+      const [agent] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
+        .where(eq(agentsTable.id, lead.agentId));
+      if (agent?.userId && agent.userId !== req.user!.id && !recipientIds.includes(agent.userId)) {
+        recipientIds.push(agent.userId);
+      }
+    }
+    if (recipientIds.length > 0) {
+      dispatchNotification({
+        event: "note.created",
+        title: "New Note Added",
+        body: `A note was added to lead ${lead.firstName} ${lead.lastName}`,
+        actionUrl: `/staff/leads/${id}`,
+        recipientUserIds: recipientIds,
+        data: { resourceType: "lead", resourceId: id },
+      });
+    }
+  }
+
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
 });
 

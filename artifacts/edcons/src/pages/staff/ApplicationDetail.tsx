@@ -268,7 +268,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                     onClick={() => setNoteTab("internal")}
                     className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "internal" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                   >
-                    🔒 Internal ({internalNotes.length})
+                    🔒 Private ({internalNotes.length})
                   </button>
                 )}
               </div>

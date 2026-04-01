@@ -773,17 +773,21 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), asy
   res.sendStatus(204);
 });
 
-router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
+  const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
   const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")];
 
-  const isInternalFilter = internal === "true";
-  conditions.push(eq(notesTable.isInternal, isInternalFilter));
+  if (!isStaff || internal !== "true") {
+    conditions.push(eq(notesTable.isInternal, false));
+  } else {
+    conditions.push(eq(notesTable.isInternal, true));
+  }
 
   const notes = await db
     .select({
@@ -803,17 +807,51 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), 
   res.json(notes);
 });
 
-router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { content, isInternal } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
+
+  const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
+
   const [note] = await db.insert(notesTable).values({
     content: String(content).slice(0, 5000),
     authorId: req.user!.id,
     resourceType: "application",
     resourceId: id,
-    isInternal: isInternal === true,
+    isInternal: isStaff && isInternal === true,
   }).returning();
+
+  const [app] = await db.select({
+    assignedToId: applicationsTable.assignedToId,
+    agentId: applicationsTable.agentId,
+    studentId: applicationsTable.studentId,
+  }).from(applicationsTable).where(eq(applicationsTable.id, id));
+
+  if (app) {
+    const recipientIds: number[] = [];
+    if (app.assignedToId && app.assignedToId !== req.user!.id) {
+      recipientIds.push(app.assignedToId);
+    }
+    if (app.agentId) {
+      const [agent] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
+        .where(eq(agentsTable.id, app.agentId));
+      if (agent?.userId && agent.userId !== req.user!.id && !recipientIds.includes(agent.userId)) {
+        recipientIds.push(agent.userId);
+      }
+    }
+    if (recipientIds.length > 0) {
+      dispatchNotification({
+        event: "note.created",
+        title: "New Note Added",
+        body: `A note was added to application #${id}`,
+        actionUrl: `/staff/applications/${id}`,
+        recipientUserIds: recipientIds,
+        data: { resourceType: "application", resourceId: id },
+      });
+    }
+  }
+
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
 });
 

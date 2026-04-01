@@ -121,6 +121,39 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
+  const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
+  const isStudent = user?.role === "student";
+
+  const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
+  const [noteText, setNoteText] = useState("");
+  const { data: generalNotes = [] } = useQuery<any[]>({
+    queryKey: [`/api/students/${id}/notes`, "general"],
+    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id,
+  });
+  const { data: internalNotes = [] } = useQuery<any[]>({
+    queryKey: [`/api/students/${id}/notes`, "internal"],
+    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/notes?internal=true`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id && !!isStaffUser,
+  });
+  const activeNotes = noteTab === "internal" ? internalNotes : generalNotes;
+
+  async function handleAddNote() {
+    if (!noteText.trim()) return;
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
+      const resp = await fetch(`${BASE_URL}/api/students/${id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ content: noteText, isInternal: noteTab === "internal" }),
+      });
+      if (resp.ok) {
+        setNoteText("");
+        qc.invalidateQueries({ queryKey: [`/api/students/${id}/notes`, noteTab] });
+      }
+    } catch {}
+  }
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadType, setUploadType] = useState("passport");
@@ -433,6 +466,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <TabsTrigger value="documents">
               Documents {documents.length > 0 && `(${documents.length})`}
             </TabsTrigger>
+            <TabsTrigger value="notes">
+              Notes ({generalNotes.length + internalNotes.length})
+            </TabsTrigger>
             <TabsTrigger value="applications">
               Applications {applications.length > 0 && `(${applications.length})`}
             </TabsTrigger>
@@ -552,6 +588,65 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 <p className="text-sm text-foreground">{student.notes}</p>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="notes" className="mt-4">
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <h2 className="font-semibold text-foreground">Notes</h2>
+              </div>
+
+              <div className="flex gap-1 border-b">
+                <button
+                  onClick={() => setNoteTab("general")}
+                  className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "general" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                >
+                  General ({generalNotes.length})
+                </button>
+                {isStaffUser && (
+                  <button
+                    onClick={() => setNoteTab("internal")}
+                    className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "internal" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    🔒 Private ({internalNotes.length})
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {activeNotes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No notes yet.</p>
+                ) : (
+                  activeNotes.map((note: any) => (
+                    <div key={note.id} className={`rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
+                      <p className="text-sm text-foreground">{note.content}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {!isStudent && (noteTab === "general" || isStaffUser) && (
+                <div className="flex gap-2 pt-2 border-t">
+                  <textarea
+                    placeholder={noteTab === "internal" ? "Add a private note (only visible to staff)..." : "Add a note..."}
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    className={`flex-1 resize-none min-h-[72px] rounded-md border px-3 py-2 text-sm ${noteTab === "internal" ? "border-orange-300 focus:ring-orange-400" : "border-input"}`}
+                  />
+                  <Button
+                    onClick={handleAddNote}
+                    disabled={!noteText.trim()}
+                    className={`self-end ${noteTab === "internal" ? "bg-orange-500 hover:bg-orange-600" : ""}`}
+                  >
+                    Add
+                  </Button>
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="applications" className="mt-4">
