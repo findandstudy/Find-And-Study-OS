@@ -263,7 +263,7 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 const AGENT_LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "interestedProgram", "interestedCountry", "source",
-  "status", "notes", "estimatedValue",
+  "notes", "estimatedValue",
 ];
 
 router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
@@ -295,6 +295,9 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   let allowedFields = isAgent ? AGENT_LEAD_PATCH_FIELDS : LEAD_PATCH_FIELDS;
+  if (user.role !== "super_admin") {
+    allowedFields = allowedFields.filter(f => f !== "status");
+  }
   if (!isAdmin && !isAgent) {
     if (req.body.assignedTo !== undefined) {
       if (existing.assignedToId !== null) {
@@ -435,6 +438,19 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       return;
     }
   }
+  const missingFields: string[] = [];
+  if (!lead.firstName?.trim()) missingFields.push("firstName");
+  if (!lead.lastName?.trim()) missingFields.push("lastName");
+  if (!lead.email?.trim()) missingFields.push("email");
+  if (!lead.phone?.trim()) missingFields.push("phone");
+  if (missingFields.length > 0) {
+    res.status(422).json({
+      error: `Cannot convert: missing required fields — ${missingFields.join(", ")}`,
+      missingFields,
+    });
+    return;
+  }
+
   if (lead.convertedStudentId) {
     const [existing] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, lead.convertedStudentId), isNull(studentsTable.deletedAt)));
     if (existing) {
@@ -621,7 +637,7 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(...conditions))
-    .orderBy(desc(notesTable.createdAt))
+    .orderBy(notesTable.createdAt)
     .limit(limitNum)
     .offset(offset);
   res.json(notes);

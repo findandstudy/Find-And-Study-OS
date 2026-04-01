@@ -3,7 +3,7 @@ import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, UserPlus, FileCheck, CreditCard, MessageCircle, Megaphone, AlertCircle } from "lucide-react";
+import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, UserPlus, FileCheck, CreditCard, MessageCircle, Megaphone, AlertCircle, ArrowUpRight } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
 
@@ -254,27 +254,43 @@ export default function AdminDashboard() {
               {latestUpdates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No recent updates.</p>
               ) : (
-                latestUpdates.map((u: any, i: number) => (
-                  <div key={u.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
-                      {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {u.userName || "System"}
-                      </p>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                        {u.action}{u.resource ? ` — ${u.resource}` : ""}
-                        {u.resourceId ? ` #${u.resourceId}` : ""}
-                      </p>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-1">
-                      {new Date(u.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
-                      <br />
-                      {new Date(u.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
-                    </div>
-                  </div>
-                ))
+                latestUpdates.map((u: any, i: number) => {
+                  const detailHref = u.resource && u.resourceId
+                    ? `/staff/${u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : ""}/${u.resourceId}`
+                    : null;
+                  const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const changes = u.data ? Object.entries(u.data).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
+                  const Wrapper = detailHref ? Link : "div" as any;
+                  const wrapperProps = detailHref ? { href: detailHref } : {};
+                  return (
+                    <Wrapper key={u.id} {...wrapperProps}>
+                      <div className={`flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors ${detailHref ? "cursor-pointer" : ""}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
+                          {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {u.userName || "System"}
+                          </p>
+                          <p className="text-xs text-foreground/80 font-medium mt-0.5">
+                            {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
+                            {u.resourceId ? ` #${u.resourceId}` : ""}
+                          </p>
+                          {changes && (
+                            <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{changes}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end shrink-0 mt-1">
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {timeAgo(u.createdAt)}
+                          </span>
+                          {detailHref && <ArrowUpRight className="w-3 h-3 text-muted-foreground mt-1" />}
+                        </div>
+                      </div>
+                    </Wrapper>
+                  );
+                })
               )}
             </div>
           </Card>

@@ -445,6 +445,9 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const AGENT_PATCH_FIELDS: string[] = [];
   let allowedFields = isStaff ? [...APP_PATCH_FIELDS] : [...AGENT_PATCH_FIELDS];
+  if (user.role !== "super_admin" && isStaff) {
+    allowedFields = allowedFields.filter(f => f !== "stage");
+  }
 
   if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
     const [existing] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
@@ -806,7 +809,7 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(...conditions))
-    .orderBy(desc(notesTable.createdAt))
+    .orderBy(notesTable.createdAt)
     .limit(limitNum)
     .offset(offset);
   res.json(notes);

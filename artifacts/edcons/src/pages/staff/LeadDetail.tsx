@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useGetLead,
@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -324,7 +324,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 hideEmail={isAgent}
                 hideWhatsApp={isAgent}
               />
-              {lead.status !== "converted" && (
+              {lead.status !== "converted" ? (
                 <Button
                   onClick={handleConvert}
                   disabled={convertLead.isPending}
@@ -333,7 +333,14 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Convert to Student
                 </Button>
-              )}
+              ) : lead.convertedStudentId ? (
+                <Link href={`${basePath}/students/${lead.convertedStudentId}`}>
+                  <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md">
+                    <GraduationCap className="w-4 h-4 mr-2" />
+                    View Student
+                  </Button>
+                </Link>
+              ) : null}
             </div>
           )}
         </div>

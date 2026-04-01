@@ -208,6 +208,15 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
 
+  if (passportNumber && passportNumber.trim()) {
+    const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.passportNumber, passportNumber.trim()), isNull(studentsTable.deletedAt)));
+    if (dupPassport) {
+      res.status(409).json({ error: "A student with this passport number already exists" });
+      return;
+    }
+  }
+
   let resolvedAgentId = agentId || null;
   if (isAgentRole(req.user!.role)) {
     const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
@@ -238,11 +247,11 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     : await inferOriginFromUser(user);
   const [student] = await db.insert(studentsTable).values({
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
-    email: email || null,
+    email: email ? email.toLowerCase().trim() : null,
     phone: phone || null,
     nationality: nationality || null,
     dateOfBirth: dateOfBirth || null,
-    passportNumber: passportNumber || null,
+    passportNumber: passportNumber ? passportNumber.trim() : null,
     passportIssueDate: passportIssueDate || null,
     passportExpiry: passportExpiry || null,
     motherName: normBody.motherName ? (normBody.motherName as string) : null,
@@ -404,6 +413,9 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     : isAgent
     ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId" && f !== "status")
     : STUDENT_PATCH_FIELDS;
+  if (role !== "super_admin" && !isAgent && !isStudent) {
+    allowedFields = allowedFields.filter(f => f !== "status");
+  }
   if (!isAdmin && !isAgent) {
     if (req.body.assignedToId !== undefined) {
       if (existing.assignedToId !== null) {
@@ -430,6 +442,27 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
+  }
+  if (updates.email && typeof updates.email === "string") {
+    const normalizedEmail = (updates.email as string).toLowerCase().trim();
+    updates.email = normalizedEmail;
+    const [dupEmail] = await db.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.email, normalizedEmail), isNull(studentsTable.deletedAt)));
+    if (dupEmail && dupEmail.id !== id) {
+      res.status(409).json({ error: "A student with this email already exists" });
+      return;
+    }
+  }
+  if (updates.passportNumber && typeof updates.passportNumber === "string") {
+    const normPassport = (updates.passportNumber as string).trim();
+    if (normPassport) {
+      const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
+        .where(and(eq(studentsTable.passportNumber, normPassport), isNull(studentsTable.deletedAt)));
+      if (dupPassport && dupPassport.id !== id) {
+        res.status(409).json({ error: "A student with this passport number already exists" });
+        return;
+      }
+    }
   }
   const { error: nameErr, normalized: normUpdates } = normalizeAndValidateNames(
     updates, ["firstName", "lastName", "motherName", "fatherName"]
@@ -671,7 +704,7 @@ router.get("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AG
     .from(notesTable)
     .leftJoin(usersTable, eq(notesTable.authorId, usersTable.id))
     .where(and(...conditions))
-    .orderBy(desc(notesTable.createdAt))
+    .orderBy(notesTable.createdAt)
     .limit(limitNum)
     .offset(offset);
   res.json(notes);

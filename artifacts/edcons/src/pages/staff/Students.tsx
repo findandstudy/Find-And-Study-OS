@@ -2139,10 +2139,17 @@ export default function StudentsPage() {
 
   const handleStuDragStart = (event: DragStartEvent) => setActiveId(event.active.id as number);
 
+  const isSuperAdmin = user?.role === "super_admin";
+
   const handleStuDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
+
+    if (!isSuperAdmin) {
+      toast({ title: "Only Super Admin can move cards", variant: "destructive" });
+      return;
+    }
 
     const studentId = active.id as number;
     const overId = over.id;

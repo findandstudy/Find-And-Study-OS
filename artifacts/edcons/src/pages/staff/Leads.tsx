@@ -1142,10 +1142,17 @@ export default function LeadsPage() {
 
   const isMainStaff = user?.role && !["agent", "sub_agent", "student"].includes(user.role);
 
+  const isSuperAdmin = user?.role === "super_admin";
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
     if (!over) return;
+
+    if (!isSuperAdmin) {
+      toast({ title: "Only Super Admin can move cards", variant: "destructive" });
+      return;
+    }
 
     const leadId = active.id as number;
     const overId = over.id;
