@@ -62,49 +62,12 @@ export default defineConfig({
     sourcemap: "hidden",
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return;
-
-          if (
-            id.includes("react-dom") ||
-            (id.includes("/react/") && !id.includes("lucide-react")) ||
-            id.includes("@radix-ui") ||
-            id.includes("class-variance-authority") ||
-            id.includes("clsx") ||
-            id.includes("tailwind-merge") ||
-            id.includes("cmdk") ||
-            id.includes("@tanstack")
-          ) {
-            return "vendor-react";
-          }
-          if (id.includes("lucide-react")) {
-            return "vendor-icons";
-          }
-          if (id.includes("jspdf") || id.includes("xlsx")) {
-            return "vendor-export";
-          }
-          if (id.includes("recharts") || id.includes("d3-")) {
-            return "vendor-charts";
-          }
-          if (id.includes("framer-motion")) {
-            return "vendor-motion";
-          }
-          if (id.includes("wouter") || id.includes("zod")) {
-            return "vendor-core";
-          }
-          if (
-            id.includes("date-fns") ||
-            id.includes("@internationalized") ||
-            id.includes("react-day-picker")
-          ) {
-            return "vendor-date";
-          }
-          if (
-            id.includes("@dnd-kit") ||
-            id.includes("@floating-ui")
-          ) {
-            return "vendor-dnd";
-          }
+        manualChunks: {
+          "vendor": [
+            "react",
+            "react-dom",
+            "react/jsx-runtime",
+          ],
         },
       },
     },
