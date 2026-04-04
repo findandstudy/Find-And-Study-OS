@@ -16,10 +16,19 @@ if (!isBuild && !rawPort) {
 }
 
 const basePath = process.env.BASE_PATH || "/";
+const siteBaseUrl = (process.env.BASE_URL || "https://findandstudy.com").replace(/\/$/, "");
+
+const injectSiteBaseUrl = {
+  name: "inject-site-base-url",
+  transformIndexHtml(html: string) {
+    return html.replace(/__SITE_BASE_URL__/g, siteBaseUrl);
+  },
+};
 
 export default defineConfig({
   base: basePath,
   plugins: [
+    injectSiteBaseUrl,
     react(),
     tailwindcss(),
     ...(process.env.NODE_ENV !== "production"
