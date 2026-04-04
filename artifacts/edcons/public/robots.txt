@@ -12,4 +12,4 @@ Disallow: /agent/
 Disallow: /login
 Disallow: /api/
 
-Sitemap: https://educons.com/sitemap.xml
+Sitemap: https://findandstudy.com/sitemap.xml
