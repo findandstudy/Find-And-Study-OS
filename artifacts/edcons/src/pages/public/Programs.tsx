@@ -1025,22 +1025,6 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
 export default function Programs() {
   const { t, lang, localePath } = useI18n();
   useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
-  useJsonLd({
-    "@context": "https://schema.org",
-    "@type": "CollectionPage",
-    "@id": `${SITE_URL}/en/programs#webpage`,
-    name: `Study Programs — ${SITE_NAME}`,
-    url: `${SITE_URL}/en/programs`,
-    description: "Browse thousands of undergraduate and postgraduate study programs at universities worldwide.",
-    isPartOf: { "@id": `${SITE_URL}/#website` },
-    breadcrumb: {
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-        { "@type": "ListItem", position: 2, name: "Programs", item: `${SITE_URL}/en/programs` },
-      ],
-    },
-  });
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1054,6 +1038,64 @@ export default function Programs() {
   const [feeMin, setFeeMin] = useState("");
   const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
+
+  useJsonLd([
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "@id": `${SITE_URL}/en/programs#webpage`,
+      name: `Study Programs — ${SITE_NAME}`,
+      url: `${SITE_URL}/en/programs`,
+      description: "Browse thousands of undergraduate and postgraduate study programs at universities worldwide.",
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      breadcrumb: {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "Programs", item: `${SITE_URL}/en/programs` },
+        ],
+      },
+    },
+    ...(programs.length > 0
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "@id": `${SITE_URL}/en/programs#itemlist`,
+            name: "Study Programs",
+            url: `${SITE_URL}/en/programs`,
+            numberOfItems: programs.length,
+            itemListElement: programs.slice(0, 20).map((p, i) => ({
+              "@type": "ListItem",
+              position: i + 1,
+              item: {
+                "@type": "Course",
+                "@id": `${SITE_URL}/en/programs?id=${p.id}`,
+                name: p.name,
+                description: [p.field, p.degree, p.duration].filter(Boolean).join(" · ") || undefined,
+                provider: {
+                  "@type": "CollegeOrUniversity",
+                  name: p.universityName,
+                  ...(p.universityCountry ? { address: { "@type": "PostalAddress", addressCountry: p.universityCountry } } : {}),
+                },
+                ...(p.language ? { inLanguage: p.language } : {}),
+                ...(p.duration ? { timeRequired: p.duration } : {}),
+                ...(p.tuitionFee != null
+                  ? {
+                      offers: {
+                        "@type": "Offer",
+                        price: p.discountedFee ?? p.tuitionFee,
+                        priceCurrency: p.currency || "USD",
+                      },
+                    }
+                  : {}),
+              },
+            })),
+          },
+        ]
+      : []),
+  ]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>({ countries: [], cities: [], universityTypes: [], universities: [], degrees: [], languages: [], fields: [], feeRange: null });
   const [page, setPage] = useState(1);
