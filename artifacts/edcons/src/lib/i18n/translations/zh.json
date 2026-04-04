@@ -402,7 +402,7 @@
     "visaApproval": "95%签证成功率",
     "studentsPlaced": "10,000+成功安置学生",
     "passwordsNoMatch": "密码不匹配",
-    "passwordMinLength": "密码至少8个字符",
+    "passwordMinLength": "密码必须至少包含8个字符、1个大写字母和1个数字",
     "connectionError": "连接错误。请重试。",
     "verifiedSuccess": "邮箱已验证！",
     "invalidLink": "验证链接无效或已使用。",
@@ -459,5 +459,23 @@
     "countriesDesc": "探索全球顶级留学目的地。",
     "programsTitle": "项目",
     "programsDesc": "浏览全球顶尖大学的数千个项目。"
+  },
+  "cookie": {
+    "title": "Cookie 偏好设置",
+    "description": "我们使用Cookie改善您的浏览体验。您可以接受所有Cookie或仅接受必要的Cookie。",
+    "acceptAll": "全部接受",
+    "essentialOnly": "仅必要",
+    "privacyPolicy": "隐私政策"
+  },
+  "password": {
+    "strength": "密码强度",
+    "weak": "弱",
+    "fair": "一般",
+    "good": "良好",
+    "strong": "强",
+    "req8Chars": "至少8个字符",
+    "reqUppercase": "至少1个大写字母",
+    "reqDigit": "至少1个数字",
+    "requirementsHint": "至少8个字符、1个大写字母、1个数字"
   }
 }

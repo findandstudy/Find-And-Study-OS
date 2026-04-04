@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { GraduationCap, Globe, Menu, X, ChevronDown } from "lucide-react";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n/index";
 import { CountryFlag } from "@/components/CountryFlag";
+import { CookieBanner } from "@/components/CookieBanner";
 
 const LANG_COUNTRY: Record<string, string> = {
   en: "GB", tr: "TR", ar: "SA", fr: "FR", ru: "RU",
@@ -215,6 +216,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </footer>
+      <CookieBanner />
     </div>
   );
 }

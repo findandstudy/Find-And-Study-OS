@@ -411,7 +411,7 @@
     "visaApproval": "%95 vize onay başarı oranı",
     "studentsPlaced": "10.000+ başarıyla yerleştirilen öğrenci",
     "passwordsNoMatch": "Şifreler eşleşmiyor",
-    "passwordMinLength": "Şifre en az 8 karakter olmalıdır",
+    "passwordMinLength": "Şifre en az 8 karakter, 1 büyük harf ve 1 rakam içermelidir",
     "connectionError": "Bağlantı hatası. Lütfen tekrar deneyin.",
     "verifiedSuccess": "E-postanız doğrulandı! Artık giriş yapabilirsiniz.",
     "invalidLink": "Doğrulama bağlantısı geçersiz veya zaten kullanılmış. Lütfen yeni bir tane talep edin.",
@@ -468,5 +468,23 @@
     "countriesDesc": "Dünya çapındaki en iyi eğitim destinasyonlarını keşfedin.",
     "programsTitle": "Programlar",
     "programsDesc": "Dünya çapında en iyi üniversitelerden binlerce programı inceleyin."
+  },
+  "cookie": {
+    "title": "Çerez Tercihleriniz",
+    "description": "Deneyiminizi iyileştirmek için çerezler kullanıyoruz. Tümünü kabul edebilir veya yalnızca sitenin işlevselliği için zorunlu olanları seçebilirsiniz.",
+    "acceptAll": "Tümünü Kabul Et",
+    "essentialOnly": "Sadece Gerekli",
+    "privacyPolicy": "Gizlilik Politikası"
+  },
+  "password": {
+    "strength": "Şifre gücü",
+    "weak": "Zayıf",
+    "fair": "Orta",
+    "good": "İyi",
+    "strong": "Güçlü",
+    "req8Chars": "En az 8 karakter",
+    "reqUppercase": "En az 1 büyük harf",
+    "reqDigit": "En az 1 rakam",
+    "requirementsHint": "Min. 8 karakter, 1 büyük harf, 1 rakam"
   }
 }

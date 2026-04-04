@@ -411,7 +411,7 @@
     "visaApproval": "95% visa approval success rate",
     "studentsPlaced": "10,000+ students successfully placed",
     "passwordsNoMatch": "Passwords do not match",
-    "passwordMinLength": "Password must be at least 8 characters",
+    "passwordMinLength": "Password must be at least 8 characters, include 1 uppercase letter and 1 number",
     "connectionError": "Connection error. Please try again.",
     "verifiedSuccess": "Your email has been verified! You can now sign in.",
     "invalidLink": "The verification link is invalid or has already been used. Please request a new one.",
@@ -468,5 +468,23 @@
     "countriesDesc": "Explore top study destinations worldwide. Find universities and programs in Turkey, UK, Canada, and more.",
     "programsTitle": "Programs",
     "programsDesc": "Browse thousands of programs from top universities worldwide."
+  },
+  "cookie": {
+    "title": "Cookie Preferences",
+    "description": "We use cookies to improve your browsing experience. You can accept all cookies or only the essential ones needed for the site to function.",
+    "acceptAll": "Accept All",
+    "essentialOnly": "Essential Only",
+    "privacyPolicy": "Privacy Policy"
+  },
+  "password": {
+    "strength": "Password strength",
+    "weak": "Weak",
+    "fair": "Fair",
+    "good": "Good",
+    "strong": "Strong",
+    "req8Chars": "At least 8 characters",
+    "reqUppercase": "At least 1 uppercase letter",
+    "reqDigit": "At least 1 number",
+    "requirementsHint": "Min. 8 characters, 1 uppercase letter, 1 number"
   }
 }

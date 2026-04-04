@@ -402,7 +402,7 @@
     "visaApproval": "95% tingkat keberhasilan visa",
     "studentsPlaced": "10.000+ siswa berhasil ditempatkan",
     "passwordsNoMatch": "Kata sandi tidak cocok",
-    "passwordMinLength": "Kata sandi minimal 8 karakter",
+    "passwordMinLength": "Kata sandi harus memiliki minimal 8 karakter, 1 huruf besar dan 1 angka",
     "connectionError": "Kesalahan koneksi. Silakan coba lagi.",
     "verifiedSuccess": "Email terverifikasi!",
     "invalidLink": "Link verifikasi tidak valid atau sudah digunakan.",
@@ -459,5 +459,23 @@
     "countriesDesc": "Jelajahi destinasi studi terbaik di dunia.",
     "programsTitle": "Program",
     "programsDesc": "Jelajahi ribuan program dari universitas terbaik."
+  },
+  "cookie": {
+    "title": "Preferensi Cookie",
+    "description": "Kami menggunakan cookie untuk meningkatkan pengalaman browsing Anda. Anda dapat menerima semua atau hanya yang penting.",
+    "acceptAll": "Terima Semua",
+    "essentialOnly": "Hanya Penting",
+    "privacyPolicy": "Kebijakan Privasi"
+  },
+  "password": {
+    "strength": "Kekuatan kata sandi",
+    "weak": "Lemah",
+    "fair": "Sedang",
+    "good": "Baik",
+    "strong": "Kuat",
+    "req8Chars": "Minimal 8 karakter",
+    "reqUppercase": "Minimal 1 huruf besar",
+    "reqDigit": "Minimal 1 angka",
+    "requirementsHint": "Min. 8 karakter, 1 huruf besar, 1 angka"
   }
 }

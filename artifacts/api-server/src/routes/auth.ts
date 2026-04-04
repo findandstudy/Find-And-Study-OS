@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { z } from "zod";
 import { db, usersTable, emailVerificationCodesTable, studentsTable } from "@workspace/db";
 import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
@@ -14,6 +15,12 @@ import {
   type SessionData,
   type SessionUser,
 } from "../lib/replitAuth";
+
+const PasswordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number");
 
 const router: IRouter = Router();
 
@@ -187,8 +194,9 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     return;
   }
 
-  if (password.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters" });
+  const pwdResult = PasswordSchema.safeParse(password);
+  if (!pwdResult.success) {
+    res.status(400).json({ error: pwdResult.error.errors[0]?.message || "Invalid password" });
     return;
   }
 
@@ -427,8 +435,9 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
     return;
   }
 
-  if (password.length < 8) {
-    res.status(400).json({ error: "Password must be at least 8 characters" });
+  const pwdResult = PasswordSchema.safeParse(password);
+  if (!pwdResult.success) {
+    res.status(400).json({ error: pwdResult.error.errors[0]?.message || "Invalid password" });
     return;
   }
 

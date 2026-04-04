@@ -402,7 +402,7 @@
     "visaApproval": "95% tasa de éxito de visa",
     "studentsPlaced": "10,000+ estudiantes colocados",
     "passwordsNoMatch": "Las contraseñas no coinciden",
-    "passwordMinLength": "La contraseña debe tener al menos 8 caracteres",
+    "passwordMinLength": "La contraseña debe tener al menos 8 caracteres, 1 mayúscula y 1 número",
     "connectionError": "Error de conexión. Inténtalo de nuevo.",
     "verifiedSuccess": "¡Correo verificado!",
     "invalidLink": "El enlace de verificación es inválido o ya fue usado.",
@@ -459,5 +459,23 @@
     "countriesDesc": "Explora los mejores destinos de estudio del mundo.",
     "programsTitle": "Programas",
     "programsDesc": "Explora miles de programas de las mejores universidades."
+  },
+  "cookie": {
+    "title": "Preferencias de cookies",
+    "description": "Usamos cookies para mejorar tu experiencia de navegación. Puedes aceptar todas o solo las esenciales.",
+    "acceptAll": "Aceptar todo",
+    "essentialOnly": "Solo esenciales",
+    "privacyPolicy": "Política de privacidad"
+  },
+  "password": {
+    "strength": "Seguridad de la contraseña",
+    "weak": "Débil",
+    "fair": "Regular",
+    "good": "Buena",
+    "strong": "Fuerte",
+    "req8Chars": "Al menos 8 caracteres",
+    "reqUppercase": "Al menos 1 mayúscula",
+    "reqDigit": "Al menos 1 número",
+    "requirementsHint": "Mín. 8 caracteres, 1 mayúscula, 1 número"
   }
 }

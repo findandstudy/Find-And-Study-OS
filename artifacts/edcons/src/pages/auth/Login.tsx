@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { PasswordStrengthIndicator, validatePasswordPolicy } from "@/components/PasswordStrengthIndicator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,7 +108,8 @@ export default function Login() {
       setError(t("login.passwordsNoMatch"));
       return;
     }
-    if (registerForm.password.length < 8) {
+    const pwdError = validatePasswordPolicy(registerForm.password);
+    if (pwdError) {
       setError(t("login.passwordMinLength"));
       return;
     }
@@ -209,7 +211,8 @@ export default function Login() {
       setError(t("login.passwordsNoMatch"));
       return;
     }
-    if (setPasswordForm.password.length < 8) {
+    const pwdError = validatePasswordPolicy(setPasswordForm.password);
+    if (pwdError) {
       setError(t("login.passwordMinLength"));
       return;
     }
@@ -509,6 +512,7 @@ export default function Login() {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    <PasswordStrengthIndicator password={registerForm.password} />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold">{t("login.confirmPassword")}</Label>
@@ -707,11 +711,13 @@ export default function Login() {
                             minLength={8}
                             autoFocus
                           />
+                          
                           <button type="button" onClick={() => setShowPassword(!showPassword)}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                             {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                           </button>
                         </div>
+                        <PasswordStrengthIndicator password={setPasswordForm.password} />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-sm font-semibold">{t("login.confirmPassword")}</Label>
