@@ -9,9 +9,9 @@ import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lu
 import { customFetch } from "@workspace/api-client-react";
 
 const offices = [
-  { city: "Istanbul", address: "Levent Mahallesi, Büyükdere Cad. No:45, 34394", phone: "+90 212 555 0100", email: "istanbul@educons.com" },
-  { city: "London", address: "30 St Mary Axe, London EC3A 8BF, UK", phone: "+44 20 7946 0958", email: "london@educons.com" },
-  { city: "Dubai", address: "Dubai Internet City, Building 4, Office 220", phone: "+971 4 555 0200", email: "dubai@educons.com" },
+  { city: "Istanbul", address: "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye", phone: "+90 552 689 8515", email: "info@findandstudy.com" },
+  { city: "London", address: "30 St Mary Axe, London EC3A 8BF, UK", phone: "+90 552 689 8515", email: "info@findandstudy.com" },
+  { city: "Dubai", address: "Dubai Internet City, Building 4, Office 220", phone: "+90 552 689 8515", email: "info@findandstudy.com" },
 ];
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -245,8 +245,8 @@ export default function Contact() {
               <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
               <div className="space-y-4">
                 {[
-                  { icon: Mail, label: t("contact.emailLabel"), value: "hello@educons.example.com", href: "mailto:hello@educons.example.com" },
-                  { icon: Phone, label: t("contact.phoneLabel"), value: "+90 212 555 0100", href: "tel:+902125550100" },
+                  { icon: Mail, label: t("contact.emailLabel"), value: "info@findandstudy.com", href: "mailto:info@findandstudy.com" },
+                  { icon: Phone, label: t("contact.phoneLabel"), value: "+90 552 689 8515", href: "tel:+905526898515" },
                   { icon: Clock, label: t("contact.hoursLabel"), value: t("contact.hoursValue"), href: undefined },
                 ].map((c, i) => (
                   <a key={i} href={c.href || '#'}

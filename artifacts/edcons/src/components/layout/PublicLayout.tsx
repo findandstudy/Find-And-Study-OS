@@ -208,9 +208,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div>
             <h4 className="text-white font-bold mb-6 font-display">{t("footer.contactTitle")}</h4>
             <ul className="space-y-3">
-              <li>info@educons.example.com</li>
-              <li>+1 (555) 123-4567</li>
-              <li>123 Education Blvd, Suite 100</li>
+              <li><a href="mailto:info@findandstudy.com" className="hover:text-primary transition-colors">info@findandstudy.com</a></li>
+              <li><a href="tel:+905526898515" className="hover:text-primary transition-colors">+90 552 689 8515</a></li>
+              <li>Levent Mah. Büyükdere Cad. No:45, İstanbul</li>
             </ul>
           </div>
         </div>
