@@ -1,7 +1,14 @@
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
-
 import { cn } from "@/lib/utils"
+
+function sanitizeCssId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "")
+}
+
+function sanitizeCssColor(value: string): string {
+  return value.replace(/[^a-zA-Z0-9\s,#%()\-.]/g, "")
+}
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
@@ -70,32 +77,42 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     ([, config]) => config.theme || config.color
   )
 
-  if (!colorConfig.length) {
-    return null
-  }
+  const safeId = sanitizeCssId(id)
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
-  })
-  .join("\n")}
-}
-`
-          )
-          .join("\n"),
-      }}
-    />
-  )
+  const cssText = React.useMemo(() => {
+    if (!colorConfig.length || !safeId) return ""
+    return Object.entries(THEMES)
+      .map(([theme, prefix]) => {
+        const vars = colorConfig
+          .map(([key, itemConfig]) => {
+            const color =
+              itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+              itemConfig.color
+            if (!color) return null
+            const safeKey = sanitizeCssId(key)
+            const safeColor = sanitizeCssColor(color)
+            return safeKey && safeColor
+              ? `  --color-${safeKey}: ${safeColor};`
+              : null
+          })
+          .filter(Boolean)
+          .join("\n")
+        return `${prefix} [data-chart=${safeId}] {\n${vars}\n}`
+      })
+      .join("\n")
+  }, [colorConfig, safeId])
+
+  React.useEffect(() => {
+    if (!cssText) return
+    const el = document.createElement("style")
+    el.textContent = cssText
+    document.head.appendChild(el)
+    return () => {
+      document.head.removeChild(el)
+    }
+  }, [cssText])
+
+  return null
 }
 
 const ChartTooltip = RechartsPrimitive.Tooltip
