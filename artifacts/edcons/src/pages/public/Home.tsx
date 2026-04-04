@@ -2,6 +2,7 @@ import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { ArrowRight, BookOpen, FileText, Globe2, ShieldCheck, Star, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
@@ -9,6 +10,26 @@ import { Link } from "wouter";
 export default function Home() {
   const { t, lang, localePath } = useI18n();
   useSeo({ title: t("seo.homeTitle"), description: t("seo.homeDesc"), lang });
+  useJsonLd([
+    ORG_SCHEMA,
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      description: "International student consultancy — find universities, programs and study destinations worldwide.",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: `${SITE_URL}/en/programs?q={search_term_string}`,
+        },
+        "query-input": "required name=search_term_string",
+      },
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+  ]);
 
   return (
     <PublicLayout>

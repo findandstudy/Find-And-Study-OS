@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -26,6 +27,22 @@ interface Destination {
 export default function Countries() {
   const { t, lang, localePath } = useI18n();
   useSeo({ title: t("seo.countriesTitle"), description: t("seo.countriesDesc"), lang });
+  useJsonLd({
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": `${SITE_URL}/en/countries#webpage`,
+    name: `Study Destinations — ${SITE_NAME}`,
+    url: `${SITE_URL}/en/countries`,
+    description: "Explore the best countries and cities to study abroad. Find universities, living costs, visa info and more.",
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+        { "@type": "ListItem", position: 2, name: "Countries", item: `${SITE_URL}/en/countries` },
+      ],
+    },
+  });
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

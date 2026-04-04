@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -1024,6 +1025,22 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
 export default function Programs() {
   const { t, lang, localePath } = useI18n();
   useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
+  useJsonLd({
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": `${SITE_URL}/en/programs#webpage`,
+    name: `Study Programs — ${SITE_NAME}`,
+    url: `${SITE_URL}/en/programs`,
+    description: "Browse thousands of undergraduate and postgraduate study programs at universities worldwide.",
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+        { "@type": "ListItem", position: 2, name: "Programs", item: `${SITE_URL}/en/programs` },
+      ],
+    },
+  });
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");

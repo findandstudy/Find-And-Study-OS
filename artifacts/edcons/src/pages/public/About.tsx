@@ -2,6 +2,7 @@ import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Award, Globe2, Heart, Users, Target, Zap } from "lucide-react";
@@ -16,6 +17,26 @@ const team = [
 export default function About() {
   const { t, lang, localePath } = useI18n();
   useSeo({ title: t("seo.aboutTitle"), description: t("seo.aboutDesc"), lang });
+  useJsonLd([
+    ORG_SCHEMA,
+    {
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      "@id": `${SITE_URL}/en/about#webpage`,
+      name: `About ${SITE_NAME}`,
+      url: `${SITE_URL}/en/about`,
+      description: "Learn about Find And Study — our mission, team, and commitment to helping students study abroad.",
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      publisher: { "@id": `${SITE_URL}/#organization` },
+      breadcrumb: {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "About", item: `${SITE_URL}/en/about` },
+        ],
+      },
+    },
+  ]);
 
   const values = [
     { icon: Heart, title: t("about.studentFirst"), desc: t("about.studentFirstDesc") },

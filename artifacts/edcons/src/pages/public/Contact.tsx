@@ -3,6 +3,7 @@ import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lucide-react";
@@ -57,6 +58,45 @@ type CountryRow = { id: number; name: string; code: string; flagEmoji?: string |
 export default function Contact() {
   const { t, lang } = useI18n();
   useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
+  useJsonLd([
+    {
+      "@context": "https://schema.org",
+      "@type": "ContactPage",
+      "@id": `${SITE_URL}/en/contact#webpage`,
+      name: `Contact ${SITE_NAME}`,
+      url: `${SITE_URL}/en/contact`,
+      description: "Get in touch with Find And Study. Our consultants are ready to help you plan your international education journey.",
+      breadcrumb: {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "Contact", item: `${SITE_URL}/en/contact` },
+        ],
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      "@id": `${SITE_URL}/#localbusiness`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      telephone: "+90-552-689-8515",
+      email: "info@findandstudy.com",
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "Levent Mahallesi, Büyükdere Cad. No:45",
+        addressLocality: "Istanbul",
+        postalCode: "34394",
+        addressCountry: "TR",
+      },
+      openingHoursSpecification: {
+        "@type": "OpeningHoursSpecification",
+        dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        opens: "09:00",
+        closes: "18:00",
+      },
+    },
+  ]);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -93,6 +94,38 @@ export default function CountryDetail({ slug }: { slug: string }) {
     description: data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
     lang,
   });
+  useJsonLd(
+    data
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "TouristDestination",
+            "@id": `${SITE_URL}/en/countries/${slug}#destination`,
+            name: data.destination.name,
+            description: data.destination.shortDescription || undefined,
+            url: `${SITE_URL}/en/countries/${slug}`,
+            touristType: { "@type": "Audience", audienceType: "International Students" },
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "@id": `${SITE_URL}/en/countries/${slug}#webpage`,
+            name: `Study in ${data.destination.name} — ${SITE_NAME}`,
+            url: `${SITE_URL}/en/countries/${slug}`,
+            description: data.destination.shortDescription || undefined,
+            isPartOf: { "@id": `${SITE_URL}/#website` },
+            breadcrumb: {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+                { "@type": "ListItem", position: 2, name: "Countries", item: `${SITE_URL}/en/countries` },
+                { "@type": "ListItem", position: 3, name: data.destination.name, item: `${SITE_URL}/en/countries/${slug}` },
+              ],
+            },
+          },
+        ]
+      : []
+  );
 
   useEffect(() => {
     setIsLoading(true);
