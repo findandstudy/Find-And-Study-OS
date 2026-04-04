@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, Component, type ReactNode } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Router as WouterRouter, useLocation, useRoute } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -37,35 +38,6 @@ function lazyRetry<T extends { default: React.ComponentType<any> }>(
       });
     return attempt(retries);
   });
-}
-
-class LazyErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidMount() {
-    sessionStorage.removeItem("chunk_reload");
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-          <p className="text-lg font-semibold">Something went wrong loading this page.</p>
-          <button
-            className="px-6 py-2 bg-primary text-white rounded-xl hover:opacity-90"
-            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
-          >
-            Reload
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
 }
 
 const About = lazyRetry(() => import("@/pages/public/About"));
@@ -190,7 +162,7 @@ function PublicRoutes({ lang }: { lang: string }) {
 
 function Router() {
   return (
-    <LazyErrorBoundary>
+    <ErrorBoundary>
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/">
@@ -350,7 +322,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </Suspense>
-    </LazyErrorBoundary>
+    </ErrorBoundary>
   );
 }
 
