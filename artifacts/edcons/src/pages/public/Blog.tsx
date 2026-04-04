@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useListBlogPosts } from "@workspace/api-client-react";
@@ -30,6 +31,58 @@ export default function Blog() {
     const matchCat = category === "All" || p.category === category;
     return matchSearch && matchCat && (p.status === 'published' || p.published === true);
   });
+
+  const allPublished = (Array.isArray(posts) ? posts : []).filter(
+    (p: any) => p.status === 'published' || p.published === true
+  );
+
+  useJsonLd([
+    {
+      "@context": "https://schema.org",
+      "@type": "Blog",
+      "@id": `${SITE_URL}/en/blog#blog`,
+      name: `${SITE_NAME} Blog`,
+      url: `${SITE_URL}/en/blog`,
+      description: "Expert advice on studying abroad, university applications, scholarships, visa tips, and student life.",
+      publisher: {
+        "@type": "EducationalOrganization",
+        "@id": `${SITE_URL}/#organization`,
+        name: SITE_NAME,
+      },
+      breadcrumb: {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "Blog", item: `${SITE_URL}/en/blog` },
+        ],
+      },
+    },
+    ...(allPublished.slice(0, 10).map((p: any) => ({
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "@id": `${SITE_URL}/en/blog/${p.slug || p.id}#blogposting`,
+      headline: p.title,
+      url: `${SITE_URL}/en/blog/${p.slug || p.id}`,
+      description: p.excerpt || p.summary || undefined,
+      datePublished: p.publishedAt || p.createdAt || undefined,
+      dateModified: p.updatedAt || p.publishedAt || undefined,
+      author: {
+        "@type": "Organization",
+        name: SITE_NAME,
+        url: SITE_URL,
+      },
+      publisher: {
+        "@type": "EducationalOrganization",
+        "@id": `${SITE_URL}/#organization`,
+        name: SITE_NAME,
+      },
+      isPartOf: { "@id": `${SITE_URL}/en/blog#blog` },
+      ...(p.category ? { articleSection: p.category } : {}),
+      ...(p.coverImageUrl || p.imageUrl
+        ? { image: { "@type": "ImageObject", url: p.coverImageUrl || p.imageUrl } }
+        : {}),
+    }))),
+  ]);
 
   return (
     <PublicLayout>
