@@ -185,7 +185,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div className="col-span-1 md:col-span-2">
             <div className="flex items-center gap-2 mb-6">
               {logoUrl ? (
-                <img src={logoUrl} alt={companyName} className="h-8 max-w-[160px] object-contain brightness-0 invert" />
+                <img src={logoUrl} alt={companyName} className="h-8 max-w-[160px] object-contain brightness-0 invert" loading="lazy" />
               ) : (
                 <>
                   <GraduationCap className="w-8 h-8 text-primary" />

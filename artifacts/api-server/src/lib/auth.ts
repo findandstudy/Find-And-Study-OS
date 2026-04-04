@@ -75,24 +75,26 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   next();
 }
 
-export async function logAudit(
+export function logAudit(
   userId: number | null,
   action: string,
   resource: string,
   resourceId?: number,
   changes?: object,
   ipAddress?: string
-) {
-  try {
-    await db.insert(auditLogsTable).values({
-      userId,
-      action,
-      resource,
-      resourceId,
-      changes: changes ? JSON.stringify(changes) : null,
-      ipAddress: ipAddress || null,
-    });
-  } catch (err) {
-    console.error("[audit] Failed to write audit log:", err);
-  }
+): void {
+  setImmediate(async () => {
+    try {
+      await db.insert(auditLogsTable).values({
+        userId,
+        action,
+        resource,
+        resourceId,
+        changes: changes ? JSON.stringify(changes) : null,
+        ipAddress: ipAddress || null,
+      });
+    } catch (err) {
+      console.error("[audit] Failed to write audit log:", err);
+    }
+  });
 }

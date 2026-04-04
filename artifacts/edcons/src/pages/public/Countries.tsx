@@ -155,7 +155,7 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
         <div className={`group relative rounded-3xl overflow-hidden border border-border/40 bg-card shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer ${featured ? 'min-h-[320px]' : 'min-h-[280px]'} flex flex-col`}>
           <div className={`h-36 bg-gradient-to-br ${gradient} relative flex items-center justify-center`}>
             {dest.thumbnailUrl ? (
-              <img src={dest.thumbnailUrl} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" />
+              <img src={dest.thumbnailUrl} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
             ) : (
               <span className="text-7xl">{dest.flagEmoji || "🌍"}</span>
             )}

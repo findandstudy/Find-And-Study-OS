@@ -926,7 +926,7 @@ function ProgramDetailDialog({ open, onClose, program }: { open: boolean; onClos
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-primary/20">
               {logoSrc ? (
-                <img src={logoSrc} alt={program.universityName} className="w-9 h-9 object-contain"
+                <img src={logoSrc} alt={program.universityName} className="w-9 h-9 object-contain" loading="lazy"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }} />
               ) : null}
               <GraduationCap className={`w-6 h-6 text-primary ${logoSrc ? "hidden" : ""}`} />
