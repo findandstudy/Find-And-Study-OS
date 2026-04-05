@@ -27,6 +27,7 @@ import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
+import { StudentDocChecklist, normalizeLevel } from "@/components/StudentDocChecklist";
 
 const STUDY_LEVELS = [
   { value: "pre_bachelors", label: "Associate" },
@@ -82,6 +83,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
   const [editOpen, setEditOpen] = useState(false);
   const [stageDocUpload, setStageDocUpload] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
+  const [studentDocsMissing, setStudentDocsMissing] = useState<string[] | null>(null);
   const { user: authUser } = useAuth();
   const isAdmin = authUser && ["super_admin", "admin", "manager"].includes(authUser.role);
   const isStaffUser = authUser && ["super_admin", "admin", "manager", "staff"].includes(authUser.role);
@@ -127,6 +129,8 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
         const stageLabel = pipelineStages.find(s => s.key === stage)?.label ?? stage;
         setStageDocUpload({ targetStage: stage, targetStageLabel: stageLabel });
+      } else if (res.status === 422 && body.code === "STUDENT_DOCS_REQUIRED") {
+        setStudentDocsMissing(body.missingDocTypes || []);
       } else {
         toast({ title: "Error", description: body.error || "Could not update stage", variant: "destructive" });
       }
@@ -149,6 +153,16 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
       }
     } catch {}
   }
+
+  const { data: studentDocs = [] } = useQuery<any[]>({
+    queryKey: [`student-docs-for-app-${app?.studentId}`],
+    queryFn: async () => {
+      const res = await apiFetch(`${BASE_URL}/api/documents?studentId=${app!.studentId}`);
+      return res.json();
+    },
+    enabled: !!app?.studentId,
+    staleTime: 30_000,
+  });
 
   const stageLabel = pipelineStages.find(s => s.key === app?.stage)?.label || app?.stage?.replace(/_/g, " ") || "—";
   const levelLabel = STUDY_LEVELS.find(l => l.value === app?.level)?.label || app?.level || "—";
@@ -242,6 +256,15 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 </div>
               )}
             </div>
+
+            {app && normalizeLevel(app.level) && (
+              <div className="bg-card rounded-2xl border shadow-sm p-4">
+                <StudentDocChecklist
+                  level={app.level}
+                  documents={studentDocs}
+                />
+              </div>
+            )}
 
             {app && authUser && (
               <>
@@ -442,6 +465,75 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           }}
         />
       )}
+
+      <Dialog open={!!studentDocsMissing} onOpenChange={() => setStudentDocsMissing(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <GraduationCap className="w-5 h-5" />
+              Eksik Zorunlu Belgeler
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Bu başvuruyu <strong>Documents Collected</strong> aşamasına taşımak için aşağıdaki zorunlu belgeler öğrenci profiline yüklenmelidir:
+            </p>
+            <ul className="space-y-1.5">
+              {(studentDocsMissing || []).map((docType) => {
+                const labels: Record<string, string> = {
+                  high_school_diploma_translation: "High School Diploma (Translation)",
+                  class_10th_ssc_marks_sheet: "Class 10th/SSC Marks Sheet",
+                  class_12th_hsc_certificate: "Class 12th/+2/HSC Certificate",
+                  class_12th_hsc_marks_sheet: "Class 12th/+2/HSC Marks Sheet",
+                  diploma_certificate: "Diploma Certificate",
+                  diploma_transcript: "Diploma Transcript",
+                  bachelors_certificate: "Bachelors Certificate",
+                  bachelors_transcript: "Bachelors Transcript",
+                  bachelors_provisional_certificate: "Bachelors Provisional Certificate",
+                  bachelors_transcript_all_semesters: "Bachelors Transcript (All Semesters)",
+                  masters_certificate: "Masters Certificate",
+                  masters_transcript: "Masters Transcript",
+                  masters_provisional_certificate: "Masters Provisional Certificate",
+                  masters_transcript_all_semesters: "Masters Transcript (All Semesters)",
+                  passport: "Passport",
+                  cv: "CV / Resume",
+                  lor: "Letter of Recommendation",
+                  sop: "Statement of Purpose",
+                  essay: "Essay",
+                  experience_letters: "Experience Letters",
+                  other_certificates_documents: "Other Certificates/Documents",
+                  ielts_pte_gre_gmat_toefl_duolingo: "IELTS/PTE/GRE/GMAT/TOEFL/Duolingo",
+                  photo: "Photo",
+                  diploma_recognition: "Diploma Recognition",
+                };
+                return (
+                  <li key={docType} className="flex items-center gap-2 text-sm text-red-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                    {labels[docType] || docType}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <DialogFooter className="gap-2">
+            {app?.studentId && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStudentDocsMissing(null);
+                  setLocation(`${basePath}/students/${app.studentId}`);
+                }}
+              >
+                <User className="w-4 h-4 mr-2" />
+                Öğrenci Profiline Git
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setStudentDocsMissing(null)}>
+              Kapat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

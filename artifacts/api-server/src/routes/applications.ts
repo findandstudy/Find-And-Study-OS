@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentRequirementsTable, documentsTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -10,6 +10,18 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
 
 const router: IRouter = Router();
+
+function normalizeStudyLevel(level: string | null | undefined): string | null {
+  if (!level) return null;
+  const l = level.toLowerCase().replace(/[\s.-]/g, "_");
+  if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
+  if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
+  if (["pre_master"].some(k => l.includes(k))) return "pre_masters";
+  if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
+  if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
+  if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
+  return null;
+}
 
 const DOC_REQUIRED_STAGES = [
   "app_fee_paid", "offer_received", "acceptance_letter",
@@ -513,6 +525,41 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         requiredStage: targetStage,
       });
       return;
+    }
+  }
+
+  if (updates.stage === "documents_collected") {
+    const [currentApp] = await db.select({
+      level: applicationsTable.level,
+      studentId: applicationsTable.studentId,
+    }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+
+    const normalizedLevel = normalizeStudyLevel(currentApp?.level);
+    if (normalizedLevel && currentApp?.studentId) {
+      const [mandatoryReqs, studentDocs] = await Promise.all([
+        db.select({ documentType: documentRequirementsTable.documentType })
+          .from(documentRequirementsTable)
+          .where(and(
+            eq(documentRequirementsTable.level, normalizedLevel),
+            eq(documentRequirementsTable.enabled, true),
+            eq(documentRequirementsTable.mandatory, true),
+          )),
+        db.select({ type: documentsTable.type })
+          .from(documentsTable)
+          .where(eq(documentsTable.studentId, currentApp.studentId)),
+      ]);
+
+      const uploadedTypes = new Set(studentDocs.map(d => (d.type || "").toLowerCase()));
+      const missingDocs = mandatoryReqs.filter(r => !uploadedTypes.has(r.documentType));
+
+      if (missingDocs.length > 0) {
+        res.status(422).json({
+          error: "Mandatory student documents are missing for this application level",
+          code: "STUDENT_DOCS_REQUIRED",
+          missingDocTypes: missingDocs.map(d => d.documentType),
+        });
+        return;
+      }
     }
   }
 

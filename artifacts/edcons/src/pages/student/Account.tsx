@@ -24,6 +24,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import { StudentDocChecklist } from "@/components/StudentDocChecklist";
 
 const DOC_TYPES = [
   { key: "passport", label: "Passport" },
@@ -561,6 +562,16 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
       {!studentProfile?.id && (
         <div className="p-4 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
           Please complete your Student Info in the Student Info tab before uploading documents.
+        </div>
+      )}
+
+      {studentProfile?.id && (
+        <div className="mb-5">
+          <StudentDocChecklist
+            level={studentProfile.interestedLevel}
+            documents={documents}
+            compact={false}
+          />
         </div>
       )}
 
