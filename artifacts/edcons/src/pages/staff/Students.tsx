@@ -91,50 +91,39 @@ function getStuStageColor(stage: PipelineStage, index: number): string {
 type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
 type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 
-const LEVELS: { key: AppLevel; label: string; badge: string; color: string }[] = [
-  { key: "pathway", label: "Language / Prep", badge: "Pathway", color: "bg-teal-100 text-teal-700 border-teal-200" },
-  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  { key: "graduate", label: "Master's Degree", badge: "Graduate", color: "bg-violet-100 text-violet-700 border-violet-200" },
-  { key: "doctorate", label: "Doctorate (PhD)", badge: "Doctorate", color: "bg-amber-100 text-amber-700 border-amber-200" },
+const LEVELS: { key: AppLevel; label: string; badge: string; color: string; dbLevel: string }[] = [
+  { key: "pathway",      label: "Language / Prep",    badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",   dbLevel: "pre_bachelors" },
+  { key: "undergraduate",label: "Bachelor / Associate",badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",   dbLevel: "bachelors" },
+  { key: "graduate",     label: "Master's Degree",    badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "masters" },
+  { key: "doctorate",    label: "Doctorate (PhD)",    badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",  dbLevel: "phd" },
 ];
 
-const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
-  pathway: [
-    { key: "passport",        label: "Passport",         icon: "🛂", accept: "image/*,.pdf", required: true  },
-    { key: "hs_diploma",      label: "HS Diploma",       icon: "🎓", accept: "image/*,.pdf", required: false },
-    { key: "hs_transcript",   label: "HS Transcript",    icon: "📋", accept: "image/*,.pdf", required: false },
-    { key: "photo",           label: "Photograph",       icon: "📷", accept: "image/*",      required: false },
-  ],
-  undergraduate: [
-    { key: "hs_diploma",      label: "HS Diploma",       icon: "🎓", accept: "image/*,.pdf", required: true  },
-    { key: "hs_transcript",   label: "HS Transcript",    icon: "📋", accept: "image/*,.pdf", required: true  },
-    { key: "passport",        label: "Passport",         icon: "🛂", accept: "image/*,.pdf", required: true  },
-    { key: "photo",           label: "Photograph",       icon: "📷", accept: "image/*",      required: true  },
-    { key: "language_proof",  label: "Language Proof",   icon: "🌐", accept: "image/*,.pdf", required: false, note: "If available" },
-  ],
-  graduate: [
-    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "🎓", accept: "image/*,.pdf", required: true  },
-    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "📋", accept: "image/*,.pdf", required: true  },
-    { key: "passport",            label: "Passport",             icon: "🛂", accept: "image/*,.pdf", required: true  },
-    { key: "photo",               label: "Photograph",           icon: "📷", accept: "image/*",      required: true  },
-    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Recognition" },
-    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
-    { key: "sop",                 label: "SOP",                  icon: "✍️", accept: "image/*,.pdf", required: false, note: "If required" },
-  ],
-  doctorate: [
-    { key: "master_diploma",      label: "Master Diploma",       icon: "🎓", accept: "image/*,.pdf", required: true  },
-    { key: "master_transcript",   label: "Master Transcript",    icon: "📋", accept: "image/*,.pdf", required: true  },
-    { key: "bachelor_diploma",    label: "Bachelor Diploma",     icon: "🎓", accept: "image/*,.pdf", required: true  },
-    { key: "bachelor_transcript", label: "Bachelor Transcript",  icon: "📋", accept: "image/*,.pdf", required: true  },
-    { key: "passport",            label: "Passport",             icon: "🛂", accept: "image/*,.pdf", required: true  },
-    { key: "photo",               label: "Photograph",           icon: "📷", accept: "image/*",      required: true  },
-    { key: "equivalency",         label: "Equivalency Letter",   icon: "📜", accept: "image/*,.pdf", required: true,  note: "Recognition" },
-    { key: "research_proposal",   label: "Research Proposal",    icon: "🔬", accept: "image/*,.pdf", required: false, note: "If required" },
-    { key: "cv",                  label: "CV",                   icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
-  ],
+const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: string }> = {
+  high_school_diploma_translation:    { label: "HS Diploma",           icon: "🎓", accept: "image/*,.pdf" },
+  class_10th_ssc_marks_sheet:         { label: "10th Marks Sheet",     icon: "📋", accept: "image/*,.pdf" },
+  class_12th_hsc_certificate:         { label: "12th Certificate",     icon: "📜", accept: "image/*,.pdf" },
+  class_12th_hsc_marks_sheet:         { label: "12th Marks Sheet",     icon: "📋", accept: "image/*,.pdf" },
+  diploma_certificate:                { label: "Diploma Certificate",  icon: "🎓", accept: "image/*,.pdf" },
+  diploma_transcript:                 { label: "Diploma Transcript",   icon: "📋", accept: "image/*,.pdf" },
+  bachelors_certificate:              { label: "Bachelor's Cert.",     icon: "🎓", accept: "image/*,.pdf" },
+  bachelors_transcript:               { label: "Bachelor's Transcript",icon: "📋", accept: "image/*,.pdf" },
+  bachelors_provisional_certificate:  { label: "Provisional Cert.",    icon: "📜", accept: "image/*,.pdf" },
+  bachelors_transcript_all_semesters: { label: "All Sem. Transcript",  icon: "📋", accept: "image/*,.pdf" },
+  masters_certificate:                { label: "Master's Cert.",       icon: "🎓", accept: "image/*,.pdf" },
+  masters_transcript:                 { label: "Master's Transcript",  icon: "📋", accept: "image/*,.pdf" },
+  masters_provisional_certificate:    { label: "Master's Provisional", icon: "📜", accept: "image/*,.pdf" },
+  masters_transcript_all_semesters:   { label: "All Sem. Transcript",  icon: "📋", accept: "image/*,.pdf" },
+  passport:                           { label: "Passport",             icon: "🛂", accept: "image/*,.pdf" },
+  cv:                                 { label: "CV / Resume",          icon: "📄", accept: "image/*,.pdf" },
+  lor:                                { label: "LOR",                  icon: "✉️", accept: "image/*,.pdf" },
+  sop:                                { label: "SOP",                  icon: "✍️", accept: "image/*,.pdf" },
+  essay:                              { label: "Essay",                icon: "📝", accept: "image/*,.pdf" },
+  experience_letters:                 { label: "Experience Letters",   icon: "💼", accept: "image/*,.pdf" },
+  other_certificates_documents:       { label: "Other Documents",      icon: "📁", accept: "image/*,.pdf" },
+  ielts_pte_gre_gmat_toefl_duolingo:  { label: "Language Test",        icon: "🌐", accept: "image/*,.pdf" },
+  photo:                              { label: "Photograph",           icon: "📷", accept: "image/*"       },
+  diploma_recognition:                { label: "Diploma Recognition",  icon: "📜", accept: "image/*,.pdf" },
 };
-
-const DOC_TYPES = LEVEL_DOCS.undergraduate;
 
 type UploadedDoc = {
   key: string;
@@ -497,7 +486,27 @@ function AddStudentModal({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [applicationLevel, setApplicationLevel] = useState<AppLevel>("undergraduate");
 
-  const currentDocs = LEVEL_DOCS[applicationLevel];
+  const { data: docRequirements } = useQuery({
+    queryKey: ["document-requirements"],
+    queryFn: () => customFetch<any[]>("/api/document-requirements"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const currentDocs = useMemo<LevelDoc[]>(() => {
+    const dbLevel = LEVELS.find(l => l.key === applicationLevel)?.dbLevel ?? "bachelors";
+    const reqs = (docRequirements ?? []).filter((r: any) => r.level === dbLevel && r.enabled);
+    if (reqs.length === 0) return [];
+    return reqs.map((r: any) => {
+      const meta = DOC_TYPE_META[r.documentType] ?? { label: r.documentType, icon: "📄", accept: "image/*,.pdf" };
+      return {
+        key: r.documentType,
+        label: meta.label,
+        icon: meta.icon,
+        accept: meta.accept,
+        required: !!r.mandatory,
+      } as LevelDoc;
+    });
+  }, [docRequirements, applicationLevel]);
 
   function handleClose() {
     setStep("upload");
