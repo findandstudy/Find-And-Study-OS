@@ -182,13 +182,15 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   const currentYear = String(new Date().getFullYear());
   let resolvedAgentId = agentId || null;
   if (isAgentRole(user.role)) {
-    const agentRec = await getAgentRecord(user.id, user.role);
+    const [agentRec, visibleIds] = await Promise.all([
+      getAgentRecord(user.id, user.role),
+      getAgentVisibleIds(user.id, user.role),
+    ]);
     if (!agentRec) {
       res.status(403).json({ error: "No agent record found" });
       return;
     }
     resolvedAgentId = agentRec.id;
-    const visibleIds = await getAgentVisibleIds(user.id, user.role);
     const [studentRec] = await db.select({ agentId: studentsTable.agentId }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
     if (!studentRec || !visibleIds.includes(studentRec.agentId!)) {
       res.status(403).json({ error: "Student not in your scope" });
@@ -264,14 +266,9 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     }
   }
 
-  const [studentOriginRec] = await db.select({
-    originType: studentsTable.originType,
-    originEntityType: studentsTable.originEntityType,
-    originEntityId: studentsTable.originEntityId,
-    originDisplayName: studentsTable.originDisplayName,
-  }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
-  const origin: OriginMeta = studentOriginRec
-    ? { originType: studentOriginRec.originType as any, originEntityType: studentOriginRec.originEntityType, originEntityId: studentOriginRec.originEntityId, originDisplayName: studentOriginRec.originDisplayName }
+  // studentFull already contains origin fields — no extra query needed
+  const origin: OriginMeta = studentFull.originType
+    ? { originType: studentFull.originType as any, originEntityType: studentFull.originEntityType, originEntityId: studentFull.originEntityId, originDisplayName: studentFull.originDisplayName }
     : await inferOriginFromUser(user);
 
   const [app] = await db.insert(applicationsTable).values({
@@ -307,10 +304,14 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     ? snapshotDiscountedFee
     : snapshotTuitionFee;
 
-  const commFinStatus = await getCommissionFinanceStatus(stage);
-  if (commFinStatus !== "excluded") {
-    const existingComm = await db.select({ id: commissionsTable.id }).from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
-    if (existingComm.length === 0) {
+  // Commission, service fee, and student status are independent — run in parallel.
+  await Promise.all([
+    // Chain 1: commission record
+    (async () => {
+      const commFinStatus = await getCommissionFinanceStatus(stage);
+      if (commFinStatus === "excluded") return;
+      const existingComm = await db.select({ id: commissionsTable.id }).from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
+      if (existingComm.length > 0) return;
       const uCommAmount = commissionBaseFee && snapshotCommissionRate
         ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
       const agentComm = await resolveAgentCommission(resolvedAgentId, uCommAmount);
@@ -334,13 +335,14 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
         subAgentCommissionRate: agentComm.subAgentCommissionRate,
         subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
       });
-    }
-  }
+    })(),
 
-  const sfFinStatus = await getServiceFeeFinanceStatus(stage);
-  if (sfFinStatus !== "excluded") {
-    const existingSF = await db.select({ id: serviceFeesTable.id }).from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
-    if (existingSF.length === 0) {
+    // Chain 2: service fee record
+    (async () => {
+      const sfFinStatus = await getServiceFeeFinanceStatus(stage);
+      if (sfFinStatus === "excluded") return;
+      const existingSF = await db.select({ id: serviceFeesTable.id }).from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
+      if (existingSF.length > 0) return;
       const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
       const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;
       await db.insert(serviceFeesTable).values({
@@ -358,20 +360,23 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
         financeStatus: sfFinStatus,
         status: "pending",
       });
-    }
-  }
+    })(),
 
-  try {
-    const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
-      .from(pipelineStagesTable)
-      .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
-    if (appMadeStage) {
-      const [stu] = await db.select({ status: studentsTable.status }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
-      if (stu && (stu.status === "active" || stu.status === "inactive")) {
-        await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, parseInt(studentId, 10)));
-      }
-    }
-  } catch {}
+    // Chain 3: student status update (best-effort — never throws)
+    (async () => {
+      try {
+        const [appMadeStage] = await db.select({ key: pipelineStagesTable.key })
+          .from(pipelineStagesTable)
+          .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
+        if (appMadeStage) {
+          const [stu] = await db.select({ status: studentsTable.status }).from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
+          if (stu && (stu.status === "active" || stu.status === "inactive")) {
+            await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, parseInt(studentId, 10)));
+          }
+        }
+      } catch {}
+    })(),
+  ]);
 
   await logAudit(req.user!.id, "create_application", "application", app.id, { studentId }, req.ip);
 
