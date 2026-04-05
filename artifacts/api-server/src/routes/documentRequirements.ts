@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, documentRequirementsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 
@@ -47,29 +47,32 @@ router.put("/document-requirements", requireAuth, requireRole(...ADMIN_ROLES), a
     return;
   }
 
-  for (const r of requirements) {
-    if (!r.documentType || !r.level) continue;
-    const [existing] = await db.select().from(documentRequirementsTable)
-      .where(and(eq(documentRequirementsTable.documentType, r.documentType), eq(documentRequirementsTable.level, r.level)));
-
-    if (existing) {
-      await db.update(documentRequirementsTable)
-        .set({
-          enabled: !!r.enabled,
-          mandatory: !!r.mandatory,
-          sortOrder: r.sortOrder ?? existing.sortOrder,
-        })
-        .where(eq(documentRequirementsTable.id, existing.id));
-    } else {
-      await db.insert(documentRequirementsTable).values({
-        documentType: r.documentType,
-        level: r.level,
-        enabled: !!r.enabled,
-        mandatory: !!r.mandatory,
-        sortOrder: r.sortOrder ?? 0,
-      });
-    }
+  const valid = requirements.filter((r: any) => r.documentType && r.level);
+  if (valid.length === 0) {
+    const rows = await db.select().from(documentRequirementsTable).orderBy(documentRequirementsTable.sortOrder);
+    res.json(rows);
+    return;
   }
+
+  const values = valid.map((r: any, idx: number) => ({
+    documentType: String(r.documentType),
+    level: String(r.level),
+    enabled: !!r.enabled,
+    mandatory: !!r.mandatory,
+    sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : idx,
+  }));
+
+  await db.insert(documentRequirementsTable)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [documentRequirementsTable.documentType, documentRequirementsTable.level],
+      set: {
+        enabled: sql`excluded.enabled`,
+        mandatory: sql`excluded.mandatory`,
+        sortOrder: sql`excluded.sort_order`,
+        updatedAt: sql`now()`,
+      },
+    });
 
   const rows = await db.select().from(documentRequirementsTable).orderBy(documentRequirementsTable.sortOrder);
   res.json(rows);
