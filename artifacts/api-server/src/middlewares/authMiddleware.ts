@@ -5,6 +5,7 @@ import {
   clearSession,
   getSessionId,
   getSession,
+  touchSession,
   type SessionUser,
 } from "../lib/replitAuth";
 
@@ -71,5 +72,11 @@ export async function authMiddleware(
   }
 
   req.user = freshUser;
+
+  // Slide session expiry on every authenticated request (fire-and-forget).
+  setImmediate(() => {
+    touchSession(sid).catch(() => {});
+  });
+
   next();
 }

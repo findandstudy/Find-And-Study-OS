@@ -173,7 +173,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
   };
 
-  const sid = await createSession(sessionData);
+  const sid = await createSession(sessionData, user.id);
   setSessionCookie(res, sid);
   res.json({ user: sessionUser });
 });
@@ -327,7 +327,7 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
     access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
   };
 
-  const sid = await createSession(sessionData);
+  const sid = await createSession(sessionData, user.id);
   setSessionCookie(res, sid);
   res.json({ user: sessionUser, verified: true });
 });
