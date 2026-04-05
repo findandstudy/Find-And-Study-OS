@@ -101,7 +101,8 @@
     "ourOffices": "हमारे कार्यालय",
     "required": "*",
     "latinOnly": "केवल लैटिन अक्षर अनुमत हैं",
-    "messageTooLong": "संदेश 400 अक्षरों से अधिक नहीं हो सकता"
+    "messageTooLong": "संदेश 400 अक्षरों से अधिक नहीं हो सकता",
+    "phoneCode": "देश कोड"
   },
   "blog": {
     "badge": "ब्लॉग",
@@ -118,7 +119,8 @@
     "noArticles": "कोई लेख नहीं मिला",
     "tryAdjusting": "अपनी खोज या फ़िल्टर समायोजित करें",
     "readMore": "और पढ़ें",
-    "minRead": "मिनट पढ़ना"
+    "minRead": "मिनट पढ़ना",
+    "filterByCategory": "श्रेणी के अनुसार फ़िल्टर करें"
   },
   "countries": {
     "badge": "अध्ययन गंतव्य",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "विश्वविद्यालय वेबसाइट पर जाएं",
     "feeMinValue": "न्यूनतम ({value})",
-    "feeMaxValue": "अधिकतम ({value})"
+    "feeMaxValue": "अधिकतम ({value})",
+    "prevPage": "पिछला पृष्ठ",
+    "nextPage": "अगला पृष्ठ",
+    "goToPage": "पृष्ठ {page} पर जाएं"
   },
   "apply": {
     "title": "आवेदन — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "कम से कम 1 बड़ा अक्षर",
     "reqDigit": "कम से कम 1 अंक",
     "requirementsHint": "न्यूनतम 8 वर्ण, 1 बड़ा अक्षर, 1 अंक"
+  },
+  "a11y": {
+    "skipToContent": "मुख्य सामग्री पर जाएं"
   }
 }

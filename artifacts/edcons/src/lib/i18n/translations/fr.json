@@ -101,7 +101,8 @@
     "ourOffices": "Nos bureaux",
     "required": "*",
     "latinOnly": "Seuls les caractères latins sont autorisés",
-    "messageTooLong": "Le message ne peut pas dépasser 400 caractères"
+    "messageTooLong": "Le message ne peut pas dépasser 400 caractères",
+    "phoneCode": "Indicatif pays"
   },
   "blog": {
     "badge": "Le Blog",
@@ -118,7 +119,8 @@
     "noArticles": "Aucun article trouvé",
     "tryAdjusting": "Essayez d'ajuster votre recherche ou vos filtres",
     "readMore": "Lire la suite",
-    "minRead": "min de lecture"
+    "minRead": "min de lecture",
+    "filterByCategory": "Filtrer par catégorie"
   },
   "countries": {
     "badge": "Destinations d'études",
@@ -211,7 +213,10 @@
     "timesRanking": "Times : {value}",
     "visitUniversity": "Visiter le site de l'université",
     "feeMinValue": "Min ({value})",
-    "feeMaxValue": "Max ({value})"
+    "feeMaxValue": "Max ({value})",
+    "prevPage": "Page précédente",
+    "nextPage": "Page suivante",
+    "goToPage": "Aller à la page {page}"
   },
   "apply": {
     "title": "Postuler — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "Au moins 1 majuscule",
     "reqDigit": "Au moins 1 chiffre",
     "requirementsHint": "Min. 8 caractères, 1 majuscule, 1 chiffre"
+  },
+  "a11y": {
+    "skipToContent": "Passer au contenu principal"
   }
 }

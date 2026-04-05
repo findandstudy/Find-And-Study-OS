@@ -62,6 +62,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col font-sans" dir={isRTL ? "rtl" : "ltr"}>
+      <a href="#main-content" className="skip-to-content">
+        {t("a11y.skipToContent")}
+      </a>
       <header className="sticky top-0 z-50 w-full glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href={localePath("/")} className="flex items-center gap-2 group">
@@ -176,7 +179,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         )}
       </header>
 
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         {children}
       </main>
 

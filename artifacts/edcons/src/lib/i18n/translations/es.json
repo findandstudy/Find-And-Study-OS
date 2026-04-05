@@ -101,7 +101,8 @@
     "ourOffices": "Nuestras oficinas",
     "required": "*",
     "latinOnly": "Solo se permiten caracteres latinos",
-    "messageTooLong": "El mensaje no puede exceder 400 caracteres"
+    "messageTooLong": "El mensaje no puede exceder 400 caracteres",
+    "phoneCode": "Código de país"
   },
   "blog": {
     "badge": "El Blog",
@@ -118,7 +119,8 @@
     "noArticles": "No se encontraron artículos",
     "tryAdjusting": "Intenta ajustar tu búsqueda o filtros",
     "readMore": "Leer más",
-    "minRead": "min de lectura"
+    "minRead": "min de lectura",
+    "filterByCategory": "Filtrar por categoría"
   },
   "countries": {
     "badge": "Destinos de estudio",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "Visitar sitio web de la universidad",
     "feeMinValue": "Mín ({value})",
-    "feeMaxValue": "Máx ({value})"
+    "feeMaxValue": "Máx ({value})",
+    "prevPage": "Página anterior",
+    "nextPage": "Página siguiente",
+    "goToPage": "Ir a la página {page}"
   },
   "apply": {
     "title": "Aplicar — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "Al menos 1 mayúscula",
     "reqDigit": "Al menos 1 número",
     "requirementsHint": "Mín. 8 caracteres, 1 mayúscula, 1 número"
+  },
+  "a11y": {
+    "skipToContent": "Ir al contenido principal"
   }
 }

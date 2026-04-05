@@ -199,73 +199,86 @@ export default function Contact() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">
-                      {t("contact.firstName")} <span className="text-destructive">*</span>
+                    <label htmlFor="contact-first-name" className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.firstName")} <span className="text-destructive" aria-hidden="true">*</span>
                     </label>
-                    <Input value={form.firstName} onChange={e => handleNameChange("firstName", e.target.value)}
-                      required placeholder={t("contact.firstNamePlaceholder")} className="rounded-xl uppercase" />
+                    <Input id="contact-first-name" value={form.firstName} onChange={e => handleNameChange("firstName", e.target.value)}
+                      required aria-required="true" placeholder={t("contact.firstNamePlaceholder")} className="rounded-xl uppercase" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">
-                      {t("contact.lastName")} <span className="text-destructive">*</span>
+                    <label htmlFor="contact-last-name" className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.lastName")} <span className="text-destructive" aria-hidden="true">*</span>
                     </label>
-                    <Input value={form.lastName} onChange={e => handleNameChange("lastName", e.target.value)}
-                      required placeholder={t("contact.lastNamePlaceholder")} className="rounded-xl uppercase" />
+                    <Input id="contact-last-name" value={form.lastName} onChange={e => handleNameChange("lastName", e.target.value)}
+                      required aria-required="true" placeholder={t("contact.lastNamePlaceholder")} className="rounded-xl uppercase" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1.5 block">
-                    {t("contact.email")} <span className="text-destructive">*</span>
+                  <label htmlFor="contact-email" className="text-sm font-medium text-foreground mb-1.5 block">
+                    {t("contact.email")} <span className="text-destructive" aria-hidden="true">*</span>
                   </label>
-                  <Input type="email" value={form.email} onChange={e => setField("email", e.target.value)}
-                    required placeholder={t("contact.emailPlaceholder")} className="rounded-xl" />
+                  <Input id="contact-email" type="email" value={form.email} onChange={e => setField("email", e.target.value)}
+                    required aria-required="true" placeholder={t("contact.emailPlaceholder")} className="rounded-xl" />
                 </div>
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">
-                      {t("contact.phone")} <span className="text-destructive">*</span>
+                    <label htmlFor="contact-phone" className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.phone")} <span className="text-destructive" aria-hidden="true">*</span>
                     </label>
                     <div className="flex gap-2">
-                      <select value={form.phoneCode} onChange={e => setField("phoneCode", e.target.value)}
+                      <select
+                        value={form.phoneCode}
+                        onChange={e => setField("phoneCode", e.target.value)}
+                        aria-label={t("contact.phoneCode")}
                         className="h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-24">
                         {PHONE_CODES.map(pc => (
                           <option key={pc.code} value={pc.code}>{pc.country} {pc.code}</option>
                         ))}
                       </select>
-                      <Input value={form.phone} onChange={e => setField("phone", e.target.value.replace(/[^0-9]/g, ""))}
-                        required placeholder={t("contact.phonePlaceholder")} className="rounded-xl flex-1" />
+                      <Input id="contact-phone" value={form.phone} onChange={e => setField("phone", e.target.value.replace(/[^0-9]/g, ""))}
+                        required aria-required="true" placeholder={t("contact.phonePlaceholder")} className="rounded-xl flex-1" />
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">
-                      {t("contact.nationality")} <span className="text-destructive">*</span>
+                    <label htmlFor="contact-nationality" className="text-sm font-medium text-foreground mb-1.5 block">
+                      {t("contact.nationality")} <span className="text-destructive" aria-hidden="true">*</span>
                     </label>
                     {countries.length > 0 ? (
-                      <select value={form.nationality} onChange={e => setField("nationality", e.target.value)}
+                      <select
+                        id="contact-nationality"
+                        value={form.nationality}
+                        onChange={e => setField("nationality", e.target.value)}
                         required
+                        aria-required="true"
                         className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
                         <option value="">{t("contact.nationalityPlaceholder")}</option>
                         {countries.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     ) : (
-                      <Input value={form.nationality} onChange={e => setField("nationality", e.target.value)}
-                        required placeholder={t("contact.nationalityPlaceholder")} className="rounded-xl" />
+                      <Input id="contact-nationality" value={form.nationality} onChange={e => setField("nationality", e.target.value)}
+                        required aria-required="true" placeholder={t("contact.nationalityPlaceholder")} className="rounded-xl" />
                     )}
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                  <label htmlFor="contact-message" className="text-sm font-medium text-foreground mb-1.5 block">
                     {t("contact.message")}
                   </label>
-                  <textarea value={form.message} onChange={e => handleMessageChange(e.target.value)}
-                    rows={5} placeholder={t("contact.messagePlaceholder")} maxLength={MSG_MAX}
+                  <textarea
+                    id="contact-message"
+                    value={form.message}
+                    onChange={e => handleMessageChange(e.target.value)}
+                    rows={5}
+                    placeholder={t("contact.messagePlaceholder")}
+                    maxLength={MSG_MAX}
+                    aria-describedby="contact-message-count"
                     className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all uppercase" />
-                  <p className="text-xs text-muted-foreground mt-1 text-right">
+                  <p id="contact-message-count" className="text-xs text-muted-foreground mt-1 text-right" aria-live="polite">
                     {form.message.length}/{MSG_MAX}
                   </p>
                 </div>
                 {error && (
-                  <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl p-3">
+                  <div role="alert" aria-live="assertive" className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl p-3">
                     {error}
                   </div>
                 )}

@@ -101,7 +101,8 @@
     "ourOffices": "Ofislerimiz",
     "required": "*",
     "latinOnly": "Yalnızca Latin harfleri kullanılabilir",
-    "messageTooLong": "Mesaj 400 karakteri geçemez"
+    "messageTooLong": "Mesaj 400 karakteri geçemez",
+    "phoneCode": "Ülke kodu"
   },
   "blog": {
     "badge": "Blog",
@@ -118,7 +119,8 @@
     "noArticles": "Makale bulunamadı",
     "tryAdjusting": "Aramanızı veya filtrelerinizi ayarlamayı deneyin",
     "readMore": "Devamını Oku",
-    "minRead": "dk okuma"
+    "minRead": "dk okuma",
+    "filterByCategory": "Kategoriye göre filtrele"
   },
   "countries": {
     "badge": "Eğitim Destinasyonları",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "Üniversite Web Sitesini Ziyaret Et",
     "feeMinValue": "Min ({value})",
-    "feeMaxValue": "Maks ({value})"
+    "feeMaxValue": "Maks ({value})",
+    "prevPage": "Önceki sayfa",
+    "nextPage": "Sonraki sayfa",
+    "goToPage": "{page}. sayfaya git"
   },
   "apply": {
     "title": "Başvur — {name}",
@@ -486,5 +491,8 @@
     "reqUppercase": "En az 1 büyük harf",
     "reqDigit": "En az 1 rakam",
     "requirementsHint": "Min. 8 karakter, 1 büyük harf, 1 rakam"
+  },
+  "a11y": {
+    "skipToContent": "Ana içeriğe geç"
   }
 }

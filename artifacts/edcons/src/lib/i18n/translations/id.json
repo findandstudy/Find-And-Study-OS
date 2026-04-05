@@ -101,7 +101,8 @@
     "ourOffices": "Kantor Kami",
     "required": "*",
     "latinOnly": "Hanya karakter Latin yang diperbolehkan",
-    "messageTooLong": "Pesan tidak boleh melebihi 400 karakter"
+    "messageTooLong": "Pesan tidak boleh melebihi 400 karakter",
+    "phoneCode": "Kode negara"
   },
   "blog": {
     "badge": "Blog",
@@ -118,7 +119,8 @@
     "noArticles": "Tidak ada artikel ditemukan",
     "tryAdjusting": "Coba sesuaikan pencarian atau filter Anda",
     "readMore": "Baca Selengkapnya",
-    "minRead": "menit baca"
+    "minRead": "menit baca",
+    "filterByCategory": "Filter berdasarkan kategori"
   },
   "countries": {
     "badge": "Destinasi Studi",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "Kunjungi Situs Universitas",
     "feeMinValue": "Min ({value})",
-    "feeMaxValue": "Maks ({value})"
+    "feeMaxValue": "Maks ({value})",
+    "prevPage": "Halaman sebelumnya",
+    "nextPage": "Halaman berikutnya",
+    "goToPage": "Pergi ke halaman {page}"
   },
   "apply": {
     "title": "Daftar — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "Minimal 1 huruf besar",
     "reqDigit": "Minimal 1 angka",
     "requirementsHint": "Min. 8 karakter, 1 huruf besar, 1 angka"
+  },
+  "a11y": {
+    "skipToContent": "Lewati ke konten utama"
   }
 }

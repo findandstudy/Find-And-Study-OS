@@ -1211,8 +1211,11 @@ export default function Programs() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
-                  <Input value={search} onChange={e => setSearch(e.target.value)}
+                  <Input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
                     placeholder={t("programs.searchPlaceholder")}
+                    aria-label={t("programs.searchPlaceholder")}
                     className="pl-12 pr-4 h-12 text-base rounded-xl border-border/50 focus:border-primary bg-background/80 backdrop-blur-sm shadow-sm w-full" />
                 </div>
                 <button
@@ -1345,11 +1348,13 @@ export default function Programs() {
                           <div className="flex items-center gap-2">
                             <Input type="number" value={feeMin} onChange={e => setFeeMin(e.target.value)}
                               placeholder={filters.feeRange?.min != null ? t("programs.feeMinValue", { value: String(filters.feeRange.min) }) : t("programs.feeMin")}
+                              aria-label={t("programs.feeMin")}
                               className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                               max={filters.feeRange?.max} />
-                            <span className="text-muted-foreground text-sm font-medium">–</span>
+                            <span className="text-muted-foreground text-sm font-medium" aria-hidden="true">–</span>
                             <Input type="number" value={feeMax} onChange={e => setFeeMax(e.target.value)}
                               placeholder={filters.feeRange?.max != null ? t("programs.feeMaxValue", { value: String(filters.feeRange.max) }) : t("programs.feeMax")}
+                              aria-label={t("programs.feeMax")}
                               className="h-10 rounded-xl border-border/50 bg-background/80 text-sm flex-1 hover:border-primary/40 transition-all" min="0"
                               max={filters.feeRange?.max} />
                           </div>
@@ -1364,8 +1369,8 @@ export default function Programs() {
                               {t("programs.showingResults", { count: String(total) })}
                             </p>
                           </div>
-                          <button onClick={clearAllFilters} className="inline-flex items-center gap-1.5 text-sm text-destructive/80 hover:text-destructive font-semibold transition-colors bg-destructive/5 hover:bg-destructive/10 px-3 py-1.5 rounded-lg">
-                            <X className="w-3.5 h-3.5" /> {t("programs.clearFilters")}
+                          <button type="button" onClick={clearAllFilters} className="inline-flex items-center gap-1.5 text-sm text-destructive/80 hover:text-destructive font-semibold transition-colors bg-destructive/5 hover:bg-destructive/10 px-3 py-1.5 rounded-lg">
+                            <X className="w-3.5 h-3.5" aria-hidden="true" /> {t("programs.clearFilters")}
                           </button>
                         </div>
                       )}
@@ -1537,8 +1542,9 @@ export default function Programs() {
 
                         <div className="mt-auto flex gap-2">
                           <Button variant="outline" size="icon" onClick={() => setDetailProgram(prog)}
-                            className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5" title={t("programs.programDetails")}>
-                            <Info className="w-4 h-4" />
+                            className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5"
+                            aria-label={t("programs.programDetails")}>
+                            <Info className="w-4 h-4" aria-hidden="true" />
                           </Button>
                           <Button onClick={() => setApplyProgram(prog)} className="flex-1 rounded-xl shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
                             {t("programs.apply")}
@@ -1552,14 +1558,19 @@ export default function Programs() {
 
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-1.5 mt-12">
-                  <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-full w-10 h-10">
-                    <ChevronLeft className="w-4 h-4" />
+                  <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-full w-10 h-10" aria-label={t("programs.prevPage")}>
+                    <ChevronLeft className="w-4 h-4" aria-hidden="true" />
                   </Button>
                   {pageNumbers.map((p, idx) => (
                     p === "..." ? (
-                      <span key={`dots-${idx}`} className="px-2 text-muted-foreground">...</span>
+                      <span key={`dots-${idx}`} className="px-2 text-muted-foreground" aria-hidden="true">...</span>
                     ) : (
-                      <button key={p} onClick={() => setPage(p as number)}
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPage(p as number)}
+                        aria-label={t("programs.goToPage", { page: String(p) })}
+                        aria-current={page === p ? "page" : undefined}
                         className={`w-10 h-10 rounded-full text-sm font-semibold transition-all duration-200 ${
                           page === p
                             ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
@@ -1569,8 +1580,8 @@ export default function Programs() {
                       </button>
                     )
                   ))}
-                  <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="rounded-full w-10 h-10">
-                    <ChevronRight className="w-4 h-4" />
+                  <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="rounded-full w-10 h-10" aria-label={t("programs.nextPage")}>
+                    <ChevronRight className="w-4 h-4" aria-hidden="true" />
                   </Button>
                 </div>
               )}

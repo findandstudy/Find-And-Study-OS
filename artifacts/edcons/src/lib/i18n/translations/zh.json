@@ -101,7 +101,8 @@
     "ourOffices": "我们的办公室",
     "required": "*",
     "latinOnly": "仅允许拉丁字符",
-    "messageTooLong": "消息不能超过400个字符"
+    "messageTooLong": "消息不能超过400个字符",
+    "phoneCode": "国家代码"
   },
   "blog": {
     "badge": "博客",
@@ -118,7 +119,8 @@
     "noArticles": "未找到文章",
     "tryAdjusting": "尝试调整搜索或筛选条件",
     "readMore": "阅读更多",
-    "minRead": "分钟阅读"
+    "minRead": "分钟阅读",
+    "filterByCategory": "按类别筛选"
   },
   "countries": {
     "badge": "留学目的地",
@@ -211,7 +213,10 @@
     "timesRanking": "Times：{value}",
     "visitUniversity": "访问大学网站",
     "feeMinValue": "最低 ({value})",
-    "feeMaxValue": "最高 ({value})"
+    "feeMaxValue": "最高 ({value})",
+    "prevPage": "上一页",
+    "nextPage": "下一页",
+    "goToPage": "跳转至第 {page} 页"
   },
   "apply": {
     "title": "申请 — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "至少1个大写字母",
     "reqDigit": "至少1个数字",
     "requirementsHint": "至少8个字符、1个大写字母、1个数字"
+  },
+  "a11y": {
+    "skipToContent": "跳转至主要内容"
   }
 }

@@ -101,7 +101,8 @@
     "ourOffices": "دفاتر ما",
     "required": "*",
     "latinOnly": "فقط حروف لاتین مجاز هستند",
-    "messageTooLong": "پیام نمی‌تواند بیش از ۴۰۰ کاراکتر باشد"
+    "messageTooLong": "پیام نمی‌تواند بیش از ۴۰۰ کاراکتر باشد",
+    "phoneCode": "کد کشور"
   },
   "blog": {
     "badge": "وبلاگ",
@@ -118,7 +119,8 @@
     "noArticles": "مقاله‌ای یافت نشد",
     "tryAdjusting": "جستجو یا فیلترها را تنظیم کنید",
     "readMore": "ادامه مطلب",
-    "minRead": "دقیقه مطالعه"
+    "minRead": "دقیقه مطالعه",
+    "filterByCategory": "فیلتر بر اساس دسته‌بندی"
   },
   "countries": {
     "badge": "مقاصد تحصیلی",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "بازدید از وب‌سایت دانشگاه",
     "feeMinValue": "حداقل ({value})",
-    "feeMaxValue": "حداکثر ({value})"
+    "feeMaxValue": "حداکثر ({value})",
+    "prevPage": "صفحه قبل",
+    "nextPage": "صفحه بعد",
+    "goToPage": "رفتن به صفحه {page}"
   },
   "apply": {
     "title": "درخواست — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "حداقل ۱ حرف بزرگ",
     "reqDigit": "حداقل ۱ عدد",
     "requirementsHint": "حداقل ۸ کاراکتر، ۱ حرف بزرگ، ۱ عدد"
+  },
+  "a11y": {
+    "skipToContent": "رفتن به محتوای اصلی"
   }
 }

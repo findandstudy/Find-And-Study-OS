@@ -99,9 +99,14 @@ export default function Blog() {
               {t("blog.subtitle")}
             </p>
             <div className="max-w-lg mx-auto relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder={t("blog.searchPlaceholder")} className="pl-12 py-5 rounded-full shadow-md" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
+              <Input
+                id="blog-search"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={t("blog.searchPlaceholder")}
+                aria-label={t("blog.searchPlaceholder")}
+                className="pl-12 py-5 rounded-full shadow-md" />
             </div>
           </motion.div>
         </div>
@@ -109,9 +114,13 @@ export default function Blog() {
 
       <section className="py-8 border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-3 flex-wrap justify-center">
+          <div className="flex gap-3 flex-wrap justify-center" role="group" aria-label={t("blog.filterByCategory")}>
             {categories.map(c => (
-              <button key={c.key} onClick={() => setCategory(c.key)}
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setCategory(c.key)}
+                aria-pressed={category === c.key}
                 className={`px-5 py-2 rounded-full text-sm font-medium transition-all
                   ${category === c.key ? 'bg-accent text-white shadow-md shadow-accent/25' : 'bg-secondary hover:bg-accent/10 text-muted-foreground hover:text-accent'}`}>
                 {c.label}
@@ -162,8 +171,11 @@ export default function Blog() {
                     {post.excerpt && (
                       <p className="text-muted-foreground text-sm line-clamp-3 mb-4">{post.excerpt}</p>
                     )}
-                    <button className="flex items-center gap-2 text-accent font-semibold text-sm mt-auto hover:gap-4 transition-all">
-                      {t("blog.readMore")} <ArrowRight className="w-4 h-4" />
+                    <button
+                      type="button"
+                      aria-label={`${t("blog.readMore")} — ${post.title}`}
+                      className="flex items-center gap-2 text-accent font-semibold text-sm mt-auto hover:gap-4 transition-all">
+                      {t("blog.readMore")} <ArrowRight className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
                 </motion.article>

@@ -101,7 +101,8 @@
     "ourOffices": "مكاتبنا",
     "required": "*",
     "latinOnly": "يُسمح فقط بالأحرف اللاتينية",
-    "messageTooLong": "الرسالة لا يمكن أن تتجاوز 400 حرف"
+    "messageTooLong": "الرسالة لا يمكن أن تتجاوز 400 حرف",
+    "phoneCode": "كود الدولة"
   },
   "blog": {
     "badge": "المدونة",
@@ -118,7 +119,8 @@
     "noArticles": "لم يتم العثور على مقالات",
     "tryAdjusting": "حاول تعديل البحث أو الفلاتر",
     "readMore": "اقرأ المزيد",
-    "minRead": "دقيقة قراءة"
+    "minRead": "دقيقة قراءة",
+    "filterByCategory": "تصفية حسب الفئة"
   },
   "countries": {
     "badge": "وجهات الدراسة",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "زيارة موقع الجامعة",
     "feeMinValue": "الحد الأدنى ({value})",
-    "feeMaxValue": "الحد الأقصى ({value})"
+    "feeMaxValue": "الحد الأقصى ({value})",
+    "prevPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية",
+    "goToPage": "انتقل إلى الصفحة {page}"
   },
   "apply": {
     "title": "تقديم — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "حرف كبير واحد على الأقل",
     "reqDigit": "رقم واحد على الأقل",
     "requirementsHint": "8 أحرف، حرف كبير، رقم"
+  },
+  "a11y": {
+    "skipToContent": "تخطى إلى المحتوى الرئيسي"
   }
 }

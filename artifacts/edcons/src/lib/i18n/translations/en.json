@@ -101,7 +101,8 @@
     "ourOffices": "Our Offices",
     "required": "*",
     "latinOnly": "Only Latin characters are allowed",
-    "messageTooLong": "Message cannot exceed 400 characters"
+    "messageTooLong": "Message cannot exceed 400 characters",
+    "phoneCode": "Country code"
   },
   "blog": {
     "badge": "The Blog",
@@ -118,7 +119,8 @@
     "noArticles": "No articles found",
     "tryAdjusting": "Try adjusting your search or filters",
     "readMore": "Read More",
-    "minRead": "min read"
+    "minRead": "min read",
+    "filterByCategory": "Filter by category"
   },
   "countries": {
     "badge": "Study Destinations",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "Visit University Website",
     "feeMinValue": "Min ({value})",
-    "feeMaxValue": "Max ({value})"
+    "feeMaxValue": "Max ({value})",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
+    "goToPage": "Go to page {page}"
   },
   "apply": {
     "title": "Apply — {name}",
@@ -486,5 +491,8 @@
     "reqUppercase": "At least 1 uppercase letter",
     "reqDigit": "At least 1 number",
     "requirementsHint": "Min. 8 characters, 1 uppercase letter, 1 number"
+  },
+  "a11y": {
+    "skipToContent": "Skip to main content"
   }
 }

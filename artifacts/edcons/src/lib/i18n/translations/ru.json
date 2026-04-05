@@ -101,7 +101,8 @@
     "ourOffices": "Наши офисы",
     "required": "*",
     "latinOnly": "Допускаются только латинские символы",
-    "messageTooLong": "Сообщение не может превышать 400 символов"
+    "messageTooLong": "Сообщение не может превышать 400 символов",
+    "phoneCode": "Код страны"
   },
   "blog": {
     "badge": "Блог",
@@ -118,7 +119,8 @@
     "noArticles": "Статьи не найдены",
     "tryAdjusting": "Попробуйте изменить поиск или фильтры",
     "readMore": "Читать далее",
-    "minRead": "мин чтения"
+    "minRead": "мин чтения",
+    "filterByCategory": "Фильтр по категории"
   },
   "countries": {
     "badge": "Направления обучения",
@@ -211,7 +213,10 @@
     "timesRanking": "Times: {value}",
     "visitUniversity": "Посетить сайт университета",
     "feeMinValue": "Мин ({value})",
-    "feeMaxValue": "Макс ({value})"
+    "feeMaxValue": "Макс ({value})",
+    "prevPage": "Предыдущая страница",
+    "nextPage": "Следующая страница",
+    "goToPage": "Перейти на страницу {page}"
   },
   "apply": {
     "title": "Заявка — {name}",
@@ -477,5 +482,8 @@
     "reqUppercase": "Минимум 1 заглавная буква",
     "reqDigit": "Минимум 1 цифра",
     "requirementsHint": "Мин. 8 символов, 1 заглавная, 1 цифра"
+  },
+  "a11y": {
+    "skipToContent": "Перейти к основному содержанию"
   }
 }
