@@ -9,6 +9,24 @@ interface ThemeSettings {
   themeButton: string | null;
   themeHover: string | null;
   companyName: string | null;
+  publicBrandName: string | null;
+  companyEmail: string | null;
+  companyPhone: string | null;
+  companyAddress: string | null;
+  companyCity: string | null;
+  companyCountry: string | null;
+  companyWebsite: string | null;
+  whatsappNumber: string | null;
+  workingHours: string | null;
+  footerDescription: string | null;
+  footerCopyright: string | null;
+  contactCtaText: string | null;
+  socialInstagram: string | null;
+  socialFacebook: string | null;
+  socialLinkedin: string | null;
+  socialTwitter: string | null;
+  socialYoutube: string | null;
+  socialTiktok: string | null;
 }
 
 interface ThemeContextType {
@@ -58,14 +76,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return m === "system" ? getSystemTheme() : m;
   });
 
+  const SETTINGS_DEFAULTS: ThemeSettings = {
+    logoUrl: null, logoDarkUrl: null, themePrimary: null, themeButton: null, themeHover: null,
+    companyName: null, publicBrandName: null, companyEmail: null, companyPhone: null,
+    companyAddress: null, companyCity: null, companyCountry: null, companyWebsite: null,
+    whatsappNumber: null, workingHours: null, footerDescription: null, footerCopyright: null,
+    contactCtaText: null, socialInstagram: null, socialFacebook: null, socialLinkedin: null,
+    socialTwitter: null, socialYoutube: null, socialTiktok: null,
+  };
+
   const [settings, setSettings] = useState<ThemeSettings>(() => {
-    const defaults: ThemeSettings = { logoUrl: null, logoDarkUrl: null, themePrimary: null, themeButton: null, themeHover: null, companyName: null };
-    if (typeof window === "undefined") return defaults;
+    if (typeof window === "undefined") return SETTINGS_DEFAULTS;
     try {
       const cached = localStorage.getItem("edcons_branding");
-      if (cached) return { ...defaults, ...JSON.parse(cached) };
+      if (cached) return { ...SETTINGS_DEFAULTS, ...JSON.parse(cached) };
     } catch {}
-    return defaults;
+    return SETTINGS_DEFAULTS;
   });
 
   const setMode = useCallback((m: ThemeMode) => {
@@ -135,6 +161,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         themeButton: data.themeButton || null,
         themeHover: data.themeHover || null,
         companyName: data.companyName || null,
+        publicBrandName: data.publicBrandName || null,
+        companyEmail: data.companyEmail || null,
+        companyPhone: data.companyPhone || null,
+        companyAddress: data.companyAddress || null,
+        companyCity: data.companyCity || null,
+        companyCountry: data.companyCountry || null,
+        companyWebsite: data.companyWebsite || null,
+        whatsappNumber: data.whatsappNumber || null,
+        workingHours: data.workingHours || null,
+        footerDescription: data.footerDescription || null,
+        footerCopyright: data.footerCopyright || null,
+        contactCtaText: data.contactCtaText || null,
+        socialInstagram: data.socialInstagram || null,
+        socialFacebook: data.socialFacebook || null,
+        socialLinkedin: data.socialLinkedin || null,
+        socialTwitter: data.socialTwitter || null,
+        socialYoutube: data.socialYoutube || null,
+        socialTiktok: data.socialTiktok || null,
       };
       setSettings(s);
       applyThemeColors(s);

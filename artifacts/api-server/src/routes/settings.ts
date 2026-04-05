@@ -50,6 +50,23 @@ router.get("/settings/branding", async (req, res): Promise<void> => {
     themeHover: settingsTable.themeHover,
     companyName: settingsTable.companyName,
     publicBrandName: settingsTable.publicBrandName,
+    companyEmail: settingsTable.companyEmail,
+    companyPhone: settingsTable.companyPhone,
+    companyAddress: settingsTable.companyAddress,
+    companyCity: settingsTable.companyCity,
+    companyCountry: settingsTable.companyCountry,
+    companyWebsite: settingsTable.companyWebsite,
+    whatsappNumber: settingsTable.whatsappNumber,
+    workingHours: settingsTable.workingHours,
+    footerDescription: settingsTable.footerDescription,
+    footerCopyright: settingsTable.footerCopyright,
+    contactCtaText: settingsTable.contactCtaText,
+    socialInstagram: settingsTable.socialInstagram,
+    socialFacebook: settingsTable.socialFacebook,
+    socialLinkedin: settingsTable.socialLinkedin,
+    socialTwitter: settingsTable.socialTwitter,
+    socialYoutube: settingsTable.socialYoutube,
+    socialTiktok: settingsTable.socialTiktok,
   }).from(settingsTable);
   res.json(settings || {});
 });
