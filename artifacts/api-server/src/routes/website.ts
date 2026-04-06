@@ -30,9 +30,9 @@ const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
 
 const VALID_BLOCK_TYPES = new Set([
-  "hero", "text_content", "features_grid", "cta_banner", "image_gallery",
-  "testimonials", "faq_accordion", "stats_counter", "team_grid",
-  "contact_form", "pricing_table", "video_embed", "logo_carousel", "custom_html",
+  "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
+  "cta_banner", "faq", "team_grid", "office_list", "logo_grid",
+  "testimonials", "section_title", "spacer_divider", "global_block",
 ]);
 
 type AnyPgTable = PgTableWithColumns<TableConfig>;
@@ -344,6 +344,13 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
     const pageId = Number(req.params.pageId);
     const { blocks, meta } = req.body;
 
+    if (Array.isArray(blocks)) {
+      const invalidBlock = blocks.find((b: { blockType: string }) => !VALID_BLOCK_TYPES.has(b.blockType));
+      if (invalidBlock) {
+        return res.status(400).json({ error: `Invalid block type: ${invalidBlock.blockType}` });
+      }
+    }
+
     await db.transaction(async (tx) => {
       if (meta) {
         await tx.update(websitePagesTable)
@@ -356,10 +363,6 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
       }
 
       if (Array.isArray(blocks)) {
-        const invalidType = blocks.find((b: { blockType: string }) => !VALID_BLOCK_TYPES.has(b.blockType));
-        if (invalidType) {
-          throw new Error(`Invalid block type: ${invalidType.blockType}`);
-        }
         await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId));
         if (blocks.length > 0) {
           await tx.insert(websitePageBlocksTable).values(
