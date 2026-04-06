@@ -59,6 +59,7 @@ interface WebsitePage {
   slug: string;
   status: string;
   template: string;
+  locale: string;
   metaTitle: string | null;
   metaDescription: string | null;
   publishedAt: string | null;
@@ -73,6 +74,9 @@ interface PageVersion {
   publishedAt: string | null;
   createdBy: number | null;
   createdAt: string;
+  authorFirstName: string | null;
+  authorLastName: string | null;
+  authorEmail: string | null;
 }
 
 type PreviewSize = "desktop" | "tablet" | "mobile";
@@ -160,14 +164,27 @@ export default function PageEditor({ id }: { id: number }) {
     onError: () => toast({ title: "Error", description: "Failed to publish.", variant: "destructive" }),
   });
 
+  const localeMutation = useMutation({
+    mutationFn: (locale: string) =>
+      customFetch(`/api/website/pages/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
+      toast({ title: "Locale updated" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update locale.", variant: "destructive" }),
+  });
+
   const restoreMutation = useMutation({
     mutationFn: (versionId: number) =>
-      customFetch<{ page: WebsitePage; blocks: PageBlock[] }>(`/api/website/pages/${id}/restore-version/${versionId}`, {
+      customFetch(`/api/website/pages/${id}/restore-version/${versionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-      }),
-    onSuccess: (data) => {
-      const result = data as unknown as { page: WebsitePage; blocks: PageBlock[] };
+      }) as Promise<{ page: WebsitePage; blocks: PageBlock[] }>,
+    onSuccess: (result) => {
       setBlocks(result.blocks.map((b, i) => ({
         id: b.id,
         blockType: b.blockType,
@@ -279,6 +296,19 @@ export default function PageEditor({ id }: { id: number }) {
             {dirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Unsaved</Badge>}
           </div>
           <div className="flex items-center gap-2">
+            <Select value={page.locale || "en"} onValueChange={(val) => localeMutation.mutate(val)}>
+              <SelectTrigger className="h-7 w-[90px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="tr">Türkçe</SelectItem>
+                <SelectItem value="ar">العربية</SelectItem>
+                <SelectItem value="fr">Français</SelectItem>
+                <SelectItem value="ru">Русский</SelectItem>
+              </SelectContent>
+            </Select>
+            <Separator orientation="vertical" className="h-5" />
             <div className="flex items-center border rounded-md">
               {(["desktop", "tablet", "mobile"] as PreviewSize[]).map(size => (
                 <Button
@@ -307,7 +337,11 @@ export default function PageEditor({ id }: { id: number }) {
                   {versions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No published versions yet.</p>
                   ) : (
-                    versions.map(v => (
+                    versions.map(v => {
+                      const authorName = v.authorFirstName
+                        ? `${v.authorFirstName} ${v.authorLastName || ""}`.trim()
+                        : v.authorEmail || "Unknown";
+                      return (
                       <Card key={v.id}>
                         <CardContent className="p-3 flex items-center justify-between">
                           <div>
@@ -315,6 +349,7 @@ export default function PageEditor({ id }: { id: number }) {
                             <p className="text-xs text-muted-foreground">
                               {v.publishedAt ? new Date(v.publishedAt).toLocaleString() : new Date(v.createdAt).toLocaleString()}
                             </p>
+                            <p className="text-xs text-muted-foreground">by {authorName}</p>
                           </div>
                           <Button
                             variant="outline"
@@ -327,7 +362,8 @@ export default function PageEditor({ id }: { id: number }) {
                           </Button>
                         </CardContent>
                       </Card>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </SheetContent>

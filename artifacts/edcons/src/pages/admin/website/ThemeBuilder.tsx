@@ -110,7 +110,7 @@ export default function WebsiteThemeBuilder() {
   }, [savedTokens]);
 
   const saveMutation = useMutation({
-    mutationFn: async (tokens: { tokenGroup: string; tokenKey: string; tokenValue: string; description?: string }[]) => {
+    mutationFn: async (tokens: { tokenGroup: string; tokenKey: string; tokenValue: string | null; description?: string }[]) => {
       return customFetch("/api/website/theme-tokens/batch", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -147,18 +147,35 @@ export default function WebsiteThemeBuilder() {
   }
 
   function handleSave() {
-    const tokens = Object.entries(localTokens)
-      .filter(([, v]) => v !== "")
-      .map(([k, v]) => {
-        const [group, key] = k.split(".");
-        return { tokenGroup: group, tokenKey: key, tokenValue: v };
-      });
+    const allTokenKeys = [
+      ...COLOR_TOKENS.map(t => ({ group: t.group, key: t.key })),
+      ...TYPOGRAPHY_TOKENS.map(t => ({ group: t.group, key: t.key })),
+      ...BUTTON_TOKENS.map(t => ({ group: t.group, key: t.key })),
+      ...SPACING_TOKENS.map(t => ({ group: t.group, key: t.key })),
+    ];
+    const tokens = allTokenKeys.map(({ group, key }) => {
+      const val = localTokens[`${group}.${key}`];
+      return { tokenGroup: group, tokenKey: key, tokenValue: val || null };
+    });
     saveMutation.mutate(tokens);
   }
 
+  const resetMutation = useMutation({
+    mutationFn: () =>
+      customFetch("/api/website/theme-tokens/all", { method: "DELETE" }),
+    onSuccess: () => {
+      setLocalTokens({});
+      setDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["website-theme-tokens"] });
+      toast({ title: "Theme reset", description: "All overrides removed. Branding defaults will be used." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to reset theme.", variant: "destructive" });
+    },
+  });
+
   function handleReset() {
-    setLocalTokens({});
-    setDirty(true);
+    resetMutation.mutate();
   }
 
   return (
@@ -175,8 +192,8 @@ export default function WebsiteThemeBuilder() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleReset} disabled={!dirty}>
-              <RotateCcw className="w-4 h-4 mr-1" /> Reset
+            <Button variant="outline" size="sm" onClick={handleReset} disabled={resetMutation.isPending}>
+              <RotateCcw className="w-4 h-4 mr-1" /> {resetMutation.isPending ? "Resetting..." : "Reset to Defaults"}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!dirty || saveMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> {saveMutation.isPending ? "Saving..." : "Save Theme"}

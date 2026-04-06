@@ -46,6 +46,8 @@ router.get("/settings/branding", async (req, res): Promise<void> => {
     logoDarkUrl: settingsTable.logoDarkUrl,
     faviconUrl: settingsTable.faviconUrl,
     themePrimary: settingsTable.themePrimary,
+    themeSecondary: settingsTable.themeSecondary,
+    themeAccent: settingsTable.themeAccent,
     themeButton: settingsTable.themeButton,
     themeHover: settingsTable.themeHover,
     companyName: settingsTable.companyName,

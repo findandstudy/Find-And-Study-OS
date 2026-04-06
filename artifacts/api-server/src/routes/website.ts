@@ -21,6 +21,7 @@ import {
   websiteCollectionsTeamMembersTable,
   websiteCollectionsFaqsTable,
   websiteCollectionsTestimonialsTable,
+  usersTable,
 } from "@workspace/db";
 import { requireAuth, requireRole } from "../lib/auth";
 
@@ -122,7 +123,21 @@ router.get("/website/pages/:pageId/blocks", ...adminOnly, async (req: Request, r
 
 router.get("/website/pages/:pageId/versions", ...adminOnly, async (req: Request, res: Response) => {
   try {
-    const rows = await db.select().from(websitePageVersionsTable)
+    const rows = await db.select({
+      id: websitePageVersionsTable.id,
+      pageId: websitePageVersionsTable.pageId,
+      versionNumber: websitePageVersionsTable.versionNumber,
+      blocksSnapshot: websitePageVersionsTable.blocksSnapshot,
+      metaSnapshot: websitePageVersionsTable.metaSnapshot,
+      publishedAt: websitePageVersionsTable.publishedAt,
+      createdBy: websitePageVersionsTable.createdBy,
+      createdAt: websitePageVersionsTable.createdAt,
+      authorFirstName: usersTable.firstName,
+      authorLastName: usersTable.lastName,
+      authorEmail: usersTable.email,
+    })
+      .from(websitePageVersionsTable)
+      .leftJoin(usersTable, eq(websitePageVersionsTable.createdBy, usersTable.id))
       .where(eq(websitePageVersionsTable.pageId, Number(req.params.pageId)))
       .orderBy(desc(websitePageVersionsTable.versionNumber));
     res.json(rows);
@@ -239,7 +254,7 @@ router.post("/website/blog-posts/:id/unpublish", ...adminOnly, async (req: Reque
 
 router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res: Response) => {
   try {
-    const tokens: { tokenGroup: string; tokenKey: string; tokenValue: string; description?: string }[] = req.body.tokens;
+    const tokens: { tokenGroup: string; tokenKey: string; tokenValue: string | null; description?: string }[] = req.body.tokens;
     if (!Array.isArray(tokens)) return res.status(400).json({ error: "tokens array required" });
     const results = await db.transaction(async (tx) => {
       const out = [];
@@ -247,6 +262,14 @@ router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res
         const existing = await tx.select().from(websiteThemeTokensTable)
           .where(eq(websiteThemeTokensTable.tokenGroup, t.tokenGroup))
           .then(rows => rows.find(r => r.tokenKey === t.tokenKey));
+
+        if (t.tokenValue === null || t.tokenValue === "") {
+          if (existing) {
+            await tx.delete(websiteThemeTokensTable).where(eq(websiteThemeTokensTable.id, existing.id));
+          }
+          continue;
+        }
+
         if (existing) {
           const [updated] = await tx.update(websiteThemeTokensTable)
             .set({ tokenValue: t.tokenValue, description: t.description || existing.description })
@@ -263,6 +286,16 @@ router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res
       return out;
     });
     res.json(results);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.delete("/website/theme-tokens/all", ...adminOnly, async (_req: Request, res: Response) => {
+  try {
+    await db.delete(websiteThemeTokensTable);
+    res.json({ success: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
