@@ -102,12 +102,17 @@ export default function Contact() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
+  const [contactFormSlug, setContactFormSlug] = useState<string | null>(null);
 
   useEffect(() => {
     customFetch<{ data: CountryRow[] }>("/api/countries?limit=500", { method: "GET" })
       .then(res => {
         if (res?.data) setCountries(res.data.filter(c => c.isActive).map(c => c.name).sort());
       })
+      .catch(() => {});
+    fetch(`${BASE_URL}/api/public/website-forms/contact/check`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.exists) setContactFormSlug("contact"); })
       .catch(() => {});
   }, []);
 
@@ -137,17 +142,21 @@ export default function Contact() {
     setError("");
     try {
       const fullPhone = form.phone ? `${form.phoneCode}${form.phone}` : undefined;
-      const res = await fetch(`${BASE_URL}/api/public/lead`, {
+      const payload = {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: fullPhone,
+        nationality: form.nationality || undefined,
+        message: form.message,
+      };
+      const endpoint = contactFormSlug
+        ? `${BASE_URL}/api/public/website-forms/${contactFormSlug}/submit`
+        : `${BASE_URL}/api/public/lead`;
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName: form.lastName,
-          email: form.email,
-          phone: fullPhone,
-          nationality: form.nationality || undefined,
-          message: form.message,
-        }),
+        body: JSON.stringify(contactFormSlug ? { ...payload, _hp: "" } : payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);

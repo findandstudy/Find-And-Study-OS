@@ -95,12 +95,16 @@ export default function PageEditor({ id }: { id: number }) {
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [dirty, setDirty] = useState(false);
   const blocksInitialized = useRef(false);
+  const [editLocale, setEditLocale] = useState("en");
+  const defaultBlocksRef = useRef<PageBlock[]>([]);
+  const translationsRef = useRef<Record<string, PageBlock[]>>({});
   const [seoOpen, setSeoOpen] = useState(false);
   const [seo, setSeo] = useState({
     metaTitle: "", metaDescription: "", canonicalUrl: "",
     robotsIndex: true, robotsFollow: true,
-    ogTitle: "", ogDescription: "",
+    ogTitle: "", ogDescription: "", ogImageUrl: "",
     twitterTitle: "", twitterDescription: "", twitterImageUrl: "",
+    slug: "",
   });
   const seoInitialized = useRef(false);
 
@@ -125,15 +129,25 @@ export default function PageEditor({ id }: { id: number }) {
     if (blocksInitialized.current) return;
     if (!blocksFetched) return;
     blocksInitialized.current = true;
-    setBlocks(savedBlocks.map((b, i) => ({
+    const parsed = savedBlocks.map((b, i) => ({
       id: b.id,
       blockType: b.blockType,
       content: (b.content || {}) as Record<string, unknown>,
       settings: (b.settings || {}) as Record<string, unknown>,
       sortOrder: b.sortOrder ?? i,
       isVisible: b.isVisible ?? true,
-    })));
-  }, [blocksFetched, savedBlocks]);
+    }));
+    setBlocks(parsed);
+    defaultBlocksRef.current = JSON.parse(JSON.stringify(parsed));
+    if (page?.translationsJson) {
+      try {
+        const tj = page.translationsJson as Record<string, unknown>;
+        for (const [loc, data] of Object.entries(tj)) {
+          if (Array.isArray(data)) translationsRef.current[loc] = data as PageBlock[];
+        }
+      } catch {}
+    }
+  }, [blocksFetched, savedBlocks, page]);
 
   const { data: seoData } = useQuery<Record<string, unknown>>({
     queryKey: ["website-page-seo", id],
@@ -152,9 +166,11 @@ export default function PageEditor({ id }: { id: number }) {
       robotsFollow: seoData.robotsFollow !== false,
       ogTitle: (seoData.ogTitle as string) || "",
       ogDescription: (seoData.ogDescription as string) || "",
+      ogImageUrl: (seoData.ogImageUrl as string) || "",
       twitterTitle: (seoData.twitterTitle as string) || "",
       twitterDescription: (seoData.twitterDescription as string) || "",
       twitterImageUrl: (seoData.twitterImageUrl as string) || "",
+      slug: (seoData.slug as string) || "",
     });
   }, [seoData]);
 
@@ -173,13 +189,27 @@ export default function PageEditor({ id }: { id: number }) {
     onError: () => toast({ title: "Error", description: "Failed to save SEO settings.", variant: "destructive" }),
   });
 
+  function buildTranslationsPayload() {
+    const txCopy = { ...translationsRef.current };
+    if (editLocale !== "en") {
+      txCopy[editLocale] = blocks.map((b, i) => ({ ...b, sortOrder: i }));
+    }
+    return Object.keys(txCopy).length > 0 ? txCopy : undefined;
+  }
+
   const saveDraftMutation = useMutation({
-    mutationFn: () =>
-      customFetch(`/api/website/pages/${id}/save-draft`, {
+    mutationFn: () => {
+      const payload: Record<string, unknown> = {
+        blocks: editLocale === "en" ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
+      };
+      const tx = buildTranslationsPayload();
+      if (tx) payload.translationsJson = tx;
+      return customFetch(`/api/website/pages/${id}/save-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })) }),
-      }),
+        body: JSON.stringify(payload),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["website-page", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
@@ -192,10 +222,15 @@ export default function PageEditor({ id }: { id: number }) {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
+      const payload: Record<string, unknown> = {
+        blocks: editLocale === "en" ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
+      };
+      const tx = buildTranslationsPayload();
+      if (tx) payload.translationsJson = tx;
       await customFetch(`/api/website/pages/${id}/save-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })) }),
+        body: JSON.stringify(payload),
       });
       return customFetch(`/api/website/pages/${id}/publish`, {
         method: "POST",
@@ -213,19 +248,29 @@ export default function PageEditor({ id }: { id: number }) {
     onError: () => toast({ title: "Error", description: "Failed to publish.", variant: "destructive" }),
   });
 
-  const localeMutation = useMutation({
-    mutationFn: (locale: string) =>
-      customFetch(`/api/website/pages/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locale }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
-      toast({ title: "Locale updated" });
-    },
-    onError: () => toast({ title: "Error", description: "Failed to update locale.", variant: "destructive" }),
-  });
+  function handleLocaleSwitch(newLocale: string) {
+    if (newLocale === editLocale) return;
+    if (editLocale === "en") {
+      defaultBlocksRef.current = JSON.parse(JSON.stringify(blocks));
+    } else {
+      translationsRef.current[editLocale] = JSON.parse(JSON.stringify(blocks));
+    }
+    if (newLocale === "en") {
+      setBlocks(JSON.parse(JSON.stringify(defaultBlocksRef.current)));
+    } else {
+      const translated = translationsRef.current[newLocale];
+      if (translated && translated.length > 0) {
+        setBlocks(JSON.parse(JSON.stringify(translated)));
+      } else {
+        const copy = JSON.parse(JSON.stringify(defaultBlocksRef.current));
+        setBlocks(copy);
+        toast({ title: "No translation yet", description: "Showing default (English) content. Edit to create translation." });
+      }
+    }
+    setEditLocale(newLocale);
+    setSelectedBlockIdx(null);
+    setDirty(true);
+  }
 
   const restoreMutation = useMutation({
     mutationFn: (versionId: number) =>
@@ -345,7 +390,7 @@ export default function PageEditor({ id }: { id: number }) {
             {dirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Unsaved</Badge>}
           </div>
           <div className="flex items-center gap-2">
-            <Select value={page.locale || "en"} onValueChange={(val) => localeMutation.mutate(val)}>
+            <Select value={editLocale} onValueChange={handleLocaleSwitch}>
               <SelectTrigger className="h-7 w-[100px] text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -380,7 +425,12 @@ export default function PageEditor({ id }: { id: number }) {
                 <SheetHeader>
                   <SheetTitle>Page SEO Settings</SheetTitle>
                 </SheetHeader>
-                <div className="mt-4 space-y-4">
+                <ScrollArea className="h-[calc(100vh-80px)] mt-4 pr-2">
+                <div className="space-y-4 pb-6">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">URL Slug</Label>
+                    <Input value={seo.slug} onChange={e => setSeo(s => ({ ...s, slug: e.target.value }))} placeholder="page-url-slug" className="h-8 text-sm" />
+                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Meta Title</Label>
                     <Input value={seo.metaTitle} onChange={e => setSeo(s => ({ ...s, metaTitle: e.target.value }))} placeholder="SEO page title" className="h-8 text-sm" />
@@ -390,6 +440,12 @@ export default function PageEditor({ id }: { id: number }) {
                     <Label className="text-xs font-medium">Meta Description</Label>
                     <Textarea value={seo.metaDescription} onChange={e => setSeo(s => ({ ...s, metaDescription: e.target.value }))} placeholder="SEO description" rows={3} className="text-sm" />
                     <p className="text-[10px] text-muted-foreground">{seo.metaDescription.length}/160 characters</p>
+                  </div>
+                  <div className="rounded border p-3 bg-muted/30">
+                    <p className="text-[10px] text-muted-foreground mb-1">Google Search Preview</p>
+                    <p className="text-sm text-blue-700 truncate">{seo.metaTitle || page?.title || "Page Title"}</p>
+                    <p className="text-xs text-green-700 truncate">findandstudy.com/{seo.slug || page?.slug || ""}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{seo.metaDescription || "No description set"}</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Canonical URL</Label>
@@ -415,6 +471,18 @@ export default function PageEditor({ id }: { id: number }) {
                     <Label className="text-xs font-medium">OG Description</Label>
                     <Textarea value={seo.ogDescription} onChange={e => setSeo(s => ({ ...s, ogDescription: e.target.value }))} placeholder="Social share description" rows={2} className="text-sm" />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">OG Image URL</Label>
+                    <Input value={seo.ogImageUrl} onChange={e => setSeo(s => ({ ...s, ogImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
+                  </div>
+                  {(seo.ogTitle || seo.ogDescription || seo.ogImageUrl) && (
+                    <div className="rounded border p-3 bg-muted/30">
+                      <p className="text-[10px] text-muted-foreground mb-1">Social Share Preview</p>
+                      {seo.ogImageUrl && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl} alt="OG" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
+                      <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || "Title"}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{seo.ogDescription || seo.metaDescription || ""}</p>
+                    </div>
+                  )}
                   <Separator />
                   <h4 className="text-xs font-bold uppercase text-muted-foreground">Twitter Card</h4>
                   <div className="space-y-1.5">
@@ -433,6 +501,7 @@ export default function PageEditor({ id }: { id: number }) {
                     {saveSeoMutation.isPending ? "Saving..." : "Save SEO Settings"}
                   </Button>
                 </div>
+                </ScrollArea>
               </SheetContent>
             </Sheet>
             <Sheet>
@@ -572,12 +641,12 @@ export default function PageEditor({ id }: { id: number }) {
                 {selectedBlock ? `Edit: ${selectedTypeDef?.label || selectedBlock.blockType}` : "Block Editor"}
               </h3>
             </div>
-            {page.locale !== "en" && (
+            {editLocale !== "en" && (
               <div className="mx-3 mt-2 p-2 rounded-lg bg-blue-50 border border-blue-200 text-xs">
                 <p className="font-medium text-blue-800 flex items-center gap-1">
-                  {LANGUAGE_META[page.locale as keyof typeof LANGUAGE_META]?.flag} Editing in {LANGUAGE_META[page.locale as keyof typeof LANGUAGE_META]?.name || page.locale}
+                  {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} Editing in {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name || editLocale}
                 </p>
-                <p className="text-blue-600 mt-0.5">Content entered here is for this locale. Default (English) content is managed separately.</p>
+                <p className="text-blue-600 mt-0.5">Content entered here is for this locale's translation. Switch to English to edit default content.</p>
               </div>
             )}
             <ScrollArea className="flex-1">
@@ -593,7 +662,7 @@ export default function PageEditor({ id }: { id: number }) {
                     />
                     <AiAssistantPanel
                       context={Object.values(selectedBlock.content).filter(v => typeof v === "string").join(" ").slice(0, 500)}
-                      locale={page?.locale}
+                      locale={editLocale}
                       onResult={(action, result) => {
                         const fieldMap: Record<string, string> = {
                           generateMetaTitle: "title",

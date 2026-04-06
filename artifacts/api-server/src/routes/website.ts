@@ -348,7 +348,7 @@ router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Respo
 router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Request, res: Response) => {
   try {
     const pageId = Number(req.params.pageId);
-    const { blocks, meta } = req.body;
+    const { blocks, meta, translationsJson } = req.body;
 
     if (Array.isArray(blocks)) {
       const invalidBlock = blocks.find((b: { blockType: string }) => !VALID_BLOCK_TYPES.has(b.blockType));
@@ -358,15 +358,12 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
     }
 
     await db.transaction(async (tx) => {
-      if (meta) {
-        await tx.update(websitePagesTable)
-          .set({ ...meta, status: "draft" })
-          .where(eq(websitePagesTable.id, pageId));
-      } else {
-        await tx.update(websitePagesTable)
-          .set({ status: "draft" })
-          .where(eq(websitePagesTable.id, pageId));
-      }
+      const pageUpdate: Record<string, unknown> = { status: "draft" };
+      if (meta) Object.assign(pageUpdate, meta);
+      if (translationsJson !== undefined) pageUpdate.translationsJson = translationsJson;
+      await tx.update(websitePagesTable)
+        .set(pageUpdate)
+        .where(eq(websitePagesTable.id, pageId));
 
       if (Array.isArray(blocks)) {
         await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId));
@@ -474,6 +471,17 @@ router.get("/website/forms/:formId/submissions", ...adminOnly, async (req: Reque
   }
 });
 
+router.get("/public/website-forms/:slug/check", async (req: Request, res: Response) => {
+  try {
+    const [form] = await db.select({ id: websiteFormsTable.id })
+      .from(websiteFormsTable)
+      .where(and(eq(websiteFormsTable.slug, req.params.slug), eq(websiteFormsTable.isActive, true)));
+    res.json({ exists: !!form });
+  } catch {
+    res.json({ exists: false });
+  }
+});
+
 router.post("/public/website-forms/:slug/submit", async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
@@ -563,6 +571,7 @@ router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Res
 router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response) => {
   try {
     const [page] = await db.select({
+      slug: websitePagesTable.slug,
       metaTitle: websitePagesTable.metaTitle,
       metaDescription: websitePagesTable.metaDescription,
       canonicalUrl: websitePagesTable.canonicalUrl,
@@ -570,6 +579,7 @@ router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
       robotsFollow: websitePagesTable.robotsFollow,
       ogTitle: websitePagesTable.ogTitle,
       ogDescription: websitePagesTable.ogDescription,
+      ogImageUrl: websitePagesTable.ogImageUrl,
       twitterTitle: websitePagesTable.twitterTitle,
       twitterDescription: websitePagesTable.twitterDescription,
       twitterImageUrl: websitePagesTable.twitterImageUrl,

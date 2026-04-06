@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Sparkles, Loader2, Wand2, Type, FileText, MessageSquare,
-  Maximize2, Minimize2, ArrowRight,
+  Maximize2, Minimize2, ArrowRight, HelpCircle,
 } from "lucide-react";
 
 interface AiAction {
@@ -30,6 +30,7 @@ const AI_ACTIONS: AiAction[] = [
   { key: "improveTone", label: "Improve Tone", icon: Sparkles, needsContext: true },
   { key: "shortenText", label: "Shorten", icon: Minimize2, needsContext: true },
   { key: "expandText", label: "Expand", icon: Maximize2, needsContext: true },
+  { key: "generateFAQItems", label: "Generate FAQ", icon: HelpCircle, needsContext: true },
 ];
 
 interface AiAssistantPanelProps {

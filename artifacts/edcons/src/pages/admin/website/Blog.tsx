@@ -583,6 +583,27 @@ export default function WebsiteBlog() {
               {form.body && <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> ~{readTime(form.body)} min read</p>}
             </div>
 
+            <AiAssistantPanel
+              context={form.body || form.excerpt || form.title}
+              locale={form.locale}
+              onResult={(action, result) => {
+                if (action === "generateExcerpt") setForm(f => ({ ...f, excerpt: result }));
+                else if (action === "generateMetaTitle") setForm(f => ({ ...f, metaTitle: result }));
+                else if (action === "generateMetaDescription") setForm(f => ({ ...f, metaDescription: result }));
+                else if (action === "generateBlogOutline" || action === "expandText") setForm(f => ({ ...f, body: result }));
+                else if (action === "improveTone" || action === "shortenText") setForm(f => ({ ...f, body: result }));
+                else if (action === "generateFAQItems") setForm(f => ({ ...f, body: f.body + "\n\n## FAQ\n" + result }));
+                else if (action === "generateHeroTitle") setForm(f => ({ ...f, title: result }));
+                else if (action === "generateCTAText" || action === "generateAltText") setForm(f => ({ ...f, body: f.body + "\n\n" + result }));
+                else if (action === "generateOGText") {
+                  try {
+                    const og = JSON.parse(result);
+                    setForm(f => ({ ...f, metaTitle: og.title || f.metaTitle, metaDescription: og.description || f.metaDescription }));
+                  } catch { setForm(f => ({ ...f, metaDescription: result })); }
+                }
+              }}
+            />
+
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Cover Image URL</Label>
