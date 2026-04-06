@@ -87,6 +87,8 @@ interface PostFormData {
   ogImageUrl: string;
   featured: boolean;
   selectedTagIds: number[];
+  status: string;
+  publishDate: string;
 }
 
 interface CategoryFormData {
@@ -111,6 +113,8 @@ interface BlogPostPayload {
   locale: string;
   metaTitle: string | null;
   metaDescription: string | null;
+  status: string;
+  publishedAt: string | null;
 }
 
 interface CategoryPayload {
@@ -136,7 +140,7 @@ function readTime(text: string): number {
 const EMPTY_FORM: PostFormData = {
   title: "", slug: "", excerpt: "", body: "", featuredImageUrl: "",
   categoryId: "", authorId: "", locale: "en", metaTitle: "", metaDescription: "",
-  ogImageUrl: "", featured: false, selectedTagIds: [],
+  ogImageUrl: "", featured: false, selectedTagIds: [], status: "draft", publishDate: "",
 };
 
 export default function WebsiteBlog() {
@@ -268,6 +272,7 @@ export default function WebsiteBlog() {
     const content = p.content ?? {};
     const bodyText = content.body ?? "";
     const assignedTagIds = postTags.filter(pt => pt.postId === p.id).map(pt => pt.tagId);
+    const pubDate = p.publishedAt ? new Date(p.publishedAt).toISOString().slice(0, 16) : "";
     setForm({
       title: p.title,
       slug: p.slug,
@@ -282,6 +287,8 @@ export default function WebsiteBlog() {
       ogImageUrl: content.ogImageUrl ?? "",
       featured: !!content.featured,
       selectedTagIds: assignedTagIds,
+      status: p.status,
+      publishDate: pubDate,
     });
     setAutoSlug(false);
     setShowPostDialog(true);
@@ -294,6 +301,10 @@ export default function WebsiteBlog() {
     }
 
     const rt = readTime(form.body);
+    const publishedAt = form.status === "published" && form.publishDate
+      ? new Date(form.publishDate).toISOString()
+      : form.status === "published" ? new Date().toISOString() : null;
+
     const payload: BlogPostPayload = {
       title: form.title.trim(),
       slug: form.slug.trim(),
@@ -305,6 +316,8 @@ export default function WebsiteBlog() {
       locale: form.locale,
       metaTitle: form.metaTitle || null,
       metaDescription: form.metaDescription || null,
+      status: form.status,
+      publishedAt,
     };
 
     saveMut.mutate(payload, {
@@ -625,6 +638,27 @@ export default function WebsiteBlog() {
             <div className="flex items-center gap-3">
               <Switch checked={form.featured} onCheckedChange={v => setForm(f => ({ ...f, featured: v }))} />
               <Label className="flex items-center gap-1.5"><Star className="w-4 h-4 text-amber-500" /> Featured Post</Label>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-semibold text-sm mb-3">Publishing</h4>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="published">Published</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Publish Date {form.status === "published" && "(auto-set if empty)"}</Label>
+                  <Input type="datetime-local" value={form.publishDate} onChange={e => setForm(f => ({ ...f, publishDate: e.target.value }))} className="rounded-xl" />
+                </div>
+              </div>
             </div>
 
             <div className="border-t pt-4">

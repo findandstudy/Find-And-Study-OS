@@ -11,7 +11,6 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Layers, Building2, Users, HelpCircle, MessageSquareQuote, Plus, Edit, Trash2,
@@ -261,19 +260,19 @@ function TeamTab() {
 
 interface FaqForm {
   question: string; answer: string; category: string;
-  sortOrder: string; isActive: boolean; locale: string;
+  sortOrder: string; isActive: boolean;
 }
 
 function FaqsTab() {
   const { items, saveMut, deleteMut } = useCollectionCrud<Faq>("/api/website/collections/faqs", "col-faqs");
   const [dialog, setDialog] = useState(false);
   const [editItem, setEditItem] = useState<Faq | null>(null);
-  const [form, setForm] = useState<FaqForm>({ question: "", answer: "", category: "", sortOrder: "0", isActive: true, locale: "en" });
+  const [form, setForm] = useState<FaqForm>({ question: "", answer: "", category: "", sortOrder: "0", isActive: true });
 
-  function openNew() { setEditItem(null); setForm({ question: "", answer: "", category: "", sortOrder: "0", isActive: true, locale: "en" }); setDialog(true); }
+  function openNew() { setEditItem(null); setForm({ question: "", answer: "", category: "", sortOrder: "0", isActive: true }); setDialog(true); }
   function openEdit(item: Faq) {
     setEditItem(item);
-    setForm({ question: item.question, answer: item.answer, category: item.category ?? "", sortOrder: String(item.sortOrder), isActive: item.isActive, locale: "en" });
+    setForm({ question: item.question, answer: item.answer, category: item.category ?? "", sortOrder: String(item.sortOrder), isActive: item.isActive });
     setDialog(true);
   }
 
@@ -303,19 +302,6 @@ function FaqsTab() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>Category</Label><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="rounded-xl" placeholder="e.g. Admissions" /></div>
               <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Locale</Label>
-              <Select value={form.locale} onValueChange={v => setForm(f => ({ ...f, locale: v }))}>
-                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="tr">Turkish</SelectItem>
-                  <SelectItem value="ar">Arabic</SelectItem>
-                  <SelectItem value="ru">Russian</SelectItem>
-                  <SelectItem value="fr">French</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>Active</Label></div>
             <div className="flex gap-3 justify-end">
