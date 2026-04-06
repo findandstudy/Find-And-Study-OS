@@ -86,46 +86,47 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
     ];
     if (showFinance) opsItems.push({ title: t("dashboard.finance"), icon: DollarSign, url: '/staff/finance' });
-    return {
-      groups: [
-        {
-          label: t("dashboard.overview"),
-          items: [
-            { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' },
-          ]
-        },
-        {
-          label: t("dashboard.operations"),
-          items: opsItems
-        },
-        {
-          label: t("dashboard.admin"),
-          items: [
-            { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
-            { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
-            { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
-            { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
-            { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
-            { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
-          ]
-        },
-        {
-          label: "Website",
-          items: [
-            { title: "Pages", icon: FileText, url: '/admin/website/pages' },
-            { title: "Global Components", icon: Component, url: '/admin/website/global-components' },
-            { title: "Navigation", icon: Menu, url: '/admin/website/navigation' },
-            { title: "Blog", icon: BookOpen, url: '/admin/website/blog' },
-            { title: "Collections", icon: Layers, url: '/admin/website/collections' },
-            { title: "Forms", icon: ClipboardList, url: '/admin/website/forms' },
-            { title: "SEO Overrides", icon: Search, url: '/admin/website/seo' },
-            { title: "Theme Builder", icon: Palette, url: '/admin/website/theme' },
-            { title: "Translations", icon: Languages, url: '/admin/website/translations' },
-            { title: "Publish History", icon: History, url: '/admin/website/publish-history' },
-          ]
-        }
-      ]
-    };
+    const groups = [
+      {
+        label: t("dashboard.overview"),
+        items: [
+          { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' },
+        ]
+      },
+      {
+        label: t("dashboard.operations"),
+        items: opsItems
+      },
+      {
+        label: t("dashboard.admin"),
+        items: [
+          { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
+          { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
+          { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
+          { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
+          { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
+          { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
+        ]
+      },
+    ];
+    if (role === 'super_admin' || role === 'admin') {
+      groups.push({
+        label: "Website",
+        items: [
+          { title: "Pages", icon: FileText, url: '/admin/website/pages' },
+          { title: "Global Components", icon: Component, url: '/admin/website/global-components' },
+          { title: "Navigation", icon: Menu, url: '/admin/website/navigation' },
+          { title: "Blog", icon: BookOpen, url: '/admin/website/blog' },
+          { title: "Collections", icon: Layers, url: '/admin/website/collections' },
+          { title: "Forms", icon: ClipboardList, url: '/admin/website/forms' },
+          { title: "SEO Overrides", icon: Search, url: '/admin/website/seo' },
+          { title: "Theme Builder", icon: Palette, url: '/admin/website/theme' },
+          { title: "Translations", icon: Languages, url: '/admin/website/translations' },
+          { title: "Publish History", icon: History, url: '/admin/website/publish-history' },
+        ]
+      });
+    }
+    return { groups };
   }
 
   if (role === 'staff' || role === 'consultant' || role === 'accountant' || role === 'editor') {

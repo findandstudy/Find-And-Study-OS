@@ -98,6 +98,7 @@ const AgentTeam = lazyRetry(() => import("@/pages/agent/Team"));
 
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
+const WEBSITE_ADMIN_ROLES = ["super_admin", "admin"];
 const STUDENT_ROLES = ["student"];
 const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
@@ -211,34 +212,34 @@ function Router() {
 
         {/* Website Module */}
         <Route path="/admin/website/pages">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsitePages /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePages /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/global-components">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteGlobalComponents /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteGlobalComponents /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/navigation">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteNavigation /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteNavigation /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/blog">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteBlog /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteBlog /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/collections">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteCollections /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteCollections /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/forms">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteForms /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteForms /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/seo">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteSeoOverrides /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteSeoOverrides /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/theme">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteThemeBuilder /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteThemeBuilder /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/translations">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteTranslations /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteTranslations /></ProtectedRoute>
         </Route>
         <Route path="/admin/website/publish-history">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsitePublishHistory /></ProtectedRoute>
+          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePublishHistory /></ProtectedRoute>
         </Route>
 
         {/* Staff / Consultant Portal */}
