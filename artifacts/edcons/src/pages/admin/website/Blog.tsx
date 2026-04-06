@@ -14,21 +14,117 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star,
+  BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star, Archive, User,
 } from "lucide-react";
 
 interface BlogPost {
-  id: number; title: string; slug: string; excerpt: string | null;
-  content: any; featuredImageUrl: string | null; status: string;
-  authorId: number | null; categoryId: number | null; locale: string;
-  metaTitle: string | null; metaDescription: string | null;
-  publishedAt: string | null; createdAt: string; updatedAt: string;
+  id: number;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: BlogPostContent;
+  featuredImageUrl: string | null;
+  status: string;
+  authorId: number | null;
+  categoryId: number | null;
+  locale: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface BlogCategory { id: number; name: string; slug: string; description: string | null; sortOrder: number; }
-interface BlogTag { id: number; name: string; slug: string; }
+interface BlogPostContent {
+  body?: string;
+  featured?: boolean;
+  readTime?: number;
+  ogImageUrl?: string;
+}
 
-function slugify(s: string) {
+interface BlogCategory {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  sortOrder: number;
+}
+
+interface BlogTag {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface BlogPostTag {
+  id: number;
+  postId: number;
+  tagId: number;
+}
+
+interface UserSummary {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+interface UsersResponse {
+  data?: UserSummary[];
+}
+
+interface PostFormData {
+  title: string;
+  slug: string;
+  excerpt: string;
+  body: string;
+  featuredImageUrl: string;
+  categoryId: string;
+  authorId: string;
+  locale: string;
+  metaTitle: string;
+  metaDescription: string;
+  ogImageUrl: string;
+  featured: boolean;
+  selectedTagIds: number[];
+}
+
+interface CategoryFormData {
+  name: string;
+  slug: string;
+  description: string;
+}
+
+interface TagFormData {
+  name: string;
+  slug: string;
+}
+
+interface BlogPostPayload {
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: BlogPostContent;
+  featuredImageUrl: string | null;
+  categoryId: number | null;
+  authorId: number | null;
+  locale: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+}
+
+interface CategoryPayload {
+  name: string;
+  slug: string;
+  description: string | null;
+}
+
+interface TagPayload {
+  name: string;
+  slug: string;
+}
+
+function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
@@ -37,10 +133,10 @@ function readTime(text: string): number {
   return Math.max(1, Math.ceil(words / 200));
 }
 
-const EMPTY_POST = {
+const EMPTY_FORM: PostFormData = {
   title: "", slug: "", excerpt: "", body: "", featuredImageUrl: "",
-  categoryId: "", locale: "en", metaTitle: "", metaDescription: "",
-  featured: false,
+  categoryId: "", authorId: "", locale: "en", metaTitle: "", metaDescription: "",
+  ogImageUrl: "", featured: false, selectedTagIds: [],
 };
 
 export default function WebsiteBlog() {
@@ -51,29 +147,57 @@ export default function WebsiteBlog() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [editPost, setEditPost] = useState<BlogPost | null>(null);
   const [showPostDialog, setShowPostDialog] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY_POST });
+  const [form, setForm] = useState<PostFormData>({ ...EMPTY_FORM });
   const [autoSlug, setAutoSlug] = useState(true);
 
   const [catDialog, setCatDialog] = useState(false);
   const [editCat, setEditCat] = useState<BlogCategory | null>(null);
-  const [catForm, setCatForm] = useState({ name: "", slug: "", description: "" });
+  const [catForm, setCatForm] = useState<CategoryFormData>({ name: "", slug: "", description: "" });
 
   const [tagDialog, setTagDialog] = useState(false);
   const [editTag, setEditTag] = useState<BlogTag | null>(null);
-  const [tagForm, setTagForm] = useState({ name: "", slug: "" });
+  const [tagForm, setTagForm] = useState<TagFormData>({ name: "", slug: "" });
 
-  const { data: posts = [] } = useQuery<BlogPost[]>({ queryKey: ["website-blog-posts"], queryFn: () => customFetch("/api/website/blog-posts") });
-  const { data: categories = [] } = useQuery<BlogCategory[]>({ queryKey: ["website-blog-categories"], queryFn: () => customFetch("/api/website/blog-categories") });
-  const { data: tags = [] } = useQuery<BlogTag[]>({ queryKey: ["website-blog-tags"], queryFn: () => customFetch("/api/website/blog-tags") });
-  const { data: users = [] } = useQuery<any[]>({ queryKey: ["users-for-blog"], queryFn: () => customFetch("/api/users").then((r: any) => r.data || r) });
+  const { data: posts = [] } = useQuery<BlogPost[]>({
+    queryKey: ["website-blog-posts"],
+    queryFn: () => customFetch("/api/website/blog-posts"),
+  });
+
+  const { data: categories = [] } = useQuery<BlogCategory[]>({
+    queryKey: ["website-blog-categories"],
+    queryFn: () => customFetch("/api/website/blog-categories"),
+  });
+
+  const { data: tags = [] } = useQuery<BlogTag[]>({
+    queryKey: ["website-blog-tags"],
+    queryFn: () => customFetch("/api/website/blog-tags"),
+  });
+
+  const { data: postTags = [] } = useQuery<BlogPostTag[]>({
+    queryKey: ["website-blog-post-tags"],
+    queryFn: () => customFetch("/api/website/blog-post-tags"),
+  });
+
+  const { data: users = [] } = useQuery<UserSummary[]>({
+    queryKey: ["users-for-blog"],
+    queryFn: async () => {
+      const res: UserSummary[] | UsersResponse = await customFetch("/api/users");
+      if (Array.isArray(res)) return res;
+      return res.data ?? [];
+    },
+  });
 
   const saveMut = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: BlogPostPayload) => {
       if (editPost) return customFetch(`/api/website/blog-posts/${editPost.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/blog-posts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); setShowPostDialog(false); toast({ title: editPost ? "Post updated" : "Post created" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["website-blog-posts"] });
+      setShowPostDialog(false);
+      toast({ title: editPost ? "Post updated" : "Post created" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
@@ -87,13 +211,30 @@ export default function WebsiteBlog() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: "Status updated" }); },
   });
 
+  const archiveMut = useMutation({
+    mutationFn: (id: number) =>
+      customFetch(`/api/website/blog-posts/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "archived" }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-posts"] }); toast({ title: "Post archived" }); },
+  });
+
+  const postTagMut = useMutation({
+    mutationFn: (data: { postId: number; tagId: number }) =>
+      customFetch("/api/website/blog-post-tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["website-blog-post-tags"] }),
+  });
+
+  const postTagDelMut = useMutation({
+    mutationFn: (id: number) => customFetch(`/api/website/blog-post-tags/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["website-blog-post-tags"] }),
+  });
+
   const catMut = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: CategoryPayload) => {
       if (editCat) return customFetch(`/api/website/blog-categories/${editCat.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/blog-categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-categories"] }); setCatDialog(false); toast({ title: editCat ? "Category updated" : "Category created" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const catDelMut = useMutation({
@@ -102,12 +243,12 @@ export default function WebsiteBlog() {
   });
 
   const tagMut = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: TagPayload) => {
       if (editTag) return customFetch(`/api/website/blog-tags/${editTag.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/blog-tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-tags"] }); setTagDialog(false); toast({ title: editTag ? "Tag updated" : "Tag created" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const tagDelMut = useMutation({
@@ -117,41 +258,82 @@ export default function WebsiteBlog() {
 
   function openNewPost() {
     setEditPost(null);
-    setForm({ ...EMPTY_POST });
+    setForm({ ...EMPTY_FORM });
     setAutoSlug(true);
     setShowPostDialog(true);
   }
 
   function openEditPost(p: BlogPost) {
     setEditPost(p);
-    const bodyText = typeof p.content === "object" && p.content?.body ? p.content.body : (typeof p.content === "string" ? p.content : "");
+    const content = p.content ?? {};
+    const bodyText = content.body ?? "";
+    const assignedTagIds = postTags.filter(pt => pt.postId === p.id).map(pt => pt.tagId);
     setForm({
-      title: p.title, slug: p.slug, excerpt: p.excerpt || "",
+      title: p.title,
+      slug: p.slug,
+      excerpt: p.excerpt ?? "",
       body: bodyText,
-      featuredImageUrl: p.featuredImageUrl || "",
+      featuredImageUrl: p.featuredImageUrl ?? "",
       categoryId: p.categoryId ? String(p.categoryId) : "",
-      locale: p.locale || "en", metaTitle: p.metaTitle || "",
-      metaDescription: p.metaDescription || "",
-      featured: !!(p.content as any)?.featured,
+      authorId: p.authorId ? String(p.authorId) : "",
+      locale: p.locale || "en",
+      metaTitle: p.metaTitle ?? "",
+      metaDescription: p.metaDescription ?? "",
+      ogImageUrl: content.ogImageUrl ?? "",
+      featured: !!content.featured,
+      selectedTagIds: assignedTagIds,
     });
     setAutoSlug(false);
     setShowPostDialog(true);
   }
 
-  function handleSavePost() {
-    if (!form.title.trim() || !form.slug.trim()) { toast({ title: "Title and slug are required", variant: "destructive" }); return; }
+  async function handleSavePost() {
+    if (!form.title.trim() || !form.slug.trim()) {
+      toast({ title: "Title and slug are required", variant: "destructive" });
+      return;
+    }
+
     const rt = readTime(form.body);
-    saveMut.mutate({
+    const payload: BlogPostPayload = {
       title: form.title.trim(),
       slug: form.slug.trim(),
       excerpt: form.excerpt.trim() || null,
-      content: { body: form.body, featured: form.featured, readTime: rt },
+      content: { body: form.body, featured: form.featured, readTime: rt, ogImageUrl: form.ogImageUrl || undefined },
       featuredImageUrl: form.featuredImageUrl || null,
       categoryId: form.categoryId ? parseInt(form.categoryId) : null,
+      authorId: form.authorId ? parseInt(form.authorId) : null,
       locale: form.locale,
       metaTitle: form.metaTitle || null,
       metaDescription: form.metaDescription || null,
+    };
+
+    saveMut.mutate(payload, {
+      onSuccess: async (savedPost: BlogPost) => {
+        const postId = editPost?.id ?? savedPost?.id;
+        if (!postId) return;
+
+        const currentAssigned = postTags.filter(pt => pt.postId === postId);
+        const toRemove = currentAssigned.filter(pt => !form.selectedTagIds.includes(pt.tagId));
+        const toAdd = form.selectedTagIds.filter(tid => !currentAssigned.some(pt => pt.tagId === tid));
+
+        for (const pt of toRemove) {
+          await customFetch(`/api/website/blog-post-tags/${pt.id}`, { method: "DELETE" });
+        }
+        for (const tid of toAdd) {
+          await customFetch("/api/website/blog-post-tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, tagId: tid }) });
+        }
+        qc.invalidateQueries({ queryKey: ["website-blog-post-tags"] });
+      },
     });
+  }
+
+  function toggleTag(tagId: number) {
+    setForm(f => ({
+      ...f,
+      selectedTagIds: f.selectedTagIds.includes(tagId)
+        ? f.selectedTagIds.filter(id => id !== tagId)
+        : [...f.selectedTagIds, tagId],
+    }));
   }
 
   useEffect(() => {
@@ -164,12 +346,26 @@ export default function WebsiteBlog() {
     return true;
   });
 
-  function getCatName(id: number | null) { return categories.find(c => c.id === id)?.name || "-"; }
-  function getAuthorName(id: number | null) {
+  function getCatName(id: number | null): string {
+    return categories.find(c => c.id === id)?.name ?? "-";
+  }
+
+  function getAuthorName(id: number | null): string {
     if (!id) return "-";
-    const u = users.find((u: any) => u.id === id);
+    const u = users.find(u => u.id === id);
     return u ? `${u.firstName} ${u.lastName}` : "-";
   }
+
+  function getPostTagNames(postId: number): string[] {
+    const tagIds = postTags.filter(pt => pt.postId === postId).map(pt => pt.tagId);
+    return tags.filter(t => tagIds.includes(t.id)).map(t => t.name);
+  }
+
+  const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+    published: { label: "Published", variant: "default" },
+    draft: { label: "Draft", variant: "secondary" },
+    archived: { label: "Archived", variant: "outline" },
+  };
 
   return (
     <DashboardLayout>
@@ -197,11 +393,12 @@ export default function WebsiteBlog() {
                   <Input placeholder="Search posts..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 rounded-xl" />
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-32 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-36 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="published">Published</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -213,14 +410,16 @@ export default function WebsiteBlog() {
                 <table className="w-full text-sm">
                   <thead><tr className="border-b bg-muted/30">
                     <th className="py-3 px-4 text-left font-semibold text-muted-foreground">Title</th>
+                    <th className="py-3 px-4 text-left font-semibold text-muted-foreground">Author</th>
                     <th className="py-3 px-4 text-left font-semibold text-muted-foreground">Category</th>
+                    <th className="py-3 px-4 text-left font-semibold text-muted-foreground">Tags</th>
                     <th className="py-3 px-4 text-left font-semibold text-muted-foreground">Status</th>
                     <th className="py-3 px-4 text-left font-semibold text-muted-foreground">Date</th>
                     <th className="py-3 px-4 text-right font-semibold text-muted-foreground">Actions</th>
                   </tr></thead>
                   <tbody>
                     {filtered.length === 0 ? (
-                      <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">No posts found</td></tr>
+                      <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">No posts found</td></tr>
                     ) : filtered.map(p => (
                       <tr key={p.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
                         <td className="py-3 px-4">
@@ -229,24 +428,40 @@ export default function WebsiteBlog() {
                             <p className="text-xs text-muted-foreground">/{p.slug}</p>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-muted-foreground">{getCatName(p.categoryId)}</td>
+                        <td className="py-3 px-4 text-muted-foreground text-xs">{getAuthorName(p.authorId)}</td>
+                        <td className="py-3 px-4 text-muted-foreground text-xs">{getCatName(p.categoryId)}</td>
                         <td className="py-3 px-4">
-                          <Badge variant={p.status === "published" ? "default" : "secondary"} className="text-xs">
-                            {p.status === "published" ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
-                            {p.status}
-                          </Badge>
-                          {(p.content as any)?.featured && <Badge variant="outline" className="ml-1 text-xs border-amber-300 text-amber-600"><Star className="w-3 h-3 mr-1" />Featured</Badge>}
+                          <div className="flex flex-wrap gap-1">
+                            {getPostTagNames(p.id).map(tn => (
+                              <Badge key={tn} variant="outline" className="text-[10px]">{tn}</Badge>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const sb = STATUS_BADGE[p.status] ?? { label: p.status, variant: "secondary" as const };
+                            return <Badge variant={sb.variant} className="text-xs">{sb.label}</Badge>;
+                          })()}
+                          {p.content?.featured && <Badge variant="outline" className="ml-1 text-xs border-amber-300 text-amber-600"><Star className="w-3 h-3 mr-1" />Featured</Badge>}
                         </td>
                         <td className="py-3 px-4 text-muted-foreground text-xs">
                           {p.publishedAt ? new Date(p.publishedAt).toLocaleDateString() : new Date(p.createdAt).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex gap-1 justify-end">
-                            <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => openEditPost(p)}><Edit className="w-3.5 h-3.5" /></Button>
-                            <Button size="icon" variant="ghost" className="w-7 h-7" onClick={() => publishMut.mutate({ id: p.id, action: p.status === "published" ? "unpublish" : "publish" })}>
-                              {p.status === "published" ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </Button>
-                            <Button size="icon" variant="ghost" className="w-7 h-7 text-destructive" onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(p.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            <Button size="icon" variant="ghost" className="w-7 h-7" title="Edit" onClick={() => openEditPost(p)}><Edit className="w-3.5 h-3.5" /></Button>
+                            {p.status !== "archived" && (
+                              <Button size="icon" variant="ghost" className="w-7 h-7" title={p.status === "published" ? "Unpublish" : "Publish"}
+                                onClick={() => publishMut.mutate({ id: p.id, action: p.status === "published" ? "unpublish" : "publish" })}>
+                                {p.status === "published" ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </Button>
+                            )}
+                            {p.status !== "archived" && (
+                              <Button size="icon" variant="ghost" className="w-7 h-7" title="Archive" onClick={() => { if (confirm("Archive this post?")) archiveMut.mutate(p.id); }}>
+                                <Archive className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                            <Button size="icon" variant="ghost" className="w-7 h-7 text-destructive" title="Delete" onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(p.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                         </td>
                       </tr>
@@ -361,6 +576,52 @@ export default function WebsiteBlog() {
               </div>
             </div>
 
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Author</Label>
+                <Select value={form.authorId || "__none__"} onValueChange={v => setForm(f => ({ ...f, authorId: v === "__none__" ? "" : v }))}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select author" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {users.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.firstName} {u.lastName}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Locale</Label>
+                <Select value={form.locale} onValueChange={v => setForm(f => ({ ...f, locale: v }))}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="tr">Turkish</SelectItem>
+                    <SelectItem value="ar">Arabic</SelectItem>
+                    <SelectItem value="ru">Russian</SelectItem>
+                    <SelectItem value="fr">French</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tags</Label>
+              {tags.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {tags.map(t => (
+                    <Badge
+                      key={t.id}
+                      variant={form.selectedTagIds.includes(t.id) ? "default" : "outline"}
+                      className="cursor-pointer text-xs"
+                      onClick={() => toggleTag(t.id)}
+                    >
+                      <Tag className="w-3 h-3 mr-1" />{t.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No tags created yet. Add tags from the Tags tab first.</p>
+              )}
+            </div>
+
             <div className="flex items-center gap-3">
               <Switch checked={form.featured} onCheckedChange={v => setForm(f => ({ ...f, featured: v }))} />
               <Label className="flex items-center gap-1.5"><Star className="w-4 h-4 text-amber-500" /> Featured Post</Label>
@@ -368,14 +629,20 @@ export default function WebsiteBlog() {
 
             <div className="border-t pt-4">
               <h4 className="font-semibold text-sm mb-3">SEO Settings</h4>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Meta Title</Label>
-                  <Input value={form.metaTitle} onChange={e => setForm(f => ({ ...f, metaTitle: e.target.value }))} className="rounded-xl" placeholder="SEO title" />
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Meta Title</Label>
+                    <Input value={form.metaTitle} onChange={e => setForm(f => ({ ...f, metaTitle: e.target.value }))} className="rounded-xl" placeholder="SEO title" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Meta Description</Label>
+                    <Input value={form.metaDescription} onChange={e => setForm(f => ({ ...f, metaDescription: e.target.value }))} className="rounded-xl" placeholder="SEO description" />
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Meta Description</Label>
-                  <Input value={form.metaDescription} onChange={e => setForm(f => ({ ...f, metaDescription: e.target.value }))} className="rounded-xl" placeholder="SEO description" />
+                  <Label>OG Image URL</Label>
+                  <Input value={form.ogImageUrl} onChange={e => setForm(f => ({ ...f, ogImageUrl: e.target.value }))} className="rounded-xl" placeholder="https://... (Open Graph image)" />
                 </div>
               </div>
             </div>

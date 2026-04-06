@@ -16,11 +16,60 @@ import {
   Menu, Plus, Edit, Trash2, GripVertical, ExternalLink, Eye, EyeOff, ChevronRight, ArrowUp, ArrowDown, Link2,
 } from "lucide-react";
 
-interface NavMenu { id: number; name: string; slug: string; location: string; isActive: boolean; }
+interface NavMenu {
+  id: number;
+  name: string;
+  slug: string;
+  location: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface NavItem {
-  id: number; menuId: number; label: string; url: string | null;
-  pageId: number | null; parentId: number | null; target: string;
-  iconClass: string | null; sortOrder: number; isVisible: boolean;
+  id: number;
+  menuId: number;
+  label: string;
+  url: string | null;
+  pageId: number | null;
+  parentId: number | null;
+  target: string;
+  iconClass: string | null;
+  sortOrder: number;
+  isVisible: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface WebsitePage {
+  id: number;
+  title: string;
+  slug: string;
+  status: string;
+}
+
+interface NavItemPayload {
+  menuId: number;
+  label: string;
+  url: string | null;
+  pageId: number | null;
+  target: string;
+  iconClass: string | null;
+  sortOrder: number;
+  isVisible: boolean;
+  parentId: number | null;
+}
+
+interface ItemFormData {
+  label: string;
+  linkType: "url" | "page";
+  url: string;
+  pageId: string;
+  target: string;
+  iconClass: string;
+  sortOrder: string;
+  isVisible: boolean;
+  parentId: string;
 }
 
 const DEFAULT_MENUS = [
@@ -34,18 +83,26 @@ export default function WebsiteNavigation() {
   const [activeMenuId, setActiveMenuId] = useState<string>("");
   const [itemDialog, setItemDialog] = useState(false);
   const [editItem, setEditItem] = useState<NavItem | null>(null);
-  const [form, setForm] = useState({ label: "", url: "", target: "_self", iconClass: "", sortOrder: "0", isVisible: true, parentId: "" });
+  const [form, setForm] = useState<ItemFormData>({
+    label: "", linkType: "url", url: "", pageId: "", target: "_self",
+    iconClass: "", sortOrder: "0", isVisible: true, parentId: "",
+  });
 
   const { data: menus = [], isLoading: menusLoading } = useQuery<NavMenu[]>({
     queryKey: ["nav-menus"],
     queryFn: () => customFetch("/api/website/navigation-menus"),
   });
 
+  const { data: pages = [] } = useQuery<WebsitePage[]>({
+    queryKey: ["website-pages"],
+    queryFn: () => customFetch("/api/website/pages"),
+  });
+
   const seedMut = useMutation({
     mutationFn: async () => {
-      const results = [];
+      const results: NavMenu[] = [];
       for (const m of DEFAULT_MENUS) {
-        const r = await customFetch("/api/website/navigation-menus", {
+        const r: NavMenu = await customFetch("/api/website/navigation-menus", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(m),
         });
         results.push(r);
@@ -63,8 +120,6 @@ export default function WebsiteNavigation() {
     if (menus.length > 0 && !activeMenuId) setActiveMenuId(String(menus[0].id));
   }, [menus, activeMenuId]);
 
-  const selectedMenu = menus.find(m => String(m.id) === activeMenuId);
-
   const { data: items = [] } = useQuery<NavItem[]>({
     queryKey: ["nav-items", activeMenuId],
     queryFn: () => customFetch(`/api/website/menus/${activeMenuId}/items`),
@@ -72,12 +127,12 @@ export default function WebsiteNavigation() {
   });
 
   const saveMut = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: NavItemPayload) => {
       if (editItem) return customFetch(`/api/website/navigation-items/${editItem.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch("/api/website/navigation-items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["nav-items", activeMenuId] }); setItemDialog(false); toast({ title: editItem ? "Item updated" : "Item added" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
@@ -99,34 +154,57 @@ export default function WebsiteNavigation() {
 
   function openNew() {
     setEditItem(null);
-    setForm({ label: "", url: "", target: "_self", iconClass: "", sortOrder: String(items.length), isVisible: true, parentId: "" });
+    setForm({
+      label: "", linkType: "url", url: "", pageId: "", target: "_self",
+      iconClass: "", sortOrder: String(items.length), isVisible: true, parentId: "",
+    });
     setItemDialog(true);
   }
 
   function openEdit(item: NavItem) {
     setEditItem(item);
+    const isPage = !!item.pageId;
     setForm({
-      label: item.label, url: item.url || "", target: item.target,
-      iconClass: item.iconClass || "", sortOrder: String(item.sortOrder),
-      isVisible: item.isVisible, parentId: item.parentId ? String(item.parentId) : "",
+      label: item.label,
+      linkType: isPage ? "page" : "url",
+      url: item.url ?? "",
+      pageId: item.pageId ? String(item.pageId) : "",
+      target: item.target,
+      iconClass: item.iconClass ?? "",
+      sortOrder: String(item.sortOrder),
+      isVisible: item.isVisible,
+      parentId: item.parentId ? String(item.parentId) : "",
     });
     setItemDialog(true);
   }
 
   function handleSave() {
-    if (!form.label.trim()) { toast({ title: "Label is required", variant: "destructive" }); return; }
-    const url = form.url.trim();
-    if (url && /^javascript:/i.test(url)) { toast({ title: "Invalid URL scheme", variant: "destructive" }); return; }
-    saveMut.mutate({
+    if (!form.label.trim()) {
+      toast({ title: "Label is required", variant: "destructive" });
+      return;
+    }
+
+    const urlVal = form.linkType === "url" ? form.url.trim() : null;
+    if (urlVal && /^javascript:/i.test(urlVal)) {
+      toast({ title: "Invalid URL scheme", variant: "destructive" });
+      return;
+    }
+
+    const pageIdVal = form.linkType === "page" && form.pageId ? parseInt(form.pageId) : null;
+
+    const payload: NavItemPayload = {
       menuId: parseInt(activeMenuId),
       label: form.label.trim(),
-      url: form.url.trim() || null,
+      url: urlVal || null,
+      pageId: pageIdVal,
       target: form.target,
       iconClass: form.iconClass.trim() || null,
       sortOrder: parseInt(form.sortOrder) || 0,
       isVisible: form.isVisible,
       parentId: form.parentId ? parseInt(form.parentId) : null,
-    });
+    };
+
+    saveMut.mutate(payload);
   }
 
   function moveItem(item: NavItem, direction: "up" | "down") {
@@ -139,11 +217,18 @@ export default function WebsiteNavigation() {
     reorderMut.mutate({ id: other.id, newOrder: item.sortOrder });
   }
 
+  function getPageTitle(pageId: number | null): string | null {
+    if (!pageId) return null;
+    const page = pages.find(p => p.id === pageId);
+    return page ? page.title : null;
+  }
+
   const topItems = items.filter(i => !i.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
   const childItems = (parentId: number) => items.filter(i => i.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   function renderItem(item: NavItem, depth: number = 0) {
     const children = childItems(item.id);
+    const pageTitle = getPageTitle(item.pageId);
     return (
       <div key={item.id}>
         <div className={`flex items-center gap-3 py-2.5 px-4 border-b border-border/30 hover:bg-secondary/30 transition-colors ${depth > 0 ? "pl-12 bg-muted/20" : ""}`}>
@@ -155,6 +240,7 @@ export default function WebsiteNavigation() {
               {item.target === "_blank" && <ExternalLink className="w-3 h-3 text-muted-foreground" />}
               {!item.isVisible && <Badge variant="outline" className="text-xs gap-1"><EyeOff className="w-2.5 h-2.5" />Hidden</Badge>}
             </div>
+            {pageTitle && <p className="text-xs text-blue-500">Page: {pageTitle}</p>}
             {item.url && <p className="text-xs text-muted-foreground truncate">{item.url}</p>}
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -240,10 +326,36 @@ export default function WebsiteNavigation() {
               <Label>Label *</Label>
               <Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} className="rounded-xl" placeholder="e.g. About Us" />
             </div>
+
             <div className="space-y-1.5">
-              <Label>URL</Label>
-              <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} className="rounded-xl" placeholder="/about or https://..." />
+              <Label>Link Type</Label>
+              <Select value={form.linkType} onValueChange={(v: "url" | "page") => setForm(f => ({ ...f, linkType: v }))}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="url">Custom URL</SelectItem>
+                  <SelectItem value="page">Internal Page</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {form.linkType === "url" ? (
+              <div className="space-y-1.5">
+                <Label>URL</Label>
+                <Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} className="rounded-xl" placeholder="/about or https://..." />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Page</Label>
+                <Select value={form.pageId || "__none__"} onValueChange={v => setForm(f => ({ ...f, pageId: v === "__none__" ? "" : v }))}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select page" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select a page</SelectItem>
+                    {pages.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.title} (/{p.slug})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Open In</Label>

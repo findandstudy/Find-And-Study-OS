@@ -11,14 +11,60 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Layers, Building2, Users, HelpCircle, MessageSquareQuote, Plus, Edit, Trash2,
 } from "lucide-react";
 
-function CollectionTable<T extends { id: number }>({ items, columns, onEdit, onDelete }: {
-  items: T[]; columns: { key: string; label: string; render?: (item: T) => React.ReactNode }[];
-  onEdit: (item: T) => void; onDelete: (id: number) => void;
+interface CollectionItem {
+  id: number;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Office extends CollectionItem {
+  name: string;
+  city: string | null;
+  country: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  mapEmbedUrl: string | null;
+  imageUrl: string | null;
+}
+
+interface TeamMember extends CollectionItem {
+  name: string;
+  title: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  email: string | null;
+  linkedinUrl: string | null;
+}
+
+interface Faq extends CollectionItem {
+  question: string;
+  answer: string;
+  category: string | null;
+}
+
+interface Testimonial extends CollectionItem {
+  name: string;
+  role: string | null;
+  company: string | null;
+  content: string;
+  photoUrl: string | null;
+  rating: number | null;
+}
+
+function CollectionTable<T extends CollectionItem>({ items, columns, onEdit, onDelete }: {
+  items: T[];
+  columns: { key: string; label: string; render?: (item: T) => React.ReactNode }[];
+  onEdit: (item: T) => void;
+  onDelete: (id: number) => void;
 }) {
   return (
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
@@ -35,7 +81,7 @@ function CollectionTable<T extends { id: number }>({ items, columns, onEdit, onD
               <tr key={item.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
                 {columns.map(c => (
                   <td key={c.key} className="py-3 px-4">
-                    {c.render ? c.render(item) : (item as any)[c.key] || "-"}
+                    {c.render ? c.render(item) : (item as Record<string, unknown>)[c.key] as string || "-"}
                   </td>
                 ))}
                 <td className="py-3 px-4 text-right">
@@ -53,18 +99,18 @@ function CollectionTable<T extends { id: number }>({ items, columns, onEdit, onD
   );
 }
 
-function useCollectionCrud<T extends { id: number }>(endpoint: string, queryKey: string) {
+function useCollectionCrud<T extends CollectionItem>(endpoint: string, queryKey: string) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: items = [] } = useQuery<T[]>({ queryKey: [queryKey], queryFn: () => customFetch(endpoint) });
 
   const saveMut = useMutation({
-    mutationFn: ({ id, data }: { id?: number; data: any }) => {
+    mutationFn: ({ id, data }: { id?: number; data: Record<string, unknown> }) => {
       if (id) return customFetch(`${endpoint}/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       return customFetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: [queryKey] }); toast({ title: "Saved" }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
@@ -75,16 +121,22 @@ function useCollectionCrud<T extends { id: number }>(endpoint: string, queryKey:
   return { items, saveMut, deleteMut };
 }
 
+interface OfficeForm {
+  name: string; city: string; country: string; address: string;
+  phone: string; email: string; mapEmbedUrl: string; imageUrl: string;
+  sortOrder: string; isActive: boolean;
+}
+
 function OfficesTab() {
-  const { items, saveMut, deleteMut } = useCollectionCrud<any>("/api/website/collections/offices", "col-offices");
+  const { items, saveMut, deleteMut } = useCollectionCrud<Office>("/api/website/collections/offices", "col-offices");
   const [dialog, setDialog] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", city: "", country: "", address: "", phone: "", email: "", mapEmbedUrl: "", imageUrl: "", sortOrder: "0", isActive: true });
+  const [editItem, setEditItem] = useState<Office | null>(null);
+  const [form, setForm] = useState<OfficeForm>({ name: "", city: "", country: "", address: "", phone: "", email: "", mapEmbedUrl: "", imageUrl: "", sortOrder: "0", isActive: true });
 
   function openNew() { setEditItem(null); setForm({ name: "", city: "", country: "", address: "", phone: "", email: "", mapEmbedUrl: "", imageUrl: "", sortOrder: "0", isActive: true }); setDialog(true); }
-  function openEdit(item: any) {
+  function openEdit(item: Office) {
     setEditItem(item);
-    setForm({ name: item.name, city: item.city || "", country: item.country || "", address: item.address || "", phone: item.phone || "", email: item.email || "", mapEmbedUrl: item.mapEmbedUrl || "", imageUrl: item.imageUrl || "", sortOrder: String(item.sortOrder || 0), isActive: item.isActive });
+    setForm({ name: item.name, city: item.city ?? "", country: item.country ?? "", address: item.address ?? "", phone: item.phone ?? "", email: item.email ?? "", mapEmbedUrl: item.mapEmbedUrl ?? "", imageUrl: item.imageUrl ?? "", sortOrder: String(item.sortOrder), isActive: item.isActive });
     setDialog(true);
   }
 
@@ -100,11 +152,12 @@ function OfficesTab() {
         <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Office</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
-        { key: "name", label: "Name", render: i => <span className="font-medium">{i.name}</span> },
+        { key: "name", label: "Name", render: (i: Office) => <span className="font-medium">{i.name}</span> },
         { key: "city", label: "City" },
         { key: "country", label: "Country" },
         { key: "phone", label: "Phone" },
-        { key: "isActive", label: "Status", render: i => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "sortOrder", label: "Order" },
+        { key: "isActive", label: "Status", render: (i: Office) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -137,16 +190,21 @@ function OfficesTab() {
   );
 }
 
+interface TeamForm {
+  name: string; title: string; bio: string; photoUrl: string;
+  email: string; linkedinUrl: string; sortOrder: string; isActive: boolean;
+}
+
 function TeamTab() {
-  const { items, saveMut, deleteMut } = useCollectionCrud<any>("/api/website/collections/team-members", "col-team");
+  const { items, saveMut, deleteMut } = useCollectionCrud<TeamMember>("/api/website/collections/team-members", "col-team");
   const [dialog, setDialog] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", title: "", bio: "", photoUrl: "", email: "", linkedinUrl: "", sortOrder: "0", isActive: true });
+  const [editItem, setEditItem] = useState<TeamMember | null>(null);
+  const [form, setForm] = useState<TeamForm>({ name: "", title: "", bio: "", photoUrl: "", email: "", linkedinUrl: "", sortOrder: "0", isActive: true });
 
   function openNew() { setEditItem(null); setForm({ name: "", title: "", bio: "", photoUrl: "", email: "", linkedinUrl: "", sortOrder: "0", isActive: true }); setDialog(true); }
-  function openEdit(item: any) {
+  function openEdit(item: TeamMember) {
     setEditItem(item);
-    setForm({ name: item.name, title: item.title || "", bio: item.bio || "", photoUrl: item.photoUrl || "", email: item.email || "", linkedinUrl: item.linkedinUrl || "", sortOrder: String(item.sortOrder || 0), isActive: item.isActive });
+    setForm({ name: item.name, title: item.title ?? "", bio: item.bio ?? "", photoUrl: item.photoUrl ?? "", email: item.email ?? "", linkedinUrl: item.linkedinUrl ?? "", sortOrder: String(item.sortOrder), isActive: item.isActive });
     setDialog(true);
   }
 
@@ -162,15 +220,15 @@ function TeamTab() {
         <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Member</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
-        { key: "name", label: "Name", render: i => (
+        { key: "name", label: "Name", render: (i: TeamMember) => (
           <div className="flex items-center gap-3">
-            {i.photoUrl ? <img src={i.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{i.name[0]}</div>}
+            {i.photoUrl ? <img src={i.photoUrl} className="w-8 h-8 rounded-full object-cover" alt={i.name} /> : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">{i.name[0]}</div>}
             <div><p className="font-medium">{i.name}</p>{i.title && <p className="text-xs text-muted-foreground">{i.title}</p>}</div>
           </div>
         )},
         { key: "email", label: "Email" },
         { key: "sortOrder", label: "Order" },
-        { key: "isActive", label: "Status", render: i => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "isActive", label: "Status", render: (i: TeamMember) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -201,22 +259,27 @@ function TeamTab() {
   );
 }
 
-function FaqsTab() {
-  const { items, saveMut, deleteMut } = useCollectionCrud<any>("/api/website/collections/faqs", "col-faqs");
-  const [dialog, setDialog] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ question: "", answer: "", category: "", sortOrder: "0", isActive: true });
+interface FaqForm {
+  question: string; answer: string; category: string;
+  sortOrder: string; isActive: boolean; locale: string;
+}
 
-  function openNew() { setEditItem(null); setForm({ question: "", answer: "", category: "", sortOrder: "0", isActive: true }); setDialog(true); }
-  function openEdit(item: any) {
+function FaqsTab() {
+  const { items, saveMut, deleteMut } = useCollectionCrud<Faq>("/api/website/collections/faqs", "col-faqs");
+  const [dialog, setDialog] = useState(false);
+  const [editItem, setEditItem] = useState<Faq | null>(null);
+  const [form, setForm] = useState<FaqForm>({ question: "", answer: "", category: "", sortOrder: "0", isActive: true, locale: "en" });
+
+  function openNew() { setEditItem(null); setForm({ question: "", answer: "", category: "", sortOrder: "0", isActive: true, locale: "en" }); setDialog(true); }
+  function openEdit(item: Faq) {
     setEditItem(item);
-    setForm({ question: item.question, answer: item.answer, category: item.category || "", sortOrder: String(item.sortOrder || 0), isActive: item.isActive });
+    setForm({ question: item.question, answer: item.answer, category: item.category ?? "", sortOrder: String(item.sortOrder), isActive: item.isActive, locale: "en" });
     setDialog(true);
   }
 
   function save() {
     if (!form.question.trim() || !form.answer.trim()) return;
-    saveMut.mutate({ id: editItem?.id, data: { ...form, sortOrder: parseInt(form.sortOrder) || 0, category: form.category || null } }, { onSuccess: () => setDialog(false) });
+    saveMut.mutate({ id: editItem?.id, data: { question: form.question, answer: form.answer, sortOrder: parseInt(form.sortOrder) || 0, isActive: form.isActive, category: form.category || null } }, { onSuccess: () => setDialog(false) });
   }
 
   return (
@@ -226,10 +289,10 @@ function FaqsTab() {
         <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add FAQ</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
-        { key: "question", label: "Question", render: i => <span className="font-medium line-clamp-1">{i.question}</span> },
-        { key: "category", label: "Category", render: i => i.category ? <Badge variant="outline" className="text-xs">{i.category}</Badge> : <span className="text-muted-foreground">-</span> },
+        { key: "question", label: "Question", render: (i: Faq) => <span className="font-medium line-clamp-1">{i.question}</span> },
+        { key: "category", label: "Category", render: (i: Faq) => i.category ? <Badge variant="outline" className="text-xs">{i.category}</Badge> : <span className="text-muted-foreground">-</span> },
         { key: "sortOrder", label: "Order" },
-        { key: "isActive", label: "Status", render: i => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "isActive", label: "Status", render: (i: Faq) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg">
@@ -240,6 +303,19 @@ function FaqsTab() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>Category</Label><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="rounded-xl" placeholder="e.g. Admissions" /></div>
               <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} className="rounded-xl" /></div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Locale</Label>
+              <Select value={form.locale} onValueChange={v => setForm(f => ({ ...f, locale: v }))}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="tr">Turkish</SelectItem>
+                  <SelectItem value="ar">Arabic</SelectItem>
+                  <SelectItem value="ru">Russian</SelectItem>
+                  <SelectItem value="fr">French</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-center gap-3"><Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} /><Label>Active</Label></div>
             <div className="flex gap-3 justify-end">
@@ -253,22 +329,31 @@ function FaqsTab() {
   );
 }
 
+interface TestimonialForm {
+  name: string; role: string; company: string; content: string;
+  photoUrl: string; rating: string; sortOrder: string; isActive: boolean;
+}
+
 function TestimonialsTab() {
-  const { items, saveMut, deleteMut } = useCollectionCrud<any>("/api/website/collections/testimonials", "col-testimonials");
+  const { items, saveMut, deleteMut } = useCollectionCrud<Testimonial>("/api/website/collections/testimonials", "col-testimonials");
   const [dialog, setDialog] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", role: "", company: "", content: "", photoUrl: "", rating: "5", sortOrder: "0", isActive: true });
+  const [editItem, setEditItem] = useState<Testimonial | null>(null);
+  const [form, setForm] = useState<TestimonialForm>({ name: "", role: "", company: "", content: "", photoUrl: "", rating: "5", sortOrder: "0", isActive: true });
 
   function openNew() { setEditItem(null); setForm({ name: "", role: "", company: "", content: "", photoUrl: "", rating: "5", sortOrder: "0", isActive: true }); setDialog(true); }
-  function openEdit(item: any) {
+  function openEdit(item: Testimonial) {
     setEditItem(item);
-    setForm({ name: item.name, role: item.role || "", company: item.company || "", content: item.content, photoUrl: item.photoUrl || "", rating: String(item.rating || 5), sortOrder: String(item.sortOrder || 0), isActive: item.isActive });
+    setForm({ name: item.name, role: item.role ?? "", company: item.company ?? "", content: item.content, photoUrl: item.photoUrl ?? "", rating: String(item.rating ?? 5), sortOrder: String(item.sortOrder), isActive: item.isActive });
     setDialog(true);
   }
 
   function save() {
     if (!form.name.trim() || !form.content.trim()) return;
-    saveMut.mutate({ id: editItem?.id, data: { ...form, rating: parseInt(form.rating) || 5, sortOrder: parseInt(form.sortOrder) || 0, role: form.role || null, company: form.company || null, photoUrl: form.photoUrl || null } }, { onSuccess: () => setDialog(false) });
+    const ratingVal = Math.min(5, Math.max(1, parseInt(form.rating) || 5));
+    saveMut.mutate({
+      id: editItem?.id,
+      data: { name: form.name, role: form.role || null, company: form.company || null, content: form.content, photoUrl: form.photoUrl || null, rating: ratingVal, sortOrder: parseInt(form.sortOrder) || 0, isActive: form.isActive },
+    }, { onSuccess: () => setDialog(false) });
   }
 
   return (
@@ -278,15 +363,16 @@ function TestimonialsTab() {
         <Button onClick={openNew} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Testimonial</Button>
       </div>
       <CollectionTable items={items} onEdit={openEdit} onDelete={id => deleteMut.mutate(id)} columns={[
-        { key: "name", label: "Name", render: i => (
+        { key: "name", label: "Name", render: (i: Testimonial) => (
           <div className="flex items-center gap-3">
-            {i.photoUrl ? <img src={i.photoUrl} className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-xs font-bold text-amber-600">{i.name[0]}</div>}
+            {i.photoUrl ? <img src={i.photoUrl} className="w-8 h-8 rounded-full object-cover" alt={i.name} /> : <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-xs font-bold text-amber-600">{i.name[0]}</div>}
             <div><p className="font-medium">{i.name}</p>{i.role && <p className="text-xs text-muted-foreground">{i.role}{i.company ? ` at ${i.company}` : ""}</p>}</div>
           </div>
         )},
-        { key: "content", label: "Quote", render: i => <span className="line-clamp-1 text-muted-foreground text-xs max-w-[200px]">"{i.content}"</span> },
-        { key: "rating", label: "Rating", render: i => <span className="text-amber-500">{Array.from({ length: i.rating || 0 }).map((_, j) => "★").join("")}</span> },
-        { key: "isActive", label: "Status", render: i => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
+        { key: "content", label: "Quote", render: (i: Testimonial) => <span className="line-clamp-1 text-muted-foreground text-xs max-w-[200px]">&ldquo;{i.content}&rdquo;</span> },
+        { key: "rating", label: "Rating", render: (i: Testimonial) => <span className="text-amber-500">{Array.from({ length: i.rating ?? 0 }).map((_, j) => "\u2605").join("")}</span> },
+        { key: "sortOrder", label: "Order" },
+        { key: "isActive", label: "Status", render: (i: Testimonial) => <Badge variant={i.isActive ? "default" : "secondary"} className="text-xs">{i.isActive ? "Active" : "Hidden"}</Badge> },
       ]} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg">
