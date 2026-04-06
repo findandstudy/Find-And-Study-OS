@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Save, Upload, Eye, EyeOff, Plus, Trash2, Copy, ChevronUp, ChevronDown,
-  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, GripVertical, Sparkles,
+  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, GripVertical, Sparkles, Settings2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AiAssistantPanel } from "@/components/AiAssistantPanel";
@@ -95,6 +95,14 @@ export default function PageEditor({ id }: { id: number }) {
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [dirty, setDirty] = useState(false);
   const blocksInitialized = useRef(false);
+  const [seoOpen, setSeoOpen] = useState(false);
+  const [seo, setSeo] = useState({
+    metaTitle: "", metaDescription: "", canonicalUrl: "",
+    robotsIndex: true, robotsFollow: true,
+    ogTitle: "", ogDescription: "",
+    twitterTitle: "", twitterDescription: "", twitterImageUrl: "",
+  });
+  const seoInitialized = useRef(false);
 
   const { data: page, isLoading: pageLoading } = useQuery<WebsitePage>({
     queryKey: ["website-page", id],
@@ -126,6 +134,44 @@ export default function PageEditor({ id }: { id: number }) {
       isVisible: b.isVisible ?? true,
     })));
   }, [blocksFetched, savedBlocks]);
+
+  const { data: seoData } = useQuery<Record<string, unknown>>({
+    queryKey: ["website-page-seo", id],
+    queryFn: () => customFetch(`/api/website/pages/${id}/seo`),
+    enabled: !!page,
+  });
+
+  useEffect(() => {
+    if (seoInitialized.current || !seoData) return;
+    seoInitialized.current = true;
+    setSeo({
+      metaTitle: (seoData.metaTitle as string) || "",
+      metaDescription: (seoData.metaDescription as string) || "",
+      canonicalUrl: (seoData.canonicalUrl as string) || "",
+      robotsIndex: seoData.robotsIndex !== false,
+      robotsFollow: seoData.robotsFollow !== false,
+      ogTitle: (seoData.ogTitle as string) || "",
+      ogDescription: (seoData.ogDescription as string) || "",
+      twitterTitle: (seoData.twitterTitle as string) || "",
+      twitterDescription: (seoData.twitterDescription as string) || "",
+      twitterImageUrl: (seoData.twitterImageUrl as string) || "",
+    });
+  }, [seoData]);
+
+  const saveSeoMutation = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/website/pages/${id}/seo`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(seo),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["website-page-seo", id] });
+      toast({ title: "SEO settings saved" });
+      setSeoOpen(false);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save SEO settings.", variant: "destructive" }),
+  });
 
   const saveDraftMutation = useMutation({
     mutationFn: () =>
@@ -324,6 +370,71 @@ export default function PageEditor({ id }: { id: number }) {
               ))}
             </div>
             <Separator orientation="vertical" className="h-5" />
+            <Sheet open={seoOpen} onOpenChange={setSeoOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                  <Settings2 className="w-3.5 h-3.5" /> SEO
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>Page SEO Settings</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Meta Title</Label>
+                    <Input value={seo.metaTitle} onChange={e => setSeo(s => ({ ...s, metaTitle: e.target.value }))} placeholder="SEO page title" className="h-8 text-sm" />
+                    <p className="text-[10px] text-muted-foreground">{seo.metaTitle.length}/60 characters</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Meta Description</Label>
+                    <Textarea value={seo.metaDescription} onChange={e => setSeo(s => ({ ...s, metaDescription: e.target.value }))} placeholder="SEO description" rows={3} className="text-sm" />
+                    <p className="text-[10px] text-muted-foreground">{seo.metaDescription.length}/160 characters</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Canonical URL</Label>
+                    <Input value={seo.canonicalUrl} onChange={e => setSeo(s => ({ ...s, canonicalUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Switch checked={seo.robotsIndex} onCheckedChange={v => setSeo(s => ({ ...s, robotsIndex: v }))} />
+                      <Label className="text-xs">Index</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={seo.robotsFollow} onCheckedChange={v => setSeo(s => ({ ...s, robotsFollow: v }))} />
+                      <Label className="text-xs">Follow</Label>
+                    </div>
+                  </div>
+                  <Separator />
+                  <h4 className="text-xs font-bold uppercase text-muted-foreground">Open Graph</h4>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">OG Title</Label>
+                    <Input value={seo.ogTitle} onChange={e => setSeo(s => ({ ...s, ogTitle: e.target.value }))} placeholder="Social share title" className="h-8 text-sm" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">OG Description</Label>
+                    <Textarea value={seo.ogDescription} onChange={e => setSeo(s => ({ ...s, ogDescription: e.target.value }))} placeholder="Social share description" rows={2} className="text-sm" />
+                  </div>
+                  <Separator />
+                  <h4 className="text-xs font-bold uppercase text-muted-foreground">Twitter Card</h4>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Twitter Title</Label>
+                    <Input value={seo.twitterTitle} onChange={e => setSeo(s => ({ ...s, twitterTitle: e.target.value }))} className="h-8 text-sm" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Twitter Description</Label>
+                    <Textarea value={seo.twitterDescription} onChange={e => setSeo(s => ({ ...s, twitterDescription: e.target.value }))} rows={2} className="text-sm" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Twitter Image URL</Label>
+                    <Input value={seo.twitterImageUrl} onChange={e => setSeo(s => ({ ...s, twitterImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
+                  </div>
+                  <Button onClick={() => saveSeoMutation.mutate()} disabled={saveSeoMutation.isPending} className="w-full">
+                    {saveSeoMutation.isPending ? "Saving..." : "Save SEO Settings"}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1">

@@ -66,6 +66,7 @@ interface FormFormData {
   successMessage: string;
   errorMessage: string;
   crmSource: string;
+  crmPipelineStage: string;
   isActive: boolean;
 }
 
@@ -104,11 +105,16 @@ export default function WebsiteForms() {
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [activeTab, setActiveTab] = useState("fields");
 
+  const { data: pipelineStages } = useQuery<{ key: string; label: string }[]>({
+    queryKey: ["pipeline-stages", "lead"],
+    queryFn: () => customFetch("/api/pipeline-stages/lead"),
+  });
+
   const [formData, setFormData] = useState<FormFormData>({
     name: "", slug: "", description: "", submitAction: "crm",
     submitEmail: "", submitWebhookUrl: "", successMessage: "Thank you! Your submission has been received.",
     errorMessage: "Something went wrong. Please try again later.",
-    crmSource: "", isActive: true,
+    crmSource: "", crmPipelineStage: "", isActive: true,
   });
 
   const [fieldData, setFieldData] = useState<FieldFormData>({
@@ -212,6 +218,7 @@ export default function WebsiteForms() {
         submitWebhookUrl: form.submitWebhookUrl || "", successMessage: form.successMessage || "",
         errorMessage: (meta.errorMessage as string) || "Something went wrong. Please try again later.",
         crmSource: (meta.crmSource as string) || "",
+        crmPipelineStage: (meta.crmPipelineStage as string) || "",
         isActive: form.isActive,
       });
     } else {
@@ -220,7 +227,7 @@ export default function WebsiteForms() {
         name: "", slug: "", description: "", submitAction: "crm",
         submitEmail: "", submitWebhookUrl: "", successMessage: "Thank you! Your submission has been received.",
         errorMessage: "Something went wrong. Please try again later.",
-        crmSource: "", isActive: true,
+        crmSource: "", crmPipelineStage: "", isActive: true,
       });
     }
     setFormDialog(true);
@@ -491,11 +498,26 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
               </div>
             )}
             {formData.submitAction === "crm" && (
-              <div>
-                <Label className="text-xs">CRM Lead Source Tag</Label>
-                <Input value={formData.crmSource} onChange={e => setFormData(f => ({ ...f, crmSource: e.target.value }))} placeholder="e.g. contact-page, landing-1" className="mt-1" />
-                <p className="text-[10px] text-muted-foreground mt-1">Used as the lead source. Defaults to "website-form:{'{'}slug{'}'}" if empty.</p>
-              </div>
+              <>
+                <div>
+                  <Label className="text-xs">CRM Lead Source Tag</Label>
+                  <Input value={formData.crmSource} onChange={e => setFormData(f => ({ ...f, crmSource: e.target.value }))} placeholder="e.g. contact-page, landing-1" className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Used as the lead source. Defaults to "website-form:{'{'}slug{'}'}" if empty.</p>
+                </div>
+                <div>
+                  <Label className="text-xs">Destination Pipeline Stage</Label>
+                  <Select value={formData.crmPipelineStage || "__none__"} onValueChange={v => setFormData(f => ({ ...f, crmPipelineStage: v === "__none__" ? "" : v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Default (first stage)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Default (first stage)</SelectItem>
+                      {(pipelineStages || []).map((s: { key: string; label: string }) => (
+                        <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground mt-1">Pipeline stage where new leads from this form will be placed.</p>
+                </div>
+              </>
             )}
             <div>
               <Label className="text-xs">Success Message</Label>

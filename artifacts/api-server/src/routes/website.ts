@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import type { PgTableWithColumns, TableConfig } from "drizzle-orm/pg-core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
@@ -26,6 +26,7 @@ import {
   settingsTable,
   integrationsTable,
   leadsTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
@@ -495,13 +496,23 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
 
     let leadId: number | null = null;
     if (formData.email && formData.firstName) {
+      let initialStatus = "new";
+      if (form.crmPipelineStage) {
+        const [stage] = await db.select({ key: pipelineStagesTable.key })
+          .from(pipelineStagesTable)
+          .where(and(
+            eq(pipelineStagesTable.entityType, "lead"),
+            eq(pipelineStagesTable.key, form.crmPipelineStage),
+          ));
+        if (stage) initialStatus = stage.key;
+      }
       const [lead] = await db.insert(leadsTable).values({
         firstName: String(formData.firstName).slice(0, 100),
         lastName: String(formData.lastName || "").slice(0, 100),
         email: String(formData.email).slice(0, 255),
         phone: formData.phone ? String(formData.phone).slice(0, 50) : null,
         source: form.crmSource || `website-form:${form.slug}`,
-        status: "new",
+        status: initialStatus,
       }).returning();
       leadId = lead.id;
     }
@@ -549,6 +560,28 @@ router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Res
   }
 });
 
+router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const [page] = await db.select({
+      metaTitle: websitePagesTable.metaTitle,
+      metaDescription: websitePagesTable.metaDescription,
+      canonicalUrl: websitePagesTable.canonicalUrl,
+      robotsIndex: websitePagesTable.robotsIndex,
+      robotsFollow: websitePagesTable.robotsFollow,
+      ogTitle: websitePagesTable.ogTitle,
+      ogDescription: websitePagesTable.ogDescription,
+      twitterTitle: websitePagesTable.twitterTitle,
+      twitterDescription: websitePagesTable.twitterDescription,
+      twitterImageUrl: websitePagesTable.twitterImageUrl,
+    }).from(websitePagesTable).where(eq(websitePagesTable.id, Number(req.params.id)));
+    if (!page) return res.status(404).json({ error: "Page not found" });
+    res.json(page);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
 router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response) => {
   try {
     const allowedFields = [
@@ -572,30 +605,34 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
   }
 });
 
+async function resolveAiIntegration(): Promise<{ provider: "openai" | "anthropic"; apiKey: string; model?: string } | null> {
+  const integrations = await db.select().from(integrationsTable)
+    .where(inArray(integrationsTable.key, ["openai", "claude"]));
+  for (const integ of integrations) {
+    if (!integ.isEnabled) continue;
+    const config = integ.config as Record<string, string>;
+    if (!config?.apiKey) continue;
+    return {
+      provider: integ.key === "openai" ? "openai" : "anthropic",
+      apiKey: config.apiKey,
+      model: config.model || undefined,
+    };
+  }
+  return null;
+}
+
 router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Response) => {
   try {
-    const [integration] = await db.select().from(integrationsTable)
-      .where(eq(integrationsTable.key, "ai_content"));
-    if (!integration || !integration.isEnabled) {
-      return res.status(400).json({ error: "AI content assistant not configured. Enable it in Settings > Integrations." });
-    }
-
-    const config = integration.config as Record<string, string>;
-    const provider = config.provider || "anthropic";
-    const apiKey = config.apiKey;
-    if (!apiKey) {
-      return res.status(400).json({ error: "AI API key not configured" });
+    const aiConfig = await resolveAiIntegration();
+    if (!aiConfig) {
+      return res.status(400).json({ error: "AI not configured. Enable OpenAI or Anthropic Claude in Settings > Integrations." });
     }
 
     const { action, context, locale } = req.body;
     if (!action) return res.status(400).json({ error: "action is required" });
 
     const { AiContentService } = await import("../lib/aiService");
-    const aiService = new AiContentService({
-      provider: provider as "openai" | "anthropic",
-      apiKey,
-      model: config.model,
-    });
+    const aiService = new AiContentService(aiConfig);
 
     const result = await aiService.generate({ action, context, locale });
     res.json({ result, action });
@@ -607,10 +644,8 @@ router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Resp
 
 router.get("/website/ai/status", ...adminOnly, async (_req: Request, res: Response) => {
   try {
-    const [integration] = await db.select().from(integrationsTable)
-      .where(eq(integrationsTable.key, "ai_content"));
-    const configured = !!(integration?.isEnabled && (integration.config as Record<string, string>)?.apiKey);
-    res.json({ configured, provider: configured ? (integration.config as Record<string, string>).provider || "anthropic" : null });
+    const aiConfig = await resolveAiIntegration();
+    res.json({ configured: !!aiConfig, provider: aiConfig?.provider || null });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
@@ -627,6 +662,12 @@ router.get("/website/translations/status", ...adminOnly, async (_req: Request, r
       title: websitePagesTable.title,
       slug: websitePagesTable.slug,
       locale: websitePagesTable.locale,
+      metaTitle: websitePagesTable.metaTitle,
+      metaDescription: websitePagesTable.metaDescription,
+      ogTitle: websitePagesTable.ogTitle,
+      ogDescription: websitePagesTable.ogDescription,
+      twitterTitle: websitePagesTable.twitterTitle,
+      twitterDescription: websitePagesTable.twitterDescription,
       translationsJson: websitePagesTable.translationsJson,
     }).from(websitePagesTable).orderBy(asc(websitePagesTable.sortOrder));
 
@@ -635,6 +676,9 @@ router.get("/website/translations/status", ...adminOnly, async (_req: Request, r
       title: websiteBlogPostsTable.title,
       slug: websiteBlogPostsTable.slug,
       locale: websiteBlogPostsTable.locale,
+      excerpt: websiteBlogPostsTable.excerpt,
+      metaTitle: websiteBlogPostsTable.metaTitle,
+      metaDescription: websiteBlogPostsTable.metaDescription,
       translationsJson: websiteBlogPostsTable.translationsJson,
     }).from(websiteBlogPostsTable).orderBy(desc(websiteBlogPostsTable.createdAt));
 
