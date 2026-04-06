@@ -841,6 +841,13 @@ export default function SettingsPage() {
           </div>
         </Card>
 
+        <Card className="p-4 bg-blue-50 border-blue-200">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-blue-800">These are global defaults. Override per page in <a href="/admin/website/seo" className="font-semibold underline">Website &gt; SEO Overrides</a>.</p>
+          </div>
+        </Card>
+
         <Card className="border-none shadow-lg shadow-black/5 p-6">
           <SectionHeader title="Default Meta Tags" description="Default SEO metadata used when pages don't specify their own." />
           <div className="space-y-5">
@@ -2146,6 +2153,14 @@ function WebToLeadTab() {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [formTitle, setFormTitle] = useState("Get in Touch");
+  const crossLink = (
+    <Card className="p-4 bg-blue-50 border-blue-200 mb-6">
+      <div className="flex items-start gap-3">
+        <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+        <p className="text-sm text-blue-800">Full form management is available in <a href="/admin/website/forms" className="font-semibold underline">Website &gt; Forms</a>. This page provides a quick embed snippet for external sites.</p>
+      </div>
+    </Card>
+  );
   const [formSubtitle, setFormSubtitle] = useState("Fill in your details and we'll contact you shortly.");
   const [btnText, setBtnText] = useState("Submit");
   const [btnColor, setBtnColor] = useState("#2563eb");
@@ -2196,6 +2211,7 @@ function WebToLeadTab() {
 
   return (
     <div className="space-y-6">
+      {crossLink}
       <Card className="border shadow-sm p-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">

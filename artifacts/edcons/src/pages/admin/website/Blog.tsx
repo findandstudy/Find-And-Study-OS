@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star, Archive, User,
+  BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star, Archive, User, Sparkles,
 } from "lucide-react";
+import { AiAssistantPanel, AiFieldButton } from "@/components/AiAssistantPanel";
 
 interface BlogPost {
   id: number;
@@ -562,12 +563,21 @@ export default function WebsiteBlog() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Excerpt</Label>
+              <div className="flex items-center justify-between">
+                <Label>Excerpt</Label>
+                <AiFieldButton action="generateExcerpt" context={form.body || form.title} locale={form.locale} onResult={r => setForm(f => ({ ...f, excerpt: r }))} label="Generate" />
+              </div>
               <Textarea value={form.excerpt} onChange={e => setForm(f => ({ ...f, excerpt: e.target.value }))} className="rounded-xl" rows={2} placeholder="Brief summary of the post" />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Body (Rich Text / HTML)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Body (Rich Text / HTML)</Label>
+                <div className="flex gap-1">
+                  <AiFieldButton action="expandText" context={form.body || form.title} locale={form.locale} onResult={r => setForm(f => ({ ...f, body: r }))} label="Expand" />
+                  <AiFieldButton action="improveTone" context={form.body} locale={form.locale} onResult={r => setForm(f => ({ ...f, body: r }))} label="Improve" />
+                </div>
+              </div>
               <Textarea value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} className="rounded-xl font-mono text-sm" rows={12} placeholder="Write your blog post content here..." />
               {form.body && <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> ~{readTime(form.body)} min read</p>}
             </div>
@@ -662,7 +672,7 @@ export default function WebsiteBlog() {
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-sm mb-3">SEO Settings</h4>
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">SEO Settings <AiFieldButton action="generateMetaTitle" context={form.title + " " + (form.excerpt || form.body.slice(0, 200))} locale={form.locale} onResult={r => setForm(f => ({ ...f, metaTitle: r }))} label="AI Meta Title" /> <AiFieldButton action="generateMetaDescription" context={form.title + " " + (form.excerpt || form.body.slice(0, 300))} locale={form.locale} onResult={r => setForm(f => ({ ...f, metaDescription: r }))} label="AI Meta Desc" /></h4>
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">

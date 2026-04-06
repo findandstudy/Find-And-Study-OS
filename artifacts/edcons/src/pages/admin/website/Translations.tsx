@@ -1,14 +1,253 @@
+import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Languages } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Languages, Globe, Check, Loader2, Copy, FileText, BookOpen,
+  CheckCircle2, Circle, AlertCircle,
+} from "lucide-react";
+
+const LOCALE_LABELS: Record<string, string> = {
+  en: "English", tr: "Türkçe", ar: "العربية", fr: "Français", ru: "Русский",
+  de: "Deutsch", es: "Español", it: "Italiano", pt: "Português", zh: "中文",
+};
+
+interface TranslationItem {
+  id: number;
+  title: string;
+  slug: string;
+  locale: string;
+  translationsJson: Record<string, Record<string, string>> | null;
+}
+
+interface TranslationStatus {
+  locales: string[];
+  pages: TranslationItem[];
+  posts: TranslationItem[];
+}
+
+const TRANSLATABLE_PAGE_FIELDS = ["title", "metaTitle", "metaDescription", "ogTitle", "ogDescription"];
+const TRANSLATABLE_POST_FIELDS = ["title", "excerpt", "metaTitle", "metaDescription"];
+
+function getCompleteness(item: TranslationItem, locale: string, fields: string[]): { done: number; total: number; pct: number } {
+  const translations = item.translationsJson || {};
+  const localeData = translations[locale] || {};
+  const done = fields.filter(f => localeData[f] && localeData[f].trim().length > 0).length;
+  return { done, total: fields.length, pct: fields.length > 0 ? Math.round((done / fields.length) * 100) : 0 };
+}
+
+function LocaleIndicator({ item, locales, fields }: { item: TranslationItem; locales: string[]; fields: string[] }) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {locales.map(locale => {
+        if (locale === item.locale) {
+          return <Badge key={locale} variant="default" className="text-[10px] gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> {locale.toUpperCase()}</Badge>;
+        }
+        const { pct } = getCompleteness(item, locale, fields);
+        if (pct === 100) return <Badge key={locale} variant="outline" className="text-[10px] gap-1 border-green-300 text-green-700"><CheckCircle2 className="w-2.5 h-2.5" /> {locale.toUpperCase()}</Badge>;
+        if (pct > 0) return <Badge key={locale} variant="outline" className="text-[10px] gap-1 border-yellow-300 text-yellow-700"><AlertCircle className="w-2.5 h-2.5" /> {locale.toUpperCase()} {pct}%</Badge>;
+        return <Badge key={locale} variant="outline" className="text-[10px] gap-1 text-muted-foreground"><Circle className="w-2.5 h-2.5" /> {locale.toUpperCase()}</Badge>;
+      })}
+    </div>
+  );
+}
 
 export default function WebsiteTranslations() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [editItem, setEditItem] = useState<{ item: TranslationItem; type: "page" | "post" } | null>(null);
+  const [editLocale, setEditLocale] = useState("tr");
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+
+  const { data: status, isLoading } = useQuery<TranslationStatus>({
+    queryKey: ["/api/website/translations/status"],
+    queryFn: () => customFetch("/api/website/translations/status"),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: { id: number; type: "page" | "post"; translations: Record<string, Record<string, string>> }) => {
+      const endpoint = payload.type === "page"
+        ? `/api/website/pages/${payload.id}/translations`
+        : `/api/website/blog-posts/${payload.id}/translations`;
+      return customFetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ translations: payload.translations }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/website/translations/status"] });
+      toast({ title: "Translation saved" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const locales = status?.locales || ["en"];
+  const pages = status?.pages || [];
+  const posts = status?.posts || [];
+  const nonDefaultLocales = locales.filter(l => l !== "en");
+
+  function openEditor(item: TranslationItem, type: "page" | "post") {
+    setEditItem({ item, type });
+    const firstNonDefault = nonDefaultLocales[0] || "tr";
+    setEditLocale(firstNonDefault);
+    const existing = item.translationsJson?.[firstNonDefault] || {};
+    setEditValues(existing);
+  }
+
+  function switchLocale(locale: string) {
+    if (!editItem) return;
+    setEditLocale(locale);
+    const existing = editItem.item.translationsJson?.[locale] || {};
+    setEditValues(existing);
+  }
+
+  function handleSave() {
+    if (!editItem) return;
+    const translations = { ...(editItem.item.translationsJson || {}), [editLocale]: editValues };
+    saveMutation.mutate({ id: editItem.item.id, type: editItem.type, translations });
+  }
+
+  function copyFromDefault() {
+    if (!editItem) return;
+    const fields = editItem.type === "page" ? TRANSLATABLE_PAGE_FIELDS : TRANSLATABLE_POST_FIELDS;
+    const defaults: Record<string, string> = {};
+    for (const f of fields) {
+      defaults[f] = (editItem.item as Record<string, unknown>)[f] as string || "";
+    }
+    setEditValues(defaults);
+    toast({ title: "Copied from default locale" });
+  }
+
+  const translatableFields = editItem?.type === "page" ? TRANSLATABLE_PAGE_FIELDS : TRANSLATABLE_POST_FIELDS;
+
   return (
     <DashboardLayout>
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Languages className="w-12 h-12 text-muted-foreground mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Translations</h1>
-        <p className="text-muted-foreground">Manage website content translations. Coming soon.</p>
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> Translations</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage multilingual content for pages and blog posts.</p>
+        </div>
+
+        <Card className="p-4 bg-blue-50 border-blue-200">
+          <div className="flex items-start gap-3">
+            <Globe className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+            <div className="text-sm text-blue-800">
+              <p className="font-medium">Supported Locales: {locales.map(l => l.toUpperCase()).join(", ")}</p>
+              <p className="mt-1">Default locale is <strong>EN</strong>. Click any page or post to translate its content into other languages. Configure supported languages in Settings &gt; Language &amp; Region.</p>
+            </div>
+          </div>
+        </Card>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <Tabs defaultValue="pages">
+            <TabsList>
+              <TabsTrigger value="pages" className="gap-1"><FileText className="w-3 h-3" /> Pages ({pages.length})</TabsTrigger>
+              <TabsTrigger value="posts" className="gap-1"><BookOpen className="w-3 h-3" /> Blog Posts ({posts.length})</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="pages" className="mt-4 space-y-3">
+              {pages.length === 0 ? (
+                <Card className="p-8 text-center"><p className="text-muted-foreground text-sm">No pages found.</p></Card>
+              ) : pages.map(page => (
+                <Card key={page.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditor(page, "page")}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">{page.title}</p>
+                      <p className="text-xs text-muted-foreground">/{page.slug}</p>
+                    </div>
+                    <LocaleIndicator item={page} locales={locales} fields={TRANSLATABLE_PAGE_FIELDS} />
+                  </div>
+                </Card>
+              ))}
+            </TabsContent>
+
+            <TabsContent value="posts" className="mt-4 space-y-3">
+              {posts.length === 0 ? (
+                <Card className="p-8 text-center"><p className="text-muted-foreground text-sm">No blog posts found.</p></Card>
+              ) : posts.map(post => (
+                <Card key={post.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditor(post, "post")}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">{post.title}</p>
+                      <p className="text-xs text-muted-foreground">/{post.slug}</p>
+                    </div>
+                    <LocaleIndicator item={post} locales={locales} fields={TRANSLATABLE_POST_FIELDS} />
+                  </div>
+                </Card>
+              ))}
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
+
+      <Dialog open={!!editItem} onOpenChange={open => { if (!open) setEditItem(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Languages className="w-5 h-5" /> Translate: {editItem?.item.title}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Label className="text-xs shrink-0">Locale:</Label>
+              <Select value={editLocale} onValueChange={switchLocale}>
+                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {nonDefaultLocales.map(l => (
+                    <SelectItem key={l} value={l}>{LOCALE_LABELS[l] || l.toUpperCase()} ({l.toUpperCase()})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={copyFromDefault} className="gap-1 ml-auto">
+                <Copy className="w-3 h-3" /> Copy from EN
+              </Button>
+            </div>
+
+            {editItem && (
+              <div className="space-y-4">
+                {translatableFields.map(field => {
+                  const defaultVal = (editItem.item as Record<string, unknown>)[field] as string || "";
+                  return (
+                    <div key={field} className="space-y-1.5">
+                      <Label className="text-xs font-semibold capitalize">{field.replace(/([A-Z])/g, " $1").trim()}</Label>
+                      {defaultVal && <p className="text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">EN: {defaultVal}</p>}
+                      {field === "metaDescription" || field === "ogDescription" || field === "excerpt" ? (
+                        <Textarea value={editValues[field] || ""} onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))}
+                          placeholder={defaultVal ? `Translate: "${defaultVal}"` : "Not translated"} rows={2} />
+                      ) : (
+                        <Input value={editValues[field] || ""} onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))}
+                          placeholder={defaultVal ? `Translate: "${defaultVal}"` : "Not translated"} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
+            <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+              Save Translation
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

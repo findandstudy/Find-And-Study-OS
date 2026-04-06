@@ -13,6 +13,7 @@ import {
   websiteGlobalComponentsTable,
   websiteFormsTable,
   websiteFormFieldsTable,
+  websiteFormSubmissionsTable,
   websiteBlogPostsTable,
   websiteBlogCategoriesTable,
   websiteBlogTagsTable,
@@ -22,7 +23,11 @@ import {
   websiteCollectionsFaqsTable,
   websiteCollectionsTestimonialsTable,
   usersTable,
+  settingsTable,
+  integrationsTable,
+  leadsTable,
 } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 
 const router = Router();
@@ -438,6 +443,282 @@ router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, a
       .where(eq(websitePageBlocksTable.pageId, pageId))
       .orderBy(asc(websitePageBlocksTable.sortOrder));
     res.json({ page, blocks });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+registerCrud("/website/form-submissions", websiteFormSubmissionsTable, websiteFormSubmissionsTable.id);
+
+router.get("/website/forms/:formId/submissions", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const { page = "1", limit = "20" } = req.query as Record<string, string>;
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const offset = (pageNum - 1) * limitNum;
+
+    const formId = Number(req.params.formId);
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` })
+      .from(websiteFormSubmissionsTable)
+      .where(eq(websiteFormSubmissionsTable.formId, formId));
+    const rows = await db.select().from(websiteFormSubmissionsTable)
+      .where(eq(websiteFormSubmissionsTable.formId, formId))
+      .orderBy(desc(websiteFormSubmissionsTable.createdAt))
+      .limit(limitNum).offset(offset);
+    res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.post("/public/website-forms/:slug/submit", async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const [form] = await db.select().from(websiteFormsTable)
+      .where(eq(websiteFormsTable.slug, slug));
+    if (!form || !form.isActive) return res.status(404).json({ error: "Form not found" });
+
+    const { _hp, ...formData } = req.body;
+    if (_hp) return res.json({ success: true });
+
+    const fields = await db.select().from(websiteFormFieldsTable)
+      .where(eq(websiteFormFieldsTable.formId, form.id))
+      .orderBy(asc(websiteFormFieldsTable.sortOrder));
+
+    for (const field of fields) {
+      if (field.isRequired && !formData[field.name]) {
+        return res.status(400).json({ error: `${field.label} is required` });
+      }
+    }
+
+    let leadId: number | null = null;
+    if (formData.email && formData.firstName) {
+      const [lead] = await db.insert(leadsTable).values({
+        firstName: String(formData.firstName).slice(0, 100),
+        lastName: String(formData.lastName || "").slice(0, 100),
+        email: String(formData.email).slice(0, 255),
+        phone: formData.phone ? String(formData.phone).slice(0, 50) : null,
+        source: `website-form:${form.slug}`,
+        status: "new",
+      }).returning();
+      leadId = lead.id;
+    }
+
+    const [submission] = await db.insert(websiteFormSubmissionsTable).values({
+      formId: form.id,
+      data: formData,
+      sourceUrl: req.headers.referer || null,
+      ipAddress: (req.ip || req.headers["x-forwarded-for"] || "").toString().slice(0, 45),
+      userAgent: (req.headers["user-agent"] || "").slice(0, 500),
+      leadId,
+      status: "new",
+    }).returning();
+
+    res.status(201).json({ success: true, submissionId: submission.id });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Response) => {
+  try {
+    const pages = await db.select({
+      id: websitePagesTable.id,
+      title: websitePagesTable.title,
+      slug: websitePagesTable.slug,
+      status: websitePagesTable.status,
+      metaTitle: websitePagesTable.metaTitle,
+      metaDescription: websitePagesTable.metaDescription,
+      ogImageUrl: websitePagesTable.ogImageUrl,
+      canonicalUrl: websitePagesTable.canonicalUrl,
+      robotsIndex: websitePagesTable.robotsIndex,
+      robotsFollow: websitePagesTable.robotsFollow,
+      ogTitle: websitePagesTable.ogTitle,
+      ogDescription: websitePagesTable.ogDescription,
+      twitterTitle: websitePagesTable.twitterTitle,
+      twitterDescription: websitePagesTable.twitterDescription,
+      twitterImageUrl: websitePagesTable.twitterImageUrl,
+    }).from(websitePagesTable).orderBy(asc(websitePagesTable.sortOrder));
+    res.json(pages);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const allowedFields = [
+      "metaTitle", "metaDescription", "ogImageUrl", "canonicalUrl",
+      "robotsIndex", "robotsFollow", "ogTitle", "ogDescription",
+      "twitterTitle", "twitterDescription", "twitterImageUrl", "slug",
+    ];
+    const updates: Record<string, unknown> = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    const [page] = await db.update(websitePagesTable)
+      .set(updates)
+      .where(eq(websitePagesTable.id, Number(req.params.id)))
+      .returning();
+    if (!page) return res.status(404).json({ error: "Not found" });
+    res.json(page);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const [integration] = await db.select().from(integrationsTable)
+      .where(eq(integrationsTable.key, "ai_content"));
+    if (!integration || !integration.isEnabled) {
+      return res.status(400).json({ error: "AI content assistant not configured. Enable it in Settings > Integrations." });
+    }
+
+    const config = integration.config as Record<string, string>;
+    const provider = config.provider || "anthropic";
+    const apiKey = config.apiKey;
+    if (!apiKey) {
+      return res.status(400).json({ error: "AI API key not configured" });
+    }
+
+    const { action, context, locale } = req.body;
+    if (!action) return res.status(400).json({ error: "action is required" });
+
+    const prompts: Record<string, string> = {
+      generateHeroTitle: `Generate a compelling hero title for a website page about: ${context}. Return only the title text, no quotes.`,
+      generateCTAText: `Generate a short call-to-action button text for: ${context}. Return only the CTA text, max 5 words.`,
+      generateFAQItems: `Generate 3 FAQ items (question and answer pairs) about: ${context}. Return as JSON array: [{"question":"...","answer":"..."}]`,
+      generateMetaTitle: `Generate an SEO-optimized meta title (max 60 chars) for a page about: ${context}. Return only the title.`,
+      generateMetaDescription: `Generate an SEO-optimized meta description (max 160 chars) for a page about: ${context}. Return only the description.`,
+      generateOGText: `Generate Open Graph title and description for social sharing about: ${context}. Return as JSON: {"title":"...","description":"..."}`,
+      generateExcerpt: `Generate a blog post excerpt (max 200 chars) for: ${context}. Return only the excerpt.`,
+      generateAltText: `Generate descriptive alt text for an image related to: ${context}. Return only the alt text.`,
+      generateBlogOutline: `Generate a blog post outline with 5-7 sections for: ${context}. Return as JSON array of section titles: ["...","..."]`,
+      improveTone: `Improve the tone and make this text more professional and engaging: ${context}. Return only the improved text.`,
+      shortenText: `Shorten this text while keeping the key message: ${context}. Return only the shortened text.`,
+      expandText: `Expand this text with more detail and depth: ${context}. Return only the expanded text.`,
+    };
+
+    const prompt = prompts[action];
+    if (!prompt) return res.status(400).json({ error: `Unknown action: ${action}` });
+
+    const langHint = locale && locale !== "en" ? ` Respond in ${locale} language.` : "";
+
+    let result: string;
+    if (provider === "openai") {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: config.model || "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt + langHint }],
+          max_tokens: 500,
+          temperature: 0.7,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.text();
+        return res.status(500).json({ error: `AI provider error: ${err}` });
+      }
+      const data = await response.json();
+      result = data.choices?.[0]?.message?.content || "";
+    } else {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: config.model || "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{ role: "user", content: prompt + langHint }],
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.text();
+        return res.status(500).json({ error: `AI provider error: ${err}` });
+      }
+      const data = await response.json();
+      result = data.content?.[0]?.text || "";
+    }
+
+    res.json({ result: result.trim(), action });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.get("/website/ai/status", ...adminOnly, async (_req: Request, res: Response) => {
+  try {
+    const [integration] = await db.select().from(integrationsTable)
+      .where(eq(integrationsTable.key, "ai_content"));
+    const configured = !!(integration?.isEnabled && (integration.config as Record<string, string>)?.apiKey);
+    res.json({ configured, provider: configured ? (integration.config as Record<string, string>).provider || "anthropic" : null });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.get("/website/translations/status", ...adminOnly, async (_req: Request, res: Response) => {
+  try {
+    const [settings] = await db.select({ supportedLanguages: settingsTable.supportedLanguages }).from(settingsTable);
+    const locales = (settings?.supportedLanguages || "en").split(",").map((l: string) => l.trim());
+
+    const pages = await db.select({
+      id: websitePagesTable.id,
+      title: websitePagesTable.title,
+      slug: websitePagesTable.slug,
+      locale: websitePagesTable.locale,
+      translationsJson: websitePagesTable.translationsJson,
+    }).from(websitePagesTable).orderBy(asc(websitePagesTable.sortOrder));
+
+    const posts = await db.select({
+      id: websiteBlogPostsTable.id,
+      title: websiteBlogPostsTable.title,
+      slug: websiteBlogPostsTable.slug,
+      locale: websiteBlogPostsTable.locale,
+      translationsJson: websiteBlogPostsTable.translationsJson,
+    }).from(websiteBlogPostsTable).orderBy(desc(websiteBlogPostsTable.createdAt));
+
+    res.json({ locales, pages, posts });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const [page] = await db.update(websitePagesTable)
+      .set({ translationsJson: req.body.translations || {} })
+      .where(eq(websitePagesTable.id, Number(req.params.id)))
+      .returning();
+    if (!page) return res.status(404).json({ error: "Not found" });
+    res.json(page);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.put("/website/blog-posts/:id/translations", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const [post] = await db.update(websiteBlogPostsTable)
+      .set({ translationsJson: req.body.translations || {} })
+      .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
+      .returning();
+    if (!post) return res.status(404).json({ error: "Not found" });
+    res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });

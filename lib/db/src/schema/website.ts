@@ -11,6 +11,15 @@ export const websitePagesTable = pgTable("website_pages", {
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
   ogImageUrl: text("og_image_url"),
+  canonicalUrl: text("canonical_url"),
+  robotsIndex: boolean("robots_index").notNull().default(true),
+  robotsFollow: boolean("robots_follow").notNull().default(true),
+  ogTitle: text("og_title"),
+  ogDescription: text("og_description"),
+  twitterTitle: text("twitter_title"),
+  twitterDescription: text("twitter_description"),
+  twitterImageUrl: text("twitter_image_url"),
+  translationsJson: jsonb("translations_json").default({}),
   sortOrder: integer("sort_order").notNull().default(0),
   parentId: integer("parent_id"),
   locale: text("locale").notNull().default("en"),
@@ -135,6 +144,21 @@ export const websiteFormFieldsTable = pgTable("website_form_fields", {
   index("website_form_fields_form_idx").on(table.formId),
 ]);
 
+export const websiteFormSubmissionsTable = pgTable("website_form_submissions", {
+  id: serial("id").primaryKey(),
+  formId: integer("form_id").notNull().references(() => websiteFormsTable.id, { onDelete: "cascade" }),
+  data: jsonb("data").notNull().default({}),
+  sourceUrl: text("source_url"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  leadId: integer("lead_id"),
+  status: text("status").notNull().default("new"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("website_form_submissions_form_idx").on(table.formId),
+  index("website_form_submissions_created_idx").on(table.createdAt),
+]);
+
 export const websiteBlogPostsTable = pgTable("website_blog_posts", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -148,6 +172,7 @@ export const websiteBlogPostsTable = pgTable("website_blog_posts", {
   locale: text("locale").notNull().default("en"),
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
+  translationsJson: jsonb("translations_json").default({}),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -267,6 +292,10 @@ export type WebsiteForm = typeof websiteFormsTable.$inferSelect;
 export const insertWebsiteFormFieldSchema = createInsertSchema(websiteFormFieldsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertWebsiteFormField = z.infer<typeof insertWebsiteFormFieldSchema>;
 export type WebsiteFormField = typeof websiteFormFieldsTable.$inferSelect;
+
+export const insertWebsiteFormSubmissionSchema = createInsertSchema(websiteFormSubmissionsTable).omit({ id: true, createdAt: true });
+export type InsertWebsiteFormSubmission = z.infer<typeof insertWebsiteFormSubmissionSchema>;
+export type WebsiteFormSubmission = typeof websiteFormSubmissionsTable.$inferSelect;
 
 export const insertWebsiteBlogPostSchema = createInsertSchema(websiteBlogPostsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertWebsiteBlogPost = z.infer<typeof insertWebsiteBlogPostSchema>;

@@ -16,9 +16,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Save, Upload, Eye, EyeOff, Plus, Trash2, Copy, ChevronUp, ChevronDown,
-  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, GripVertical,
+  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, GripVertical, Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { useLocation } from "wouter";
 import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type BlockFieldDef } from "@/lib/website/blockTypes";
 
@@ -461,15 +462,39 @@ export default function PageEditor({ id }: { id: number }) {
               </h3>
             </div>
             <ScrollArea className="flex-1">
-              <div className="p-4">
+              <div className="p-4 space-y-4">
                 {!selectedBlock ? (
                   <p className="text-sm text-muted-foreground text-center py-8">Select a block to edit its content.</p>
                 ) : (
-                  <BlockFieldEditor
-                    fields={selectedTypeDef?.fields || []}
-                    content={selectedBlock.content}
-                    onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)}
-                  />
+                  <>
+                    <BlockFieldEditor
+                      fields={selectedTypeDef?.fields || []}
+                      content={selectedBlock.content}
+                      onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)}
+                    />
+                    <AiAssistantPanel
+                      context={Object.values(selectedBlock.content).filter(v => typeof v === "string").join(" ").slice(0, 500)}
+                      locale={page?.locale}
+                      onResult={(action, result) => {
+                        const fieldMap: Record<string, string> = {
+                          generateMetaTitle: "title",
+                          generateMetaDescription: "subtitle",
+                          generateHeroTitle: "heading",
+                          generateCTAText: "buttonText",
+                          generateOGText: "description",
+                          improveTone: "body",
+                          shortenText: "body",
+                          expandText: "body",
+                          generateExcerpt: "description",
+                          generateAltText: "altText",
+                        };
+                        const targetField = fieldMap[action];
+                        if (targetField && selectedBlockIdx !== null) {
+                          updateBlockContent(selectedBlockIdx, targetField, result);
+                        }
+                      }}
+                    />
+                  </>
                 )}
               </div>
             </ScrollArea>
