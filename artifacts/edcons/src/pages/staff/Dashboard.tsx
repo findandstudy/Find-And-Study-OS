@@ -4,7 +4,7 @@ import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, Shield, Link as LinkIcon } from "lucide-react";
+import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, AlertTriangle, Shield, Link as LinkIcon } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
 
@@ -99,6 +99,11 @@ export default function StaffDashboard() {
   });
   const quickLinks: any[] = quickLinksData?.data || [];
 
+  const { data: contractAgents = [] } = useQuery<any[]>({
+    queryKey: ["/api/agents/contract-alerts"],
+    queryFn: () => fetch(`${BASE}/api/agents/contract-alerts`, { credentials: "include" }).then(r => r.json()),
+  });
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -135,6 +140,43 @@ export default function StaffDashboard() {
             </Card>
           ))}
         </div>
+
+        {contractAgents.length > 0 && (
+          <Card className="p-5 border-none shadow-lg shadow-black/5 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-sm">Contract Alerts</h3>
+                <p className="text-xs text-muted-foreground">{contractAgents.length} agent(s) need attention</p>
+              </div>
+              <Link href="/staff/agents" className="ml-auto">
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 gap-1">
+                  View All <ArrowUpRight className="w-3 h-3" />
+                </Badge>
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {contractAgents.slice(0, 4).map((a: any) => {
+                const daysLeft = Math.ceil((new Date(a.contractEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                const isExpired = daysLeft <= 0;
+                return (
+                  <div key={a.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/60 dark:bg-card/40 border border-border/50">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${isExpired ? "bg-red-500" : "bg-orange-500 animate-pulse"}`} />
+                      <span className="text-sm font-medium">{a.firstName} {a.lastName}</span>
+                      {a.companyName && <span className="text-xs text-muted-foreground">({a.companyName})</span>}
+                    </div>
+                    <Badge variant="outline" className={`text-xs ${isExpired ? "bg-red-500/10 text-red-600 border-red-200" : "bg-orange-500/10 text-orange-600 border-orange-200"}`}>
+                      {isExpired ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft}d left`}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">

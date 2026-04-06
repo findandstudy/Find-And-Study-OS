@@ -374,6 +374,8 @@ async function seedDocumentRequirements() {
   await backfillStudentAppStatus();
   const { startEmailWorker } = await import("./lib/email");
   startEmailWorker();
+  const { startContractChecker } = await import("./lib/contractChecker");
+  startContractChecker();
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);

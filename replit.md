@@ -34,6 +34,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
     - **Admin Settings Center:** Comprehensive configuration for branding, company information, SEO, email branding, document templates, and advanced settings.
     - **Integrations System:** Manages third-party service integrations (Communication, AI, Social Media, Custom Webhooks) with secure API key handling.
     - **Catalog Options:** Dynamic, database-driven management of dropdown options (degree, language, duration, fee type, intake, field).
+    - **Agent Contract Management:** Tracks contract start/end dates per agent, with automated expiry notification emails at 60-day and 3-day thresholds. Contract status (Active/Expiring Soon/Expired) shown as badges in agent table and alert panels on admin/staff dashboards. Background worker runs every 6 hours.
     - **Embeddable Widgets:** Allows embedding course finder and application forms on external websites, including an AI-powered multi-step apply form.
     - **Multi-Language (i18n) System:** Supports 10 languages including RTL support, URL routing, language detection, and SEO-friendly hreflang tags.
     - **Document Management System:** Defines document requirements by education level, supports ZIP download of all student documents, and PDF merging. Application creation validates required student information.

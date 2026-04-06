@@ -15,7 +15,8 @@ const AGENT_PATCH_FIELDS = [
   "status", "commissionRate", "notes", "companyName", "country",
   "agencyCode", "state", "city", "address", "businessName",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
-  "contractUrl", "branch", "pointOfContact", "parentAgentId",
+  "contractUrl", "contractStartDate", "contractEndDate",
+  "branch", "pointOfContact", "parentAgentId",
   "subAgentCommissionRate", "hideServiceFees", "assignedStaffId", "canManageStaff",
 ];
 
@@ -27,6 +28,31 @@ function isValidStorageUrl(url: string): boolean {
   if (!url) return true;
   return url.startsWith("/api/storage/objects/") || url.startsWith("https://");
 }
+
+router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
+  try {
+    const sixtyDaysFromNow = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+    const rows = await db.select({
+      id: agentsTable.id,
+      firstName: agentsTable.firstName,
+      lastName: agentsTable.lastName,
+      companyName: agentsTable.companyName,
+      contractEndDate: agentsTable.contractEndDate,
+    }).from(agentsTable)
+      .where(
+        and(
+          isNotNull(agentsTable.contractEndDate),
+          isNull(agentsTable.deletedAt),
+          eq(agentsTable.status, "active"),
+          sql`${agentsTable.contractEndDate} <= ${sixtyDaysFromNow.toISOString().split("T")[0]}`
+        )
+      )
+      .orderBy(agentsTable.contractEndDate);
+    res.json(rows);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;

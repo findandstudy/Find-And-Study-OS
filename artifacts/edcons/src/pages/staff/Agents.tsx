@@ -99,6 +99,8 @@ type Agent = {
   logoUrl: string | null;
   agentIdProofUrl: string | null;
   businessCertUrl: string | null;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
   branch: string | null;
   pointOfContact: string | null;
   notes: string | null;
@@ -112,6 +114,7 @@ const emptyForm = {
   country: "", state: "", city: "", address: "",
   businessName: "", category: "", commissionRate: "",
   logoUrl: "", agentIdProofUrl: "", businessCertUrl: "",
+  contractStartDate: "", contractEndDate: "",
   branch: "", pointOfContact: "", notes: "",
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
   assignedStaffId: "",
@@ -258,6 +261,8 @@ export default function AgentsPage() {
       logoUrl: agent.logoUrl || "",
       agentIdProofUrl: agent.agentIdProofUrl || "",
       businessCertUrl: agent.businessCertUrl || "",
+      contractStartDate: agent.contractStartDate ? agent.contractStartDate.split("T")[0] : "",
+      contractEndDate: agent.contractEndDate ? agent.contractEndDate.split("T")[0] : "",
       branch: agent.branch || "",
       pointOfContact: agent.pointOfContact || "",
       notes: agent.notes || "",
@@ -330,6 +335,8 @@ export default function AgentsPage() {
       logoUrl: form.logoUrl || null,
       agentIdProofUrl: form.agentIdProofUrl || null,
       businessCertUrl: form.businessCertUrl || null,
+      contractStartDate: form.contractStartDate || null,
+      contractEndDate: form.contractEndDate || null,
       branch: form.branch.trim() || null,
       pointOfContact: form.pointOfContact.trim() || null,
       notes: form.notes.trim() || null,
@@ -516,6 +523,17 @@ export default function AgentsPage() {
     return colors[s] || "bg-gray-500/10 text-gray-600 border-gray-200";
   };
 
+  function getContractStatus(agent: Agent): { label: string; color: string; daysLeft: number | null } {
+    if (!agent.contractEndDate) return { label: "", color: "", daysLeft: null };
+    const now = new Date();
+    const end = new Date(agent.contractEndDate);
+    const diffMs = end.getTime() - now.getTime();
+    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 0) return { label: "Expired", color: "bg-red-500/10 text-red-600 border-red-300", daysLeft };
+    if (daysLeft <= 60) return { label: "Expiring Soon", color: "bg-orange-500/10 text-orange-600 border-orange-300", daysLeft };
+    return { label: "Active", color: "bg-green-500/10 text-green-600 border-green-200", daysLeft };
+  }
+
   type AgentSortKey = "agent" | "contact" | "category" | "commission" | "status" | "parent" | "country" | "contactPerson";
   type AgentSortDir = "asc" | "desc";
 
@@ -602,12 +620,13 @@ export default function AgentsPage() {
               <AgentSortHeader label="Commission %" sortKey="commission" currentSort={agentSort} onSort={handleAgentSort} />
               <AgentSortHeader label="Contact Person" sortKey="contactPerson" currentSort={agentSort} onSort={handleAgentSort} />
               <AgentSortHeader label="Status" sortKey="status" currentSort={agentSort} onSort={handleAgentSort} />
+              <th className="py-3 px-3 font-semibold text-muted-foreground">Contract</th>
               {isManager && <th className="py-3 px-3 font-semibold text-muted-foreground text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {sortedData.length === 0 ? (
-              <tr><td colSpan={showParent ? 10 : 9} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
+              <tr><td colSpan={showParent ? 11 : 10} className="py-12 text-center text-muted-foreground">No agents found</td></tr>
             ) : sortedData.map(a => (
               <tr key={a.id} className={`border-b border-border/30 hover:bg-secondary/30 transition-colors ${selected.has(a.id) ? "bg-primary/5" : ""}`}>
                 {isManager && (
@@ -681,6 +700,20 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   <Badge className={`text-xs ${statusBadge(a.status)}`}>{a.status}</Badge>
                 </td>
+                <td className="py-3 px-3">
+                  {(() => {
+                    const cs = getContractStatus(a);
+                    if (!cs.label) return <span className="text-muted-foreground text-xs">-</span>;
+                    return (
+                      <div className="space-y-0.5">
+                        <Badge variant="outline" className={`text-xs ${cs.color}`}>{cs.label}</Badge>
+                        {cs.daysLeft !== null && cs.daysLeft > 0 && (
+                          <p className="text-xs text-muted-foreground">{cs.daysLeft}d left</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </td>
                 {isManager && (
                   <td className="py-3 px-3 text-right">
                     <div className="flex gap-1 justify-end">
@@ -745,6 +778,47 @@ export default function AgentsPage() {
             <p className="text-muted-foreground text-sm mt-1">Manage agents and sub-agents</p>
           </div>
         </div>
+
+        {(() => {
+          const allAgentsList = [...agents, ...subAgents];
+          const expiring = allAgentsList.filter(a => {
+            if (!a.contractEndDate) return false;
+            const d = Math.ceil((new Date(a.contractEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            return d > 0 && d <= 60;
+          });
+          const expired = allAgentsList.filter(a => {
+            if (!a.contractEndDate) return false;
+            return new Date(a.contractEndDate).getTime() < Date.now();
+          });
+          if (expiring.length === 0 && expired.length === 0) return null;
+          return (
+            <div className="space-y-2">
+              {expired.length > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                  <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                  <p className="text-sm text-red-700 dark:text-red-400">
+                    <span className="font-semibold">{expired.length} agent(s)</span> with expired contracts:{" "}
+                    {expired.slice(0, 3).map(a => `${a.firstName} ${a.lastName}`).join(", ")}
+                    {expired.length > 3 ? ` +${expired.length - 3} more` : ""}
+                  </p>
+                </div>
+              )}
+              {expiring.length > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shrink-0" />
+                  <p className="text-sm text-orange-700 dark:text-orange-400">
+                    <span className="font-semibold">{expiring.length} agent(s)</span> with contracts expiring within 60 days:{" "}
+                    {expiring.slice(0, 3).map(a => {
+                      const d = Math.ceil((new Date(a.contractEndDate!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      return `${a.firstName} ${a.lastName} (${d}d)`;
+                    }).join(", ")}
+                    {expiring.length > 3 ? ` +${expiring.length - 3} more` : ""}
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="rounded-xl bg-secondary/50 p-1">
@@ -1121,6 +1195,53 @@ export default function AgentsPage() {
                     <input ref={certRef} type="file" accept="image/*,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f, "businessCertUrl", setCertUploading); e.target.value = ""; }} />
                   </div>
                 </div>
+              </div>
+
+              {/* Contract Dates */}
+              <div className="space-y-4">
+                <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                  Contract Details
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Contract Start Date</Label>
+                    <Input type="date" value={form.contractStartDate}
+                      onChange={e => setForm(f => ({ ...f, contractStartDate: e.target.value }))}
+                      className="rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Contract End Date</Label>
+                    <Input type="date" value={form.contractEndDate}
+                      onChange={e => setForm(f => ({ ...f, contractEndDate: e.target.value }))}
+                      className="rounded-xl" />
+                  </div>
+                </div>
+                {form.contractStartDate && form.contractEndDate && (() => {
+                  const end = new Date(form.contractEndDate);
+                  const now = new Date();
+                  const daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  const isExpired = daysLeft <= 0;
+                  const isExpiring = daysLeft > 0 && daysLeft <= 60;
+                  const bgColor = isExpired ? "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800" :
+                    isExpiring ? "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800" :
+                    "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800";
+                  const textColor = isExpired ? "text-red-700 dark:text-red-400" :
+                    isExpiring ? "text-orange-700 dark:text-orange-400" :
+                    "text-green-700 dark:text-green-400";
+                  const label = isExpired ? "Expired" : isExpiring ? "Expiring Soon" : "Active";
+                  return (
+                    <div className={`p-3 rounded-xl border ${bgColor} flex items-center justify-between`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${isExpired ? "bg-red-500" : isExpiring ? "bg-orange-500 animate-pulse" : "bg-green-500"}`} />
+                        <span className={`text-sm font-medium ${textColor}`}>{label}</span>
+                      </div>
+                      <span className={`text-sm font-semibold ${textColor}`}>
+                        {isExpired ? `Expired ${Math.abs(daysLeft)} day(s) ago` : `${daysLeft} day(s) remaining`}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Branch & Point of Contact */}
