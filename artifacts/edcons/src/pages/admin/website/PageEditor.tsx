@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { useLocation } from "wouter";
 import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type BlockFieldDef } from "@/lib/website/blockTypes";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 
 const ALLOWED_TAGS = new Set(["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"]);
 const ALLOWED_ATTRS = new Set(["href", "target", "rel", "src", "alt", "class", "style"]);
@@ -64,6 +65,7 @@ interface WebsitePage {
   metaTitle: string | null;
   metaDescription: string | null;
   publishedAt: string | null;
+  translationsJson: Record<string, Record<string, string>> | null;
 }
 
 interface PageVersion {
@@ -298,15 +300,13 @@ export default function PageEditor({ id }: { id: number }) {
           </div>
           <div className="flex items-center gap-2">
             <Select value={page.locale || "en"} onValueChange={(val) => localeMutation.mutate(val)}>
-              <SelectTrigger className="h-7 w-[90px] text-xs">
+              <SelectTrigger className="h-7 w-[100px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="tr">Türkçe</SelectItem>
-                <SelectItem value="ar">العربية</SelectItem>
-                <SelectItem value="fr">Français</SelectItem>
-                <SelectItem value="ru">Русский</SelectItem>
+                {SUPPORTED_LANGUAGES.map(code => (
+                  <SelectItem key={code} value={code}>{LANGUAGE_META[code].flag} {LANGUAGE_META[code].nativeName}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Separator orientation="vertical" className="h-5" />
@@ -461,6 +461,14 @@ export default function PageEditor({ id }: { id: number }) {
                 {selectedBlock ? `Edit: ${selectedTypeDef?.label || selectedBlock.blockType}` : "Block Editor"}
               </h3>
             </div>
+            {page.locale !== "en" && (
+              <div className="mx-3 mt-2 p-2 rounded-lg bg-blue-50 border border-blue-200 text-xs">
+                <p className="font-medium text-blue-800 flex items-center gap-1">
+                  {LANGUAGE_META[page.locale as keyof typeof LANGUAGE_META]?.flag} Editing in {LANGUAGE_META[page.locale as keyof typeof LANGUAGE_META]?.name || page.locale}
+                </p>
+                <p className="text-blue-600 mt-0.5">Content entered here is for this locale. Default (English) content is managed separately.</p>
+              </div>
+            )}
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
                 {!selectedBlock ? (

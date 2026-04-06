@@ -17,6 +17,7 @@ import {
   BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star, Archive, User, Sparkles,
 } from "lucide-react";
 import { AiAssistantPanel, AiFieldButton } from "@/components/AiAssistantPanel";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 
 interface BlogPost {
   id: number;
@@ -615,11 +616,9 @@ export default function WebsiteBlog() {
                 <Select value={form.locale} onValueChange={v => setForm(f => ({ ...f, locale: v }))}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="tr">Turkish</SelectItem>
-                    <SelectItem value="ar">Arabic</SelectItem>
-                    <SelectItem value="ru">Russian</SelectItem>
-                    <SelectItem value="fr">French</SelectItem>
+                    {SUPPORTED_LANGUAGES.map(code => (
+                      <SelectItem key={code} value={code}>{LANGUAGE_META[code].flag} {LANGUAGE_META[code].name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

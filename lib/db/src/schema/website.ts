@@ -122,6 +122,8 @@ export const websiteFormsTable = pgTable("website_forms", {
   submitEmail: text("submit_email"),
   submitWebhookUrl: text("submit_webhook_url"),
   successMessage: text("success_message"),
+  errorMessage: text("error_message"),
+  crmSource: text("crm_source"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

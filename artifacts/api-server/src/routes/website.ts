@@ -500,7 +500,7 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
         lastName: String(formData.lastName || "").slice(0, 100),
         email: String(formData.email).slice(0, 255),
         phone: formData.phone ? String(formData.phone).slice(0, 50) : null,
-        source: `website-form:${form.slug}`,
+        source: form.crmSource || `website-form:${form.slug}`,
         status: "new",
       }).returning();
       leadId = lead.id;
@@ -590,67 +590,15 @@ router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Resp
     const { action, context, locale } = req.body;
     if (!action) return res.status(400).json({ error: "action is required" });
 
-    const prompts: Record<string, string> = {
-      generateHeroTitle: `Generate a compelling hero title for a website page about: ${context}. Return only the title text, no quotes.`,
-      generateCTAText: `Generate a short call-to-action button text for: ${context}. Return only the CTA text, max 5 words.`,
-      generateFAQItems: `Generate 3 FAQ items (question and answer pairs) about: ${context}. Return as JSON array: [{"question":"...","answer":"..."}]`,
-      generateMetaTitle: `Generate an SEO-optimized meta title (max 60 chars) for a page about: ${context}. Return only the title.`,
-      generateMetaDescription: `Generate an SEO-optimized meta description (max 160 chars) for a page about: ${context}. Return only the description.`,
-      generateOGText: `Generate Open Graph title and description for social sharing about: ${context}. Return as JSON: {"title":"...","description":"..."}`,
-      generateExcerpt: `Generate a blog post excerpt (max 200 chars) for: ${context}. Return only the excerpt.`,
-      generateAltText: `Generate descriptive alt text for an image related to: ${context}. Return only the alt text.`,
-      generateBlogOutline: `Generate a blog post outline with 5-7 sections for: ${context}. Return as JSON array of section titles: ["...","..."]`,
-      improveTone: `Improve the tone and make this text more professional and engaging: ${context}. Return only the improved text.`,
-      shortenText: `Shorten this text while keeping the key message: ${context}. Return only the shortened text.`,
-      expandText: `Expand this text with more detail and depth: ${context}. Return only the expanded text.`,
-    };
+    const { AiContentService } = await import("../lib/aiService");
+    const aiService = new AiContentService({
+      provider: provider as "openai" | "anthropic",
+      apiKey,
+      model: config.model,
+    });
 
-    const prompt = prompts[action];
-    if (!prompt) return res.status(400).json({ error: `Unknown action: ${action}` });
-
-    const langHint = locale && locale !== "en" ? ` Respond in ${locale} language.` : "";
-
-    let result: string;
-    if (provider === "openai") {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: config.model || "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt + langHint }],
-          max_tokens: 500,
-          temperature: 0.7,
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.text();
-        return res.status(500).json({ error: `AI provider error: ${err}` });
-      }
-      const data = await response.json();
-      result = data.choices?.[0]?.message?.content || "";
-    } else {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: config.model || "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{ role: "user", content: prompt + langHint }],
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.text();
-        return res.status(500).json({ error: `AI provider error: ${err}` });
-      }
-      const data = await response.json();
-      result = data.content?.[0]?.text || "";
-    }
-
-    res.json({ result: result.trim(), action });
+    const result = await aiService.generate({ action, context, locale });
+    res.json({ result, action });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
