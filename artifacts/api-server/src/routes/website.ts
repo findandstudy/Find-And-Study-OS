@@ -29,6 +29,12 @@ const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
 
+const VALID_BLOCK_TYPES = new Set([
+  "hero", "text_content", "features_grid", "cta_banner", "image_gallery",
+  "testimonials", "faq_accordion", "stats_counter", "team_grid",
+  "contact_form", "pricing_table", "video_embed", "logo_carousel", "custom_html",
+]);
+
 type AnyPgTable = PgTableWithColumns<TableConfig>;
 
 function registerCrud(
@@ -350,6 +356,10 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
       }
 
       if (Array.isArray(blocks)) {
+        const invalidType = blocks.find((b: { blockType: string }) => !VALID_BLOCK_TYPES.has(b.blockType));
+        if (invalidType) {
+          throw new Error(`Invalid block type: ${invalidType.blockType}`);
+        }
         await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId));
         if (blocks.length > 0) {
           await tx.insert(websitePageBlocksTable).values(

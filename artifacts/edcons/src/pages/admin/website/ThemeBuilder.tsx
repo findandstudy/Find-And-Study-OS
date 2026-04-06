@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -96,18 +96,21 @@ export default function WebsiteThemeBuilder() {
     queryFn: () => customFetch("/api/settings/branding"),
   });
 
-  const { data: savedTokens = [], isLoading } = useQuery<ThemeToken[]>({
+  const { data: savedTokens = [], isLoading: tokensLoading } = useQuery<ThemeToken[]>({
     queryKey: ["website-theme-tokens"],
     queryFn: () => customFetch("/api/website/theme-tokens"),
   });
 
+  const tokensHydrated = useRef(false);
   useEffect(() => {
-    if (savedTokens.length > 0) {
-      const map: Record<string, string> = {};
-      savedTokens.forEach(t => { map[`${t.tokenGroup}.${t.tokenKey}`] = t.tokenValue; });
-      setLocalTokens(map);
+    if (tokensHydrated.current) return;
+    const map: Record<string, string> = {};
+    savedTokens.forEach(t => { map[`${t.tokenGroup}.${t.tokenKey}`] = t.tokenValue; });
+    setLocalTokens(map);
+    if (savedTokens.length >= 0 && !tokensLoading) {
+      tokensHydrated.current = true;
     }
-  }, [savedTokens]);
+  }, [savedTokens, tokensLoading]);
 
   const saveMutation = useMutation({
     mutationFn: async (tokens: { tokenGroup: string; tokenKey: string; tokenValue: string | null; description?: string }[]) => {
@@ -173,6 +176,7 @@ export default function WebsiteThemeBuilder() {
     onSuccess: () => {
       setLocalTokens({});
       setDirty(false);
+      tokensHydrated.current = false;
       queryClient.invalidateQueries({ queryKey: ["website-theme-tokens"] });
       toast({ title: "Theme reset", description: "All overrides removed. Branding defaults will be used." });
     },
