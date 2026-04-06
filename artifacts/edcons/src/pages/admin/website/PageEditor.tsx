@@ -143,7 +143,11 @@ export default function PageEditor({ id }: { id: number }) {
       try {
         const tj = page.translationsJson as Record<string, unknown>;
         for (const [loc, data] of Object.entries(tj)) {
-          if (Array.isArray(data)) translationsRef.current[loc] = data as PageBlock[];
+          if (Array.isArray(data)) {
+            translationsRef.current[loc] = data as PageBlock[];
+          } else if (data && typeof data === "object" && "blocks" in (data as Record<string, unknown>)) {
+            translationsRef.current[loc] = (data as { blocks: PageBlock[] }).blocks;
+          }
         }
       } catch {}
     }
@@ -190,11 +194,17 @@ export default function PageEditor({ id }: { id: number }) {
   });
 
   function buildTranslationsPayload() {
-    const txCopy = { ...translationsRef.current };
-    if (editLocale !== "en") {
-      txCopy[editLocale] = blocks.map((b, i) => ({ ...b, sortOrder: i }));
+    const existing = (page?.translationsJson as Record<string, unknown>) || {};
+    const result: Record<string, unknown> = { ...existing };
+    for (const [loc, blockArr] of Object.entries(translationsRef.current)) {
+      const prev = (result[loc] && typeof result[loc] === "object") ? result[loc] as Record<string, unknown> : {};
+      result[loc] = { ...prev, blocks: blockArr };
     }
-    return Object.keys(txCopy).length > 0 ? txCopy : undefined;
+    if (editLocale !== "en") {
+      const prev = (result[editLocale] && typeof result[editLocale] === "object") ? result[editLocale] as Record<string, unknown> : {};
+      result[editLocale] = { ...prev, blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })) };
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
   }
 
   const saveDraftMutation = useMutation({

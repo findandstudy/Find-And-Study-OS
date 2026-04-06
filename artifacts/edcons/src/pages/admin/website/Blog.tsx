@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -155,6 +155,9 @@ export default function WebsiteBlog() {
   const [showPostDialog, setShowPostDialog] = useState(false);
   const [form, setForm] = useState<PostFormData>({ ...EMPTY_FORM });
   const [autoSlug, setAutoSlug] = useState(true);
+  const [editLocale, setEditLocale] = useState("en");
+  const defaultFormRef = useRef<PostFormData>({ ...EMPTY_FORM });
+  const blogTranslationsRef = useRef<Record<string, Partial<PostFormData>>>({});
 
   const [catDialog, setCatDialog] = useState(false);
   const [editCat, setEditCat] = useState<BlogCategory | null>(null);
@@ -633,8 +636,28 @@ export default function WebsiteBlog() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Locale</Label>
-                <Select value={form.locale} onValueChange={v => setForm(f => ({ ...f, locale: v }))}>
+                <Label>Editing Locale</Label>
+                <Select value={editLocale} onValueChange={v => {
+                  const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;
+                  if (editLocale === "en") {
+                    defaultFormRef.current = { ...form };
+                  } else {
+                    const partial: Record<string, string> = {};
+                    for (const f of TRANSLATABLE) partial[f] = form[f];
+                    blogTranslationsRef.current[editLocale] = partial as Partial<PostFormData>;
+                  }
+                  if (v === "en") {
+                    setForm({ ...defaultFormRef.current });
+                  } else {
+                    const tr = blogTranslationsRef.current[v];
+                    if (tr && Object.values(tr).some(val => val && String(val).trim())) {
+                      setForm(f => ({ ...f, ...tr }));
+                    } else {
+                      toast({ title: "No translation yet", description: "Showing default content. Edit to create translation." });
+                    }
+                  }
+                  setEditLocale(v);
+                }}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {SUPPORTED_LANGUAGES.map(code => (
@@ -642,6 +665,9 @@ export default function WebsiteBlog() {
                     ))}
                   </SelectContent>
                 </Select>
+                {editLocale !== "en" && (
+                  <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale]?.name}. Switch to English for default content.</p>
+                )}
               </div>
             </div>
 

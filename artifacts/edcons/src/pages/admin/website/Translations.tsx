@@ -27,7 +27,7 @@ interface TranslationItem {
   title: string;
   slug: string;
   locale: string;
-  translationsJson: Record<string, Record<string, string>> | null;
+  translationsJson: Record<string, Record<string, string> | { fields?: Record<string, string>; blocks?: unknown[] }> | null;
 }
 
 interface TranslationStatus {
@@ -39,9 +39,28 @@ interface TranslationStatus {
 const TRANSLATABLE_PAGE_FIELDS = ["title", "metaTitle", "metaDescription", "ogTitle", "ogDescription"];
 const TRANSLATABLE_POST_FIELDS = ["title", "excerpt", "metaTitle", "metaDescription"];
 
-function getCompleteness(item: TranslationItem, locale: string, fields: string[]): { done: number; total: number; pct: number } {
+function getLocaleFields(item: TranslationItem, locale: string): Record<string, string> {
   const translations = item.translationsJson || {};
-  const localeData = translations[locale] || {};
+  const localeData = translations[locale];
+  if (!localeData) return {};
+  if (typeof localeData === "object" && "fields" in localeData && localeData.fields) return localeData.fields as Record<string, string>;
+  if (typeof localeData === "object" && !Array.isArray(localeData)) return localeData as Record<string, string>;
+  return {};
+}
+
+function setLocaleFields(item: TranslationItem, locale: string, fields: Record<string, string>): Record<string, unknown> {
+  const translations = { ...(item.translationsJson || {}) };
+  const existing = translations[locale];
+  if (existing && typeof existing === "object" && "blocks" in existing) {
+    translations[locale] = { ...existing, fields } as never;
+  } else {
+    translations[locale] = fields as never;
+  }
+  return translations;
+}
+
+function getCompleteness(item: TranslationItem, locale: string, fields: string[]): { done: number; total: number; pct: number } {
+  const localeData = getLocaleFields(item, locale);
   const done = fields.filter(f => localeData[f] && localeData[f].trim().length > 0).length;
   return { done, total: fields.length, pct: fields.length > 0 ? Math.round((done / fields.length) * 100) : 0 };
 }
@@ -101,20 +120,20 @@ export default function WebsiteTranslations() {
     setEditItem({ item, type });
     const firstNonDefault = nonDefaultLocales[0] || "tr";
     setEditLocale(firstNonDefault);
-    const existing = item.translationsJson?.[firstNonDefault] || {};
+    const existing = getLocaleFields(item, firstNonDefault);
     setEditValues(existing);
   }
 
   function switchLocale(locale: string) {
     if (!editItem) return;
     setEditLocale(locale);
-    const existing = editItem.item.translationsJson?.[locale] || {};
+    const existing = getLocaleFields(editItem.item, locale);
     setEditValues(existing);
   }
 
   function handleSave() {
     if (!editItem) return;
-    const translations = { ...(editItem.item.translationsJson || {}), [editLocale]: editValues };
+    const translations = setLocaleFields(editItem.item, editLocale, editValues);
     saveMutation.mutate({ id: editItem.item.id, type: editItem.type, translations });
   }
 
