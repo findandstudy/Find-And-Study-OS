@@ -138,6 +138,13 @@ export default function WebsiteThemeBuilder() {
       };
       if (brandMap[key]) return brandMap[key]!;
     }
+    if (group === "buttons") {
+      const buttonMap: Record<string, string | null | undefined> = {
+        primaryBg: branding?.themePrimary,
+        primaryText: "#ffffff",
+      };
+      if (buttonMap[key]) return buttonMap[key]!;
+    }
     return "";
   }
 

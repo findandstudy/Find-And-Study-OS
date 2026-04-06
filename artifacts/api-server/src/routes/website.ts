@@ -256,6 +256,14 @@ router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res
   try {
     const tokens: { tokenGroup: string; tokenKey: string; tokenValue: string | null; description?: string }[] = req.body.tokens;
     if (!Array.isArray(tokens)) return res.status(400).json({ error: "tokens array required" });
+    for (const t of tokens) {
+      if (typeof t.tokenGroup !== "string" || !t.tokenGroup || typeof t.tokenKey !== "string" || !t.tokenKey) {
+        return res.status(400).json({ error: "Each token must have non-empty tokenGroup and tokenKey strings" });
+      }
+      if (t.tokenValue !== null && typeof t.tokenValue !== "string") {
+        return res.status(400).json({ error: "tokenValue must be a string or null" });
+      }
+    }
     const results = await db.transaction(async (tx) => {
       const out = [];
       for (const t of tokens) {
