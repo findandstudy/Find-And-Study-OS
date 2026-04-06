@@ -237,4 +237,157 @@ router.post("/website/blog-posts/:id/unpublish", ...adminOnly, async (req: Reque
   }
 });
 
+router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const tokens: { tokenGroup: string; tokenKey: string; tokenValue: string; description?: string }[] = req.body.tokens;
+    if (!Array.isArray(tokens)) return res.status(400).json({ error: "tokens array required" });
+    const results = await db.transaction(async (tx) => {
+      const out = [];
+      for (const t of tokens) {
+        const existing = await tx.select().from(websiteThemeTokensTable)
+          .where(eq(websiteThemeTokensTable.tokenGroup, t.tokenGroup))
+          .then(rows => rows.find(r => r.tokenKey === t.tokenKey));
+        if (existing) {
+          const [updated] = await tx.update(websiteThemeTokensTable)
+            .set({ tokenValue: t.tokenValue, description: t.description || existing.description })
+            .where(eq(websiteThemeTokensTable.id, existing.id))
+            .returning();
+          out.push(updated);
+        } else {
+          const [created] = await tx.insert(websiteThemeTokensTable)
+            .values({ tokenGroup: t.tokenGroup, tokenKey: t.tokenKey, tokenValue: t.tokenValue, description: t.description })
+            .returning();
+          out.push(created);
+        }
+      }
+      return out;
+    });
+    res.json(results);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+const DEFAULT_PAGES = [
+  { title: "Home", slug: "home", sortOrder: 0, template: "home" },
+  { title: "About", slug: "about", sortOrder: 1, template: "about" },
+  { title: "Countries", slug: "countries", sortOrder: 2, template: "countries" },
+  { title: "Programs", slug: "programs", sortOrder: 3, template: "programs" },
+  { title: "Blog", slug: "blog", sortOrder: 4, template: "blog" },
+  { title: "Contact", slug: "contact", sortOrder: 5, template: "contact" },
+];
+
+router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const existing = await db.select().from(websitePagesTable);
+    if (existing.length > 0) return res.json({ seeded: false, pages: existing });
+    const pages = await db.insert(websitePagesTable).values(
+      DEFAULT_PAGES.map(p => ({ ...p, status: "draft" as const, locale: "en", createdBy: req.user?.id }))
+    ).returning();
+    res.status(201).json({ seeded: true, pages });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const pageId = Number(req.params.pageId);
+    const { blocks, meta } = req.body;
+
+    await db.transaction(async (tx) => {
+      if (meta) {
+        await tx.update(websitePagesTable)
+          .set({ ...meta, status: "draft" })
+          .where(eq(websitePagesTable.id, pageId));
+      } else {
+        await tx.update(websitePagesTable)
+          .set({ status: "draft" })
+          .where(eq(websitePagesTable.id, pageId));
+      }
+
+      if (Array.isArray(blocks)) {
+        await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId));
+        if (blocks.length > 0) {
+          await tx.insert(websitePageBlocksTable).values(
+            blocks.map((b: { blockType: string; content: Record<string, unknown>; settings?: Record<string, unknown>; sortOrder: number; isVisible: boolean }, i: number) => ({
+              pageId,
+              blockType: b.blockType,
+              content: b.content || {},
+              settings: b.settings || {},
+              sortOrder: b.sortOrder ?? i,
+              isVisible: b.isVisible ?? true,
+            }))
+          );
+        }
+      }
+    });
+
+    const [page] = await db.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId));
+    const savedBlocks = await db.select().from(websitePageBlocksTable)
+      .where(eq(websitePageBlocksTable.pageId, pageId))
+      .orderBy(asc(websitePageBlocksTable.sortOrder));
+    res.json({ page, blocks: savedBlocks });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const pageId = Number(req.params.pageId);
+    const versionId = Number(req.params.versionId);
+
+    const [version] = await db.select().from(websitePageVersionsTable)
+      .where(eq(websitePageVersionsTable.id, versionId));
+    if (!version || version.pageId !== pageId) return res.status(404).json({ error: "Version not found" });
+
+    const snapshot = version.blocksSnapshot as Array<{
+      blockType: string;
+      content: Record<string, unknown>;
+      settings: Record<string, unknown>;
+      sortOrder: number;
+      isVisible: boolean;
+    }>;
+
+    await db.transaction(async (tx) => {
+      await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId));
+      if (Array.isArray(snapshot) && snapshot.length > 0) {
+        await tx.insert(websitePageBlocksTable).values(
+          snapshot.map((b, i) => ({
+            pageId,
+            blockType: b.blockType,
+            content: b.content || {},
+            settings: b.settings || {},
+            sortOrder: b.sortOrder ?? i,
+            isVisible: b.isVisible ?? true,
+          }))
+        );
+      }
+      const metaSnap = version.metaSnapshot as Record<string, string> | null;
+      if (metaSnap) {
+        await tx.update(websitePagesTable)
+          .set({ status: "draft", metaTitle: metaSnap.metaTitle || null, metaDescription: metaSnap.metaDescription || null })
+          .where(eq(websitePagesTable.id, pageId));
+      } else {
+        await tx.update(websitePagesTable)
+          .set({ status: "draft" })
+          .where(eq(websitePagesTable.id, pageId));
+      }
+    });
+
+    const [page] = await db.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId));
+    const blocks = await db.select().from(websitePageBlocksTable)
+      .where(eq(websitePageBlocksTable.pageId, pageId))
+      .orderBy(asc(websitePageBlocksTable.sortOrder));
+    res.json({ page, blocks });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
 export default router;

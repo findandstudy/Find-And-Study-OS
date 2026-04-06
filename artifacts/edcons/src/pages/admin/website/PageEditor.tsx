@@ -1,0 +1,841 @@
+import { useState, useCallback, useEffect, useRef } from "react";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Save, Upload, Eye, EyeOff, Plus, Trash2, Copy, ChevronUp, ChevronDown,
+  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, GripVertical,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type BlockFieldDef } from "@/lib/website/blockTypes";
+
+const ALLOWED_TAGS = new Set(["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"]);
+const ALLOWED_ATTRS = new Set(["href", "target", "rel", "src", "alt", "class", "style"]);
+
+function sanitizeHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  function clean(node: Node): void {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as Element;
+        if (!ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
+          el.replaceWith(...Array.from(el.childNodes));
+          continue;
+        }
+        const attrs = Array.from(el.attributes);
+        for (const attr of attrs) {
+          if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
+            el.removeAttribute(attr.name);
+          }
+        }
+        if (el.tagName.toLowerCase() === "a") {
+          el.setAttribute("rel", "noopener noreferrer");
+        }
+        clean(el);
+      }
+    }
+  }
+  clean(doc.body);
+  return doc.body.innerHTML;
+}
+
+interface WebsitePage {
+  id: number;
+  title: string;
+  slug: string;
+  status: string;
+  template: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  publishedAt: string | null;
+}
+
+interface PageVersion {
+  id: number;
+  pageId: number;
+  versionNumber: number;
+  blocksSnapshot: PageBlock[];
+  metaSnapshot: Record<string, string> | null;
+  publishedAt: string | null;
+  createdBy: number | null;
+  createdAt: string;
+}
+
+type PreviewSize = "desktop" | "tablet" | "mobile";
+const PREVIEW_WIDTHS: Record<PreviewSize, string> = { desktop: "100%", tablet: "768px", mobile: "375px" };
+
+export default function PageEditor({ id }: { id: number }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const [blocks, setBlocks] = useState<PageBlock[]>([]);
+  const [selectedBlockIdx, setSelectedBlockIdx] = useState<number | null>(null);
+  const [previewSize, setPreviewSize] = useState<PreviewSize>("desktop");
+  const [showAddBlock, setShowAddBlock] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const blocksInitialized = useRef(false);
+
+  const { data: page, isLoading: pageLoading } = useQuery<WebsitePage>({
+    queryKey: ["website-page", id],
+    queryFn: () => customFetch(`/api/website/pages/${id}`),
+  });
+
+  const { data: savedBlocks = [], isFetched: blocksFetched } = useQuery<PageBlock[]>({
+    queryKey: ["website-page-blocks", id],
+    queryFn: () => customFetch(`/api/website/pages/${id}/blocks`),
+    enabled: !!page,
+  });
+
+  const { data: versions = [] } = useQuery<PageVersion[]>({
+    queryKey: ["website-page-versions", id],
+    queryFn: () => customFetch(`/api/website/pages/${id}/versions`),
+    enabled: !!page,
+  });
+
+  useEffect(() => {
+    if (blocksInitialized.current) return;
+    if (!blocksFetched) return;
+    blocksInitialized.current = true;
+    setBlocks(savedBlocks.map((b, i) => ({
+      id: b.id,
+      blockType: b.blockType,
+      content: (b.content || {}) as Record<string, unknown>,
+      settings: (b.settings || {}) as Record<string, unknown>,
+      sortOrder: b.sortOrder ?? i,
+      isVisible: b.isVisible ?? true,
+    })));
+  }, [blocksFetched, savedBlocks]);
+
+  const saveDraftMutation = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/website/pages/${id}/save-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })) }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
+      setDirty(false);
+      toast({ title: "Draft saved" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save draft.", variant: "destructive" }),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      await customFetch(`/api/website/pages/${id}/save-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })) }),
+      });
+      return customFetch(`/api/website/pages/${id}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-page-versions", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
+      setDirty(false);
+      toast({ title: "Published!", description: "Page is now live." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to publish.", variant: "destructive" }),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (versionId: number) =>
+      customFetch<{ page: WebsitePage; blocks: PageBlock[] }>(`/api/website/pages/${id}/restore-version/${versionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: (data) => {
+      const result = data as unknown as { page: WebsitePage; blocks: PageBlock[] };
+      setBlocks(result.blocks.map((b, i) => ({
+        id: b.id,
+        blockType: b.blockType,
+        content: (b.content || {}) as Record<string, unknown>,
+        settings: (b.settings || {}) as Record<string, unknown>,
+        sortOrder: b.sortOrder ?? i,
+        isVisible: b.isVisible ?? true,
+      })));
+      setDirty(true);
+      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
+      toast({ title: "Version restored", description: "Loaded as a new draft." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to restore version.", variant: "destructive" }),
+  });
+
+  const addBlock = useCallback((blockType: string) => {
+    const newBlock: PageBlock = {
+      blockType,
+      content: getDefaultContent(blockType),
+      settings: {},
+      sortOrder: blocks.length,
+      isVisible: true,
+    };
+    setBlocks(prev => [...prev, newBlock]);
+    setSelectedBlockIdx(blocks.length);
+    setShowAddBlock(false);
+    setDirty(true);
+  }, [blocks.length]);
+
+  const removeBlock = useCallback((idx: number) => {
+    setBlocks(prev => prev.filter((_, i) => i !== idx));
+    if (selectedBlockIdx === idx) setSelectedBlockIdx(null);
+    else if (selectedBlockIdx !== null && selectedBlockIdx > idx) setSelectedBlockIdx(selectedBlockIdx - 1);
+    setDirty(true);
+  }, [selectedBlockIdx]);
+
+  const duplicateBlock = useCallback((idx: number) => {
+    setBlocks(prev => {
+      const copy = { ...prev[idx], content: { ...prev[idx].content }, settings: { ...prev[idx].settings }, id: undefined };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+    setDirty(true);
+  }, []);
+
+  const moveBlock = useCallback((idx: number, dir: -1 | 1) => {
+    setBlocks(prev => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+    if (selectedBlockIdx === idx) setSelectedBlockIdx(idx + dir);
+    setDirty(true);
+  }, [selectedBlockIdx]);
+
+  const toggleVisibility = useCallback((idx: number) => {
+    setBlocks(prev => prev.map((b, i) => i === idx ? { ...b, isVisible: !b.isVisible } : b));
+    setDirty(true);
+  }, []);
+
+  const updateBlockContent = useCallback((idx: number, key: string, value: unknown) => {
+    setBlocks(prev => prev.map((b, i) => i === idx ? { ...b, content: { ...b.content, [key]: value } } : b));
+    setDirty(true);
+  }, []);
+
+  const selectedBlock = selectedBlockIdx !== null ? blocks[selectedBlockIdx] : null;
+  const selectedTypeDef = selectedBlock ? getBlockTypeDef(selectedBlock.blockType) : null;
+
+  if (pageLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!page) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center py-20">
+          <p className="text-muted-foreground">Page not found.</p>
+          <Button variant="link" onClick={() => setLocation("/admin/website/pages")}>
+            Back to Pages
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+        <div className="h-12 border-b bg-card flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLocation("/admin/website/pages")}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <Separator orientation="vertical" className="h-5" />
+            <h2 className="font-semibold text-sm">{page.title}</h2>
+            <Badge variant={page.status === "published" ? "default" : "secondary"} className="text-xs">
+              {page.status}
+            </Badge>
+            {dirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Unsaved</Badge>}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border rounded-md">
+              {(["desktop", "tablet", "mobile"] as PreviewSize[]).map(size => (
+                <Button
+                  key={size}
+                  variant={previewSize === size ? "default" : "ghost"}
+                  size="icon"
+                  className="h-7 w-7 rounded-none first:rounded-l-md last:rounded-r-md"
+                  onClick={() => setPreviewSize(size)}
+                >
+                  {size === "desktop" ? <Monitor className="w-3.5 h-3.5" /> : size === "tablet" ? <Tablet className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+                </Button>
+              ))}
+            </div>
+            <Separator orientation="vertical" className="h-5" />
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                  <History className="w-3.5 h-3.5" /> Versions ({versions.length})
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>Version History</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-3">
+                  {versions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No published versions yet.</p>
+                  ) : (
+                    versions.map(v => (
+                      <Card key={v.id}>
+                        <CardContent className="p-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">Version {v.versionNumber}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {v.publishedAt ? new Date(v.publishedAt).toLocaleString() : new Date(v.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => restoreMutation.mutate(v.id)}
+                            disabled={restoreMutation.isPending}
+                          >
+                            <RotateCcw className="w-3 h-3" /> Restore
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
+              <Save className="w-3.5 h-3.5" /> {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
+            </Button>
+            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending}>
+              <Upload className="w-3.5 h-3.5" /> {publishMutation.isPending ? "Publishing..." : "Publish"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-64 border-r bg-card flex flex-col shrink-0">
+            <div className="p-3 border-b flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase text-muted-foreground">Blocks</h3>
+              <Dialog open={showAddBlock} onOpenChange={setShowAddBlock}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-6 w-6">
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Add Block</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid grid-cols-2 gap-2 mt-2 max-h-[60vh] overflow-y-auto">
+                    {BLOCK_TYPES.map(bt => (
+                      <button
+                        key={bt.type}
+                        onClick={() => addBlock(bt.type)}
+                        className="flex items-center gap-2 p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                      >
+                        <span className="text-lg">{bt.icon}</span>
+                        <div>
+                          <p className="text-sm font-medium">{bt.label}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{bt.category}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-1">
+                {blocks.map((block, idx) => {
+                  const def = getBlockTypeDef(block.blockType);
+                  return (
+                    <div
+                      key={idx}
+                      className={`group flex items-center gap-1 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                        selectedBlockIdx === idx ? "bg-primary/10 border border-primary/30" : "hover:bg-secondary"
+                      } ${!block.isVisible ? "opacity-50" : ""}`}
+                      onClick={() => setSelectedBlockIdx(idx)}
+                    >
+                      <GripVertical className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="text-sm shrink-0">{def?.icon || "📦"}</span>
+                      <span className="flex-1 truncate text-xs font-medium">{def?.label || block.blockType}</span>
+                      <div className="hidden group-hover:flex items-center gap-0.5">
+                        <button onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-0.5 hover:bg-secondary rounded" disabled={idx === 0}>
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); moveBlock(idx, 1); }} className="p-0.5 hover:bg-secondary rounded" disabled={idx === blocks.length - 1}>
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); toggleVisibility(idx); }} className="p-0.5 hover:bg-secondary rounded">
+                          {block.isVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); duplicateBlock(idx); }} className="p-0.5 hover:bg-secondary rounded">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); removeBlock(idx); }} className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {blocks.length === 0 && (
+                  <div className="text-center py-8 text-xs text-muted-foreground">
+                    <p>No blocks yet.</p>
+                    <p>Click + to add your first block.</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="w-80 border-r bg-background flex flex-col shrink-0">
+            <div className="p-3 border-b">
+              <h3 className="text-xs font-bold uppercase text-muted-foreground">
+                {selectedBlock ? `Edit: ${selectedTypeDef?.label || selectedBlock.blockType}` : "Block Editor"}
+              </h3>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-4">
+                {!selectedBlock ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Select a block to edit its content.</p>
+                ) : (
+                  <BlockFieldEditor
+                    fields={selectedTypeDef?.fields || []}
+                    content={selectedBlock.content}
+                    onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)}
+                  />
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="flex-1 bg-secondary/30 flex flex-col items-center p-4 overflow-auto">
+            <div
+              className="bg-white dark:bg-card rounded-lg shadow-lg border overflow-hidden transition-all duration-300"
+              style={{ width: PREVIEW_WIDTHS[previewSize], maxWidth: "100%", minHeight: "400px" }}
+            >
+              <BlockPreview blocks={blocks} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+function BlockFieldEditor({
+  fields,
+  content,
+  onChange,
+}: {
+  fields: BlockFieldDef[];
+  content: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {fields.map(field => (
+        <div key={field.key} className="space-y-1.5">
+          <Label className="text-xs font-medium">{field.label}</Label>
+          {field.type === "text" && (
+            <Input
+              value={(content[field.key] as string) || ""}
+              onChange={e => onChange(field.key, e.target.value)}
+              placeholder={field.placeholder}
+              className="h-8 text-sm"
+            />
+          )}
+          {field.type === "textarea" && (
+            <Textarea
+              value={(content[field.key] as string) || ""}
+              onChange={e => onChange(field.key, e.target.value)}
+              placeholder={field.placeholder}
+              rows={3}
+              className="text-sm"
+            />
+          )}
+          {field.type === "richtext" && (
+            <Textarea
+              value={(content[field.key] as string) || ""}
+              onChange={e => onChange(field.key, e.target.value)}
+              placeholder={field.placeholder}
+              rows={6}
+              className="text-sm font-mono"
+            />
+          )}
+          {field.type === "url" && (
+            <Input
+              value={(content[field.key] as string) || ""}
+              onChange={e => onChange(field.key, e.target.value)}
+              placeholder={field.placeholder || "https://..."}
+              className="h-8 text-sm"
+            />
+          )}
+          {field.type === "image" && (
+            <Input
+              value={(content[field.key] as string) || ""}
+              onChange={e => onChange(field.key, e.target.value)}
+              placeholder="Image URL"
+              className="h-8 text-sm"
+            />
+          )}
+          {field.type === "number" && (
+            <Input
+              type="number"
+              value={(content[field.key] as number) ?? field.defaultValue ?? ""}
+              onChange={e => onChange(field.key, e.target.value ? Number(e.target.value) : "")}
+              className="h-8 text-sm"
+            />
+          )}
+          {field.type === "color" && (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded border relative overflow-hidden" style={{ backgroundColor: (content[field.key] as string) || "#e5e7eb" }}>
+                <input
+                  type="color"
+                  value={(content[field.key] as string) || "#e5e7eb"}
+                  onChange={e => onChange(field.key, e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+              </div>
+              <Input
+                value={(content[field.key] as string) || ""}
+                onChange={e => onChange(field.key, e.target.value)}
+                className="h-8 text-xs font-mono"
+              />
+            </div>
+          )}
+          {field.type === "toggle" && (
+            <Switch
+              checked={!!content[field.key]}
+              onCheckedChange={val => onChange(field.key, val)}
+            />
+          )}
+          {field.type === "select" && field.options && (
+            <Select value={(content[field.key] as string) || ""} onValueChange={v => onChange(field.key, v)}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectContent>
+                {field.options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {field.type === "items" && field.itemFields && (
+            <ItemsEditor
+              items={(content[field.key] as Record<string, unknown>[]) || []}
+              itemFields={field.itemFields}
+              onChange={newItems => onChange(field.key, newItems)}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ItemsEditor({
+  items,
+  itemFields,
+  onChange,
+}: {
+  items: Record<string, unknown>[];
+  itemFields: BlockFieldDef[];
+  onChange: (items: Record<string, unknown>[]) => void;
+}) {
+  const addItem = () => {
+    const defaults: Record<string, unknown> = {};
+    itemFields.forEach(f => { defaults[f.key] = f.defaultValue ?? ""; });
+    onChange([...items, defaults]);
+  };
+
+  const removeItem = (idx: number) => {
+    onChange(items.filter((_, i) => i !== idx));
+  };
+
+  const updateItem = (idx: number, key: string, value: unknown) => {
+    onChange(items.map((item, i) => i === idx ? { ...item, [key]: value } : item));
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.map((item, idx) => (
+        <Card key={idx} className="bg-secondary/30">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500" onClick={() => removeItem(idx)}>
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+            {itemFields.map(f => (
+              <div key={f.key} className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">{f.label}</Label>
+                {(f.type === "text" || f.type === "url" || f.type === "image") && (
+                  <Input
+                    value={(item[f.key] as string) || ""}
+                    onChange={e => updateItem(idx, f.key, e.target.value)}
+                    placeholder={f.placeholder}
+                    className="h-7 text-xs"
+                  />
+                )}
+                {f.type === "textarea" && (
+                  <Textarea
+                    value={(item[f.key] as string) || ""}
+                    onChange={e => updateItem(idx, f.key, e.target.value)}
+                    rows={2}
+                    className="text-xs"
+                  />
+                )}
+                {f.type === "number" && (
+                  <Input
+                    type="number"
+                    value={(item[f.key] as number) ?? ""}
+                    onChange={e => updateItem(idx, f.key, Number(e.target.value))}
+                    className="h-7 text-xs"
+                  />
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+      <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={addItem}>
+        <Plus className="w-3 h-3 mr-1" /> Add Item
+      </Button>
+    </div>
+  );
+}
+
+function BlockPreview({ blocks }: { blocks: PageBlock[] }) {
+  const visibleBlocks = blocks.filter(b => b.isVisible);
+
+  if (visibleBlocks.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-96 text-muted-foreground text-sm">
+        Add blocks to see a preview
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y">
+      {visibleBlocks.map((block, idx) => (
+        <div key={idx} className="relative">
+          <div className="absolute top-1 right-1 z-10">
+            <Badge variant="outline" className="text-[9px] bg-white/80 dark:bg-card/80">
+              {getBlockTypeDef(block.blockType)?.label || block.blockType}
+            </Badge>
+          </div>
+          <BlockPreviewItem block={block} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BlockPreviewItem({ block }: { block: PageBlock }) {
+  const c = block.content as Record<string, string | number | boolean | Record<string, unknown>[] | null>;
+
+  switch (block.blockType) {
+    case "hero":
+      return (
+        <div className="relative py-16 px-6 text-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
+          {c.badge && <span className="inline-block px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium mb-4">{c.badge as string}</span>}
+          <h1 className="text-2xl font-bold mb-2">{(c.title as string) || "Hero Title"}</h1>
+          {c.subtitle && <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{c.subtitle as string}</p>}
+          <div className="flex gap-2 justify-center">
+            {c.ctaLabel && <span className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium">{c.ctaLabel as string}</span>}
+            {c.secondaryLabel && <span className="inline-block px-4 py-2 border rounded-lg text-xs font-medium">{c.secondaryLabel as string}</span>}
+          </div>
+        </div>
+      );
+
+    case "rich_text":
+      return (
+        <div className="p-6 prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizeHtml((c.content as string) || "") }} />
+      );
+
+    case "stats_strip":
+      return (
+        <div className={`py-8 px-6 ${c.bgColor === "primary" ? "bg-blue-600 text-white" : "bg-gray-50 dark:bg-gray-900"}`}>
+          <div className="grid grid-cols-4 gap-4 text-center">
+            {((c.stats as { value: string; label: string }[]) || []).map((s, i) => (
+              <div key={i}>
+                <p className="text-xl font-bold">{s.value}</p>
+                <p className={`text-xs ${c.bgColor === "primary" ? "text-white/70" : "text-gray-500"}`}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "feature_cards":
+    case "icon_cards":
+      return (
+        <div className="py-8 px-6">
+          {c.title && <h2 className="text-lg font-bold text-center mb-1">{c.title as string}</h2>}
+          {c.subtitle && <p className="text-sm text-gray-500 text-center mb-4">{c.subtitle as string}</p>}
+          <div className={`grid gap-3 ${c.columns === "2" ? "grid-cols-2" : c.columns === "4" ? "grid-cols-4" : "grid-cols-3"}`}>
+            {((c.cards as { title: string; description: string }[]) || []).map((card, i) => (
+              <div key={i} className="p-4 rounded-xl border bg-white dark:bg-card">
+                <h3 className="text-sm font-semibold mb-1">{card.title}</h3>
+                <p className="text-xs text-gray-500">{card.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "cta_banner":
+      return (
+        <div className={`py-10 px-6 text-center ${c.bgStyle === "gradient" ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white" : c.bgStyle === "solid" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-800"}`}>
+          <h2 className="text-lg font-bold mb-2">{(c.title as string) || "CTA Title"}</h2>
+          {c.subtitle && <p className={`text-sm mb-4 ${c.bgStyle !== "image" ? "text-white/80" : "text-gray-600"}`}>{c.subtitle as string}</p>}
+          <div className="flex gap-2 justify-center">
+            {c.ctaLabel && <span className="inline-block px-4 py-2 bg-white text-blue-600 rounded-lg text-xs font-medium">{c.ctaLabel as string}</span>}
+          </div>
+        </div>
+      );
+
+    case "faq":
+      return (
+        <div className="py-8 px-6">
+          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
+          <div className="space-y-2 max-w-xl mx-auto">
+            {((c.items as { question: string; answer: string }[]) || []).map((item, i) => (
+              <div key={i} className="p-3 rounded-lg border">
+                <p className="text-sm font-medium">{item.question}</p>
+                <p className="text-xs text-gray-500 mt-1">{item.answer}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "team_grid":
+      return (
+        <div className="py-8 px-6">
+          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
+          <div className="grid grid-cols-4 gap-3">
+            {((c.members as { name: string; role: string }[]) || []).map((m, i) => (
+              <div key={i} className="text-center p-3">
+                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 mx-auto mb-2 flex items-center justify-center text-sm font-bold text-blue-600">{m.name?.[0]}</div>
+                <p className="text-xs font-medium">{m.name}</p>
+                <p className="text-[10px] text-gray-500">{m.role}</p>
+              </div>
+            ))}
+            {((c.members as unknown[]) || []).length === 0 && <p className="col-span-4 text-center text-xs text-gray-400">Team members from collections</p>}
+          </div>
+        </div>
+      );
+
+    case "office_list":
+      return (
+        <div className="py-8 px-6">
+          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
+          <div className="grid grid-cols-2 gap-3">
+            {((c.offices as { name: string; city: string; address: string }[]) || []).map((o, i) => (
+              <div key={i} className="p-3 rounded-lg border">
+                <p className="text-sm font-semibold">{o.name}</p>
+                <p className="text-xs text-gray-500">{o.city}</p>
+              </div>
+            ))}
+            {((c.offices as unknown[]) || []).length === 0 && <p className="col-span-2 text-center text-xs text-gray-400">Offices from collections</p>}
+          </div>
+        </div>
+      );
+
+    case "logo_grid":
+      return (
+        <div className="py-8 px-6">
+          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
+          <div className="flex flex-wrap gap-4 justify-center">
+            {((c.logos as { name: string; imageUrl: string }[]) || []).map((l, i) => (
+              <div key={i} className="w-20 h-12 rounded border flex items-center justify-center text-xs text-gray-400 bg-gray-50 dark:bg-gray-800">
+                {l.imageUrl ? <img src={l.imageUrl} alt={l.name} className="max-h-10 max-w-16 object-contain" /> : l.name}
+              </div>
+            ))}
+            {((c.logos as unknown[]) || []).length === 0 && <p className="text-xs text-gray-400">Add logos to display</p>}
+          </div>
+        </div>
+      );
+
+    case "testimonials":
+      return (
+        <div className="py-8 px-6">
+          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
+          <div className={c.layout === "grid" ? "grid grid-cols-2 gap-3" : "space-y-3"}>
+            {((c.items as { name: string; content: string; role: string }[]) || []).map((t, i) => (
+              <div key={i} className="p-3 rounded-lg border bg-white dark:bg-card">
+                <p className="text-xs italic text-gray-600 dark:text-gray-400 mb-2">"{t.content}"</p>
+                <p className="text-xs font-medium">{t.name}</p>
+                {t.role && <p className="text-[10px] text-gray-500">{t.role}</p>}
+              </div>
+            ))}
+            {((c.items as unknown[]) || []).length === 0 && <p className="text-center text-xs text-gray-400">Testimonials from collections</p>}
+          </div>
+        </div>
+      );
+
+    case "section_title": {
+      const alignCls = c.alignment === "left" ? "text-left" : c.alignment === "right" ? "text-right" : "text-center";
+      return (
+        <div className={`py-6 px-6 ${alignCls}`}>
+          <h2 className={`font-bold ${c.size === "lg" ? "text-2xl" : c.size === "sm" ? "text-base" : "text-lg"}`}>{(c.title as string) || "Section Title"}</h2>
+          {c.subtitle && <p className="text-sm text-gray-500 mt-1">{c.subtitle as string}</p>}
+        </div>
+      );
+    }
+
+    case "spacer_divider":
+      return (
+        <div style={{ height: `${(c.height as number) || 48}px` }} className="flex items-center justify-center">
+          {c.showDivider && <hr className="w-full border-t" style={{ borderColor: (c.dividerColor as string) || "#e5e7eb" }} />}
+        </div>
+      );
+
+    case "global_block":
+      return (
+        <div className="py-4 px-6 text-center bg-purple-50 dark:bg-purple-950/20 border-2 border-dashed border-purple-200 dark:border-purple-800">
+          <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+            🔗 Global Block: {(c.globalComponentSlug as string) || `ID ${c.globalComponentId}`}
+          </p>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="py-6 px-6 text-center text-sm text-gray-400">
+          Unknown block type: {block.blockType}
+        </div>
+      );
+  }
+}

@@ -79,6 +79,7 @@ const WebsiteSeoOverrides = lazyRetry(() => import("@/pages/admin/website/SeoOve
 const WebsiteThemeBuilder = lazyRetry(() => import("@/pages/admin/website/ThemeBuilder"));
 const WebsiteTranslations = lazyRetry(() => import("@/pages/admin/website/Translations"));
 const WebsitePublishHistory = lazyRetry(() => import("@/pages/admin/website/PublishHistory"));
+const WebsitePageEditor = lazyRetry(() => import("@/pages/admin/website/PageEditor"));
 
 const StudentDashboard = lazyRetry(() => import("@/pages/student/Dashboard"));
 const StudentApplications = lazyRetry(() => import("@/pages/student/Applications"));
@@ -211,6 +212,9 @@ function Router() {
         </Route>
 
         {/* Website Module */}
+        <Route path="/admin/website/pages/:id/edit">
+          {(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePageEditor id={Number(params.id)} /></ProtectedRoute>}
+        </Route>
         <Route path="/admin/website/pages">
           <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePages /></ProtectedRoute>
         </Route>
