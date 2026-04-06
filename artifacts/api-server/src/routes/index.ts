@@ -30,6 +30,7 @@ import destinationsRouter from "./destinations";
 import quickLinksRouter from "./quickLinks";
 import exportRouter from "./export";
 import documentRequirementsRouter from "./documentRequirements";
+import websiteRouter from "./website";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(destinationsRouter);
 router.use(quickLinksRouter);
 router.use(exportRouter);
 router.use(documentRequirementsRouter);
+router.use(websiteRouter);
 
 export default router;

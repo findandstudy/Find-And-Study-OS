@@ -69,6 +69,17 @@ const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
 const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
 
+const WebsitePages = lazyRetry(() => import("@/pages/admin/website/Pages"));
+const WebsiteGlobalComponents = lazyRetry(() => import("@/pages/admin/website/GlobalComponents"));
+const WebsiteNavigation = lazyRetry(() => import("@/pages/admin/website/Navigation"));
+const WebsiteBlog = lazyRetry(() => import("@/pages/admin/website/Blog"));
+const WebsiteCollections = lazyRetry(() => import("@/pages/admin/website/Collections"));
+const WebsiteForms = lazyRetry(() => import("@/pages/admin/website/Forms"));
+const WebsiteSeoOverrides = lazyRetry(() => import("@/pages/admin/website/SeoOverrides"));
+const WebsiteThemeBuilder = lazyRetry(() => import("@/pages/admin/website/ThemeBuilder"));
+const WebsiteTranslations = lazyRetry(() => import("@/pages/admin/website/Translations"));
+const WebsitePublishHistory = lazyRetry(() => import("@/pages/admin/website/PublishHistory"));
+
 const StudentDashboard = lazyRetry(() => import("@/pages/student/Dashboard"));
 const StudentApplications = lazyRetry(() => import("@/pages/student/Applications"));
 const StudentWishlist = lazyRetry(() => import("@/pages/student/Wishlist"));
@@ -196,6 +207,38 @@ function Router() {
         </Route>
         <Route path="/admin/embeds">
           <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
+        </Route>
+
+        {/* Website Module */}
+        <Route path="/admin/website/pages">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsitePages /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/global-components">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteGlobalComponents /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/navigation">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteNavigation /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/blog">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteBlog /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/collections">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteCollections /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/forms">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteForms /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/seo">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteSeoOverrides /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/theme">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteThemeBuilder /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/translations">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsiteTranslations /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/website/publish-history">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><WebsitePublishHistory /></ProtectedRoute>
         </Route>
 
         {/* Staff / Consultant Portal */}

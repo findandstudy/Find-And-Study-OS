@@ -46,6 +46,15 @@ import {
   Heart,
   MessageSquare,
   ArrowLeftCircle,
+  Globe,
+  Component,
+  Menu,
+  BookOpen,
+  Layers,
+  ClipboardList,
+  Palette,
+  Languages,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +107,21 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
             { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
             { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
             { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
+          ]
+        },
+        {
+          label: "Website",
+          items: [
+            { title: "Pages", icon: FileText, url: '/admin/website/pages' },
+            { title: "Global Components", icon: Component, url: '/admin/website/global-components' },
+            { title: "Navigation", icon: Menu, url: '/admin/website/navigation' },
+            { title: "Blog", icon: BookOpen, url: '/admin/website/blog' },
+            { title: "Collections", icon: Layers, url: '/admin/website/collections' },
+            { title: "Forms", icon: ClipboardList, url: '/admin/website/forms' },
+            { title: "SEO Overrides", icon: Search, url: '/admin/website/seo' },
+            { title: "Theme Builder", icon: Palette, url: '/admin/website/theme' },
+            { title: "Translations", icon: Languages, url: '/admin/website/translations' },
+            { title: "Publish History", icon: History, url: '/admin/website/publish-history' },
           ]
         }
       ]
