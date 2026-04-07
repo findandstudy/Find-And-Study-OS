@@ -109,13 +109,13 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
         </Badge>
       </div>
 
-      {!configured ? (
+      {!configured && (
         <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
           <p className="font-medium">AI assistant is not configured.</p>
           <p className="text-xs mt-1">Go to Settings &gt; Integrations and enable the AI Content integration with your API key.</p>
         </div>
-      ) : (
-        <>
+      )}
+
           <div>
             <Textarea
               value={contextInput}
@@ -123,6 +123,7 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
               placeholder="Enter context or text for AI to work with..."
               rows={2}
               className="text-xs"
+              disabled={!configured}
             />
           </div>
 
@@ -133,7 +134,7 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
                 variant="outline"
                 size="sm"
                 className="text-[11px] h-7 gap-1"
-                disabled={generateMutation.isPending}
+                disabled={!configured || generateMutation.isPending}
                 onClick={() => handleAction(action)}
               >
                 <action.icon className="w-3 h-3" /> {action.label}
@@ -160,8 +161,6 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
               )}
             </div>
           )}
-        </>
-      )}
     </div>
   );
 }

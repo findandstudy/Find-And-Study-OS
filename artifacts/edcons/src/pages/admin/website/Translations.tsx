@@ -17,7 +17,7 @@ import {
   CheckCircle2, Circle, AlertCircle,
 } from "lucide-react";
 
-import { LANGUAGE_META } from "@/lib/i18n";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 
 interface TranslationItem {
   id: number;
@@ -111,7 +111,8 @@ export default function WebsiteTranslations() {
   const locales = status?.locales || ["en"];
   const pages = status?.pages || [];
   const posts = status?.posts || [];
-  const nonDefaultLocales = locales.filter(l => l !== "en");
+  const allNonDefault = SUPPORTED_LANGUAGES.filter(l => l !== "en");
+  const nonDefaultLocales = allNonDefault.length > 0 ? allNonDefault : locales.filter(l => l !== "en");
 
   function openEditor(item: TranslationItem, type: "page" | "post") {
     setEditItem({ item, type });
