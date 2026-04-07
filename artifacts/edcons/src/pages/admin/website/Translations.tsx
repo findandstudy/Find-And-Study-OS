@@ -134,6 +134,8 @@ export default function WebsiteTranslations() {
   function handleSave() {
     if (!editItem) return;
     const translations = setLocaleFields(editItem.item, editLocale, editValues);
+    const updatedItem = { ...editItem.item, translationsJson: translations };
+    setEditItem({ ...editItem, item: updatedItem as typeof editItem.item });
     saveMutation.mutate({ id: editItem.item.id, type: editItem.type, translations });
   }
 

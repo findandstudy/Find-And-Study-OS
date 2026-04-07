@@ -695,7 +695,17 @@ export default function WebsiteBlog() {
                   </SelectContent>
                 </Select>
                 {editLocale !== "en" && (
-                  <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale]?.name}. Switch to English for default content.</p>
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale]?.name}.</p>
+                    <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => {
+                      const base = defaultFormRef.current;
+                      const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;
+                      const copy: Record<string, string> = {};
+                      for (const f of TRANSLATABLE) copy[f] = base[f];
+                      setForm(f => ({ ...f, ...copy }));
+                      toast({ title: "Copied from default (English)" });
+                    }}>Copy from English</Button>
+                  </div>
                 )}
               </div>
             </div>

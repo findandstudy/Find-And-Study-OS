@@ -671,7 +671,12 @@ export default function PageEditor({ id }: { id: number }) {
                 <p className="font-medium text-blue-800 flex items-center gap-1">
                   {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} Editing in {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name || editLocale}
                 </p>
-                <p className="text-blue-600 mt-0.5">Content entered here is for this locale's translation. Switch to English to edit default content.</p>
+                <p className="text-blue-600 mt-0.5">Content entered here is for this locale's translation.</p>
+                <Button type="button" variant="outline" size="sm" className="h-5 text-[10px] px-2 mt-1" onClick={() => {
+                  const defaultBlocks = defaultBlocksRef.current;
+                  setBlocks(defaultBlocks.map(b => ({ ...b })));
+                  toast({ title: "Copied blocks from English" });
+                }}>Copy blocks from English</Button>
               </div>
             )}
             <ScrollArea className="flex-1">
