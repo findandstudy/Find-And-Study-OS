@@ -694,6 +694,13 @@ export default function WebsiteBlog() {
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex gap-0.5 mt-1">
+                  {SUPPORTED_LANGUAGES.filter(l => l !== "en").slice(0, 5).map(l => {
+                    const tr = blogTranslationsRef.current[l];
+                    const has = tr && Object.values(tr).some(v => v && String(v).trim());
+                    return <span key={l} className={`text-[9px] ${has ? "text-green-600" : "text-muted-foreground/40"}`} title={`${LANGUAGE_META[l].name}: ${has ? "translated" : "not translated"}`}>{has ? "●" : "○"}</span>;
+                  })}
+                </div>
                 {editLocale !== "en" && (
                   <div className="space-y-1">
                     <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name}.</p>

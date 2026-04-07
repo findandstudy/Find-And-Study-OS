@@ -422,6 +422,13 @@ export default function PageEditor({ id }: { id: number }) {
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex gap-0.5">
+              {SUPPORTED_LANGUAGES.filter(l => l !== "en").slice(0, 5).map(l => {
+                const trBlocks = translationsRef.current[l];
+                const has = trBlocks && trBlocks.length > 0;
+                return <span key={l} className={`text-[9px] ${has ? "text-green-600" : "text-muted-foreground/40"}`} title={`${LANGUAGE_META[l].name}: ${has ? "translated" : "not translated"}`}>{has ? "●" : "○"}</span>;
+              })}
+            </div>
             <Separator orientation="vertical" className="h-5" />
             <div className="flex items-center border rounded-md">
               {(["desktop", "tablet", "mobile"] as PreviewSize[]).map(size => (
