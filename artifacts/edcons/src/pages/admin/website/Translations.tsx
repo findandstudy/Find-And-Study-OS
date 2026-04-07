@@ -17,10 +17,7 @@ import {
   CheckCircle2, Circle, AlertCircle,
 } from "lucide-react";
 
-const LOCALE_LABELS: Record<string, string> = {
-  en: "English", tr: "Türkçe", ar: "العربية", fr: "Français", ru: "Русский",
-  de: "Deutsch", es: "Español", it: "Italiano", pt: "Português", zh: "中文",
-};
+import { LANGUAGE_META } from "@/lib/i18n";
 
 interface TranslationItem {
   id: number;
@@ -229,7 +226,7 @@ export default function WebsiteTranslations() {
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {nonDefaultLocales.map(l => (
-                    <SelectItem key={l} value={l}>{LOCALE_LABELS[l] || l.toUpperCase()} ({l.toUpperCase()})</SelectItem>
+                    <SelectItem key={l} value={l}>{LANGUAGE_META[l]?.flag} {LANGUAGE_META[l]?.name || l.toUpperCase()}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

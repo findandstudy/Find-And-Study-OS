@@ -167,7 +167,7 @@ export default function PageEditor({ id }: { id: number }) {
   const globalSeo = {
     metaTitle: (globalSettings?.seoMetaTitle as string) || "",
     metaDescription: (globalSettings?.seoMetaDescription as string) || "",
-    ogImageUrl: (globalSettings?.seoOgImageUrl as string) || "",
+    ogImageUrl: (globalSettings?.ogImageUrl as string) || "",
     siteName: (globalSettings?.siteName as string) || "",
   };
 
