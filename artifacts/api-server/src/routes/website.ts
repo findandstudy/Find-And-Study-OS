@@ -499,8 +499,36 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
       .orderBy(asc(websiteFormFieldsTable.sortOrder));
 
     for (const field of fields) {
-      if (field.isRequired && !formData[field.name]) {
+      const val = formData[field.name];
+      if (field.isRequired && !val) {
         return res.status(400).json({ error: `${field.label} is required` });
+      }
+      if (val) {
+        const strVal = String(val);
+        const rules = (field.validationRules || {}) as Record<string, string>;
+
+        if (field.fieldType === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strVal)) {
+          return res.status(400).json({ error: `${field.label} must be a valid email address` });
+        }
+        if (field.fieldType === "url" && !/^https?:\/\/.+/.test(strVal)) {
+          return res.status(400).json({ error: `${field.label} must be a valid URL` });
+        }
+        if (field.fieldType === "phone" && !/^[+\d\s()-]{6,20}$/.test(strVal)) {
+          return res.status(400).json({ error: `${field.label} must be a valid phone number` });
+        }
+        if (rules.minLength && strVal.length < Number(rules.minLength)) {
+          return res.status(400).json({ error: `${field.label} must be at least ${rules.minLength} characters` });
+        }
+        if (rules.maxLength && strVal.length > Number(rules.maxLength)) {
+          return res.status(400).json({ error: `${field.label} must be at most ${rules.maxLength} characters` });
+        }
+        if (rules.pattern) {
+          try {
+            if (!new RegExp(rules.pattern).test(strVal)) {
+              return res.status(400).json({ error: `${field.label} does not match the required format` });
+            }
+          } catch {}
+        }
       }
     }
 
@@ -527,9 +555,12 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
       leadId = lead.id;
     }
 
+    const submissionData = { ...formData };
+    if (form.pageSourceTag) submissionData._pageSourceTag = form.pageSourceTag;
+
     const [submission] = await db.insert(websiteFormSubmissionsTable).values({
       formId: form.id,
-      data: formData,
+      data: submissionData,
       sourceUrl: req.headers.referer || null,
       ipAddress: (req.ip || req.headers["x-forwarded-for"] || "").toString().slice(0, 45),
       userAgent: (req.headers["user-agent"] || "").slice(0, 500),

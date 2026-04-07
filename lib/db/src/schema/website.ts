@@ -125,6 +125,7 @@ export const websiteFormsTable = pgTable("website_forms", {
   errorMessage: text("error_message"),
   crmSource: text("crm_source"),
   crmPipelineStage: text("crm_pipeline_stage"),
+  pageSourceTag: text("page_source_tag"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

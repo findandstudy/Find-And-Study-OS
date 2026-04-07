@@ -28,6 +28,9 @@ interface WebsiteForm {
   submitEmail: string | null;
   submitWebhookUrl: string | null;
   successMessage: string | null;
+  crmSource: string | null;
+  crmPipelineStage: string | null;
+  pageSourceTag: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -67,6 +70,7 @@ interface FormFormData {
   errorMessage: string;
   crmSource: string;
   crmPipelineStage: string;
+  pageSourceTag: string;
   isActive: boolean;
 }
 
@@ -77,6 +81,9 @@ interface FieldFormData {
   placeholder: string;
   isRequired: boolean;
   options: string;
+  minLength: string;
+  maxLength: string;
+  pattern: string;
 }
 
 const FIELD_TYPES = [
@@ -114,11 +121,11 @@ export default function WebsiteForms() {
     name: "", slug: "", description: "", submitAction: "crm",
     submitEmail: "", submitWebhookUrl: "", successMessage: "Thank you! Your submission has been received.",
     errorMessage: "Something went wrong. Please try again later.",
-    crmSource: "", crmPipelineStage: "", isActive: true,
+    crmSource: "", crmPipelineStage: "", pageSourceTag: "", isActive: true,
   });
 
   const [fieldData, setFieldData] = useState<FieldFormData>({
-    fieldType: "text", label: "", name: "", placeholder: "", isRequired: false, options: "",
+    fieldType: "text", label: "", name: "", placeholder: "", isRequired: false, options: "", minLength: "", maxLength: "", pattern: "",
   });
 
   const { data: forms = [], isLoading } = useQuery<WebsiteForm[]>({
@@ -217,8 +224,9 @@ export default function WebsiteForms() {
         submitAction: form.submitAction, submitEmail: form.submitEmail || "",
         submitWebhookUrl: form.submitWebhookUrl || "", successMessage: form.successMessage || "",
         errorMessage: (meta.errorMessage as string) || "Something went wrong. Please try again later.",
-        crmSource: (meta.crmSource as string) || "",
-        crmPipelineStage: (meta.crmPipelineStage as string) || "",
+        crmSource: form.crmSource || "",
+        crmPipelineStage: form.crmPipelineStage || "",
+        pageSourceTag: form.pageSourceTag || "",
         isActive: form.isActive,
       });
     } else {
@@ -227,7 +235,7 @@ export default function WebsiteForms() {
         name: "", slug: "", description: "", submitAction: "crm",
         submitEmail: "", submitWebhookUrl: "", successMessage: "Thank you! Your submission has been received.",
         errorMessage: "Something went wrong. Please try again later.",
-        crmSource: "", crmPipelineStage: "", isActive: true,
+        crmSource: "", crmPipelineStage: "", pageSourceTag: "", isActive: true,
       });
     }
     setFormDialog(true);
@@ -236,14 +244,16 @@ export default function WebsiteForms() {
   function openFieldDialog(field?: FormField) {
     if (field) {
       setEditingField(field);
+      const rules = (field.validationRules || {}) as Record<string, string>;
       setFieldData({
         fieldType: field.fieldType, label: field.label, name: field.name,
         placeholder: field.placeholder || "", isRequired: field.isRequired,
         options: Array.isArray(field.options) ? (field.options as string[]).join(", ") : "",
+        minLength: rules.minLength || "", maxLength: rules.maxLength || "", pattern: rules.pattern || "",
       });
     } else {
       setEditingField(null);
-      setFieldData({ fieldType: "text", label: "", name: "", placeholder: "", isRequired: false, options: "" });
+      setFieldData({ fieldType: "text", label: "", name: "", placeholder: "", isRequired: false, options: "", minLength: "", maxLength: "", pattern: "" });
     }
     setFieldDialog(true);
   }
@@ -257,6 +267,10 @@ export default function WebsiteForms() {
     if (!selectedForm) return;
     const name = fieldData.name || slugify(fieldData.label);
     const options = fieldData.options ? fieldData.options.split(",").map(o => o.trim()).filter(Boolean) : [];
+    const validationRules: Record<string, string | number> = {};
+    if (fieldData.minLength) validationRules.minLength = fieldData.minLength;
+    if (fieldData.maxLength) validationRules.maxLength = fieldData.maxLength;
+    if (fieldData.pattern) validationRules.pattern = fieldData.pattern;
     const payload: Record<string, unknown> = {
       formId: selectedForm.id,
       fieldType: fieldData.fieldType,
@@ -264,6 +278,7 @@ export default function WebsiteForms() {
       name,
       placeholder: fieldData.placeholder || null,
       isRequired: fieldData.isRequired,
+      validationRules,
       options,
       sortOrder: editingField?.sortOrder ?? fields.length,
     };
@@ -505,6 +520,11 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
                   <p className="text-[10px] text-muted-foreground mt-1">Used as the lead source. Defaults to "website-form:{'{'}slug{'}'}" if empty.</p>
                 </div>
                 <div>
+                  <Label className="text-xs">Page Source Tag</Label>
+                  <Input value={formData.pageSourceTag} onChange={e => setFormData(f => ({ ...f, pageSourceTag: e.target.value }))} placeholder="e.g. homepage, pricing, about-us" className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Identifies which page this form is embedded on for analytics/CRM tracking.</p>
+                </div>
+                <div>
                   <Label className="text-xs">Destination Pipeline Stage</Label>
                   <Select value={formData.crmPipelineStage || "__none__"} onValueChange={v => setFormData(f => ({ ...f, crmPipelineStage: v === "__none__" ? "" : v }))}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Default (first stage)" /></SelectTrigger>
@@ -582,6 +602,25 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
               <Switch checked={fieldData.isRequired} onCheckedChange={v => setFieldData(f => ({ ...f, isRequired: v }))} />
               <Label className="text-xs">Required</Label>
             </div>
+            {["text", "textarea", "email", "phone", "url"].includes(fieldData.fieldType) && (
+              <div className="space-y-3 pt-2 border-t">
+                <Label className="text-xs font-semibold text-muted-foreground">Validation Rules</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-[10px]">Min Length</Label>
+                    <Input type="number" value={fieldData.minLength} onChange={e => setFieldData(f => ({ ...f, minLength: e.target.value }))} placeholder="0" className="mt-0.5 h-7 text-xs" />
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">Max Length</Label>
+                    <Input type="number" value={fieldData.maxLength} onChange={e => setFieldData(f => ({ ...f, maxLength: e.target.value }))} placeholder="255" className="mt-0.5 h-7 text-xs" />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Pattern (RegEx)</Label>
+                  <Input value={fieldData.pattern} onChange={e => setFieldData(f => ({ ...f, pattern: e.target.value }))} placeholder="e.g. ^[A-Za-z]+$" className="mt-0.5 h-7 text-xs font-mono" />
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 mt-4">
             <Button variant="outline" onClick={() => setFieldDialog(false)}>Cancel</Button>
