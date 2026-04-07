@@ -985,6 +985,146 @@ function GlobalBlockSelector({
   );
 }
 
+function GlobalBlockPreview({ componentId, slug }: { componentId: number | null; slug: string }) {
+  const { data: globalComponents } = useQuery<{ id: number; name: string; slug: string; componentType: string; content: Record<string, unknown>; isActive: boolean }[]>({
+    queryKey: ["website-global-components"],
+    queryFn: () => customFetch("/api/website/global-components"),
+  });
+
+  if (!componentId && !slug) {
+    return (
+      <div className="py-4 px-6 text-center bg-purple-50 dark:bg-purple-950/20 border-2 border-dashed border-purple-200 dark:border-purple-800">
+        <p className="text-xs text-purple-500 font-medium">No global component selected</p>
+      </div>
+    );
+  }
+
+  const comp = globalComponents?.find(c => c.id === componentId || c.slug === slug);
+  if (!comp) {
+    return (
+      <div className="py-4 px-6 text-center bg-amber-50 dark:bg-amber-950/20 border-2 border-dashed border-amber-300 dark:border-amber-700">
+        <p className="text-xs text-amber-600 font-medium">Component not found: {slug || `ID ${componentId}`}</p>
+      </div>
+    );
+  }
+
+  if (!comp.isActive) {
+    return (
+      <div className="py-4 px-6 text-center bg-amber-50 dark:bg-amber-950/20 border-2 border-dashed border-amber-300 dark:border-amber-700">
+        <p className="text-xs text-amber-600 font-medium">Inactive component: {comp.name}</p>
+      </div>
+    );
+  }
+
+  const raw = (comp.content || {}) as Record<string, unknown>;
+  const s = (k: string) => (raw[k] as string) || "";
+
+  switch (comp.componentType) {
+    case "cta_banner":
+      return (
+        <div className="relative py-10 px-8 text-center text-white" style={{ backgroundColor: s("backgroundColor") || "#2563eb" }}>
+          {s("backgroundImage") && (
+            <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${s("backgroundImage")})` }} />
+          )}
+          <div className="relative z-10">
+            <h2 className="text-2xl font-bold mb-2">{s("heading") || "CTA Heading"}</h2>
+            {s("body") && <p className="text-sm opacity-90 mb-4 max-w-lg mx-auto">{s("body")}</p>}
+            {s("buttonText") && (
+              <span className="inline-block px-5 py-2 bg-white text-blue-600 rounded-lg font-medium text-sm">
+                {s("buttonText")}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+
+    case "stats_strip": {
+      const items = (raw.items as { value: string; label: string }[]) || [];
+      return (
+        <div className="py-6 px-4 bg-gray-50 dark:bg-gray-900">
+          <div className="flex justify-center gap-8 flex-wrap">
+            {items.map((item, i) => (
+              <div key={i} className="text-center">
+                <div className="text-2xl font-bold text-primary">{item.value || "—"}</div>
+                <div className="text-xs text-muted-foreground mt-1">{item.label || "Label"}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    case "testimonials": {
+      const items = (raw.items as { quote: string; author: string; role: string; avatar?: string }[]) || [];
+      return (
+        <div className="py-6 px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {items.slice(0, 4).map((item, i) => (
+              <div key={i} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <p className="text-sm italic text-muted-foreground mb-3">"{item.quote || "Quote..."}"</p>
+                <div className="flex items-center gap-2">
+                  {item.avatar && <img src={item.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />}
+                  <div>
+                    <p className="text-xs font-medium">{item.author || "Author"}</p>
+                    {item.role && <p className="text-[10px] text-muted-foreground">{item.role}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    case "contact_strip":
+      return (
+        <div className="py-6 px-6 bg-gray-50 dark:bg-gray-900">
+          <div className="flex flex-wrap justify-center gap-6 text-sm">
+            {s("phone") && <span>Tel: {s("phone")}</span>}
+            {s("email") && <span>Email: {s("email")}</span>}
+            {s("whatsapp") && <span>WhatsApp: {s("whatsapp")}</span>}
+            {s("address") && <span>{s("address")}</span>}
+          </div>
+        </div>
+      );
+
+    case "logo_grid": {
+      const items = (raw.items as { name: string; imageUrl: string }[]) || [];
+      const cols = (raw.columns as number) || 4;
+      return (
+        <div className="py-6 px-6">
+          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+            {items.map((item, i) => (
+              <div key={i} className="flex items-center justify-center p-3 border rounded-lg bg-white dark:bg-gray-900 min-h-[60px]">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt={item.name} className="max-h-10 max-w-full object-contain" />
+                ) : (
+                  <span className="text-xs text-muted-foreground">{item.name || "Logo"}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    case "custom_html":
+      return (
+        <div className="py-4 px-6 bg-gray-50 dark:bg-gray-900 border-l-4 border-purple-400">
+          <p className="text-[10px] text-purple-500 font-medium mb-1">Custom HTML: {comp.name}</p>
+          <div className="text-xs text-muted-foreground truncate">{s("html").slice(0, 120) || "(empty)"}...</div>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="py-4 px-6 text-center bg-purple-50 dark:bg-purple-950/20 border-2 border-dashed border-purple-200 dark:border-purple-800">
+          <p className="text-xs text-purple-600 font-medium">{comp.name} ({comp.componentType})</p>
+        </div>
+      );
+  }
+}
+
 function BlockPreview({ blocks }: { blocks: PageBlock[] }) {
   const visibleBlocks = blocks.filter(b => b.isVisible);
 
@@ -1174,13 +1314,7 @@ function BlockPreviewItem({ block }: { block: PageBlock }) {
       );
 
     case "global_block":
-      return (
-        <div className="py-4 px-6 text-center bg-purple-50 dark:bg-purple-950/20 border-2 border-dashed border-purple-200 dark:border-purple-800">
-          <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
-            🔗 Global Block: {(c.globalComponentSlug as string) || `ID ${c.globalComponentId}`}
-          </p>
-        </div>
-      );
+      return <GlobalBlockPreview componentId={c.globalComponentId as number | null} slug={c.globalComponentSlug as string} />;
 
     default:
       return (
