@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Palette, Save, RotateCcw, Check } from "lucide-react";
+import { Palette, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ThemeToken {
@@ -96,20 +96,18 @@ export default function WebsiteThemeBuilder() {
     queryFn: () => customFetch("/api/settings/branding"),
   });
 
-  const { data: savedTokens = [], isLoading: tokensLoading } = useQuery<ThemeToken[]>({
+  const { data: savedTokens, isLoading: tokensLoading } = useQuery<ThemeToken[]>({
     queryKey: ["website-theme-tokens"],
     queryFn: () => customFetch("/api/website/theme-tokens"),
   });
 
   const tokensHydrated = useRef(false);
   useEffect(() => {
-    if (tokensHydrated.current) return;
+    if (tokensHydrated.current || tokensLoading || !savedTokens) return;
     const map: Record<string, string> = {};
     savedTokens.forEach(t => { map[`${t.tokenGroup}.${t.tokenKey}`] = t.tokenValue; });
     setLocalTokens(map);
-    if (savedTokens.length >= 0 && !tokensLoading) {
-      tokensHydrated.current = true;
-    }
+    tokensHydrated.current = true;
   }, [savedTokens, tokensLoading]);
 
   const saveMutation = useMutation({
@@ -176,8 +174,7 @@ export default function WebsiteThemeBuilder() {
     onSuccess: () => {
       setLocalTokens({});
       setDirty(false);
-      tokensHydrated.current = false;
-      queryClient.invalidateQueries({ queryKey: ["website-theme-tokens"] });
+      queryClient.setQueryData(["website-theme-tokens"], []);
       toast({ title: "Theme reset", description: "All overrides removed. Branding defaults will be used." });
     },
     onError: () => {
@@ -187,6 +184,11 @@ export default function WebsiteThemeBuilder() {
 
   function handleReset() {
     resetMutation.mutate();
+  }
+
+  function selectVal(group: string, key: string): string | undefined {
+    const v = getVal(group, key);
+    return v || undefined;
   }
 
   return (
@@ -270,7 +272,7 @@ export default function WebsiteThemeBuilder() {
                 <div key={token.key} className="space-y-2">
                   <Label className="text-xs font-medium">{token.label}</Label>
                   {token.type === "font" ? (
-                    <Select value={getVal(token.group, token.key) || ""} onValueChange={v => setVal(token.group, token.key, v)}>
+                    <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
                       <SelectTrigger className="h-9"><SelectValue placeholder="Select font..." /></SelectTrigger>
                       <SelectContent>
                         {FONT_OPTIONS.map(f => (
@@ -279,7 +281,7 @@ export default function WebsiteThemeBuilder() {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Select value={getVal(token.group, token.key) || ""} onValueChange={v => setVal(token.group, token.key, v)}>
+                    <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
                       <SelectTrigger className="h-9"><SelectValue placeholder="Select scale..." /></SelectTrigger>
                       <SelectContent>
                         {FONT_SCALE_OPTIONS.map(o => (
@@ -324,14 +326,14 @@ export default function WebsiteThemeBuilder() {
                       <Input value={getVal(token.group, token.key)} onChange={e => setVal(token.group, token.key, e.target.value)} className="h-8 text-xs font-mono" />
                     </div>
                   ) : token.type === "radius" ? (
-                    <Select value={getVal(token.group, token.key) || ""} onValueChange={v => setVal(token.group, token.key, v)}>
+                    <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
                       <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>
                         {RADIUS_OPTIONS.map(o => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Select value={getVal(token.group, token.key) || ""} onValueChange={v => setVal(token.group, token.key, v)}>
+                    <Select value={selectVal(token.group, token.key)} onValueChange={v => setVal(token.group, token.key, v)}>
                       <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>
                         {WEIGHT_OPTIONS.map(o => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
@@ -343,8 +345,9 @@ export default function WebsiteThemeBuilder() {
             </div>
             {(getVal("buttons", "borderRadius") || getVal("buttons", "primaryBg")) && (
               <div className="mt-4 flex gap-3">
-                <button
-                  className="px-6 py-2 text-sm font-medium"
+                <Button
+                  variant="ghost"
+                  className="px-6 py-2 text-sm font-medium hover:opacity-90"
                   style={{
                     backgroundColor: getVal("buttons", "primaryBg") || "#3b82f6",
                     color: getVal("buttons", "primaryText") || "#ffffff",
@@ -353,7 +356,7 @@ export default function WebsiteThemeBuilder() {
                   }}
                 >
                   Preview Button
-                </button>
+                </Button>
               </div>
             )}
           </CardContent>

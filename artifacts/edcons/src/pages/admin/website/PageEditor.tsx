@@ -690,6 +690,11 @@ export default function PageEditor({ id }: { id: number }) {
               <div className="p-4 space-y-4">
                 {!selectedBlock ? (
                   <p className="text-sm text-muted-foreground text-center py-8">Select a block to edit its content.</p>
+                ) : selectedBlock.blockType === "global_block" ? (
+                  <GlobalBlockSelector
+                    content={selectedBlock.content}
+                    onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)}
+                  />
                 ) : (
                   <>
                     <BlockFieldEditor
@@ -916,6 +921,66 @@ function ItemsEditor({
       <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={addItem}>
         <Plus className="w-3 h-3 mr-1" /> Add Item
       </Button>
+    </div>
+  );
+}
+
+function GlobalBlockSelector({
+  content,
+  onChange,
+}: {
+  content: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const { data: globalComponents = [] } = useQuery<{ id: number; name: string; slug: string; componentType: string; isActive: boolean }[]>({
+    queryKey: ["website-global-components"],
+    queryFn: () => customFetch("/api/website/global-components"),
+  });
+
+  const activeComponents = globalComponents.filter(c => c.isActive);
+  const selectedId = content.globalComponentId as number | null;
+  const selectedComp = activeComponents.find(c => c.id === selectedId);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Global Component</Label>
+        {activeComponents.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">
+            No active global components. Create one in Website &gt; Global Components first.
+          </p>
+        ) : (
+          <Select
+            value={selectedId ? String(selectedId) : ""}
+            onValueChange={v => {
+              const comp = activeComponents.find(c => c.id === Number(v));
+              if (comp) {
+                onChange("globalComponentId", comp.id);
+                onChange("globalComponentSlug", comp.slug);
+              }
+            }}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select a component..." />
+            </SelectTrigger>
+            <SelectContent>
+              {activeComponents.map(c => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.name} ({c.componentType.replace(/_/g, " ")})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      {selectedComp && (
+        <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
+          <p className="text-xs font-medium text-purple-700 dark:text-purple-300">{selectedComp.name}</p>
+          <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-0.5">
+            Type: {selectedComp.componentType.replace(/_/g, " ")} | Slug: {selectedComp.slug}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
