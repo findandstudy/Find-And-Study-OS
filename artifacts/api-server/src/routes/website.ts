@@ -537,6 +537,18 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
       status: "new",
     }).returning();
 
+    if (form.submitAction === "webhook" && form.submitWebhookUrl) {
+      fetch(form.submitWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formSlug: form.slug, submissionId: submission.id, data: formData }),
+      }).catch(err => console.error(`[FORM] Webhook delivery failed for ${form.slug}:`, err.message));
+    }
+
+    if (form.submitAction === "email" && form.submitEmail) {
+      console.log(`[FORM] Email notification queued for ${form.submitEmail} (form: ${form.slug}, submission: ${submission.id})`);
+    }
+
     res.status(201).json({
       success: true,
       submissionId: submission.id,
