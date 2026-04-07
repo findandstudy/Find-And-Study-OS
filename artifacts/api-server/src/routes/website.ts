@@ -569,11 +569,17 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
     }).returning();
 
     if (form.submitAction === "webhook" && form.submitWebhookUrl) {
-      fetch(form.submitWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formSlug: form.slug, submissionId: submission.id, data: formData }),
-      }).catch(err => console.error(`[FORM] Webhook delivery failed for ${form.slug}:`, err.message));
+      const webhookUrl = form.submitWebhookUrl;
+      const isValidWebhook = /^https:\/\/[^\/]/.test(webhookUrl) && !/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01]))/i.test(webhookUrl);
+      if (!isValidWebhook) {
+        console.warn(`[FORM] Blocked webhook to private/non-HTTPS URL: ${webhookUrl}`);
+      } else {
+        fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ formSlug: form.slug, submissionId: submission.id, data: formData }),
+        }).catch(err => console.error(`[FORM] Webhook delivery failed for ${form.slug}:`, err.message));
+      }
     }
 
     if (form.submitAction === "email" && form.submitEmail) {
