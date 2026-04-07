@@ -218,7 +218,7 @@ export default function WebsiteForms() {
   function openFormDialog(form?: WebsiteForm) {
     if (form) {
       setEditingForm(form);
-      const meta = (form as Record<string, unknown>);
+      const meta = form as unknown as Record<string, unknown>;
       setFormData({
         name: form.name, slug: form.slug, description: form.description || "",
         submitAction: form.submitAction, submitEmail: form.submitEmail || "",

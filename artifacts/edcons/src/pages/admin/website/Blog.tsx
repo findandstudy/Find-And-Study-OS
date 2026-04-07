@@ -696,7 +696,7 @@ export default function WebsiteBlog() {
                 </Select>
                 {editLocale !== "en" && (
                   <div className="space-y-1">
-                    <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale]?.name}.</p>
+                    <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name}.</p>
                     <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => {
                       const base = defaultFormRef.current;
                       const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;

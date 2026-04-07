@@ -91,7 +91,7 @@ export default function WebsiteTranslations() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (payload: { id: number; type: "page" | "post"; translations: Record<string, Record<string, string>> }) => {
+    mutationFn: (payload: { id: number; type: "page" | "post"; translations: Record<string, unknown> }) => {
       const endpoint = payload.type === "page"
         ? `/api/website/pages/${payload.id}/translations`
         : `/api/website/blog-posts/${payload.id}/translations`;
@@ -141,8 +141,9 @@ export default function WebsiteTranslations() {
     if (!editItem) return;
     const fields = editItem.type === "page" ? TRANSLATABLE_PAGE_FIELDS : TRANSLATABLE_POST_FIELDS;
     const defaults: Record<string, string> = {};
+    const itemAny = editItem.item as unknown as Record<string, unknown>;
     for (const f of fields) {
-      defaults[f] = (editItem.item as Record<string, unknown>)[f] as string || "";
+      defaults[f] = (itemAny[f] as string) || "";
     }
     setEditValues(defaults);
     toast({ title: "Copied from default locale" });
@@ -227,7 +228,7 @@ export default function WebsiteTranslations() {
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {nonDefaultLocales.map(l => (
-                    <SelectItem key={l} value={l}>{LANGUAGE_META[l]?.flag} {LANGUAGE_META[l]?.name || l.toUpperCase()}</SelectItem>
+                    <SelectItem key={l} value={l}>{LANGUAGE_META[l as keyof typeof LANGUAGE_META]?.flag} {LANGUAGE_META[l as keyof typeof LANGUAGE_META]?.name || l.toUpperCase()}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -239,7 +240,7 @@ export default function WebsiteTranslations() {
             {editItem && (
               <div className="space-y-4">
                 {translatableFields.map(field => {
-                  const defaultVal = (editItem.item as Record<string, unknown>)[field] as string || "";
+                  const defaultVal = (editItem.item as unknown as Record<string, unknown>)[field] as string || "";
                   return (
                     <div key={field} className="space-y-1.5">
                       <Label className="text-xs font-semibold capitalize">{field.replace(/([A-Z])/g, " $1").trim()}</Label>
