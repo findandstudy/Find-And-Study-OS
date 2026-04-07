@@ -159,6 +159,18 @@ export default function PageEditor({ id }: { id: number }) {
     enabled: !!page,
   });
 
+  const { data: globalSettings } = useQuery<Record<string, unknown>>({
+    queryKey: ["global-settings"],
+    queryFn: () => customFetch("/api/settings"),
+    staleTime: 60_000,
+  });
+  const globalSeo = {
+    metaTitle: (globalSettings?.seoMetaTitle as string) || "",
+    metaDescription: (globalSettings?.seoMetaDescription as string) || "",
+    ogImageUrl: (globalSettings?.seoOgImageUrl as string) || "",
+    siteName: (globalSettings?.siteName as string) || "",
+  };
+
   useEffect(() => {
     if (seoInitialized.current || !seoData) return;
     seoInitialized.current = true;
@@ -453,9 +465,12 @@ export default function PageEditor({ id }: { id: number }) {
                   </div>
                   <div className="rounded border p-3 bg-muted/30">
                     <p className="text-[10px] text-muted-foreground mb-1">Google Search Preview</p>
-                    <p className="text-sm text-blue-700 truncate">{seo.metaTitle || page?.title || "Page Title"}</p>
-                    <p className="text-xs text-green-700 truncate">findandstudy.com/{seo.slug || page?.slug || ""}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{seo.metaDescription || "No description set"}</p>
+                    <p className="text-sm text-blue-700 truncate">{seo.metaTitle || page?.title || globalSeo.metaTitle || "Page Title"}</p>
+                    <p className="text-xs text-green-700 truncate">{globalSeo.siteName ? globalSeo.siteName.toLowerCase().replace(/\s+/g, '') + '.com' : 'findandstudy.com'}/{seo.slug || page?.slug || ""}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{seo.metaDescription || globalSeo.metaDescription || "No description set"}</p>
+                    {!seo.metaTitle && !seo.metaDescription && globalSeo.metaTitle && (
+                      <p className="text-[10px] text-amber-600 mt-1">Using global SEO defaults from Settings.</p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Canonical URL</Label>
@@ -485,12 +500,12 @@ export default function PageEditor({ id }: { id: number }) {
                     <Label className="text-xs font-medium">OG Image URL</Label>
                     <Input value={seo.ogImageUrl} onChange={e => setSeo(s => ({ ...s, ogImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
                   </div>
-                  {(seo.ogTitle || seo.ogDescription || seo.ogImageUrl) && (
+                  {(seo.ogTitle || seo.ogDescription || seo.ogImageUrl || globalSeo.ogImageUrl) && (
                     <div className="rounded border p-3 bg-muted/30">
                       <p className="text-[10px] text-muted-foreground mb-1">Social Share Preview</p>
-                      {seo.ogImageUrl && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl} alt="OG" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
-                      <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || "Title"}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{seo.ogDescription || seo.metaDescription || ""}</p>
+                      {(seo.ogImageUrl || globalSeo.ogImageUrl) && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl || globalSeo.ogImageUrl} alt="OG" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
+                      <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || globalSeo.metaTitle || "Title"}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{seo.ogDescription || seo.metaDescription || globalSeo.metaDescription || ""}</p>
                     </div>
                   )}
                   <Separator />

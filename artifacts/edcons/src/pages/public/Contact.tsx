@@ -99,6 +99,7 @@ export default function Contact() {
   ]);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
@@ -158,10 +159,11 @@ export default function Contact() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(contactFormSlug ? { ...payload, _hp: "" } : payload),
       });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Submission failed");
+        throw new Error(data?.message || data?.error || "Submission failed");
       }
+      if (data?.message) setSuccessMsg(data.message);
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message || t("common.error"));
@@ -198,8 +200,8 @@ export default function Contact() {
               <div className="bg-green-50 border border-green-200 rounded-2xl p-10 text-center">
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-xl font-display font-bold text-foreground mb-2">{t("contact.successTitle")}</h3>
-                <p className="text-muted-foreground">{t("contact.successMessage")}</p>
-                <Button onClick={() => { setSubmitted(false); setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" }); }} 
+                <p className="text-muted-foreground">{successMsg || t("contact.successMessage")}</p>
+                <Button onClick={() => { setSubmitted(false); setSuccessMsg(""); setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" }); }} 
                   variant="outline" className="mt-6 rounded-full">
                   {t("contact.sendAnother")}
                 </Button>

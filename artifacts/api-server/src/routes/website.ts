@@ -483,11 +483,13 @@ router.get("/public/website-forms/:slug/check", async (req: Request, res: Respon
 });
 
 router.post("/public/website-forms/:slug/submit", async (req: Request, res: Response) => {
+  let formRecord: typeof websiteFormsTable.$inferSelect | undefined;
   try {
     const { slug } = req.params;
     const [form] = await db.select().from(websiteFormsTable)
       .where(eq(websiteFormsTable.slug, slug));
     if (!form || !form.isActive) return res.status(404).json({ error: "Form not found" });
+    formRecord = form;
 
     const { _hp, ...formData } = req.body;
     if (_hp) return res.json({ success: true });
@@ -535,10 +537,17 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
       status: "new",
     }).returning();
 
-    res.status(201).json({ success: true, submissionId: submission.id });
+    res.status(201).json({
+      success: true,
+      submissionId: submission.id,
+      message: form.successMessage || "Thank you! Your submission has been received.",
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
-    res.status(500).json({ error: msg });
+    res.status(500).json({
+      error: msg,
+      message: formRecord?.errorMessage || "Something went wrong. Please try again later.",
+    });
   }
 });
 

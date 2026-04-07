@@ -32,6 +32,7 @@ interface BlogPost {
   locale: string;
   metaTitle: string | null;
   metaDescription: string | null;
+  translationsJson: Record<string, unknown> | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -268,6 +269,9 @@ export default function WebsiteBlog() {
   function openNewPost() {
     setEditPost(null);
     setForm({ ...EMPTY_FORM });
+    defaultFormRef.current = { ...EMPTY_FORM };
+    blogTranslationsRef.current = {};
+    setEditLocale("en");
     setAutoSlug(true);
     setShowPostDialog(true);
   }
@@ -278,7 +282,7 @@ export default function WebsiteBlog() {
     const bodyText = content.body ?? "";
     const assignedTagIds = postTags.filter(pt => pt.postId === p.id).map(pt => pt.tagId);
     const pubDate = p.publishedAt ? new Date(p.publishedAt).toISOString().slice(0, 16) : "";
-    setForm({
+    const formData: PostFormData = {
       title: p.title,
       slug: p.slug,
       excerpt: p.excerpt ?? "",
@@ -294,7 +298,18 @@ export default function WebsiteBlog() {
       selectedTagIds: assignedTagIds,
       status: p.status,
       publishDate: pubDate,
-    });
+    };
+    setForm(formData);
+    defaultFormRef.current = { ...formData };
+    setEditLocale("en");
+    blogTranslationsRef.current = {};
+    if (p.translationsJson && typeof p.translationsJson === "object") {
+      for (const [loc, data] of Object.entries(p.translationsJson as Record<string, unknown>)) {
+        if (data && typeof data === "object") {
+          blogTranslationsRef.current[loc] = data as Partial<PostFormData>;
+        }
+      }
+    }
     setAutoSlug(false);
     setShowPostDialog(true);
   }
@@ -310,20 +325,32 @@ export default function WebsiteBlog() {
       ? new Date(form.publishDate).toISOString()
       : form.status === "published" ? new Date().toISOString() : null;
 
-    const payload: BlogPostPayload = {
-      title: form.title.trim(),
-      slug: form.slug.trim(),
-      excerpt: form.excerpt.trim() || null,
-      content: { body: form.body, featured: form.featured, readTime: rt, ogImageUrl: form.ogImageUrl || undefined },
-      featuredImageUrl: form.featuredImageUrl || null,
-      categoryId: form.categoryId ? parseInt(form.categoryId) : null,
-      authorId: form.authorId ? parseInt(form.authorId) : null,
-      locale: form.locale,
-      metaTitle: form.metaTitle || null,
-      metaDescription: form.metaDescription || null,
-      status: form.status,
+    const TRANSLATABLE_BLOG = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;
+    if (editLocale !== "en") {
+      const partial: Record<string, string> = {};
+      for (const f of TRANSLATABLE_BLOG) partial[f] = form[f];
+      blogTranslationsRef.current[editLocale] = partial as Partial<PostFormData>;
+    }
+
+    const baseForm = editLocale === "en" ? form : defaultFormRef.current;
+    const translationsPayload = Object.keys(blogTranslationsRef.current).length > 0
+      ? blogTranslationsRef.current : undefined;
+
+    const payload: BlogPostPayload & { translationsJson?: unknown } = {
+      title: baseForm.title.trim(),
+      slug: baseForm.slug.trim(),
+      excerpt: baseForm.excerpt.trim() || null,
+      content: { body: baseForm.body, featured: baseForm.featured, readTime: rt, ogImageUrl: baseForm.ogImageUrl || undefined },
+      featuredImageUrl: baseForm.featuredImageUrl || null,
+      categoryId: baseForm.categoryId ? parseInt(baseForm.categoryId) : null,
+      authorId: baseForm.authorId ? parseInt(baseForm.authorId) : null,
+      locale: baseForm.locale,
+      metaTitle: baseForm.metaTitle || null,
+      metaDescription: baseForm.metaDescription || null,
+      status: baseForm.status,
       publishedAt,
     };
+    if (translationsPayload) payload.translationsJson = translationsPayload;
 
     saveMut.mutate(payload, {
       onSuccess: async (savedPost: BlogPost) => {
@@ -649,10 +676,12 @@ export default function WebsiteBlog() {
                   if (v === "en") {
                     setForm({ ...defaultFormRef.current });
                   } else {
+                    const base = { ...defaultFormRef.current };
                     const tr = blogTranslationsRef.current[v];
                     if (tr && Object.values(tr).some(val => val && String(val).trim())) {
-                      setForm(f => ({ ...f, ...tr }));
+                      setForm({ ...base, ...tr });
                     } else {
+                      setForm(base);
                       toast({ title: "No translation yet", description: "Showing default content. Edit to create translation." });
                     }
                   }
