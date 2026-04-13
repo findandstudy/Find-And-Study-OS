@@ -312,7 +312,9 @@
     "docLabel_sop": "Lettre de motivation",
     "docSub_ifAvailable": "Si disponible",
     "docSub_ifRequired": "Si requis",
-    "docSub_recognition": "Reconnaissance"
+    "docSub_recognition": "Reconnaissance",
+    "languageScore": "Score linguistique",
+    "languageScorePlaceholder": "ex. 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "Portail",

@@ -197,7 +197,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, address, highSchool, graduationYear, gpa, leadId, documents } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, address, highSchool, graduationYear, gpa, languageScore, leadId, documents } = req.body;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality) {
     res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, and nationality are required" });
@@ -265,6 +265,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           highSchool: s(highSchool, 200),
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
+          languageScore: s(languageScore, 20),
         }).returning();
       }
 
@@ -280,13 +281,14 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       if (!existingStudent.highSchool && highSchool) fillableFields.highSchool = s(highSchool, 200);
       if (!existingStudent.graduationYear && graduationYear) fillableFields.graduationYear = parseInt(String(graduationYear), 10) || null;
       if (!existingStudent.gpa && gpa) fillableFields.gpa = s(gpa, 20);
+      if (!existingStudent.languageScore && languageScore) fillableFields.languageScore = s(languageScore, 20);
       if (Object.keys(fillableFields).length > 0) {
         await db.update(studentsTable).set(fillableFields).where(eq(studentsTable.id, existingStudent.id));
       }
 
       resultStudentId = existingStudent.id;
       const studentGpaVal = existingStudent.gpa || gpa || null;
-      const studentLangVal = (existingStudent as any).languageScore || null;
+      const studentLangVal = existingStudent.languageScore || languageScore || null;
       const appResult = await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, studentGpaVal, studentLangVal);
       if (appResult.eligibilityErrors) {
         res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: appResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
@@ -347,11 +349,12 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           highSchool: s(highSchool, 200),
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
+          languageScore: s(languageScore, 20),
         }).returning();
       }
 
       resultStudentId = newStudent.id;
-      const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, null);
+      const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, languageScore || null);
       if (newAppResult.eligibilityErrors) {
         res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: newAppResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
         return;

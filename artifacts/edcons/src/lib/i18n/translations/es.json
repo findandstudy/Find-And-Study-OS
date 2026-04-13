@@ -312,7 +312,9 @@
     "docLabel_sop": "Carta de motivación",
     "docSub_ifAvailable": "Si disponible",
     "docSub_ifRequired": "Si requerido",
-    "docSub_recognition": "Reconocimiento"
+    "docSub_recognition": "Reconocimiento",
+    "languageScore": "Puntuación de idioma",
+    "languageScorePlaceholder": "ej. 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "Portal",

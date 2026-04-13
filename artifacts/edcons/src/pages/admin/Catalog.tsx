@@ -81,7 +81,7 @@ type University = {
   contactPersonName?: string | null; contactPersonPhone?: string | null; contactPersonEmail?: string | null;
   status: string;
 };
-type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; isActive: boolean };
+type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; isActive: boolean };
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
@@ -1233,8 +1233,8 @@ function ProgramsTab() {
               Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "",
               "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
               "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
-              "Language Fee": p.languageFee ?? "", "Min GPA": (p as any).minGpa ?? "",
-              "Min Language Score": (p as any).minLanguageScore ?? "",
+              "Language Fee": p.languageFee ?? "", "Min GPA": p.minGpa ?? "",
+              "Min Language Score": p.minLanguageScore ?? "",
               Active: p.isActive ? "Yes" : "No",
               Requirements: p.requirements ?? "",
             }));
@@ -1369,11 +1369,11 @@ function ProgramsTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Min. Diploma GPA</Label>
-                  <Input className="mt-1" type="number" step="0.01" placeholder="e.g. 2.5" value={(form as any)?.minGpa ?? ""} onChange={e => setForm(f => ({ ...f, minGpa: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" step="0.01" placeholder="e.g. 2.5" value={form?.minGpa ?? ""} onChange={e => setForm(f => ({ ...f, minGpa: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
                   <Label className="text-xs">Min. Language Score</Label>
-                  <Input className="mt-1" type="number" step="0.5" placeholder="e.g. 6.0" value={(form as any)?.minLanguageScore ?? ""} onChange={e => setForm(f => ({ ...f, minLanguageScore: e.target.value ? Number(e.target.value) : null }))} />
+                  <Input className="mt-1" type="number" step="0.5" placeholder="e.g. 6.0" value={form?.minLanguageScore ?? ""} onChange={e => setForm(f => ({ ...f, minLanguageScore: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
               </div>
             </div>

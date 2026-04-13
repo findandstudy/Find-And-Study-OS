@@ -312,7 +312,9 @@
     "docLabel_sop": "Surat Tujuan",
     "docSub_ifAvailable": "Jika tersedia",
     "docSub_ifRequired": "Jika diperlukan",
-    "docSub_recognition": "Pengakuan"
+    "docSub_recognition": "Pengakuan",
+    "languageScore": "Skor Bahasa",
+    "languageScorePlaceholder": "mis. 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "Portal",

@@ -321,7 +321,9 @@
     "appDocLabel_final_acceptance": "Final Acceptance Letter",
     "appDocLabel_student_card": "Student Card Upload",
     "appDocLabel_visa_approved": "Visa OK",
-    "appDocLabel_visa_reject": "Visa Reject"
+    "appDocLabel_visa_reject": "Visa Reject",
+    "languageScore": "Language Score",
+    "languageScorePlaceholder": "e.g. 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "Portal",

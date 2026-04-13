@@ -312,7 +312,9 @@
     "docLabel_sop": "उद्देश्य विवरण",
     "docSub_ifAvailable": "उपलब्ध हो तो",
     "docSub_ifRequired": "आवश्यक हो तो",
-    "docSub_recognition": "मान्यता"
+    "docSub_recognition": "मान्यता",
+    "languageScore": "भाषा स्कोर",
+    "languageScorePlaceholder": "जैसे 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "पोर्टल",

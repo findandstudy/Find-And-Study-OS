@@ -321,7 +321,9 @@
     "appDocLabel_final_acceptance": "Kesin Kabul Mektubu",
     "appDocLabel_student_card": "Öğrenci Kartı Yükleme",
     "appDocLabel_visa_approved": "Vize Onay",
-    "appDocLabel_visa_reject": "Vize Red"
+    "appDocLabel_visa_reject": "Vize Red",
+    "languageScore": "Dil Puanı",
+    "languageScorePlaceholder": "ör. 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "Portal",

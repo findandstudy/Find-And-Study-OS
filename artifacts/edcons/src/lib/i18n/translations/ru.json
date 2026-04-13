@@ -312,7 +312,9 @@
     "docLabel_sop": "Мотивационное письмо",
     "docSub_ifAvailable": "При наличии",
     "docSub_ifRequired": "При необходимости",
-    "docSub_recognition": "Признание"
+    "docSub_recognition": "Признание",
+    "languageScore": "Языковой балл",
+    "languageScorePlaceholder": "напр. 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "Портал",

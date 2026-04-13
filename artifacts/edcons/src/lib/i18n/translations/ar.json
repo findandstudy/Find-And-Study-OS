@@ -312,7 +312,9 @@
     "docLabel_sop": "خطاب الغرض",
     "docSub_ifAvailable": "إن وُجد",
     "docSub_ifRequired": "إن لزم",
-    "docSub_recognition": "الاعتراف"
+    "docSub_recognition": "الاعتراف",
+    "languageScore": "درجة اللغة",
+    "languageScorePlaceholder": "مثال 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "البوابة",

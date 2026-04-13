@@ -312,7 +312,9 @@
     "docLabel_sop": "个人陈述",
     "docSub_ifAvailable": "如有",
     "docSub_ifRequired": "如需要",
-    "docSub_recognition": "认证"
+    "docSub_recognition": "认证",
+    "languageScore": "语言成绩",
+    "languageScorePlaceholder": "例如 6.5 (IELTS)"
   },
   "dashboard": {
     "portal": "门户",

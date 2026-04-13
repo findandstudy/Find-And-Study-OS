@@ -274,7 +274,7 @@ const EMPTY_FORM = {
   nationality: "", dateOfBirth: "", notes: "",
   motherName: "", fatherName: "", passportNumber: "",
   passportIssueDate: "", passportExpiry: "",
-  address: "", highSchool: "", graduationYear: "", gpa: "",
+  address: "", highSchool: "", graduationYear: "", gpa: "", languageScore: "",
 };
 
 function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
@@ -880,6 +880,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </Label>
               <Input value={form.gpa} onChange={(e) => setForm(f => ({ ...f, gpa: e.target.value }))}
                 placeholder={t("apply.gpaPlaceholder")} className={`rounded-xl ${extracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold">
+                {t("apply.languageScore")}
+              </Label>
+              <Input value={form.languageScore} onChange={(e) => setForm(f => ({ ...f, languageScore: e.target.value }))}
+                placeholder={t("apply.languageScorePlaceholder")} className="rounded-xl" />
             </div>
 
             <div className="space-y-1.5">
