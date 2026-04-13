@@ -182,7 +182,8 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     scholarship?: number; intakes?: string; requirements?: string;
     commissionRate?: number; applicationFee?: number; advancedFee?: number;
     depositFee?: number; serviceFeeAmount?: number; discountedFee?: number;
-    languageFee?: number; feeType?: string; isActive?: string | boolean;
+    languageFee?: number; feeType?: string; minGpa?: number; minLanguageScore?: number;
+    isActive?: string | boolean;
   }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
@@ -208,6 +209,8 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
       discountedFee: r.discountedFee ? Number(r.discountedFee) : null,
       languageFee: r.languageFee ? Number(r.languageFee) : null,
       feeType: r.feeType ?? null,
+      minGpa: r.minGpa ? Number(r.minGpa) : null,
+      minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
       isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
     };
   }).filter(Boolean) as ReturnType<typeof programsTable.$inferInsert>[];

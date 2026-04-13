@@ -1187,10 +1187,10 @@ function ProgramsTab() {
   };
 
   const templateRows = [
-    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", isActive: "Yes" },
-    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", isActive: "Yes" },
+    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5, minLanguageScore: 5.5, isActive: "Yes" },
+    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, isActive: "Yes" },
   ];
-  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, isActive";
+  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, isActive";
 
   return (
     <div className="space-y-4">
@@ -1233,7 +1233,9 @@ function ProgramsTab() {
               Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "",
               "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
               "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
-              "Language Fee": p.languageFee ?? "", Active: p.isActive ? "Yes" : "No",
+              "Language Fee": p.languageFee ?? "", "Min GPA": (p as any).minGpa ?? "",
+              "Min Language Score": (p as any).minLanguageScore ?? "",
+              Active: p.isActive ? "Yes" : "No",
               Requirements: p.requirements ?? "",
             }));
             await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -1360,6 +1362,20 @@ function ProgramsTab() {
               </div>
               <div><Label>Scholarship</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : null }))} /></div>
               <div><Label>Commission %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : null }))} /></div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Minimum Requirements</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Min. Diploma GPA</Label>
+                  <Input className="mt-1" type="number" step="0.01" placeholder="e.g. 2.5" value={(form as any)?.minGpa ?? ""} onChange={e => setForm(f => ({ ...f, minGpa: e.target.value ? Number(e.target.value) : null }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Min. Language Score</Label>
+                  <Input className="mt-1" type="number" step="0.5" placeholder="e.g. 6.0" value={(form as any)?.minLanguageScore ?? ""} onChange={e => setForm(f => ({ ...f, minLanguageScore: e.target.value ? Number(e.target.value) : null }))} />
+                </div>
+              </div>
             </div>
 
             {/* ── Additional Fees ────────────────────────────── */}

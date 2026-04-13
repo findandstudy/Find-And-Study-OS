@@ -27,7 +27,7 @@ const aiExtractLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null) {
+async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[] }> {
   try {
     let snapshotTuitionFee: number | null = null;
     let snapshotDiscountedFee: number | null = null;
@@ -50,6 +50,26 @@ async function createApplicationForStudent(studentId: number, programId: number 
     if (programId) {
       const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
       if (prog) {
+        const eligibilityErrors: string[] = [];
+        if (prog.minGpa != null) {
+          const gpaNum = parseFloat(studentGpa || "");
+          if (isNaN(gpaNum)) {
+            eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa}, but no GPA was provided`);
+          } else if (gpaNum < prog.minGpa) {
+            eligibilityErrors.push(`GPA (${gpaNum}) is below the minimum required (${prog.minGpa})`);
+          }
+        }
+        if (prog.minLanguageScore != null) {
+          const langNum = parseFloat(studentLanguageScore || "");
+          if (isNaN(langNum)) {
+            eligibilityErrors.push(`Program requires minimum language score of ${prog.minLanguageScore}, but no language score was provided`);
+          } else if (langNum < prog.minLanguageScore) {
+            eligibilityErrors.push(`Language score (${langNum}) is below the minimum required (${prog.minLanguageScore})`);
+          }
+        }
+        if (eligibilityErrors.length > 0) {
+          return { appId: null, eligibilityErrors };
+        }
         snapshotTuitionFee = prog.tuitionFee ?? null;
         snapshotDiscountedFee = (prog.discountedFee != null && !isNaN(Number(prog.discountedFee))) ? Number(prog.discountedFee) : null;
         snapshotScholarship = prog.scholarship ?? null;
@@ -169,10 +189,10 @@ async function createApplicationForStudent(studentId: number, programId: number 
     } catch {}
 
     console.log(`[AUTO-APPLICATION] Created application #${app.id} for student #${studentId}, program: ${snapshotProgramName}`);
-    return app.id;
+    return { appId: app.id };
   } catch (err) {
     console.error("[AUTO-APPLICATION] Error creating application:", err);
-    return null;
+    return { appId: null };
   }
 }
 
@@ -265,7 +285,14 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }
 
       resultStudentId = existingStudent.id;
-      resultAppId = await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
+      const studentGpaVal = existingStudent.gpa || gpa || null;
+      const studentLangVal = (existingStudent as any).languageScore || null;
+      const appResult = await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, studentGpaVal, studentLangVal);
+      if (appResult.eligibilityErrors) {
+        res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: appResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+        return;
+      }
+      resultAppId = appResult.appId;
 
       const emailContent = await buildExistingAccountEmail({
         firstName: existingUser.firstName || firstName,
@@ -324,7 +351,12 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }
 
       resultStudentId = newStudent.id;
-      resultAppId = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName);
+      const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, null);
+      if (newAppResult.eligibilityErrors) {
+        res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: newAppResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+        return;
+      }
+      resultAppId = newAppResult.appId;
 
       const setPasswordUrl = `${baseUrl}/login?token=${passwordToken}`;
       const verifyEmailUrl = `${baseUrl}/api/auth/verify-email-token/${verificationToken}`;

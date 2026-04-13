@@ -382,12 +382,23 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     } catch (err: any) {
       let desc = err.message || "Could not create application";
       const errData = err?.data;
-      if (errData?.missingFields) {
+      if (errData?.code === "ELIGIBILITY_FAILED" && errData?.eligibilityErrors) {
+        desc = errData.eligibilityErrors.join("\n");
+        toast({
+          title: "Eligibility Requirements Not Met",
+          description: desc,
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else if (errData?.missingFields) {
         desc = `Student is missing required fields: ${errData.missingFields.join(", ")}. Please complete the student profile first.`;
+        toast({ title: "Failed", description: desc, variant: "destructive" });
       } else if (errData?.error) {
         desc = errData.error;
+        toast({ title: "Failed", description: desc, variant: "destructive" });
+      } else {
+        toast({ title: "Failed", description: desc, variant: "destructive" });
       }
-      toast({ title: "Failed", description: desc, variant: "destructive" });
     } finally {
       setAppSubmitting(false);
     }

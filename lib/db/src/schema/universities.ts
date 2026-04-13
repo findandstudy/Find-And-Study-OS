@@ -60,6 +60,8 @@ export const programsTable = pgTable("programs", {
   discountedFee: real("discounted_fee"),
   languageFee: real("language_fee"),
   feeType: text("fee_type"),
+  minGpa: real("min_gpa"),
+  minLanguageScore: real("min_language_score"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

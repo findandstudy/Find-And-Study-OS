@@ -252,6 +252,32 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   if (programId) {
     const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, parseInt(String(programId), 10)));
     if (prog) {
+      const eligibilityErrors: string[] = [];
+      if (prog.minGpa != null) {
+        const studentGpaNum = parseFloat(studentFull.gpa || "");
+        if (isNaN(studentGpaNum)) {
+          eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa}, but student has no GPA recorded`);
+        } else if (studentGpaNum < prog.minGpa) {
+          eligibilityErrors.push(`Student GPA (${studentGpaNum}) is below the minimum required (${prog.minGpa})`);
+        }
+      }
+      if (prog.minLanguageScore != null) {
+        const studentLangNum = parseFloat(studentFull.languageScore || "");
+        if (isNaN(studentLangNum)) {
+          eligibilityErrors.push(`Program requires minimum language score of ${prog.minLanguageScore}, but student has no language score recorded`);
+        } else if (studentLangNum < prog.minLanguageScore) {
+          eligibilityErrors.push(`Student language score (${studentLangNum}) is below the minimum required (${prog.minLanguageScore})`);
+        }
+      }
+      if (eligibilityErrors.length > 0) {
+        res.status(422).json({
+          error: "Student does not meet program eligibility requirements",
+          eligibilityErrors,
+          code: "ELIGIBILITY_FAILED",
+        });
+        return;
+      }
+
       snapshotTuitionFee = snapshotTuitionFee ?? prog.tuitionFee ?? null;
       snapshotDiscountedFee = (prog.discountedFee != null && !isNaN(Number(prog.discountedFee))) ? Number(prog.discountedFee) : null;
       snapshotScholarship = snapshotScholarship ?? prog.scholarship ?? null;
@@ -953,6 +979,66 @@ router.patch("/applications/:id/origin", requireAuth, requireRole("super_admin",
 
   await logAudit(req.user!.id, "override_origin", "application", id, { old: oldOrigin, new: { originType, originEntityType, originEntityId, originDisplayName } }, req.ip);
   res.json(updated);
+});
+
+router.post("/applications/reject-unqualified", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const allApps = await db.select({
+    id: applicationsTable.id,
+    studentId: applicationsTable.studentId,
+    programId: applicationsTable.programId,
+    stage: applicationsTable.stage,
+  }).from(applicationsTable).where(and(
+    isNull(applicationsTable.deletedAt),
+    sql`${applicationsTable.programId} IS NOT NULL`,
+    sql`${applicationsTable.stage} NOT IN ('rejected', 'cancelled')`,
+  ));
+
+  const programIds = [...new Set(allApps.filter(a => a.programId).map(a => a.programId!))];
+  if (programIds.length === 0) { res.json({ rejected: 0 }); return; }
+
+  const programs = await db.select({
+    id: programsTable.id,
+    minGpa: programsTable.minGpa,
+    minLanguageScore: programsTable.minLanguageScore,
+  }).from(programsTable).where(inArray(programsTable.id, programIds));
+  const progMap = new Map(programs.filter(p => p.minGpa != null || p.minLanguageScore != null).map(p => [p.id, p]));
+
+  if (progMap.size === 0) { res.json({ rejected: 0 }); return; }
+
+  const studentIds = [...new Set(allApps.map(a => a.studentId))];
+  const students = await db.select({
+    id: studentsTable.id,
+    gpa: studentsTable.gpa,
+    languageScore: studentsTable.languageScore,
+  }).from(studentsTable).where(inArray(studentsTable.id, studentIds));
+  const stuMap = new Map(students.map(s => [s.id, s]));
+
+  let rejectedCount = 0;
+  for (const app of allApps) {
+    if (!app.programId) continue;
+    const prog = progMap.get(app.programId);
+    if (!prog) continue;
+    const stu = stuMap.get(app.studentId);
+    if (!stu) continue;
+
+    let fail = false;
+    if (prog.minGpa != null) {
+      const gpaNum = parseFloat(stu.gpa || "");
+      if (isNaN(gpaNum) || gpaNum < prog.minGpa) fail = true;
+    }
+    if (prog.minLanguageScore != null) {
+      const langNum = parseFloat(stu.languageScore || "");
+      if (isNaN(langNum) || langNum < prog.minLanguageScore) fail = true;
+    }
+
+    if (fail) {
+      await db.update(applicationsTable).set({ stage: "rejected" }).where(eq(applicationsTable.id, app.id));
+      rejectedCount++;
+    }
+  }
+
+  await logAudit(req.user!.id, "bulk_reject_unqualified", "application", undefined, { rejectedCount }, req.ip);
+  res.json({ rejected: rejectedCount });
 });
 
 export default router;
