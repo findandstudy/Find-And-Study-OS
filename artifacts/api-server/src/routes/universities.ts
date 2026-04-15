@@ -153,7 +153,12 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
   const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
-  const quotaVal = quota !== undefined && quota !== "" && quota !== null ? Math.max(0, Math.round(Number(quota))) : null;
+  let quotaVal: number | null = null;
+  if (quota !== undefined && quota !== "" && quota !== null) {
+    const qv = Math.round(Number(quota));
+    if (isNaN(qv) || qv < 1) { res.status(400).json({ error: "quota must be a positive integer (>= 1) or empty" }); return; }
+    quotaVal = qv;
+  }
   const [prog] = await db.insert(programsTable).values({
     universityId: Number(universityId), name, degree: degree || null, field: field || null,
     language: language || null, duration: duration || null,
@@ -197,7 +202,7 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
       updates.quota = null;
     } else {
       const qv = Math.round(Number(updates.quota));
-      if (isNaN(qv) || qv < 0) { res.status(400).json({ error: "quota must be a non-negative integer or null" }); return; }
+      if (isNaN(qv) || qv < 1) { res.status(400).json({ error: "quota must be a positive integer (>= 1) or null" }); return; }
       updates.quota = qv;
     }
   }

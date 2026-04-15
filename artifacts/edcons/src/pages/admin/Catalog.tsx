@@ -1256,12 +1256,13 @@ function ProgramsTab() {
               <SortTh label="Degree / Field" col="degree" sort={sort} onSort={handleSort} />
               <SortTh label="Fee" col="fee" sort={sort} onSort={handleSort} />
               <SortTh label="Commission" col="commission" sort={sort} onSort={handleSort} />
+              <th className="px-4 py-2 text-xs font-medium text-left">Quota</th>
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No programs found</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No programs found</td></tr>
             )}
             {sorted.map(p => (
               <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${selected.has(p.id) ? "bg-primary/5" : ""}`}>
@@ -1276,6 +1277,7 @@ function ProgramsTab() {
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">{[p.degree, p.field].filter(Boolean).join(" / ") || "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.tuitionFee ? `${p.tuitionFee.toLocaleString()} ${p.currency ?? "USD"}` : "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.commissionRate != null ? `%${p.commissionRate}` : "—"}</td>
+                <td className="px-4 py-2.5 text-xs">{p.quota != null ? p.quota : "∞"}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm(p)}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -1377,7 +1379,7 @@ function ProgramsTab() {
                 </div>
                 <div>
                   <Label className="text-xs">Quota (Kontenjan)</Label>
-                  <Input className="mt-1" type="number" step="1" min="0" placeholder="e.g. 50" value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(0, Math.round(Number(e.target.value))) : null }))} />
+                  <Input className="mt-1" type="number" step="1" min="1" placeholder="e.g. 50 (empty = unlimited)" value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null }))} />
                 </div>
               </div>
             </div>

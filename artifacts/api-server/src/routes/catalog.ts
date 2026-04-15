@@ -211,7 +211,7 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
       feeType: r.feeType ?? null,
       minGpa: r.minGpa ? Number(r.minGpa) : null,
       minLanguageScore: r.minLanguageScore ? Number(r.minLanguageScore) : null,
-      quota: r.quota ? Math.max(0, Math.round(Number(r.quota))) : null,
+      quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,
       isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
     };
   }).filter(Boolean) as ReturnType<typeof programsTable.$inferInsert>[];
