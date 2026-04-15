@@ -14,6 +14,7 @@ type PdfMarkupModalProps = {
   onApply: (amount: number) => void;
   currency?: string;
   sampleFee?: number | null;
+  allowNegative?: boolean;
 };
 
 function formatCurrency(amount: number, currency = "USD"): string {
@@ -24,18 +25,22 @@ function formatCurrency(amount: number, currency = "USD"): string {
   }
 }
 
-export function PdfMarkupModal({ open, onOpenChange, currentMarkup, onApply, currency = "USD", sampleFee }: PdfMarkupModalProps) {
+export function PdfMarkupModal({ open, onOpenChange, currentMarkup, onApply, currency = "USD", sampleFee, allowNegative = false }: PdfMarkupModalProps) {
   const [amount, setAmount] = useState("");
 
   useEffect(() => {
     if (open) {
-      setAmount(currentMarkup > 0 ? String(currentMarkup) : "");
+      setAmount(currentMarkup !== 0 ? String(currentMarkup) : "");
     }
   }, [open, currentMarkup]);
 
   const parsed = Number(amount) || 0;
-  const numericAmount = Math.min(Math.max(0, Math.floor(parsed)), MAX_MARKUP);
+  const minVal = allowNegative ? -MAX_MARKUP : 0;
+  const numericAmount = Math.min(Math.max(minVal, Math.floor(parsed)), MAX_MARKUP);
   const preview = sampleFee != null && sampleFee > 0 ? sampleFee : 1000;
+  const adjustedPreview = Math.max(0, preview + numericAmount);
+  const isNegative = numericAmount < 0;
+  const isPositive = numericAmount > 0;
 
   function handleApply() {
     onApply(numericAmount);
@@ -66,30 +71,40 @@ export function PdfMarkupModal({ open, onOpenChange, currentMarkup, onApply, cur
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Additional Service Fee ({currency})</Label>
+            <Label className="text-sm font-medium">
+              {allowNegative ? "Service Fee Adjustment" : "Additional Service Fee"} ({currency})
+            </Label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="number"
-                min={0}
+                min={minVal}
                 max={MAX_MARKUP}
                 step={1}
                 placeholder="0"
                 value={amount}
                 onChange={e => {
                   const v = e.target.value;
-                  if (v === "" || Number(v) >= 0) setAmount(v);
+                  if (v === "" || v === "-") {
+                    setAmount(v);
+                  } else {
+                    const n = Number(v);
+                    if (!isNaN(n) && (allowNegative || n >= 0)) setAmount(v);
+                  }
                 }}
                 className="pl-9 h-11 rounded-xl text-lg font-semibold"
                 autoFocus
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Enter a whole number to add on top of each program's service fee in the PDF (max {MAX_MARKUP.toLocaleString()}). Enter 0 or leave empty to remove markup.
+              {allowNegative
+                ? `Enter a positive number to increase or a negative number to decrease the fee in the PDF (range: -${MAX_MARKUP.toLocaleString()} to +${MAX_MARKUP.toLocaleString()}). Enter 0 or leave empty to remove adjustment.`
+                : `Enter a whole number to add on top of each program's service fee in the PDF (max ${MAX_MARKUP.toLocaleString()}). Enter 0 or leave empty to remove markup.`
+              }
             </p>
           </div>
 
-          {numericAmount > 0 && (
+          {numericAmount !== 0 && (
             <div className="p-4 bg-muted/50 rounded-xl border space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview (per program)</p>
               <div className="flex items-center gap-3 flex-wrap">
@@ -97,24 +112,25 @@ export function PdfMarkupModal({ open, onOpenChange, currentMarkup, onApply, cur
                   <p className="text-xs text-muted-foreground">Original Fee</p>
                   <p className="text-sm font-semibold">{formatCurrency(preview, currency)}</p>
                 </div>
-                <div className="flex items-center gap-1 text-primary">
-                  <span className="text-sm font-bold">+</span>
-                  <span className="text-sm font-bold">{formatCurrency(numericAmount, currency)}</span>
+                <div className={`flex items-center gap-1 ${isNegative ? "text-red-600 dark:text-red-400" : "text-primary"}`}>
+                  <span className="text-sm font-bold">{isPositive ? "+" : ""}{formatCurrency(numericAmount, currency)}</span>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground" />
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">PDF Fee</p>
-                  <p className="text-sm font-bold text-green-600 dark:text-green-400">{formatCurrency(preview + numericAmount, currency)}</p>
+                  <p className={`text-sm font-bold ${isNegative ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                    {formatCurrency(adjustedPreview, currency)}
+                  </p>
                 </div>
               </div>
             </div>
           )}
 
           <div className="flex items-center justify-between pt-2">
-            {currentMarkup > 0 ? (
+            {currentMarkup !== 0 ? (
               <Button variant="ghost" size="sm" onClick={handleClear} className="text-destructive hover:text-destructive gap-1.5">
                 <Eraser className="w-3.5 h-3.5" />
-                Clear Markup
+                Clear Adjustment
               </Button>
             ) : (
               <div />

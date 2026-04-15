@@ -162,6 +162,7 @@ export default function CourseFinder() {
   const isStudent = user?.role === "student";
   const showWishlist = isStudent || !user;
   const canUsePdfMarkup = user && ["super_admin", "admin", "manager", "agent", "sub_agent"].includes(user.role);
+  const canUseNegativeMarkup = user && ["super_admin", "admin", "manager"].includes(user.role);
   const canExportExcel = user && ["super_admin", "admin"].includes(user.role);
 
   useEffect(() => {
@@ -333,7 +334,7 @@ export default function CourseFinder() {
         companyWebsite: settings?.companyWebsite || undefined,
         showCommission: !!showCommission,
         agentShareRate: agentShareRate ?? null,
-        serviceFeeMarkup: pdfMarkup > 0 ? pdfMarkup : undefined,
+        serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
         hideServiceFee,
       });
       toast({ title: "PDF generated", description: `Proposal with ${selected.length} program${selected.length !== 1 ? "s" : ""} downloaded.` });
@@ -593,9 +594,9 @@ export default function CourseFinder() {
                         >
                           <DollarSign className="w-3.5 h-3.5" />
                           PDF Fee Adjustment
-                          {pdfMarkup > 0 && (
-                            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                              PDF Markup: +{pdfMarkup.toLocaleString()} {programs[0]?.currency || "USD"}
+                          {pdfMarkup !== 0 && (
+                            <Badge variant="secondary" className={`ml-1 text-[10px] px-1.5 py-0 h-4 ${pdfMarkup > 0 ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"}`}>
+                              {pdfMarkup > 0 ? "+" : ""}{pdfMarkup.toLocaleString()} {programs[0]?.currency || "USD"}
                             </Badge>
                           )}
                         </Button>
@@ -778,6 +779,7 @@ export default function CourseFinder() {
           onApply={setPdfMarkup}
           currency={programs[0]?.currency || "USD"}
           sampleFee={programs[0]?.serviceFeeAmount}
+          allowNegative={!!canUseNegativeMarkup}
         />
       )}
     </DashboardLayout>

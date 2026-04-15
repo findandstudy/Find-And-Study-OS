@@ -342,7 +342,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
     }
 
     if (showServiceFee) {
-      const totalServiceFee = (p.serviceFeeAmount ?? 0) + serviceFeeMarkup;
+      const totalServiceFee = Math.max(0, (p.serviceFeeAmount ?? 0) + serviceFeeMarkup);
       drawRow("Service Fee", fmt(totalServiceFee, cur), BODY, DARK);
     }
 
