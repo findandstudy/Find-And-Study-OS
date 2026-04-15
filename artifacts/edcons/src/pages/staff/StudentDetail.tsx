@@ -384,8 +384,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       const errData = err?.data;
       if (errData?.code === "QUOTA_FULL") {
         toast({
-          title: "Program Quota Full",
-          description: errData.error || "This program has reached its enrollment quota for this year.",
+          title: errData.error || "Program quota is full for this year",
           variant: "destructive",
           duration: 10000,
         });
