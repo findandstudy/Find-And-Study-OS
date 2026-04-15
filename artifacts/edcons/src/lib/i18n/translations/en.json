@@ -216,7 +216,11 @@
     "feeMaxValue": "Max ({value})",
     "prevPage": "Previous page",
     "nextPage": "Next page",
-    "goToPage": "Go to page {page}"
+    "goToPage": "Go to page {page}",
+    "quotaFull": "Program Quota Full",
+    "quotaFullDesc": "This program has reached its enrollment quota for this year.",
+    "quota": "Quota",
+    "quotaLabel": "Quota (Kontenjan)"
   },
   "apply": {
     "title": "Apply — {name}",

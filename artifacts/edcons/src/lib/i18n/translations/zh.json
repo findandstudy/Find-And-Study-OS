@@ -216,7 +216,11 @@
     "feeMaxValue": "最高 ({value})",
     "prevPage": "上一页",
     "nextPage": "下一页",
-    "goToPage": "跳转至第 {page} 页"
+    "goToPage": "跳转至第 {page} 页",
+    "quotaFull": "项目名额已满",
+    "quotaFullDesc": "该项目今年的招生名额已满。",
+    "quota": "名额",
+    "quotaLabel": "名额（Kontenjan）"
   },
   "apply": {
     "title": "申请 — {name}",

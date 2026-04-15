@@ -278,6 +278,31 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
         return;
       }
 
+      if (prog.quota != null) {
+        const wonStages = await db.select({ key: pipelineStagesTable.key })
+          .from(pipelineStagesTable)
+          .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
+        const wonKeys = wonStages.map(s => s.key);
+        if (wonKeys.length > 0) {
+          const currentYear = String(new Date().getFullYear());
+          const [{ cnt }] = await db.select({ cnt: sql<number>`count(*)` })
+            .from(applicationsTable)
+            .where(and(
+              eq(applicationsTable.programId, prog.id),
+              eq(applicationsTable.season, season || currentYear),
+              inArray(applicationsTable.stage, wonKeys),
+              isNull(applicationsTable.deletedAt),
+            ));
+          if (Number(cnt) >= prog.quota) {
+            res.status(422).json({
+              error: `Program quota is full for this year (${prog.quota}/${prog.quota} enrolled)`,
+              code: "QUOTA_FULL",
+            });
+            return;
+          }
+        }
+      }
+
       snapshotTuitionFee = snapshotTuitionFee ?? prog.tuitionFee ?? null;
       snapshotDiscountedFee = (prog.discountedFee != null && !isNaN(Number(prog.discountedFee))) ? Number(prog.discountedFee) : null;
       snapshotScholarship = snapshotScholarship ?? prog.scholarship ?? null;

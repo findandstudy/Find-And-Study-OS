@@ -216,7 +216,11 @@
     "feeMaxValue": "Макс ({value})",
     "prevPage": "Предыдущая страница",
     "nextPage": "Следующая страница",
-    "goToPage": "Перейти на страницу {page}"
+    "goToPage": "Перейти на страницу {page}",
+    "quotaFull": "Квота программы заполнена",
+    "quotaFullDesc": "Эта программа достигла квоты зачисления на этот год.",
+    "quota": "Квота",
+    "quotaLabel": "Квота (Kontенjan)"
   },
   "apply": {
     "title": "Заявка — {name}",

@@ -216,7 +216,11 @@
     "feeMaxValue": "حداکثر ({value})",
     "prevPage": "صفحه قبل",
     "nextPage": "صفحه بعد",
-    "goToPage": "رفتن به صفحه {page}"
+    "goToPage": "رفتن به صفحه {page}",
+    "quotaFull": "سهمیه برنامه پر شده",
+    "quotaFullDesc": "این برنامه به سهمیه ثبت‌نام خود برای امسال رسیده است.",
+    "quota": "سهمیه",
+    "quotaLabel": "سهمیه (کونتنجان)"
   },
   "apply": {
     "title": "درخواست — {name}",

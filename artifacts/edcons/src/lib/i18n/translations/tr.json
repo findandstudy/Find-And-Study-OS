@@ -216,7 +216,11 @@
     "feeMaxValue": "Maks ({value})",
     "prevPage": "Önceki sayfa",
     "nextPage": "Sonraki sayfa",
-    "goToPage": "{page}. sayfaya git"
+    "goToPage": "{page}. sayfaya git",
+    "quotaFull": "Program Kontenjanı Dolu",
+    "quotaFullDesc": "Bu program bu yıl için kayıt kontenjanına ulaştı.",
+    "quota": "Kontenjan",
+    "quotaLabel": "Kontenjan"
   },
   "apply": {
     "title": "Başvur — {name}",

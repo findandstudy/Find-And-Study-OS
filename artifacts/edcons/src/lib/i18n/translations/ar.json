@@ -216,7 +216,11 @@
     "feeMaxValue": "الحد الأقصى ({value})",
     "prevPage": "الصفحة السابقة",
     "nextPage": "الصفحة التالية",
-    "goToPage": "انتقل إلى الصفحة {page}"
+    "goToPage": "انتقل إلى الصفحة {page}",
+    "quotaFull": "حصة البرنامج ممتلئة",
+    "quotaFullDesc": "لقد وصل هذا البرنامج إلى حصة القبول لهذا العام.",
+    "quota": "الحصة",
+    "quotaLabel": "الحصة (كونتنجان)"
   },
   "apply": {
     "title": "تقديم — {name}",

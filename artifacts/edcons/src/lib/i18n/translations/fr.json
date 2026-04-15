@@ -216,7 +216,11 @@
     "feeMaxValue": "Max ({value})",
     "prevPage": "Page précédente",
     "nextPage": "Page suivante",
-    "goToPage": "Aller à la page {page}"
+    "goToPage": "Aller à la page {page}",
+    "quotaFull": "Quota du programme atteint",
+    "quotaFullDesc": "Ce programme a atteint son quota d'inscription pour cette année.",
+    "quota": "Quota",
+    "quotaLabel": "Quota (Kontenjan)"
   },
   "apply": {
     "title": "Postuler — {name}",

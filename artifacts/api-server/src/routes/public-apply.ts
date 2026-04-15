@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
 import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable } from "@workspace/db";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, inArray, isNull, sql } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
@@ -27,7 +27,7 @@ const aiExtractLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[] }> {
+async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {
   try {
     let snapshotTuitionFee: number | null = null;
     let snapshotDiscountedFee: number | null = null;
@@ -70,6 +70,28 @@ async function createApplicationForStudent(studentId: number, programId: number 
         if (eligibilityErrors.length > 0) {
           return { appId: null, eligibilityErrors };
         }
+
+        if (prog.quota != null) {
+          const wonStages = await db.select({ key: pipelineStagesTable.key })
+            .from(pipelineStagesTable)
+            .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
+          const wonKeys = wonStages.map(s => s.key);
+          if (wonKeys.length > 0) {
+            const currentYear = String(new Date().getFullYear());
+            const [{ cnt }] = await db.select({ cnt: sql<number>`count(*)` })
+              .from(applicationsTable)
+              .where(and(
+                eq(applicationsTable.programId, prog.id),
+                eq(applicationsTable.season, currentYear),
+                inArray(applicationsTable.stage, wonKeys),
+                isNull(applicationsTable.deletedAt),
+              ));
+            if (Number(cnt) >= prog.quota) {
+              return { appId: null, quotaError: `Program quota is full (${prog.quota}/${prog.quota} enrolled)` };
+            }
+          }
+        }
+
         snapshotTuitionFee = prog.tuitionFee ?? null;
         snapshotDiscountedFee = (prog.discountedFee != null && !isNaN(Number(prog.discountedFee))) ? Number(prog.discountedFee) : null;
         snapshotScholarship = prog.scholarship ?? null;
@@ -294,6 +316,10 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: appResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
         return;
       }
+      if (appResult.quotaError) {
+        res.status(422).json({ error: appResult.quotaError, code: "QUOTA_FULL" });
+        return;
+      }
       resultAppId = appResult.appId;
 
       const emailContent = await buildExistingAccountEmail({
@@ -357,6 +383,10 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, languageScore || null);
       if (newAppResult.eligibilityErrors) {
         res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: newAppResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+        return;
+      }
+      if (newAppResult.quotaError) {
+        res.status(422).json({ error: newAppResult.quotaError, code: "QUOTA_FULL" });
         return;
       }
       resultAppId = newAppResult.appId;

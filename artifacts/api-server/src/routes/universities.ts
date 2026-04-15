@@ -20,7 +20,7 @@ const PROG_PATCH_FIELDS = [
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
   "commissionRate", "applicationFee", "advancedFee", "depositFee",
   "serviceFeeAmount", "discountedFee", "languageFee", "feeType",
-  "minGpa", "minLanguageScore", "isActive",
+  "minGpa", "minLanguageScore", "quota", "isActive",
 ];
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
@@ -149,10 +149,11 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     universityId, name, degree, field, language, duration,
     tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate,
     applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
-    feeType, minGpa, minLanguageScore, isActive = true,
+    feeType, minGpa, minLanguageScore, quota, isActive = true,
   } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
   const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
+  const quotaVal = quota !== undefined && quota !== "" && quota !== null ? Math.max(0, Math.round(Number(quota))) : null;
   const [prog] = await db.insert(programsTable).values({
     universityId: Number(universityId), name, degree: degree || null, field: field || null,
     language: language || null, duration: duration || null,
@@ -169,6 +170,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     feeType: feeType || null,
     minGpa: n(minGpa),
     minLanguageScore: n(minLanguageScore),
+    quota: quotaVal,
     isActive,
   }).returning();
   await logAudit(req.user!.id, "create_program", "program", prog.id, { universityId, name }, req.ip);
@@ -189,6 +191,15 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   const updates: Record<string, unknown> = {};
   for (const key of PROG_PATCH_FIELDS) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
+  }
+  if (updates.quota !== undefined) {
+    if (updates.quota === null || updates.quota === "") {
+      updates.quota = null;
+    } else {
+      const qv = Math.round(Number(updates.quota));
+      if (isNaN(qv) || qv < 0) { res.status(400).json({ error: "quota must be a non-negative integer or null" }); return; }
+      updates.quota = qv;
+    }
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [prog] = await db.update(programsTable).set(updates).where(eq(programsTable.id, id)).returning();

@@ -216,7 +216,11 @@
     "feeMaxValue": "Maks ({value})",
     "prevPage": "Halaman sebelumnya",
     "nextPage": "Halaman berikutnya",
-    "goToPage": "Pergi ke halaman {page}"
+    "goToPage": "Pergi ke halaman {page}",
+    "quotaFull": "Kuota Program Penuh",
+    "quotaFullDesc": "Program ini telah mencapai kuota pendaftaran untuk tahun ini.",
+    "quota": "Kuota",
+    "quotaLabel": "Kuota (Kontenjan)"
   },
   "apply": {
     "title": "Daftar — {name}",

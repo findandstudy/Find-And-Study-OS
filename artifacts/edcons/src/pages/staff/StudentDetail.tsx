@@ -382,7 +382,14 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     } catch (err: any) {
       let desc = err.message || "Could not create application";
       const errData = err?.data;
-      if (errData?.code === "ELIGIBILITY_FAILED" && errData?.eligibilityErrors) {
+      if (errData?.code === "QUOTA_FULL") {
+        toast({
+          title: "Program Quota Full",
+          description: errData.error || "This program has reached its enrollment quota for this year.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else if (errData?.code === "ELIGIBILITY_FAILED" && errData?.eligibilityErrors) {
         desc = errData.eligibilityErrors.join("\n");
         toast({
           title: "Eligibility Requirements Not Met",

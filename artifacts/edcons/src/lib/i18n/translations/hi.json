@@ -216,7 +216,11 @@
     "feeMaxValue": "अधिकतम ({value})",
     "prevPage": "पिछला पृष्ठ",
     "nextPage": "अगला पृष्ठ",
-    "goToPage": "पृष्ठ {page} पर जाएं"
+    "goToPage": "पृष्ठ {page} पर जाएं",
+    "quotaFull": "कार्यक्रम कोटा भरा हुआ",
+    "quotaFullDesc": "इस कार्यक्रम की इस वर्ष के लिए नामांकन सीमा पूरी हो चुकी है।",
+    "quota": "कोटा",
+    "quotaLabel": "कोटा (कोंतेनजान)"
   },
   "apply": {
     "title": "आवेदन — {name}",

@@ -93,6 +93,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       discountedFee: programsTable.discountedFee,
       languageFee: programsTable.languageFee,
       feeType: programsTable.feeType,
+      quota: programsTable.quota,
       isActive: programsTable.isActive,
       universityId: programsTable.universityId,
       universityName: universitiesTable.name,

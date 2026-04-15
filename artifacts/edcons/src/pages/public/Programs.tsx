@@ -523,7 +523,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: t("apply.submissionFailed") }));
-        if (err.code === "ELIGIBILITY_FAILED" && err.eligibilityErrors) {
+        if (err.code === "QUOTA_FULL") {
+          toast({
+            title: t("programs.quotaFull"),
+            description: err.error || t("programs.quotaFullDesc"),
+            variant: "destructive",
+            duration: 12000,
+          });
+        } else if (err.code === "ELIGIBILITY_FAILED" && err.eligibilityErrors) {
           toast({
             title: "Eligibility Requirements Not Met",
             description: err.eligibilityErrors.join(". "),

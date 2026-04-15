@@ -81,7 +81,7 @@ type University = {
   contactPersonName?: string | null; contactPersonPhone?: string | null; contactPersonEmail?: string | null;
   status: string;
 };
-type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; isActive: boolean };
+type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean };
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
@@ -1187,10 +1187,10 @@ function ProgramsTab() {
   };
 
   const templateRows = [
-    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5, minLanguageScore: 5.5, isActive: "Yes" },
-    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, isActive: "Yes" },
+    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5, minLanguageScore: 5.5, quota: 50, isActive: "Yes" },
+    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, quota: 30, isActive: "Yes" },
   ];
-  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, isActive";
+  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive";
 
   return (
     <div className="space-y-4">
@@ -1234,7 +1234,7 @@ function ProgramsTab() {
               "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
               "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
               "Language Fee": p.languageFee ?? "", "Min GPA": p.minGpa ?? "",
-              "Min Language Score": p.minLanguageScore ?? "",
+              "Min Language Score": p.minLanguageScore ?? "", "Quota": p.quota ?? "",
               Active: p.isActive ? "Yes" : "No",
               Requirements: p.requirements ?? "",
             }));
@@ -1374,6 +1374,10 @@ function ProgramsTab() {
                 <div>
                   <Label className="text-xs">Min. Language Score</Label>
                   <Input className="mt-1" type="number" step="0.5" placeholder="e.g. 6.0" value={form?.minLanguageScore ?? ""} onChange={e => setForm(f => ({ ...f, minLanguageScore: e.target.value ? Number(e.target.value) : null }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Quota (Kontenjan)</Label>
+                  <Input className="mt-1" type="number" step="1" min="0" placeholder="e.g. 50" value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(0, Math.round(Number(e.target.value))) : null }))} />
                 </div>
               </div>
             </div>
