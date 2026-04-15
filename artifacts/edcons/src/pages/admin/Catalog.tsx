@@ -1120,6 +1120,12 @@ function ProgramsTab() {
   const programs: Program[] = data?.data ?? [];
   const totalPages = data?.meta?.totalPages ?? 1;
 
+  const { data: enrolledCounts = {} } = useQuery<Record<number, number>>({
+    queryKey: ["programs-enrolled-counts"],
+    queryFn: () => api("/api/programs/enrolled-counts"),
+    staleTime: 60_000,
+  });
+
   const sorted = useMemo(() => {
     return [...programs].sort((a, b) => {
       if (sort.col === "university") {
@@ -1277,7 +1283,11 @@ function ProgramsTab() {
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">{[p.degree, p.field].filter(Boolean).join(" / ") || "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.tuitionFee ? `${p.tuitionFee.toLocaleString()} ${p.currency ?? "USD"}` : "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.commissionRate != null ? `%${p.commissionRate}` : "—"}</td>
-                <td className="px-4 py-2.5 text-xs">{p.quota != null ? p.quota : "∞"}</td>
+                <td className="px-4 py-2.5 text-xs">
+                  {p.quota != null
+                    ? <span className={(enrolledCounts[p.id] ?? 0) >= p.quota ? "text-destructive font-semibold" : ""}>{enrolledCounts[p.id] ?? 0}/{p.quota}</span>
+                    : "∞"}
+                </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm(p)}><Pencil className="h-3.5 w-3.5" /></Button>

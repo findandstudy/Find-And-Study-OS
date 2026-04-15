@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, universitiesTable, programsTable } from "@workspace/db";
-import { eq, ilike, sql, and } from "drizzle-orm";
+import { db, universitiesTable, programsTable, applicationsTable, pipelineStagesTable } from "@workspace/db";
+import { eq, ilike, sql, and, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 
@@ -180,6 +180,31 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   }).returning();
   await logAudit(req.user!.id, "create_program", "program", prog.id, { universityId, name }, req.ip);
   res.status(201).json(prog);
+});
+
+router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLES), async (_req, res): Promise<void> => {
+  const currentYear = String(new Date().getFullYear());
+  const wonStages = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
+  const wonKeys = wonStages.map(s => s.key);
+  if (wonKeys.length === 0) { res.json({}); return; }
+  const rows = await db.select({
+    programId: applicationsTable.programId,
+    count: sql<number>`count(*)`,
+  })
+    .from(applicationsTable)
+    .where(and(
+      eq(applicationsTable.season, currentYear),
+      inArray(applicationsTable.stage, wonKeys),
+      isNull(applicationsTable.deletedAt),
+    ))
+    .groupBy(applicationsTable.programId);
+  const counts: Record<number, number> = {};
+  for (const r of rows) {
+    if (r.programId != null) counts[r.programId] = Number(r.count);
+  }
+  res.json(counts);
 });
 
 router.get("/programs/:id", async (req, res): Promise<void> => {
