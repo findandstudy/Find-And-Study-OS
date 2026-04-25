@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
@@ -208,6 +209,17 @@ export default function TasksPage() {
   const [notesTask, setNotesTask] = useState<Task | null>(null);
   const [newNoteText, setNewNoteText] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  // Note id to scroll into view + highlight when arriving from a
+  // notification deep-link. Cleared when the dialog closes.
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+  // Whether we still owe the targeted note a scrollIntoView call after
+  // the notes dialog has mounted. Set together with highlightedNoteId
+  // and reset once the scroll has happened.
+  const scrollPendingRef = useRef<string | null>(null);
+  // Tracks the deep-link query string we've already consumed so we don't
+  // re-open the dialog if the user closes it manually.
+  const consumedDeepLinkRef = useRef<string | null>(null);
+  const [, setLocation] = useLocation();
   // Mention autocomplete state for the note textarea.
   const [noteMentionIds, setNoteMentionIds] = useState<number[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -249,6 +261,64 @@ export default function TasksPage() {
   useEffect(() => {
     if (user) void loadAssignees();
   }, [user, loadAssignees]);
+
+  // Deep-link handler: when arriving at /staff/tasks?taskId=N(&noteId=...)
+  // automatically open that task's notes dialog and (when noteId is given)
+  // mark the matching note for scroll + highlight. The query string is
+  // consumed once and cleared so back-navigation and manual close-and-reopen
+  // behave normally.
+  useEffect(() => {
+    if (!user || tasks.length === 0) return;
+    if (typeof window === "undefined") return;
+    const search = window.location.search;
+    if (!search) return;
+    if (consumedDeepLinkRef.current === search) return;
+    const params = new URLSearchParams(search);
+    const taskIdRaw = params.get("taskId");
+    if (!taskIdRaw) return;
+    const taskId = Number(taskIdRaw);
+    if (!Number.isFinite(taskId)) return;
+    const target = tasks.find(t => t.id === taskId);
+    if (!target) return;
+    consumedDeepLinkRef.current = search;
+    setNotesTask(target);
+    const noteId = params.get("noteId");
+    if (noteId) {
+      setHighlightedNoteId(noteId);
+      scrollPendingRef.current = noteId;
+    }
+    // Strip the query string from the URL so back-nav and manual reopens
+    // do not retrigger this effect.
+    setLocation("/staff/tasks", { replace: true });
+  }, [user, tasks, setLocation]);
+
+  // Once the notes dialog is mounted with a highlighted note, scroll that
+  // note into view. We use a small timeout so the radix Dialog content has
+  // had a chance to mount and lay out before we query the DOM.
+  useEffect(() => {
+    if (!notesTask || !highlightedNoteId) return;
+    if (scrollPendingRef.current !== highlightedNoteId) return;
+    const noteId = highlightedNoteId;
+    const timer = window.setTimeout(() => {
+      const el = document.querySelector(
+        `[data-testid="note-text-${CSS.escape(noteId)}"]`,
+      );
+      if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+        (el as HTMLElement).scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      scrollPendingRef.current = null;
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [notesTask, highlightedNoteId]);
+
+  // Clear the highlight ring when the notes dialog closes so the next
+  // open of the same task doesn't keep the stale highlight.
+  useEffect(() => {
+    if (!notesTask) {
+      setHighlightedNoteId(null);
+      scrollPendingRef.current = null;
+    }
+  }, [notesTask]);
 
   function openCreate() {
     setEditingTask(null);
@@ -1032,8 +1102,15 @@ export default function TasksPage() {
                     const mentionIds = Array.isArray(n.mentions) ? n.mentions : [];
                     const dedupMentionIds = Array.from(new Set(mentionIds));
                     const youAreMentioned = user?.id != null && dedupMentionIds.includes(user.id);
+                    const isHighlighted = highlightedNoteId === n.id;
                     return (
-                    <div key={n.id} className="rounded-md border bg-muted/40 p-2 group">
+                    <div
+                      key={n.id}
+                      data-testid={`note-${n.id}`}
+                      className={`rounded-md border bg-muted/40 p-2 group transition-shadow ${
+                        isHighlighted ? "ring-2 ring-primary shadow-md" : ""
+                      }`}
+                    >
                       <div className="flex items-start gap-2">
                         <p
                           className="flex-1 text-sm whitespace-pre-wrap break-words"

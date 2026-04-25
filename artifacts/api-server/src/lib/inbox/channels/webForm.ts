@@ -35,9 +35,26 @@ export function parseWebFormPayload(payload: unknown): WebFormSubmission | null 
   if (!payload || typeof payload !== "object") return null;
   const p = payload as Record<string, unknown>;
   const text = String(p.message || p.text || p.body || "").trim();
-  const externalMessageId = String(
-    p.submission_id || p.id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-  );
+  // Idempotency: prefer caller-supplied submission_id/id. When absent (most plain
+  // HTML form posts), derive a deterministic content hash so retries of the same
+  // submission collapse to the same externalMessageId. Includes a coarse 1-hour
+  // bucket so legitimate re-submissions later (e.g. user retries the next day)
+  // are not silently de-duped.
+  const explicitId = p.submission_id || p.id;
+  let externalMessageId: string;
+  if (explicitId) {
+    externalMessageId = String(explicitId);
+  } else {
+    const hourBucket = Math.floor(Date.now() / (60 * 60 * 1000));
+    const hashInput = JSON.stringify({
+      formId: p.form_id ?? null,
+      email: p.email ?? null,
+      phone: p.phone ?? null,
+      text,
+      bucket: hourBucket,
+    });
+    externalMessageId = `wf_${crypto.createHash("sha256").update(hashInput).digest("hex").slice(0, 24)}`;
+  }
   const externalThreadId = String(
     p.thread_id || p.email || p.phone || externalMessageId,
   );

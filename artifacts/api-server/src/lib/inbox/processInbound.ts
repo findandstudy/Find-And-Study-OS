@@ -53,27 +53,43 @@ export async function processInboundMessage(opts: {
   const { channel, channelAccountId = null, contact, message } = opts;
   const phoneE164 = toE164(contact.phone || null);
 
-  const [existingContact] = await db
-    .select()
-    .from(externalContactsTable)
-    .where(and(eq(externalContactsTable.channel, channel), eq(externalContactsTable.externalId, contact.externalId)));
+  // Race-safe upsert: insert with onConflictDoNothing on the (channel, externalId)
+  // unique index. If the row already exists OR was inserted concurrently by
+  // another worker, refetch it. This eliminates select-then-insert TOCTOU.
+  const [insertedContact] = await db
+    .insert(externalContactsTable)
+    .values({
+      channel,
+      externalId: contact.externalId,
+      displayName: contact.displayName || null,
+      phone: contact.phone || null,
+      phoneE164,
+      email: contact.email ? String(contact.email).toLowerCase() : null,
+      metadata: contact.metadata || {},
+    })
+    .onConflictDoNothing({
+      target: [externalContactsTable.channel, externalContactsTable.externalId],
+    })
+    .returning();
 
-  let externalContact = existingContact;
+  let externalContact = insertedContact;
   if (!externalContact) {
-    const [created] = await db
-      .insert(externalContactsTable)
-      .values({
-        channel,
-        externalId: contact.externalId,
-        displayName: contact.displayName || null,
-        phone: contact.phone || null,
-        phoneE164,
-        email: contact.email ? String(contact.email).toLowerCase() : null,
-        metadata: contact.metadata || {},
-      })
-      .returning();
-    externalContact = created;
-  } else {
+    const [refetched] = await db
+      .select()
+      .from(externalContactsTable)
+      .where(
+        and(
+          eq(externalContactsTable.channel, channel),
+          eq(externalContactsTable.externalId, contact.externalId),
+        ),
+      );
+    externalContact = refetched;
+    if (!externalContact) {
+      throw new Error("processInbound: external contact upsert returned no row");
+    }
+  }
+  // Refresh metadata on the canonical row when not freshly inserted.
+  if (insertedContact === undefined) {
     await db
       .update(externalContactsTable)
       .set({
@@ -181,6 +197,11 @@ export async function processInboundMessage(opts: {
         eq(conversationsTable.channelAccountId, channelAccountId),
         eq(conversationsTable.externalThreadId, externalThreadId),
       );
+  // Race-safe conversation upsert. The unique index is
+  // (channel_account_id, external_thread_id) — when channelAccountId is null
+  // we can't rely on the partial unique constraint catching duplicates, so
+  // fall back to select-then-insert (acceptable: null channelAccountId only
+  // occurs in legacy/unconfigured paths with low concurrency).
   let conversation = (
     await db
       .select()
@@ -190,7 +211,7 @@ export async function processInboundMessage(opts: {
   )[0];
 
   if (!conversation) {
-    const [created] = await db
+    const insertResult = await db
       .insert(conversationsTable)
       .values({
         type: "external",
@@ -208,26 +229,30 @@ export async function processInboundMessage(opts: {
           ? { source: channel, subAgent: subAgentMatch }
           : { source: channel },
       })
+      .onConflictDoNothing({
+        target: [conversationsTable.channelAccountId, conversationsTable.externalThreadId],
+      })
       .returning();
-    conversation = created;
+    if (insertResult.length > 0) {
+      conversation = insertResult[0];
+    } else {
+      // Concurrent insert won the race — refetch the canonical conversation row.
+      const [refetched] = await db
+        .select()
+        .from(conversationsTable)
+        .where(convIdentityWhere)
+        .limit(1);
+      conversation = refetched;
+      if (!conversation) {
+        throw new Error("processInbound: conversation upsert returned no row");
+      }
+    }
   }
 
-  const [existingMsg] = await db
-    .select({ id: messagesTable.id })
-    .from(messagesTable)
-    .where(and(eq(messagesTable.channel, channel), eq(messagesTable.externalMessageId, message.externalMessageId)));
-
-  if (existingMsg) {
-    return {
-      conversationId: conversation.id,
-      messageId: existingMsg.id,
-      externalContactId: externalContact.id,
-      duplicate: true,
-      unmatched: !isLinked,
-    };
-  }
-
-  const [inserted] = await db
+  // Race-safe message insert. The unique index on (channel, externalMessageId)
+  // doubles as our dedupe guarantee — a duplicate webhook delivery is dropped
+  // by the DB and we report `duplicate: true` after a refetch.
+  const insertedRows = await db
     .insert(messagesTable)
     .values({
       conversationId: conversation.id,
@@ -239,7 +264,30 @@ export async function processInboundMessage(opts: {
       sentAt: message.receivedAt || new Date(),
       metadata: message.metadata || {},
     })
+    .onConflictDoNothing({
+      target: [messagesTable.channel, messagesTable.externalMessageId],
+    })
     .returning();
+
+  if (insertedRows.length === 0) {
+    const [existingMsg] = await db
+      .select({ id: messagesTable.id })
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.channel, channel),
+          eq(messagesTable.externalMessageId, message.externalMessageId),
+        ),
+      );
+    return {
+      conversationId: conversation.id,
+      messageId: existingMsg?.id ?? 0,
+      externalContactId: externalContact.id,
+      duplicate: true,
+      unmatched: !isLinked,
+    };
+  }
+  const inserted = insertedRows[0];
 
   await db
     .update(conversationsTable)

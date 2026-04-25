@@ -292,7 +292,7 @@ router.post("/tasks/:id/notes", requireAuth, async (req, res): Promise<void> => 
       event: "task.mention",
       title: `${authorName} mentioned you in a task`,
       body: `${authorName} mentioned you in a note on "${task.title}": ${snippet}`,
-      actionUrl: `/staff/tasks?taskId=${task.id}`,
+      actionUrl: `/staff/tasks?taskId=${task.id}&noteId=${note.id}`,
       icon: "AtSign",
       recipientUserIds: validMentions,
       templateVars: {
