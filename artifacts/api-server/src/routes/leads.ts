@@ -8,6 +8,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
+import { toE164 } from "../lib/inbox/phone";
 
 const router: IRouter = Router();
 
@@ -45,11 +46,13 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     return;
   }
   const origin = directOrigin();
+  const phoneStr = phone ? String(phone).slice(0, 30) : null;
   const [lead] = await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
     email: String(email).slice(0, 255),
-    phone: phone ? String(phone).slice(0, 30) : null,
+    phone: phoneStr,
+    phoneE164: toE164(phoneStr),
     nationality: nationality ? String(nationality).slice(0, 100) : null,
     interestedProgram: interestedProgram ? String(interestedProgram).slice(0, 255) : null,
     interestedCountry: interestedCountry ? String(interestedCountry).slice(0, 100) : null,
@@ -85,11 +88,13 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 
   const origin = await inferOriginFromAgentId(agent.id);
 
+  const phoneStr2 = String(phone).slice(0, 30);
   await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
     email: String(email).slice(0, 255),
-    phone: String(phone).slice(0, 30),
+    phone: phoneStr2,
+    phoneE164: toE164(phoneStr2),
     source: "web_form",
     status: "new",
     agentId: agent.id,
@@ -211,7 +216,8 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     : await inferOriginFromUser(user);
   const [lead] = await db.insert(leadsTable).values({
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status, email,
-    phone, nationality: nationality || null,
+    phone, phoneE164: toE164(phone),
+    nationality: nationality || null,
     interestedProgram: interestedProgram || null,
     interestedCountry: interestedCountry || null,
     source: source || null, notes: notes || null,
@@ -333,6 +339,9 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   }
   const { error: nameErr, normalized: normUpdates } = normalizeAndValidateNames(updates, ["firstName", "lastName"]);
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+  if (Object.prototype.hasOwnProperty.call(normUpdates, "phone")) {
+    (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
+  }
   const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   await logAudit(user.id, "update_lead", "lead", id, updates, req.ip);

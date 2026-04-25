@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
+import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -737,6 +738,12 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               })()}
             </div>
           </div>
+        </div>
+        <div className="space-y-3">
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" /> All Messaging
+          </h2>
+          <AllMessagingHistory type="lead" id={Number(id)} />
         </div>
       </div>
       {lead && (

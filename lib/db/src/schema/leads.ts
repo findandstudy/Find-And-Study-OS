@@ -12,6 +12,7 @@ export const leadsTable = pgTable("leads", {
   lastName: text("last_name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  phoneE164: text("phone_e164"),
   nationality: text("nationality"),
   country: text("country"),
   source: text("source"),
@@ -38,6 +39,7 @@ export const leadsTable = pgTable("leads", {
   index("leads_status_idx").on(table.status),
   index("leads_season_idx").on(table.season),
   index("leads_origin_type_idx").on(table.originType),
+  index("leads_phone_e164_idx").on(table.phoneE164),
 ]);
 
 export const followUpsTable = pgTable("follow_ups", {

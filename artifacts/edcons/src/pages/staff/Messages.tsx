@@ -15,7 +15,8 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
-  FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download
+  FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download,
+  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput
 } from "lucide-react";
 
 interface Conversation {
@@ -65,6 +66,7 @@ const channelIcon: Record<string, any> = {
   telegram: Send,
   email: Mail,
   sms: Smartphone,
+  web_form: FormInput,
 };
 
 const channelColor: Record<string, string> = {
@@ -73,7 +75,446 @@ const channelColor: Record<string, string> = {
   telegram: "bg-sky-500/10 text-sky-600",
   email: "bg-purple-500/10 text-purple-600",
   sms: "bg-amber-500/10 text-amber-600",
+  web_form: "bg-indigo-500/10 text-indigo-600",
 };
+
+interface InboxConversation {
+  id: number;
+  type: string;
+  title: string | null;
+  channel: string;
+  externalContactId: number | null;
+  unmatched: boolean;
+  status: string;
+  assignedToId: number | null;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  lastInboundAt: string | null;
+  externalContact: {
+    id: number;
+    displayName: string | null;
+    phone: string | null;
+    email: string | null;
+    leadId: number | null;
+    studentId: number | null;
+    agentId: number | null;
+  } | null;
+  assignedTo: { id: number; firstName: string; lastName: string } | null;
+}
+
+function InboxTab() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all">("mine");
+  const [channel, setChannel] = useState<string>("all");
+  const [convs, setConvs] = useState<InboxConversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [matchOpen, setMatchOpen] = useState(false);
+  const [matchSuggestions, setMatchSuggestions] = useState<any | null>(null);
+  const [tplOpen, setTplOpen] = useState(false);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [tplId, setTplId] = useState<string>("");
+  const [tplParams, setTplParams] = useState<string>("");
+
+  const fetchInbox = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = `/api/inbox/conversations?tab=${tab}${channel !== "all" ? `&channel=${channel}` : ""}`;
+      const res = await customFetch(url);
+      setConvs((res as any)?.data || []);
+    } catch {
+      setConvs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tab, channel]);
+
+  useEffect(() => { fetchInbox(); }, [fetchInbox]);
+
+  const fetchDetail = useCallback(async (id: number) => {
+    try {
+      const res = await customFetch(`/api/inbox/conversations/${id}`);
+      setDetail(res);
+    } catch {
+      setDetail(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedId) fetchDetail(selectedId);
+    else setDetail(null);
+  }, [selectedId, fetchDetail]);
+
+  async function loadSuggestions() {
+    if (!selectedId) return;
+    try {
+      const r = await customFetch(`/api/inbox/conversations/${selectedId}/match-suggestions`);
+      setMatchSuggestions(r);
+      setMatchOpen(true);
+    } catch {
+      toast({ title: "Failed to load suggestions", variant: "destructive" });
+    }
+  }
+
+  async function applyMatch(type: "lead" | "student" | "agent", entityId: number) {
+    if (!selectedId) return;
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, entityId }),
+      });
+      toast({ title: "Linked" });
+      setMatchOpen(false);
+      fetchInbox();
+      fetchDetail(selectedId);
+    } catch {
+      toast({ title: "Failed to link", variant: "destructive" });
+    }
+  }
+
+  async function createNewLead() {
+    if (!selectedId) return;
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/match/new-lead`, { method: "POST" });
+      toast({ title: "New lead created" });
+      setMatchOpen(false);
+      fetchInbox();
+      fetchDetail(selectedId);
+    } catch {
+      toast({ title: "Failed to create lead", variant: "destructive" });
+    }
+  }
+
+  async function assignToMe() {
+    if (!selectedId || !user) return;
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/assign`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      toast({ title: "Assigned to you" });
+      fetchInbox();
+      fetchDetail(selectedId);
+    } catch {
+      toast({ title: "Failed to assign", variant: "destructive" });
+    }
+  }
+
+  async function sendReply() {
+    if (!selectedId || !reply.trim()) return;
+    setSending(true);
+    try {
+      const res: any = await customFetch(`/api/inbox/conversations/${selectedId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: reply.trim() }),
+      });
+      if (res?.simulated) toast({ title: "Sent (simulated)", description: "Outbound is simulated outside production" });
+      else toast({ title: "Sent" });
+      setReply("");
+      fetchDetail(selectedId);
+    } catch (err: any) {
+      const body = err?.body;
+      if (body?.error === "outside_24h_window") {
+        toast({ title: "Outside 24h window", description: "Use a template instead.", variant: "destructive" });
+        await openTemplateDialog();
+      } else {
+        toast({ title: body?.error || "Failed to send", variant: "destructive" });
+      }
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function openTemplateDialog() {
+    try {
+      const r = await customFetch(`/api/messages/templates?channel=whatsapp`);
+      setTemplates((r as any)?.data || []);
+      setTplOpen(true);
+    } catch {
+      toast({ title: "Failed to load templates", variant: "destructive" });
+    }
+  }
+
+  async function sendTemplate() {
+    if (!selectedId || !tplId) return;
+    try {
+      const params = tplParams.split("|").map((s) => s.trim()).filter(Boolean);
+      const res: any = await customFetch(`/api/inbox/conversations/${selectedId}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: parseInt(tplId, 10), parameters: params }),
+      });
+      if (res?.simulated) toast({ title: "Template sent (simulated)" });
+      else toast({ title: "Template sent" });
+      setTplOpen(false);
+      setTplId("");
+      setTplParams("");
+      fetchDetail(selectedId);
+    } catch (err: any) {
+      toast({ title: err?.body?.error || "Failed to send template", variant: "destructive" });
+    }
+  }
+
+  const channelOptions = ["all", "whatsapp", "web_form", "email", "sms", "telegram"];
+  const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
+    { key: "mine", label: "Mine", icon: UserCheck },
+    { key: "unassigned", label: "Unassigned", icon: InboxIcon },
+    { key: "unmatched", label: "Unmatched", icon: AlertTriangle },
+    { key: "all", label: "All", icon: Hash },
+  ];
+
+  const conv = detail?.conversation;
+  const ext = detail?.externalContact;
+  const linked = ext && (ext.leadId || ext.studentId || ext.agentId);
+  const linkedLabel = ext?.leadId ? "Lead" : ext?.studentId ? "Student" : ext?.agentId ? "Agent" : null;
+  const linkedHref =
+    ext?.leadId ? `/staff/leads/${ext.leadId}` :
+    ext?.studentId ? `/staff/students/${ext.studentId}` :
+    ext?.agentId ? `/staff/agents/${ext.agentId}` : null;
+
+  return (
+    <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
+        <div className={`lg:col-span-4 border-r border-border/50 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+          <div className="p-3 border-b border-border/50 space-y-2">
+            <div className="flex gap-1 flex-wrap">
+              {tabs.map((t) => {
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${tab === t.key ? "bg-primary/10 text-primary border border-primary/30" : "text-muted-foreground hover:bg-secondary border border-transparent"}`}
+                  >
+                    <Icon className="w-3 h-3" /> {t.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              {channelOptions.map((ch) => {
+                const Icon = ch === "all" ? Hash : (channelIcon[ch] || MessageCircle);
+                return (
+                  <button
+                    key={ch}
+                    onClick={() => setChannel(ch)}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${channel === ch ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50"}`}
+                  >
+                    <Icon className="w-3 h-3" /> {ch}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+            ) : convs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <InboxIcon className="w-10 h-10 mb-2 opacity-30" />
+                <p className="text-sm">No conversations</p>
+              </div>
+            ) : convs.map((c) => {
+              const Icon = channelIcon[c.channel] || MessageCircle;
+              const isSel = c.id === selectedId;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 ${isSel ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-secondary/50"}`}
+                >
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center ${channelColor[c.channel] || ""}`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-sm truncate">
+                        {c.externalContact?.displayName || c.title || "(unknown)"}
+                      </p>
+                      {c.unmatched && <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-700 px-1">unmatched</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{c.lastMessagePreview || "—"}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={`lg:col-span-8 flex flex-col ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+          {!selectedId ? (
+            <div className="text-center text-muted-foreground">
+              <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">Select a conversation</p>
+            </div>
+          ) : !detail ? (
+            <div className="flex items-center justify-center w-full h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <>
+              <div className="px-4 py-3 border-b border-border/50 flex items-center gap-3">
+                <Button size="icon" variant="ghost" className="lg:hidden" onClick={() => setSelectedId(null)}>
+                  <ArrowLeft className="w-4 h-4" />
+                </Button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm truncate">{ext?.displayName || conv.title || "(unknown)"}</p>
+                    <Badge variant="secondary" className={`text-[10px] ${channelColor[conv.channel] || ""}`}>{conv.channel}</Badge>
+                    {linked && linkedHref && (
+                      <a href={linkedHref}>
+                        <Badge variant="outline" className="text-[10px] gap-1 cursor-pointer hover:bg-primary/10">
+                          <Link2 className="w-3 h-3" /> {linkedLabel} #{ext.leadId || ext.studentId || ext.agentId}
+                        </Badge>
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {ext?.phone || ext?.email || ""}
+                    {conv.assignedTo ? ` • assigned to ${conv.assignedTo.firstName} ${conv.assignedTo.lastName}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  {conv.assignedToId !== user?.id && (
+                    <Button size="sm" variant="outline" onClick={assignToMe} className="h-7 text-xs gap-1">
+                      <UserCheck className="w-3 h-3" /> Assign me
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {conv.unmatched && (
+                <div className="m-3 p-3 rounded-lg border border-amber-300 bg-amber-50 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5" />
+                  <div className="flex-1 text-xs text-amber-900">
+                    <p className="font-semibold">Unmatched contact</p>
+                    <p>This conversation isn't linked to a lead/student/agent yet.</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={loadSuggestions}>
+                    Match
+                  </Button>
+                </div>
+              )}
+
+              {conv.channel === "whatsapp" && !detail.withinWindow && (
+                <div className="m-3 p-3 rounded-lg border border-orange-300 bg-orange-50 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-orange-700" />
+                  <p className="text-xs text-orange-900 flex-1">Outside the 24h reply window. Use a template.</p>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openTemplateDialog}>Use template</Button>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {(detail.messages || []).map((m: any) => {
+                  const out = m.direction === "outbound";
+                  return (
+                    <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
+                        <p className="whitespace-pre-wrap">{m.content}</p>
+                        <div className={`text-[10px] mt-1 ${out ? "opacity-80" : "text-muted-foreground"}`}>
+                          {new Date(m.createdAt).toLocaleString()}
+                          {m.status === "failed" && <span className="ml-1 text-red-300">• failed</span>}
+                          {m.metadata?.simulated && <span className="ml-1 opacity-80">• simulated</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-border/50 p-3 flex items-end gap-2">
+                <Textarea
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  placeholder={conv.channel === "whatsapp" && !detail.withinWindow ? "Outside 24h — use a template" : "Reply..."}
+                  rows={2}
+                  className="flex-1 rounded-lg text-sm"
+                  disabled={conv.channel === "whatsapp" && !detail.withinWindow}
+                />
+                {conv.channel === "whatsapp" && (
+                  <Button size="sm" variant="outline" onClick={openTemplateDialog} className="h-9 gap-1">
+                    <FileText className="w-3 h-3" /> Template
+                  </Button>
+                )}
+                <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || (conv.channel === "whatsapp" && !detail.withinWindow)} className="h-9 gap-1">
+                  {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Send
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <Dialog open={matchOpen} onOpenChange={setMatchOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Link2 className="w-4 h-4" /> Match contact</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {matchSuggestions?.outcome === "strong" && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded">Strong match found — confirm to link.</p>
+            )}
+            {matchSuggestions?.outcome === "ambiguous" && (
+              <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">Multiple candidates — pick one.</p>
+            )}
+            {matchSuggestions?.outcome === "none" && (
+              <p className="text-xs text-muted-foreground bg-secondary p-2 rounded">No matches — create a new lead.</p>
+            )}
+            {(matchSuggestions?.candidates || []).map((c: any, i: number) => (
+              <div key={`${c.type}-${c.id}-${i}`} className="flex items-center justify-between p-2 border rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">{c.displayName || `${c.firstName || ""} ${c.lastName || ""}`.trim() || "(unnamed)"} <Badge variant="outline" className="text-[9px] ml-1">{c.type}</Badge></p>
+                  <p className="text-[11px] text-muted-foreground">{c.email || c.phone || ""}</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => applyMatch(c.type, c.id)}>Link</Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMatchOpen(false)}>Cancel</Button>
+            <Button onClick={createNewLead} className="gap-1"><Plus className="w-3 h-3" /> Create new lead</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tplOpen} onOpenChange={setTplOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FileText className="w-4 h-4" /> WhatsApp Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs">Template</Label>
+              <Select value={tplId} onValueChange={setTplId}>
+                <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder="Select template" /></SelectTrigger>
+                <SelectContent>
+                  {templates
+                    .filter((t) => t.externalTemplateName)
+                    .map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.externalTemplateName} ({t.language || "en"})</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Parameters (pipe-separated)</Label>
+              <Input value={tplParams} onChange={(e) => setTplParams(e.target.value)} placeholder="param1|param2|..." className="h-9 rounded-lg" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTplOpen(false)}>Cancel</Button>
+            <Button onClick={sendTemplate} disabled={!tplId} className="gap-1"><Send className="w-3 h-3" /> Send</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
 
 function ConversationList({
   conversations, selectedId, onSelect, onNewConversation, search, setSearch
@@ -1121,10 +1562,13 @@ export default function MessagesPage() {
       <div className="space-y-6">
         <h1 className="text-2xl font-display font-bold text-foreground">Communication Center</h1>
 
-        <Tabs defaultValue="messages" className="space-y-4">
+        <Tabs defaultValue="inbox" className="space-y-4">
           <TabsList className="h-10">
+            <TabsTrigger value="inbox" className="gap-2 px-4">
+              <InboxIcon className="w-4 h-4" /> Inbox
+            </TabsTrigger>
             <TabsTrigger value="messages" className="gap-2 px-4">
-              <MessageCircle className="w-4 h-4" /> Messages
+              <MessageCircle className="w-4 h-4" /> Internal
             </TabsTrigger>
             {canBroadcast && (
               <TabsTrigger value="broadcast" className="gap-2 px-4">
@@ -1135,6 +1579,10 @@ export default function MessagesPage() {
               <FileText className="w-4 h-4" /> Templates
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="inbox">
+            <InboxTab />
+          </TabsContent>
 
           <TabsContent value="messages">
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>

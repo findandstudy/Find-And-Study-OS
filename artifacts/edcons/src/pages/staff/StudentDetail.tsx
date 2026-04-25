@@ -24,6 +24,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
+import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -626,6 +627,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 Follow-ups {(followUps as any[]).length > 0 && `(${(followUps as any[]).length})`}
               </TabsTrigger>
             )}
+            <TabsTrigger value="messaging">All Messaging</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -1075,6 +1077,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               </div>
             </TabsContent>
           )}
+
+          <TabsContent value="messaging" className="mt-4">
+            <AllMessagingHistory type="student" id={Number(id)} />
+          </TabsContent>
         </Tabs>
       </div>
 

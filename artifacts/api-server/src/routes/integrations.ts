@@ -6,8 +6,16 @@ import { ADMIN_ROLES } from "../lib/roles";
 import Anthropic from "@anthropic-ai/sdk";
 import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
 import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
+import crypto from "crypto";
+import { isLiveIntegrationsEnabled, liveModeReason } from "../lib/inbox/liveMode";
 
 const router: IRouter = Router();
+
+const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form"]);
+
+router.get("/integrations/live-mode", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  res.json({ live: isLiveIntegrationsEnabled(), reason: liveModeReason() });
+});
 
 router.get("/integrations", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
   const integrations = await db
@@ -49,6 +57,15 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     return;
   }
 
+  if (LIVE_GATED_KEYS.has(key) && isEnabled === true && !isLiveIntegrationsEnabled()) {
+    res.status(403).json({
+      error: "live_integrations_disabled",
+      message:
+        "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
+    });
+    return;
+  }
+
   const [existing] = await db
     .select()
     .from(integrationsTable)
@@ -57,6 +74,8 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
   let result;
   if (existing) {
     const mergedConfig = mergeConfig(existing.config as Record<string, any>, config || {});
+    if (key === "web_form" && !mergedConfig.formId) mergedConfig.formId = crypto.randomUUID();
+    if (key === "web_form" && !mergedConfig.secret) mergedConfig.secret = crypto.randomBytes(24).toString("hex");
     [result] = await db
       .update(integrationsTable)
       .set({
@@ -68,9 +87,14 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
       .where(eq(integrationsTable.key, key))
       .returning();
   } else {
+    const initialConfig: Record<string, any> = { ...(config || {}) };
+    if (key === "web_form") {
+      if (!initialConfig.formId) initialConfig.formId = crypto.randomUUID();
+      if (!initialConfig.secret) initialConfig.secret = crypto.randomBytes(24).toString("hex");
+    }
     [result] = await db
       .insert(integrationsTable)
-      .values({ key, name, category, isEnabled: isEnabled ?? false, config: config || {} })
+      .values({ key, name, category, isEnabled: isEnabled ?? false, config: initialConfig })
       .returning();
   }
 
@@ -91,9 +115,19 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
     return;
   }
 
+  const willEnable = !existing.isEnabled;
+  if (LIVE_GATED_KEYS.has(req.params.key) && willEnable && !isLiveIntegrationsEnabled()) {
+    res.status(403).json({
+      error: "live_integrations_disabled",
+      message:
+        "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
+    });
+    return;
+  }
+
   const [result] = await db
     .update(integrationsTable)
-    .set({ isEnabled: !existing.isEnabled })
+    .set({ isEnabled: willEnable })
     .where(eq(integrationsTable.key, req.params.key))
     .returning();
 
@@ -158,6 +192,46 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     } catch (err: any) {
       res.json({ success: false, message: `SMTP connection failed: ${err?.message || "Unknown error"}` });
     }
+    return;
+  }
+
+  if (req.params.key === "whatsapp") {
+    if (!isLiveIntegrationsEnabled()) {
+      res.json({ success: true, message: "Test skipped — running in simulated mode (set ALLOW_LIVE_INTEGRATIONS=true to test live)" });
+      return;
+    }
+    if (!config.phoneNumberId || !config.accessToken) {
+      res.json({ success: false, message: "Phone Number ID and Access Token are required" });
+      return;
+    }
+    try {
+      const r = await fetch(
+        `https://graph.facebook.com/v20.0/${encodeURIComponent(config.phoneNumberId)}`,
+        { headers: { Authorization: `Bearer ${config.accessToken}` } },
+      );
+      if (r.ok) {
+        res.json({ success: true, message: "WhatsApp Cloud API credentials verified" });
+      } else {
+        const body = await r.text();
+        res.json({ success: false, message: `WhatsApp test failed (${r.status}): ${body.slice(0, 200)}` });
+      }
+    } catch (err: any) {
+      res.json({ success: false, message: `WhatsApp test failed: ${err?.message || "Unknown error"}` });
+    }
+    return;
+  }
+
+  if (req.params.key === "web_form") {
+    if (!config.formId || !config.secret) {
+      res.json({ success: false, message: "Web form has no formId/secret yet — save first to generate" });
+      return;
+    }
+    res.json({
+      success: true,
+      message: isLiveIntegrationsEnabled()
+        ? "Web form is live — submissions will be accepted."
+        : "Web form configured — set ALLOW_LIVE_INTEGRATIONS=true (or deploy) to accept submissions.",
+    });
     return;
   }
 

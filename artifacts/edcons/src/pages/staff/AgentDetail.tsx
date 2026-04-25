@@ -12,6 +12,7 @@ import {
   ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare, Send
 } from "lucide-react";
 import { QuickContactDialog } from "@/components/QuickContact";
+import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -133,7 +134,7 @@ export default function AgentDetailPage() {
             )}
 
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="leads" className="gap-1.5">
                   <Users className="w-4 h-4" /> Leads {Array.isArray(leads) && leads.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{leads.length}</Badge>}
                 </TabsTrigger>
@@ -142,6 +143,9 @@ export default function AgentDetailPage() {
                 </TabsTrigger>
                 <TabsTrigger value="applications" className="gap-1.5">
                   <FileText className="w-4 h-4" /> Applications {Array.isArray(apps) && apps.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{apps.length}</Badge>}
+                </TabsTrigger>
+                <TabsTrigger value="messaging" className="gap-1.5">
+                  <MessageSquare className="w-4 h-4" /> All Messaging
                 </TabsTrigger>
               </TabsList>
 
@@ -253,6 +257,10 @@ export default function AgentDetailPage() {
                     <p>No applications from this agent yet</p>
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="messaging" className="mt-4">
+                <AllMessagingHistory type="agent" id={Number(agentId)} />
               </TabsContent>
             </Tabs>
           </>

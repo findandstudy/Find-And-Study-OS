@@ -8,6 +8,7 @@ import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
+import { toE164 } from "../lib/inbox/phone";
 import bcrypt from "bcryptjs";
 
 const router: IRouter = Router();
@@ -250,6 +251,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
     email: email ? email.toLowerCase().trim() : null,
     phone: phone || null,
+    phoneE164: toE164(phone || null),
     nationality: nationality || null,
     dateOfBirth: dateOfBirth || null,
     passportNumber: passportNumber ? passportNumber.trim() : null,
@@ -470,6 +472,9 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     updates, ["firstName", "lastName", "motherName", "fatherName"]
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+  if (Object.prototype.hasOwnProperty.call(normUpdates, "phone")) {
+    (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
+  }
   const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "update_student", "student", id, updates, req.ip);

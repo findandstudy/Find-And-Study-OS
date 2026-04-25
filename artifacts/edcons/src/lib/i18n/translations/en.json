@@ -648,5 +648,56 @@
     },
     "universitiesCount": "{count} universities",
     "countriesCount": "{count} countries"
+  },
+  "inbox": {
+    "title": "Inbox",
+    "internal": "Internal",
+    "tabs": {
+      "mine": "Mine",
+      "unassigned": "Unassigned",
+      "unmatched": "Unmatched",
+      "all": "All"
+    },
+    "channels": {
+      "all": "All",
+      "whatsapp": "WhatsApp",
+      "web_form": "Web Form",
+      "email": "Email",
+      "sms": "SMS",
+      "telegram": "Telegram"
+    },
+    "empty": "No conversations",
+    "select": "Select a conversation",
+    "assignToMe": "Assign to me",
+    "assignedToYou": "Assigned to you",
+    "unmatchedBanner": "Unmatched contact",
+    "unmatchedHelp": "This conversation isn't linked to a lead, student, or agent yet.",
+    "match": "Match",
+    "matchTitle": "Match contact",
+    "matchStrong": "Strong match found — confirm to link.",
+    "matchAmbiguous": "Multiple candidates — pick one.",
+    "matchNone": "No matches — create a new lead.",
+    "createNewLead": "Create new lead",
+    "linkedTo": "Linked to",
+    "outside24h": "Outside the 24-hour reply window. Use a template.",
+    "useTemplate": "Use template",
+    "template": "Template",
+    "templateTitle": "WhatsApp Template",
+    "selectTemplate": "Select template",
+    "parameters": "Parameters (pipe-separated)",
+    "send": "Send",
+    "sent": "Sent",
+    "simulated": "Sent (simulated)",
+    "simulatedHelp": "Outbound is simulated outside production",
+    "reply": "Reply...",
+    "allMessaging": "All Messaging",
+    "noMessagingHistory": "No external messaging history yet."
+  },
+  "integrations": {
+    "prodOnlyTitle": "Production-only integrations are simulated.",
+    "prodOnlyHelp": "WhatsApp Business and Web Form can only be enabled in production. Outbound calls run in simulated mode. Webhooks still work for testing.",
+    "prodOnlyEnable": "Settings can be saved (disabled) but enabling requires production.",
+    "embedSnippet": "Embed snippet",
+    "copySnippet": "Copy snippet"
   }
 }

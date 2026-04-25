@@ -33,6 +33,7 @@ import documentRequirementsRouter from "./documentRequirements";
 import websiteRouter from "./website";
 import tasksRouter from "./tasks";
 import campaignsRouter from "./campaigns";
+import inboxRouter from "./inbox";
 
 const router: IRouter = Router();
 
@@ -70,5 +71,6 @@ router.use(documentRequirementsRouter);
 router.use(websiteRouter);
 router.use(tasksRouter);
 router.use(campaignsRouter);
+router.use(inboxRouter);
 
 export default router;

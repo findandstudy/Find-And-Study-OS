@@ -11,6 +11,7 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("staff"),
   avatarUrl: text("avatar_url"),
   phone: text("phone"),
+  phoneE164: text("phone_e164"),
   passwordHash: text("password_hash"),
   language: text("language").notNull().default("en"),
   isActive: boolean("is_active").notNull().default(true),
@@ -34,6 +35,7 @@ export const usersTable = pgTable("users", {
 }, (table) => [
   index("users_role_idx").on(table.role),
   index("users_managing_agent_id_idx").on(table.managingAgentId),
+  index("users_phone_e164_idx").on(table.phoneE164),
 ]);
 
 export const emailVerificationCodesTable = pgTable("email_verification_codes", {

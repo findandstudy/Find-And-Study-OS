@@ -7,6 +7,7 @@ import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { toE164 } from "../lib/inbox/phone";
 
 const router: IRouter = Router();
 
@@ -223,7 +224,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
       res.status(400).json({ error: "A user with this email already exists" });
       return;
     }
-    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null };
+    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null, phoneE164: toE164(phone || null) };
     if (password && password.length >= 6) {
       userValues.passwordHash = await bcrypt.hash(password, 10);
     }
@@ -238,6 +239,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     lastName,
     email: email || null,
     phone: phone || null,
+    phoneE164: toE164(phone || null),
     commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
     status: "active",
     agencyCode: parentAgent.agencyCode || null,
@@ -290,13 +292,19 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
     return;
   }
 
+  if (Object.prototype.hasOwnProperty.call(updates, "phone")) {
+    (updates as any).phoneE164 = toE164((updates as any).phone);
+  }
   const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, subAgentId)).returning();
   if (subAgent.userId && (updates.firstName !== undefined || updates.lastName !== undefined || updates.email !== undefined || updates.phone !== undefined)) {
     const userUpdates: Record<string, unknown> = {};
     if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
     if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
     if (updates.email !== undefined) userUpdates.email = updates.email;
-    if (updates.phone !== undefined) userUpdates.phone = updates.phone;
+    if (updates.phone !== undefined) {
+      userUpdates.phone = updates.phone;
+      (userUpdates as any).phoneE164 = toE164((updates as any).phone);
+    }
     if (Object.keys(userUpdates).length > 0) {
       await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
     }
@@ -533,6 +541,7 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
     firstName,
     lastName,
     phone: phone || null,
+    phoneE164: toE164(phone || null),
     role: "agent_staff",
     passwordHash,
     managingAgentId: agent.id,
@@ -567,7 +576,10 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
   const updates: Record<string, unknown> = {};
   if (req.body.firstName !== undefined) updates.firstName = req.body.firstName;
   if (req.body.lastName !== undefined) updates.lastName = req.body.lastName;
-  if (req.body.phone !== undefined) updates.phone = req.body.phone || null;
+  if (req.body.phone !== undefined) {
+    updates.phone = req.body.phone || null;
+    (updates as any).phoneE164 = toE164(req.body.phone || null);
+  }
   if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
   if (req.body.permissions !== undefined) {
     const validPerms = Array.isArray(req.body.permissions)
@@ -722,7 +734,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     } else {
       const role = parentAgentId ? "sub_agent" : "agent";
       const [newUser] = await db.insert(usersTable).values({
-        email, firstName, lastName, role, phone: phone || null,
+        email, firstName, lastName, role, phone: phone || null, phoneE164: toE164(phone || null),
       }).returning();
       userId = newUser.id;
     }
@@ -733,6 +745,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     firstName, lastName, status,
     email: email || null,
     phone: phone || null,
+    phoneE164: toE164(phone || null),
     companyName: companyName || null,
     country: country || null,
     commissionRate: commissionRate ? parseFloat(commissionRate) : null,
@@ -795,10 +808,19 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
+  if (Object.prototype.hasOwnProperty.call(updates, "phone")) {
+    (updates as any).phoneE164 = toE164((updates as any).phone);
+  }
   const [oldAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!oldAgent) { res.status(404).json({ error: "Agent not found" }); return; }
 
   const [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+  if (oldAgent.userId && Object.prototype.hasOwnProperty.call(updates, "phone")) {
+    await db.update(usersTable).set({
+      phone: (updates as any).phone,
+      phoneE164: (updates as any).phoneE164,
+    }).where(eq(usersTable.id, oldAgent.userId));
+  }
 
   const commissionRateChanged = updates.commissionRate !== undefined && updates.commissionRate !== oldAgent.commissionRate;
   if (commissionRateChanged) {

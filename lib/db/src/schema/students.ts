@@ -11,6 +11,7 @@ export const studentsTable = pgTable("students", {
   lastName: text("last_name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  phoneE164: text("phone_e164"),
   dateOfBirth: text("date_of_birth"),
   nationality: text("nationality"),
   passportNumber: text("passport_number"),
@@ -50,6 +51,7 @@ export const studentsTable = pgTable("students", {
   index("students_season_idx").on(table.season),
   index("students_user_id_idx").on(table.userId),
   index("students_origin_type_idx").on(table.originType),
+  index("students_phone_e164_idx").on(table.phoneE164),
 ]);
 
 export const insertStudentSchema = createInsertSchema(studentsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });

@@ -12,6 +12,7 @@ export const agentsTable = pgTable("agents", {
   lastName: text("last_name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  phoneE164: text("phone_e164"),
   country: text("country"),
   state: text("state"),
   city: text("city"),
@@ -44,6 +45,7 @@ export const agentsTable = pgTable("agents", {
   index("agents_parent_agent_id_idx").on(table.parentAgentId),
   index("agents_status_idx").on(table.status),
   uniqueIndex("agents_embed_token_idx").on(table.embedToken),
+  index("agents_phone_e164_idx").on(table.phoneE164),
 ]);
 
 export const insertAgentSchema = createInsertSchema(agentsTable).omit({ id: true, createdAt: true, updatedAt: true });

@@ -648,5 +648,56 @@
     },
     "universitiesCount": "{count} üniversite",
     "countriesCount": "{count} ülke"
+  },
+  "inbox": {
+    "title": "Gelen Kutusu",
+    "internal": "Dahili",
+    "tabs": {
+      "mine": "Bana Atanan",
+      "unassigned": "Atanmamış",
+      "unmatched": "Eşleşmemiş",
+      "all": "Tümü"
+    },
+    "channels": {
+      "all": "Tümü",
+      "whatsapp": "WhatsApp",
+      "web_form": "Web Form",
+      "email": "E-posta",
+      "sms": "SMS",
+      "telegram": "Telegram"
+    },
+    "empty": "Görüşme yok",
+    "select": "Bir görüşme seçin",
+    "assignToMe": "Bana ata",
+    "assignedToYou": "Size atandı",
+    "unmatchedBanner": "Eşleşmemiş kişi",
+    "unmatchedHelp": "Bu görüşme henüz bir lead, öğrenci veya acentaya bağlı değil.",
+    "match": "Eşle",
+    "matchTitle": "Kişiyi eşle",
+    "matchStrong": "Güçlü eşleşme bulundu — bağlamak için onaylayın.",
+    "matchAmbiguous": "Birden fazla aday — birini seçin.",
+    "matchNone": "Eşleşme yok — yeni lead oluşturun.",
+    "createNewLead": "Yeni lead oluştur",
+    "linkedTo": "Bağlı",
+    "outside24h": "24 saatlik yanıt penceresi dışında. Şablon kullanın.",
+    "useTemplate": "Şablon kullan",
+    "template": "Şablon",
+    "templateTitle": "WhatsApp Şablonu",
+    "selectTemplate": "Şablon seçin",
+    "parameters": "Parametreler (dikey çubukla ayrılmış)",
+    "send": "Gönder",
+    "sent": "Gönderildi",
+    "simulated": "Gönderildi (simülasyon)",
+    "simulatedHelp": "Üretim dışında giden mesajlar simüle edilir",
+    "reply": "Yanıtla...",
+    "allMessaging": "Tüm Mesajlaşma",
+    "noMessagingHistory": "Henüz dış mesajlaşma geçmişi yok."
+  },
+  "integrations": {
+    "prodOnlyTitle": "Üretim modunda olmayan entegrasyonlar simüle edilir.",
+    "prodOnlyHelp": "WhatsApp Business ve Web Form yalnızca üretimde etkinleştirilebilir. Giden çağrılar simülasyon modunda çalışır. Webhook'lar test için her zaman çalışır.",
+    "prodOnlyEnable": "Ayarlar kaydedilebilir (kapalı) ancak etkinleştirmek için üretim gerekir.",
+    "embedSnippet": "Yerleştirme kodu",
+    "copySnippet": "Kodu kopyala"
   }
 }

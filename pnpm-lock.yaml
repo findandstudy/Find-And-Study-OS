@@ -214,6 +214,9 @@ importers:
       helmet:
         specifier: ^8.1.0
         version: 8.1.0
+      libphonenumber-js:
+        specifier: ^1.12.42
+        version: 1.12.42
       nodemailer:
         specifier: ^8.0.3
         version: 8.0.3
@@ -2925,6 +2928,9 @@ packages:
   leven@4.1.0:
     resolution: {integrity: sha512-KZ9W9nWDT7rF7Dazg8xyLHGLrmpgq2nVNFUckhqdW3szVP6YhCpp/RAnpmVExA9JvrMynjwSLVrEj3AepHR6ew==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  libphonenumber-js@1.12.42:
+    resolution: {integrity: sha512-oKQFPTibqQwZZkChCDVMFVJXMZdyJNqDWZWYNn8BgyAaK/6yFJEowxCY0RVFirRyWP63hMRuKlkSEd9qlvbWXg==}
 
   lightningcss-linux-x64-gnu@1.31.1:
     resolution: {integrity: sha512-xGlFWRMl+0KvUhgySdIaReQdB4FNudfUTARn7q0hh/V67PVGCs3ADFjw+6++kG1RNd0zdGRlEKa+T13/tQjPMA==}
@@ -6268,6 +6274,8 @@ snapshots:
       readable-stream: 2.3.8
 
   leven@4.1.0: {}
+
+  libphonenumber-js@1.12.42: {}
 
   lightningcss-linux-x64-gnu@1.31.1:
     optional: true

@@ -106,6 +106,14 @@ export const NOTIFICATION_EVENTS = {
       "task.mention": { name: "Mentioned in Task Note", description: "When a teammate mentions you with @ in a task note" },
     },
   },
+  inbox: {
+    label: "Inbox",
+    events: {
+      "inbox.inbound_message": { name: "New External Message", description: "When a new WhatsApp or web-form message arrives" },
+      "inbox.unmatched_inbound": { name: "Unmatched External Message", description: "When an inbound message cannot be linked to a known contact" },
+      "inbox.assigned": { name: "Conversation Assigned", description: "When a conversation is assigned to you" },
+    },
+  },
 } as const;
 
 export const DEFAULT_NOTIFICATION_RULES = [
@@ -132,4 +140,7 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "message.new", name: "New Message", category: "messages", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
   { event: "message.mention", name: "Mentioned in Message", category: "messages", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "task.mention", name: "Mentioned in Task Note", category: "tasks", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "inbox.inbound_message", name: "New External Message", category: "inbox", channels: ["in_app"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager", "staff", "consultant"] },
+  { event: "inbox.unmatched_inbound", name: "Unmatched External Message", category: "inbox", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager", "staff"] },
+  { event: "inbox.assigned", name: "Conversation Assigned", category: "inbox", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
 ];

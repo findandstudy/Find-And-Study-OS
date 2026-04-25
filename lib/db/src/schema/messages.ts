@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const conversationsTable = pgTable("conversations", {
@@ -10,10 +10,24 @@ export const conversationsTable = pgTable("conversations", {
   lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
   lastMessagePreview: text("last_message_preview"),
   metadata: jsonb("metadata").default({}),
+  channel: text("channel").notNull().default("internal"),
+  channelAccountId: integer("channel_account_id"),
+  externalContactId: integer("external_contact_id"),
+  externalThreadId: text("external_thread_id"),
+  assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("open"),
+  unmatched: boolean("unmatched").notNull().default(false),
+  lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   index("conversations_created_by_id_idx").on(table.createdById),
+  index("conversations_channel_idx").on(table.channel),
+  index("conversations_assigned_to_id_idx").on(table.assignedToId),
+  index("conversations_status_idx").on(table.status),
+  index("conversations_unmatched_idx").on(table.unmatched),
+  index("conversations_external_contact_id_idx").on(table.externalContactId),
+  uniqueIndex("conversations_channel_thread_idx").on(table.channelAccountId, table.externalThreadId),
 ]);
 
 export const conversationParticipantsTable = pgTable("conversation_participants", {
@@ -32,12 +46,18 @@ export const messagesTable = pgTable("messages", {
   content: text("content").notNull(),
   channel: text("channel").notNull().default("internal"),
   status: text("status").notNull().default("sent"),
+  direction: text("direction").notNull().default("internal"),
+  externalMessageId: text("external_message_id"),
+  failedReason: text("failed_reason"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
   replyToId: integer("reply_to_id"),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("messages_sender_id_idx").on(table.senderId),
   index("messages_conversation_id_idx").on(table.conversationId),
+  index("messages_direction_idx").on(table.direction),
+  uniqueIndex("messages_channel_external_idx").on(table.channel, table.externalMessageId),
 ]);
 
 export const broadcastsTable = pgTable("broadcasts", {
@@ -66,6 +86,7 @@ export const messageTemplatesTable = pgTable("message_templates", {
   channel: text("channel").notNull().default("all"),
   language: text("language").notNull().default("en"),
   variables: jsonb("variables").default([]),
+  externalTemplateName: text("external_template_name"),
   isActive: boolean("is_active").notNull().default(true),
   createdById: integer("created_by_id").references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

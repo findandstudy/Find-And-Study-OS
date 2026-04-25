@@ -5,6 +5,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import router from "./routes";
+import webhooksRouter from "./routes/webhooks";
 
 const app: Express = express();
 
@@ -77,6 +78,11 @@ app.use((_req, res, next) => {
 });
 
 app.use(cookieParser());
+
+// Webhook routes are mounted BEFORE express.json so the raw body is available
+// for HMAC signature verification. These endpoints do not require auth or CSRF.
+app.use("/api", webhooksRouter);
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(authMiddleware);
@@ -89,7 +95,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (
     req.path.startsWith("/api/public/") ||
     req.path.startsWith("/api/course-finder") ||
-    req.path.startsWith("/api/auth/")
+    req.path.startsWith("/api/auth/") ||
+    req.path.startsWith("/api/webhooks/")
   ) {
     return next();
   }

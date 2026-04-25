@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Mail, MessageCircle, Send, Bot, Plug, Key, Eye, EyeOff,
   Loader2, Check, X, ExternalLink, Search, Zap, Globe,
-  Smartphone, Video, Share2, Webhook, Database
+  Smartphone, Video, Share2, Webhook, Database, Shield, Copy, FormInput
 } from "lucide-react";
 
 interface IntegrationDef {
@@ -58,12 +58,23 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
   {
     key: "whatsapp", name: "WhatsApp Business", category: "communication",
     icon: MessageCircle, color: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
-    description: "Send WhatsApp messages via Meta Business API",
+    description: "Send and receive WhatsApp via Meta Cloud API. Outbound is simulated outside production.",
     fields: [
       { key: "phoneNumberId", label: "Phone Number ID", type: "text", required: true },
       { key: "accessToken", label: "Access Token", type: "password", required: true },
       { key: "businessAccountId", label: "Business Account ID", type: "text" },
+      { key: "appSecret", label: "App Secret (HMAC verification)", type: "password" },
       { key: "webhookVerifyToken", label: "Webhook Verify Token", type: "password" },
+    ],
+  },
+  {
+    key: "web_form", name: "Web Form (Lead Capture)", category: "communication",
+    icon: FormInput, color: "bg-indigo-500/10 text-indigo-600 border-indigo-200",
+    description: "Embed a public form on your site that creates a conversation in your inbox.",
+    fields: [
+      { key: "formId", label: "Form ID (auto-generated)", type: "text" },
+      { key: "secret", label: "Signing Secret (auto-generated)", type: "password" },
+      { key: "redirectUrl", label: "After-submit Redirect URL", type: "url", placeholder: "https://yourcompany.com/thanks" },
     ],
   },
   {
@@ -221,6 +232,8 @@ const CATEGORIES = [
   { key: "thirdparty", label: "Third Party" },
 ];
 
+const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form"]);
+
 export function IntegrationsManager() {
   const { toast } = useToast();
   const [integrations, setIntegrations] = useState<IntegrationData[]>([]);
@@ -233,9 +246,13 @@ export function IntegrationsManager() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [showPasswords, setShowPasswords] = useState<Set<string>>(new Set());
+  const [liveMode, setLiveMode] = useState<{ live: boolean; reason: string } | null>(null);
 
   useEffect(() => {
     fetchIntegrations();
+    customFetch("/api/integrations/live-mode")
+      .then((r: any) => setLiveMode({ live: !!r?.live, reason: r?.reason || "" }))
+      .catch(() => {});
   }, []);
 
   async function fetchIntegrations() {
@@ -277,8 +294,9 @@ export function IntegrationsManager() {
       toast({ title: `${editDef.name} settings saved` });
       setEditDef(null);
       fetchIntegrations();
-    } catch {
-      toast({ title: "Failed to save", variant: "destructive" });
+    } catch (err: any) {
+      const msg = err?.body?.message || err?.message || "Failed to save";
+      toast({ title: msg, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -290,12 +308,21 @@ export function IntegrationsManager() {
       openEdit(def);
       return;
     }
+    if (LIVE_GATED_KEYS.has(def.key) && !existing.isEnabled && liveMode && !liveMode.live) {
+      toast({ title: "Production-only", description: "This integration can only be enabled in production.", variant: "destructive" });
+      return;
+    }
     try {
       await customFetch(`/api/integrations/${def.key}/toggle`, { method: "PATCH" });
       fetchIntegrations();
-    } catch {
-      toast({ title: "Failed to toggle", variant: "destructive" });
+    } catch (err: any) {
+      const msg = err?.body?.message || err?.message || "Failed to toggle";
+      toast({ title: msg, variant: "destructive" });
     }
+  }
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(() => toast({ title: `${label} copied` })).catch(() => {});
   }
 
   async function handleTest(key: string) {
@@ -326,6 +353,18 @@ export function IntegrationsManager() {
 
   return (
     <div className="space-y-6">
+      {liveMode && !liveMode.live && (
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900">
+          <Shield className="w-5 h-5 mt-0.5 flex-shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold">Production-only integrations are simulated.</p>
+            <p className="opacity-90 mt-0.5">
+              WhatsApp Business and Web Form can only be enabled in production. Outbound calls run in simulated mode.
+              Webhooks still work for testing. Set <code className="px-1 bg-amber-100 rounded">ALLOW_LIVE_INTEGRATIONS=true</code> to override.
+            </p>
+          </div>
+        </div>
+      )}
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -464,6 +503,11 @@ export function IntegrationsManager() {
                   <Switch checked={editEnabled} onCheckedChange={setEditEnabled} />
                 </div>
 
+                {LIVE_GATED_KEYS.has(editDef.key) && liveMode && !liveMode.live && (
+                  <div className="text-xs p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
+                    Settings can be saved (disabled) but enabling requires production.
+                  </div>
+                )}
                 {editDef.fields.map((field) => (
                   <div key={field.key}>
                     <Label className="text-xs flex items-center gap-1">
@@ -490,6 +534,28 @@ export function IntegrationsManager() {
                     </div>
                   </div>
                 ))}
+                {editDef.key === "web_form" && editConfig.formId && (
+                  <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
+                    <p className="text-xs font-semibold">Embed snippet</p>
+                    <p className="text-[11px] text-muted-foreground">Paste this HTML into your website:</p>
+                    <textarea
+                      readOnly
+                      className="w-full h-24 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
+                      value={`<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs rounded-lg gap-1"
+                      onClick={() => copyToClipboard(
+                        `<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`,
+                        "Snippet",
+                      )}
+                    >
+                      <Copy className="w-3 h-3" /> Copy snippet
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <DialogFooter>
