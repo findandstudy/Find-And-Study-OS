@@ -1,5 +1,5 @@
 import { ReactNode, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -389,7 +389,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               data-active={isActive}
                               className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm"
                             >
-                              <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}${item.url}`}>
+                              <Link href={item.url}>
                                 <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
                                 <span className="flex-1">{item.title}</span>
                                 {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
@@ -412,7 +412,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                     {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
                                   </span>
                                 )}
-                              </a>
+                              </Link>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         );
@@ -444,10 +444,10 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" className="w-56 mb-1">
                   <DropdownMenuItem asChild>
-                    <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}${['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}`}>
+                    <Link href={['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}>
                       <User className="w-4 h-4 mr-2" />
                       {t("dashboard.profileSettings")}
-                    </a>
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
