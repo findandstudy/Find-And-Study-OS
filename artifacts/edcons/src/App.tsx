@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { Switch, Route, Router as WouterRouter, useLocation, useRoute } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -175,7 +176,213 @@ function PublicRoutes({ lang }: { lang: string }) {
   );
 }
 
+function AdminShell() {
+  return (
+    <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+      <DashboardLayout>
+        <Switch>
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/users" component={AdminUsers} />
+          <Route path="/admin/catalog" component={AdminCatalog} />
+          <Route path="/admin/campaigns" component={AdminCampaigns} />
+          <Route path="/admin/audit" component={AdminAuditLog} />
+          <Route path="/admin/settings" component={StaffSettings} />
+          <Route path="/admin/activity/:userId">
+            {(params) => <AdminActivity userId={Number(params.userId)} />}
+          </Route>
+          <Route path="/admin/activity" component={AdminActivity} />
+          <Route path="/admin/embeds" component={AdminEmbeds} />
+          <Route path="/admin/website/pages/:id/edit">
+            {(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePageEditor id={Number(params.id)} /></ProtectedRoute>}
+          </Route>
+          <Route path="/admin/website/pages">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePages /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/global-components">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteGlobalComponents /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/navigation">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteNavigation /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/blog">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteBlog /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/collections">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteCollections /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/forms">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteForms /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/seo">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteSeoOverrides /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/theme">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteThemeBuilder /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/translations">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteTranslations /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/website/publish-history">
+            <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePublishHistory /></ProtectedRoute>
+          </Route>
+          <Route component={NotFound} />
+        </Switch>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}
+
+function StaffShell() {
+  return (
+    <ProtectedRoute allowedRoles={STAFF_ROLES}>
+      <DashboardLayout>
+        <Switch>
+          <Route path="/staff" component={StaffDashboard} />
+          <Route path="/staff/leads/:id">
+            {(params) => <LeadDetail id={Number(params.id)} />}
+          </Route>
+          <Route path="/staff/leads" component={StaffLeads} />
+          <Route path="/staff/students/:id">
+            {(params) => <StudentDetail id={Number(params.id)} />}
+          </Route>
+          <Route path="/staff/students" component={StaffStudents} />
+          <Route path="/staff/applications/:id">
+            {(params) => <ApplicationDetail id={Number(params.id)} />}
+          </Route>
+          <Route path="/staff/applications" component={StaffApplications} />
+          <Route path="/staff/documents" component={StaffDocuments} />
+          <Route path="/staff/course-finder">
+            <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]} requiredPermission="course_finder"><StaffCourseFinder /></ProtectedRoute>
+          </Route>
+          <Route path="/staff/agents/:id" component={StaffAgentDetail} />
+          <Route path="/staff/agents">
+            <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
+          </Route>
+          <Route path="/staff/messages" component={StaffMessages} />
+          <Route path="/staff/finance">
+            <ProtectedRoute allowedRoles={["super_admin", "admin", "accountant"]}><StaffFinance /></ProtectedRoute>
+          </Route>
+          <Route path="/staff/settings" component={StaffSettings} />
+          <Route path="/staff/tasks" component={StaffTasks} />
+          <Route component={NotFound} />
+        </Switch>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}
+
+function StudentShell() {
+  return (
+    <ProtectedRoute allowedRoles={STUDENT_ROLES}>
+      <EmailVerificationGuard>
+        <DashboardLayout>
+          <Switch>
+            <Route path="/student" component={StudentDashboard} />
+            <Route path="/student/wishlist" component={StudentWishlist} />
+            <Route path="/student/messages" component={StudentMessages} />
+            <Route path="/student/applications" component={StudentApplications} />
+            <Route path="/student/course-finder" component={StaffCourseFinder} />
+            <Route path="/student/account" component={StudentAccount} />
+            <Route component={NotFound} />
+          </Switch>
+        </DashboardLayout>
+      </EmailVerificationGuard>
+    </ProtectedRoute>
+  );
+}
+
+function AgentShell() {
+  return (
+    <ProtectedRoute allowedRoles={AGENT_ROLES}>
+      <DashboardLayout>
+        <Switch>
+          <Route path="/agent" component={AgentDashboard} />
+          <Route path="/agent/leads/:id">
+            {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><LeadDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+          </Route>
+          <Route path="/agent/leads">
+            <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><AgentLeads /></ProtectedRoute>
+          </Route>
+          <Route path="/agent/students/:id">
+            {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="students"><StudentDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+          </Route>
+          <Route path="/agent/students">
+            <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="students"><AgentStudents /></ProtectedRoute>
+          </Route>
+          <Route path="/agent/applications/:id">
+            {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="applications"><ApplicationDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
+          </Route>
+          <Route path="/agent/applications">
+            <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="applications"><AgentApps /></ProtectedRoute>
+          </Route>
+          <Route path="/agent/messages">
+            <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="messages"><AgentMessages /></ProtectedRoute>
+          </Route>
+          <Route path="/agent/commissions">
+            <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="commissions"><AgentCommissions /></ProtectedRoute>
+          </Route>
+          <Route path="/agent/account" component={AgentAccount} />
+          <Route path="/agent/sub-agents">
+            <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
+          </Route>
+          <Route path="/agent/team">
+            <ProtectedRoute allowedRoles={["agent", "sub_agent"]}><AgentTeam /></ProtectedRoute>
+          </Route>
+          <Route component={NotFound} />
+        </Switch>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}
+
 function Router() {
+  const [location] = useLocation();
+
+  const isAdminPath = location === "/admin" || location.startsWith("/admin/");
+  const isStaffPath = location === "/staff" || location.startsWith("/staff/");
+  const isStudentPath = location === "/student" || location.startsWith("/student/");
+  const isAgentPath = location === "/agent" || location.startsWith("/agent/");
+
+  if (isAdminPath) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <AdminShell />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (isStaffPath) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <StaffShell />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (isStudentPath) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <StudentShell />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (isAgentPath) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <AgentShell />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
     <Suspense fallback={<PageLoader />}>
@@ -185,175 +392,6 @@ function Router() {
         </Route>
         <Route path="/login">
           <LoginRedirect />
-        </Route>
-
-        {/* Admin Portal - no language prefix */}
-        <Route path="/admin">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminDashboard /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/users">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/catalog">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/campaigns">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCampaigns /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/audit">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/settings">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><StaffSettings /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/activity">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/activity/:userId">
-          {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity userId={Number(params.userId)} /></ProtectedRoute>}
-        </Route>
-        <Route path="/admin/embeds">
-          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
-        </Route>
-
-        {/* Website Module */}
-        <Route path="/admin/website/pages/:id/edit">
-          {(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePageEditor id={Number(params.id)} /></ProtectedRoute>}
-        </Route>
-        <Route path="/admin/website/pages">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePages /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/global-components">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteGlobalComponents /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/navigation">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteNavigation /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/blog">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteBlog /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/collections">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteCollections /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/forms">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteForms /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/seo">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteSeoOverrides /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/theme">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteThemeBuilder /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/translations">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsiteTranslations /></ProtectedRoute>
-        </Route>
-        <Route path="/admin/website/publish-history">
-          <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePublishHistory /></ProtectedRoute>
-        </Route>
-
-        {/* Staff / Consultant Portal */}
-        <Route path="/staff">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDashboard /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/leads">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffLeads /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/leads/:id">
-          {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><LeadDetail id={Number(params.id)} /></ProtectedRoute>}
-        </Route>
-        <Route path="/staff/students">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffStudents /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/students/:id">
-          {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><StudentDetail id={Number(params.id)} /></ProtectedRoute>}
-        </Route>
-        <Route path="/staff/applications">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffApplications /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/applications/:id">
-          {(params) => <ProtectedRoute allowedRoles={STAFF_ROLES}><ApplicationDetail id={Number(params.id)} /></ProtectedRoute>}
-        </Route>
-        <Route path="/staff/documents">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffDocuments /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/course-finder">
-          <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]} requiredPermission="course_finder"><StaffCourseFinder /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/agents/:id">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffAgentDetail /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/agents">
-          <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/messages">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffMessages /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/finance">
-          <ProtectedRoute allowedRoles={["super_admin", "admin", "accountant"]}><StaffFinance /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/settings">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffSettings /></ProtectedRoute>
-        </Route>
-        <Route path="/staff/tasks">
-          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffTasks /></ProtectedRoute>
-        </Route>
-
-        {/* Student Portal */}
-        <Route path="/student">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentDashboard /></EmailVerificationGuard></ProtectedRoute>
-        </Route>
-        <Route path="/student/wishlist">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentWishlist /></EmailVerificationGuard></ProtectedRoute>
-        </Route>
-        <Route path="/student/messages">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentMessages /></EmailVerificationGuard></ProtectedRoute>
-        </Route>
-        <Route path="/student/applications">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentApplications /></EmailVerificationGuard></ProtectedRoute>
-        </Route>
-        <Route path="/student/course-finder">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StaffCourseFinder /></EmailVerificationGuard></ProtectedRoute>
-        </Route>
-        <Route path="/student/account">
-          <ProtectedRoute allowedRoles={STUDENT_ROLES}><EmailVerificationGuard><StudentAccount /></EmailVerificationGuard></ProtectedRoute>
-        </Route>
-
-        {/* Agent Portal */}
-        <Route path="/agent">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentDashboard /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/leads">
-          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><AgentLeads /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/leads/:id">
-          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><LeadDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
-        </Route>
-        <Route path="/agent/students">
-          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="students"><AgentStudents /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/students/:id">
-          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="students"><StudentDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
-        </Route>
-        <Route path="/agent/applications">
-          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="applications"><AgentApps /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/applications/:id">
-          {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="applications"><ApplicationDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
-        </Route>
-        <Route path="/agent/messages">
-          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="messages"><AgentMessages /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/commissions">
-          <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="commissions"><AgentCommissions /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/account">
-          <ProtectedRoute allowedRoles={AGENT_ROLES}><AgentAccount /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/sub-agents">
-          <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
-        </Route>
-        <Route path="/agent/team">
-          <ProtectedRoute allowedRoles={["agent", "sub_agent"]}><AgentTeam /></ProtectedRoute>
         </Route>
 
         {/* Language-prefixed public routes */}

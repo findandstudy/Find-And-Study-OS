@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, createContext, useContext } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
@@ -68,6 +68,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, ChevronUp, User } from "lucide-react";
+
+const DashboardLayoutMountedCtx = createContext(false);
 
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string };
 type TFunc = (key: string, params?: Record<string, string | number>) => string;
@@ -239,6 +241,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
+  const isAlreadyMounted = useContext(DashboardLayoutMountedCtx);
   const { user, isLoading } = useAuth(true);
   const [location] = useLocation();
   const { t } = useI18n();
@@ -319,6 +322,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 10000,
   });
 
+  if (isAlreadyMounted) return <>{children}</>;
+
   if (isLoading || !user) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -350,6 +355,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const sidebarLogo = (isAgentRole && agentProfile?.logoUrl) ? agentProfile.logoUrl : systemLogo;
 
   return (
+    <DashboardLayoutMountedCtx.Provider value={true}>
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
       <div className="flex min-h-screen w-full bg-secondary/20">
         <Sidebar className="border-r border-border/60 shadow-sm">
@@ -531,5 +537,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
       </div>
     </SidebarProvider>
+    </DashboardLayoutMountedCtx.Provider>
   );
 }
