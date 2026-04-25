@@ -9,7 +9,7 @@ export interface WebFormSubmission {
   agentRef?: string | null;
   externalThreadId: string;
   receivedAt: Date;
-  raw: any;
+  raw: Record<string, unknown>;
 }
 
 /**
@@ -31,27 +31,28 @@ export function verifyWebFormSignature(rawBody: Buffer | string, signatureHeader
  * Parse a web form payload into a normalized inbound submission.
  * Expected shape (lenient): { name, email, phone, message, agent_ref, form_id, submission_id }
  */
-export function parseWebFormPayload(payload: any): WebFormSubmission | null {
+export function parseWebFormPayload(payload: unknown): WebFormSubmission | null {
   if (!payload || typeof payload !== "object") return null;
-  const text = String(payload.message || payload.text || payload.body || "").trim();
+  const p = payload as Record<string, unknown>;
+  const text = String(p.message || p.text || p.body || "").trim();
   const externalMessageId = String(
-    payload.submission_id || payload.id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    p.submission_id || p.id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   );
   const externalThreadId = String(
-    payload.thread_id || payload.email || payload.phone || externalMessageId,
+    p.thread_id || p.email || p.phone || externalMessageId,
   );
-  const fromName = payload.name
-    ? String(payload.name)
-    : [payload.firstName, payload.lastName].filter(Boolean).join(" ").trim() || undefined;
+  const fromName = p.name
+    ? String(p.name)
+    : [p.firstName, p.lastName].filter(Boolean).join(" ").trim() || undefined;
   return {
     externalMessageId,
     fromName,
-    email: payload.email ? String(payload.email) : undefined,
-    phone: payload.phone ? String(payload.phone) : undefined,
-    agentRef: payload.agent_ref ? String(payload.agent_ref) : null,
+    email: p.email ? String(p.email) : undefined,
+    phone: p.phone ? String(p.phone) : undefined,
+    agentRef: p.agent_ref ? String(p.agent_ref) : null,
     text: text || "(no message body)",
     externalThreadId,
     receivedAt: new Date(),
-    raw: payload,
+    raw: p,
   };
 }

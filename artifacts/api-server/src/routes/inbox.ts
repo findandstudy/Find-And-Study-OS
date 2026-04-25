@@ -411,8 +411,8 @@ router.post(
             .set({ metadata: { emailedTo: contact.email } })
             .where(eq(messagesTable.id, msg.id));
         }
-      } catch (err: any) {
-        emailError = String(err?.message || err);
+      } catch (err) {
+        emailError = err instanceof Error ? err.message : String(err);
         console.error("[INBOX] web_form email auto-reply failed:", err);
         try {
           await dispatchNotification({

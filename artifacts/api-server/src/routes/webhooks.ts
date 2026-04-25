@@ -38,9 +38,13 @@ const rawJson = express.raw({ type: "application/json", limit: "5mb" });
  */
 const rawAny = express.raw({ type: () => true, limit: "5mb" });
 
+interface RequestWithRawBody extends Request {
+  rawBody?: Buffer;
+}
+
 function parseRawByContentType(req: Request, _res: Response, next: NextFunction): void {
   const raw = req.body as Buffer;
-  (req as any).rawBody = raw;
+  (req as RequestWithRawBody).rawBody = raw;
   const ct = String(req.headers["content-type"] || "").toLowerCase();
   try {
     if (!raw || raw.length === 0) {
@@ -144,7 +148,7 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
     return;
   }
 
-  let payload: any;
+  let payload: unknown;
   try {
     payload = JSON.parse(raw.toString("utf8"));
   } catch {
@@ -223,9 +227,9 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   // All comparisons are constant-time.
   if (cfg.secret) {
     const sig = req.headers["x-webform-signature"] as string | undefined;
-    const raw = (req as any).rawBody as Buffer | undefined;
+    const raw = (req as RequestWithRawBody).rawBody;
     const tokenHeader = (req.headers["x-webform-token"] as string | undefined) || undefined;
-    const body = (req.body && typeof req.body === "object") ? (req.body as Record<string, any>) : {};
+    const body: Record<string, unknown> = (req.body && typeof req.body === "object") ? (req.body as Record<string, unknown>) : {};
     const tokenBody = (body.secret_token || body.secret) as string | undefined;
 
     const sigOk = sig ? verifyWebFormSignature(raw ?? Buffer.alloc(0), sig, cfg.secret) : false;
@@ -287,7 +291,7 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
       return;
     }
     res.status(200).json({ ok: true, ...result });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[WEBHOOK] web_form process error:", err);
     res.status(500).json({ error: "Processing failed" });
   }

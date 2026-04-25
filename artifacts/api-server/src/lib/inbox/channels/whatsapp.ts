@@ -202,25 +202,48 @@ export interface WhatsAppInbound {
   text: string;
   receivedAt: Date;
   externalThreadId: string;
-  raw: any;
+  raw: Record<string, unknown>;
+}
+
+interface WAContact {
+  wa_id?: string;
+  profile?: { name?: string };
+}
+
+interface WAMessage {
+  id: string;
+  from: string;
+  type: string;
+  timestamp?: string;
+  text?: { body?: string };
+  interactive?: {
+    button_reply?: { title?: string };
+    list_reply?: { title?: string };
+  };
+  image?: { caption?: string };
+  document?: { caption?: string };
+  audio?: { caption?: string };
+  video?: { caption?: string };
+  [k: string]: unknown;
 }
 
 /**
  * Parse a WhatsApp Cloud API webhook payload into normalized inbound messages.
  * Returns an empty array for non-message events (status updates, etc.).
  */
-export function parseWhatsAppWebhook(payload: any): WhatsAppInbound[] {
+export function parseWhatsAppWebhook(payload: unknown): WhatsAppInbound[] {
   const out: WhatsAppInbound[] = [];
-  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  const root = (payload && typeof payload === "object") ? payload as Record<string, unknown> : {};
+  const entries = Array.isArray(root.entry) ? root.entry as Array<Record<string, unknown>> : [];
   for (const entry of entries) {
-    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    const changes = Array.isArray(entry?.changes) ? entry.changes as Array<Record<string, unknown>> : [];
     for (const change of changes) {
-      const value = change?.value || {};
-      const contacts = Array.isArray(value.contacts) ? value.contacts : [];
-      const messages = Array.isArray(value.messages) ? value.messages : [];
+      const value = (change?.value && typeof change.value === "object") ? change.value as Record<string, unknown> : {};
+      const contacts: WAContact[] = Array.isArray(value.contacts) ? value.contacts as WAContact[] : [];
+      const messages: WAMessage[] = Array.isArray(value.messages) ? value.messages as WAMessage[] : [];
       for (const msg of messages) {
         const fromPhone = "+" + String(msg.from || "").replace(/^\+/, "");
-        const contact = contacts.find((c: any) => c.wa_id === msg.from) || contacts[0];
+        const contact = contacts.find((c) => c.wa_id === msg.from) || contacts[0];
         let text = "";
         if (msg.type === "text") text = msg.text?.body || "";
         else if (msg.type === "interactive") {
