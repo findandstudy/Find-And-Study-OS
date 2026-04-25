@@ -375,7 +375,8 @@
     "agent": "Agent",
     "subAgent": "Sub Agent",
     "switchToLight": "Switch to light mode",
-    "switchToDark": "Switch to dark mode"
+    "switchToDark": "Switch to dark mode",
+    "tasks": "Tasks"
   },
   "notFound": {
     "title": "Page Not Found",
@@ -500,5 +501,70 @@
   },
   "a11y": {
     "skipToContent": "Skip to main content"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "subtitle": "Manage your to-dos and follow-ups",
+    "newTask": "New Task",
+    "editTask": "Edit Task",
+    "createTask": "Create Task",
+    "viewArchive": "Archive",
+    "viewActive": "Active",
+    "emptyActive": "No tasks yet",
+    "emptyActiveHint": "Create your first task to get started.",
+    "emptyArchive": "No archived tasks",
+    "emptyArchiveHint": "Tasks you archive will appear here.",
+    "loading": "Loading tasks…",
+    "loadFailed": "Failed to load tasks",
+    "saveFailed": "Could not save task",
+    "moveFailed": "Could not move task",
+    "archiveFailed": "Could not archive task",
+    "restoreFailed": "Could not restore task",
+    "noteAddFailed": "Could not add note",
+    "noteDeleteFailed": "Could not delete note",
+    "titleRequired": "Title is required",
+    "confirmArchive": "Archive this task?",
+    "created": "Task created",
+    "updated": "Task updated",
+    "archived": "Task archived",
+    "restored": "Task restored",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "add": "Add",
+    "adding": "Adding…",
+    "edit": "Edit",
+    "archive": "Archive",
+    "restore": "Restore",
+    "viewNotes": "View notes",
+    "notes": "Notes",
+    "noNotes": "No notes yet",
+    "addNotePlaceholder": "Write a note…",
+    "unassigned": "Unassigned",
+    "colEmpty": "No tasks here",
+    "dialogDescription": "Fill in the task details and assign it to a team member.",
+    "fields": {
+      "title": "Title",
+      "description": "Description",
+      "status": "Status",
+      "priority": "Priority",
+      "dueDate": "Due Date",
+      "assignTo": "Assign To"
+    },
+    "col": {
+      "todo": "To Do",
+      "in_progress": "In Progress",
+      "done": "Done"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "advanceTo": {
+      "todo": "Move to To Do",
+      "in_progress": "Move to In Progress",
+      "done": "Mark as Done"
+    }
   }
 }

@@ -366,7 +366,8 @@
     "agent": "Agent",
     "subAgent": "Sous-agent",
     "switchToLight": "Passer au mode clair",
-    "switchToDark": "Passer au mode sombre"
+    "switchToDark": "Passer au mode sombre",
+    "tasks": "Tâches"
   },
   "notFound": {
     "title": "Page introuvable",
@@ -491,5 +492,70 @@
   },
   "a11y": {
     "skipToContent": "Passer au contenu principal"
+  },
+  "tasks": {
+    "title": "Tâches",
+    "subtitle": "Gérez vos tâches et suivis",
+    "newTask": "Nouvelle tâche",
+    "editTask": "Modifier la tâche",
+    "createTask": "Créer une tâche",
+    "viewArchive": "Archives",
+    "viewActive": "Actives",
+    "emptyActive": "Aucune tâche",
+    "emptyActiveHint": "Créez votre première tâche pour commencer.",
+    "emptyArchive": "Aucune tâche archivée",
+    "emptyArchiveHint": "Les tâches archivées apparaîtront ici.",
+    "loading": "Chargement des tâches…",
+    "loadFailed": "Échec du chargement des tâches",
+    "saveFailed": "Impossible d'enregistrer la tâche",
+    "moveFailed": "Impossible de déplacer la tâche",
+    "archiveFailed": "Impossible d'archiver la tâche",
+    "restoreFailed": "Impossible de restaurer la tâche",
+    "noteAddFailed": "Impossible d'ajouter la note",
+    "noteDeleteFailed": "Impossible de supprimer la note",
+    "titleRequired": "Le titre est requis",
+    "confirmArchive": "Archiver cette tâche ?",
+    "created": "Tâche créée",
+    "updated": "Tâche mise à jour",
+    "archived": "Tâche archivée",
+    "restored": "Tâche restaurée",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "cancel": "Annuler",
+    "add": "Ajouter",
+    "adding": "Ajout…",
+    "edit": "Modifier",
+    "archive": "Archiver",
+    "restore": "Restaurer",
+    "viewNotes": "Voir les notes",
+    "notes": "Notes",
+    "noNotes": "Aucune note",
+    "addNotePlaceholder": "Écrire une note…",
+    "unassigned": "Non assigné",
+    "colEmpty": "Aucune tâche ici",
+    "dialogDescription": "Remplissez les détails de la tâche et assignez-la à un membre.",
+    "fields": {
+      "title": "Titre",
+      "description": "Description",
+      "status": "Statut",
+      "priority": "Priorité",
+      "dueDate": "Date d'échéance",
+      "assignTo": "Assigner à"
+    },
+    "col": {
+      "todo": "À faire",
+      "in_progress": "En cours",
+      "done": "Terminé"
+    },
+    "priority": {
+      "low": "Basse",
+      "medium": "Moyenne",
+      "high": "Haute"
+    },
+    "advanceTo": {
+      "todo": "Déplacer vers À faire",
+      "in_progress": "Déplacer vers En cours",
+      "done": "Marquer comme terminé"
+    }
   }
 }

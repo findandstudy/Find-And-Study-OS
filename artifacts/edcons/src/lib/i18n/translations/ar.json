@@ -366,7 +366,8 @@
     "agent": "وكيل",
     "subAgent": "وكيل فرعي",
     "switchToLight": "التبديل إلى الوضع الفاتح",
-    "switchToDark": "التبديل إلى الوضع الداكن"
+    "switchToDark": "التبديل إلى الوضع الداكن",
+    "tasks": "المهام"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",
@@ -491,5 +492,70 @@
   },
   "a11y": {
     "skipToContent": "تخطى إلى المحتوى الرئيسي"
+  },
+  "tasks": {
+    "title": "المهام",
+    "subtitle": "أدر مهامك ومتابعاتك",
+    "newTask": "مهمة جديدة",
+    "editTask": "تعديل المهمة",
+    "createTask": "إنشاء مهمة",
+    "viewArchive": "الأرشيف",
+    "viewActive": "النشطة",
+    "emptyActive": "لا توجد مهام بعد",
+    "emptyActiveHint": "أنشئ أول مهمة لتبدأ.",
+    "emptyArchive": "لا توجد مهام مؤرشفة",
+    "emptyArchiveHint": "ستظهر المهام التي تؤرشفها هنا.",
+    "loading": "جارٍ تحميل المهام…",
+    "loadFailed": "فشل تحميل المهام",
+    "saveFailed": "تعذر حفظ المهمة",
+    "moveFailed": "تعذر نقل المهمة",
+    "archiveFailed": "تعذر أرشفة المهمة",
+    "restoreFailed": "تعذر استعادة المهمة",
+    "noteAddFailed": "تعذر إضافة الملاحظة",
+    "noteDeleteFailed": "تعذر حذف الملاحظة",
+    "titleRequired": "العنوان مطلوب",
+    "confirmArchive": "أرشفة هذه المهمة؟",
+    "created": "تم إنشاء المهمة",
+    "updated": "تم تحديث المهمة",
+    "archived": "تم أرشفة المهمة",
+    "restored": "تم استعادة المهمة",
+    "save": "حفظ",
+    "saving": "جارٍ الحفظ…",
+    "cancel": "إلغاء",
+    "add": "إضافة",
+    "adding": "جارٍ الإضافة…",
+    "edit": "تعديل",
+    "archive": "أرشفة",
+    "restore": "استعادة",
+    "viewNotes": "عرض الملاحظات",
+    "notes": "الملاحظات",
+    "noNotes": "لا توجد ملاحظات بعد",
+    "addNotePlaceholder": "اكتب ملاحظة…",
+    "unassigned": "غير معين",
+    "colEmpty": "لا توجد مهام هنا",
+    "dialogDescription": "املأ تفاصيل المهمة وقم بتعيينها لعضو في الفريق.",
+    "fields": {
+      "title": "العنوان",
+      "description": "الوصف",
+      "status": "الحالة",
+      "priority": "الأولوية",
+      "dueDate": "تاريخ الاستحقاق",
+      "assignTo": "تعيين إلى"
+    },
+    "col": {
+      "todo": "للقيام به",
+      "in_progress": "قيد التنفيذ",
+      "done": "تم"
+    },
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "عالية"
+    },
+    "advanceTo": {
+      "todo": "نقل إلى للقيام به",
+      "in_progress": "نقل إلى قيد التنفيذ",
+      "done": "تعليم كمكتمل"
+    }
   }
 }

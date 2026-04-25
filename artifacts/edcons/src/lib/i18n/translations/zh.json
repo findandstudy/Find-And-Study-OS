@@ -366,7 +366,8 @@
     "agent": "代理",
     "subAgent": "子代理",
     "switchToLight": "切换到浅色模式",
-    "switchToDark": "切换到深色模式"
+    "switchToDark": "切换到深色模式",
+    "tasks": "任务"
   },
   "notFound": {
     "title": "页面未找到",
@@ -491,5 +492,70 @@
   },
   "a11y": {
     "skipToContent": "跳转至主要内容"
+  },
+  "tasks": {
+    "title": "任务",
+    "subtitle": "管理您的待办事项和后续跟进",
+    "newTask": "新建任务",
+    "editTask": "编辑任务",
+    "createTask": "创建任务",
+    "viewArchive": "存档",
+    "viewActive": "活跃",
+    "emptyActive": "暂无任务",
+    "emptyActiveHint": "创建您的第一个任务以开始。",
+    "emptyArchive": "无存档任务",
+    "emptyArchiveHint": "您存档的任务将显示在这里。",
+    "loading": "正在加载任务…",
+    "loadFailed": "加载任务失败",
+    "saveFailed": "无法保存任务",
+    "moveFailed": "无法移动任务",
+    "archiveFailed": "无法存档任务",
+    "restoreFailed": "无法恢复任务",
+    "noteAddFailed": "无法添加备注",
+    "noteDeleteFailed": "无法删除备注",
+    "titleRequired": "标题为必填",
+    "confirmArchive": "存档此任务？",
+    "created": "任务已创建",
+    "updated": "任务已更新",
+    "archived": "任务已存档",
+    "restored": "任务已恢复",
+    "save": "保存",
+    "saving": "保存中…",
+    "cancel": "取消",
+    "add": "添加",
+    "adding": "添加中…",
+    "edit": "编辑",
+    "archive": "存档",
+    "restore": "恢复",
+    "viewNotes": "查看备注",
+    "notes": "备注",
+    "noNotes": "暂无备注",
+    "addNotePlaceholder": "写一条备注…",
+    "unassigned": "未分配",
+    "colEmpty": "这里暂无任务",
+    "dialogDescription": "填写任务详情并分配给团队成员。",
+    "fields": {
+      "title": "标题",
+      "description": "描述",
+      "status": "状态",
+      "priority": "优先级",
+      "dueDate": "截止日期",
+      "assignTo": "分配给"
+    },
+    "col": {
+      "todo": "待办",
+      "in_progress": "进行中",
+      "done": "已完成"
+    },
+    "priority": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "advanceTo": {
+      "todo": "移至待办",
+      "in_progress": "移至进行中",
+      "done": "标记为完成"
+    }
   }
 }

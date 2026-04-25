@@ -1,0 +1,137 @@
+Projeme Trello/Asana tarzı bir "Tasks" (Görev Yönetimi) modülü ekle. 
+Aşağıdaki spesifikasyonu birebir uygula.
+
+## ÜRÜN ÖZELLİKLERİ
+- Kullanıcılar görev oluşturup başkalarına atayabilir.
+- 3 sütunlu Kanban görünümü: To Do → In Progress → Done.
+- Sürükle-bırak ile sütunlar arası taşıma + tek tıkla "bir sonraki duruma geç" butonu.
+- Her görevin altında **append-only notlar** (sohbet gibi): herkes yorum ekler, sadece admin silebilir, her notta yazar adı ve zaman damgası görünür.
+- Soft-delete: silinen görev "Archive" sekmesinde durur, admin geri yükleyebilir.
+- Rol bazlı erişim: admin her şey, staff atandıklarını günceller, diğer kullanıcılar sadece atandıklarını görür.
+- Çoklu kiracı (multi-tenant) izolasyonu: tüm sorgularda tenantId filtresi zorunlu.
+
+## VERİTABANI ŞEMASI (PostgreSQL)
+`tasks` tablosu:
+- id           : text/uuid, primary key
+- tenant_id    : text, NOT NULL, FK → tenants(id) ON DELETE CASCADE
+- title        : text, NOT NULL
+- description  : text, nullable
+- assigned_to  : text, nullable (userId)
+- assigned_to_name : text, nullable (denormalize, listede hızlı göstermek için)
+- due_date     : text, nullable (YYYY-MM-DD biçimi)
+- priority     : text, NOT NULL, default 'medium' (low|medium|high)
+- status       : text, NOT NULL, default 'todo' (todo|in_progress|done)
+- task_notes   : jsonb, nullable, Array<{id,text,createdAt,authorName}>
+- archived_at  : timestamp, nullable (soft delete işareti)
+- created_at   : timestamp, NOT NULL, default NOW()
+- updated_at   : timestamp, NOT NULL, default NOW()
+
+İndeksler: tenant_id, status, assigned_to üzerinde.
+
+## REST API ENDPOINT'LERİ
+Hepsi JWT authenticate middleware'inden geçer. tenantId her sorguda WHERE clause'a eklenir.
+
+GET    /api/tasks?archived=&limit=&offset=
+   - Query: archived=true → arşivlenmişler, default → aktifler
+   - Yetki: tüm roller. Admin TÜM görevleri görür. Diğerleri SADECE 
+     (assignedTo = currentUser OR assignedTo IS NULL) olanları.
+   - limit max 1000, default 500. createdAt DESC sıralı.
+
+POST   /api/tasks              [admin/super_admin only]
+   - Body: {title, description?, assignedTo?, assignedToName?, dueDate?, priority?, status?}
+   - title boş → 400 "Title is required"
+   - priority/status geçersiz enum → 400 "Invalid priority/status. Must be one of: ..."
+   - assignedTo verildiyse o kullanıcının AYNI tenantId'ye ait olduğunu doğrula → değilse 400.
+   - Yeni id ata (uuid), tenantId'yi current user'dan al, status default 'todo', priority default 'medium'.
+   - 201 ile yeni satırı döndür.
+
+PUT    /api/tasks/:id          [admin veya staff]
+   - Aynı validation'lar.
+   - WHERE id=:id AND tenantId=currentTenant — başka tenant'ın görevini değiştiremez.
+   - updatedAt = NOW() set et.
+   - Yoksa 404.
+
+DELETE /api/tasks/:id          [admin only]
+   - Soft-delete: archivedAt = NOW(), updatedAt = NOW().
+   - Gerçekten silme.
+
+POST   /api/tasks/restore/:id  [admin only]
+   - archivedAt = NULL, updatedAt = NOW().
+
+POST   /api/tasks/:id/notes    [admin VEYA assignedTo=currentUser VEYA assignedTo IS NULL]
+   - Body: {text: string}
+   - text boş → 400.
+   - DB'den görevi çek (yetki filtresiyle), yoksa 404.
+   - Current user'ın fullName'ini DB'den al (yoksa email).
+   - Yeni not: {id: uuid, text: text.trim(), createdAt: ISO string, authorName: ...}
+   - taskNotes dizisinin SONUNA ekle (append-only — mevcut notlar değişmesin).
+   - Güncellenmiş satırı 201 ile döndür.
+
+DELETE /api/tasks/:id/notes/:noteId  [admin only]
+   - taskNotes'tan id'si eşleşeni filtrele, geri yaz.
+
+## UI (React) — TEK SAYFA, /tasks ROUTE'UNDA
+3 sütunlu Kanban + 2 dialog (yeni/düzenle + not görüntüleme).
+
+Üst bar:
+- Sol: "Tasks" başlığı + "Manage your to-dos and follow-ups" alt yazısı.
+- Sağ: "Archive ⇄ Active" toggle butonu + (admin için) "+ New Task" butonu.
+
+Hiç görev yoksa: dashed-border bir kart, "No tasks yet", admin için "Create Task" butonu.
+
+Görev varsa 3 kolon (md:grid-cols-3):
+- "To Do" (gri nokta), "In Progress" (mavi nokta), "Done" (yeşil nokta) — başlığın yanında sayı badge.
+- Her kolon kendi görevlerini render eder.
+
+TASK CARD bileşeni:
+- Sol: GripVertical sürükleme tutamacı (sadece canManage && !showArchived).
+- Orta: title (status='done' ise üstü çizili), description (line-clamp-2), 
+  alt satırda priority badge + dueDate + assignedToName chip + not sayısı chip.
+- Sağ aksiyon ikonları: 
+  - Aktif modda: ArrowRight (bir sonraki status'e geç, canManage), MessageSquarePlus (notları aç),
+    Pencil + Trash2 (admin only)
+  - Arşiv modda: RotateCcw (admin only, geri yükle).
+- Karta tıklamak notlar dialog'unu açar.
+
+SÜRÜKLE-BIRAK (önemli!):
+HTML5 native DnD KULLANMA (mobil dostu değil). Bunun yerine:
+- pointerdown: sürükleme başlangıç noktasını kaydet.
+- pointermove (window'a): 5px'ten fazla hareket varsa drag başlat, ghost konumu güncelle, 
+  altındaki kolonu bul (kolon ref'leriyle bounding-rect kontrolü).
+- pointerup: drop hedefi varsa o status'e moveToStatus çağır.
+- Sürüklenen kart opacity-40 + scale-95, hedef kolon dashed-border + ring efekti.
+- "Ghost" görsel cursor'un yanında position:fixed olarak gösterilir.
+
+YENİ/DÜZENLE DIALOG'U:
+- Title (zorunlu *), Description (textarea), Status (Select), Priority (Select),
+  Due Date (date input), Assign To (Select — kullanıcı listesinden, "Unassigned" seçeneği).
+- Assign To değiştirilince hem assignedTo hem assignedToName aynı anda set edilir.
+
+NOT DIALOG'U (kart tıklanınca):
+- Üstte: görev başlığı + description + priority/status/dueDate/assignedTo özet.
+- Orta: mevcut notlar listesi (boşsa "No notes yet"). Her not: text + "yazar — tarih saat".
+  Her notun yanında admin için X (sil) butonu.
+- Alt: textarea + "Add" butonu. Boş ise disabled.
+
+## YARDIMCI: 401 HATASI
+Bir `toastApiError(err, fallback)` helper'ı kullan. Bu helper:
+- Eğer err bir ApiError && status===401 && sessionExpired===true ise SUSAR
+  (oturum dolma toast'u merkezi AuthContext'te zaten gösteriliyor).
+- Aksi halde err.message veya fallback'i toast.error olarak gösterir.
+
+## UYULACAK PRENSİPLER
+- Tüm endpoint'lerde tenantId her WHERE clause'una EKLEN — cross-tenant güvenlik kritik.
+- Optimistik UI YAPMA. Her yazma sonrası listeyi sunucudan yeniden çek.
+- Validation hem client (boş title kontrolü) hem server (enum, tenant) tarafında olsun.
+- Admin/staff/diğer rol matrisini kodda merkezileştir (ADMIN_ROLES, MANAGE_ROLES sabitleri).
+- assignedTo değiştiğinde assignedToName'i de güncelle ki listede ekstra JOIN gerekmesin.
+- Görev oluşturma/güncelleme sonrası bildirim sistemi varsa refresh tetikle.
+
+# === BU 3 YERİ KENDİ PROJENE GÖRE DEĞİŞTİR ===
+1. Stack: [BENİM PROJEMDE: Express + Drizzle ORM + PostgreSQL backend, React + Tailwind + 
+   shadcn/ui + sonner toast + lucide-react ikonlar + wouter router + JWT auth frontend.
+   SENİN PROJENDE FARKLIYSA, ona göre adapte et — örn. Next.js API routes, Prisma vs.]
+2. Authentication: [Mevcut auth/middleware'imi kullan — JWT'den userId, tenantId, role 
+   alıyorum. SENİN PROJENDE auth nasılsa onu kullan.]
+3. Tenant kavramı YOKSA: tenantId/multi-tenant kontrolünü çıkar, sadece userId ile 
+   "kendi görevlerin" filtresi uygula. UI ve API'nin geri kalanı aynı kalsın.

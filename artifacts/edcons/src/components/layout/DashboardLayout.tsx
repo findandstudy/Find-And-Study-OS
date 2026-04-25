@@ -84,6 +84,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t("dashboard.courseFinder"), icon: Search, url: '/staff/course-finder' },
       { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
       { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
+      { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
     if (showFinance) opsItems.push({ title: t("dashboard.finance"), icon: DollarSign, url: '/staff/finance' });
     const groups = [
@@ -137,6 +138,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t("dashboard.documents"), icon: FolderOpen, url: '/staff/documents' },
       { title: t("dashboard.courseFinder"), icon: Search, url: '/staff/course-finder' },
       { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
+      { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
     if (showFinance) workItems.push({ title: t("dashboard.finance"), icon: Briefcase, url: '/staff/finance' });
     return {

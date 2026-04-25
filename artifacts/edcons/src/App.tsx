@@ -61,6 +61,7 @@ const StaffCourseFinder = lazyRetry(() => import("@/pages/staff/CourseFinder"));
 const StaffAgents = lazyRetry(() => import("@/pages/staff/Agents"));
 const StaffAgentDetail = lazyRetry(() => import("@/pages/staff/AgentDetail"));
 const StaffMessages = lazyRetry(() => import("@/pages/staff/Messages"));
+const StaffTasks = lazyRetry(() => import("@/pages/staff/Tasks"));
 
 const AdminDashboard = lazyRetry(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazyRetry(() => import("@/pages/admin/Users"));
@@ -288,6 +289,9 @@ function Router() {
         </Route>
         <Route path="/staff/settings">
           <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffSettings /></ProtectedRoute>
+        </Route>
+        <Route path="/staff/tasks">
+          <ProtectedRoute allowedRoles={STAFF_ROLES}><StaffTasks /></ProtectedRoute>
         </Route>
 
         {/* Student Portal */}

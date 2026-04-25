@@ -366,7 +366,8 @@
     "agent": "Agen",
     "subAgent": "Sub-Agen",
     "switchToLight": "Beralih ke mode terang",
-    "switchToDark": "Beralih ke mode gelap"
+    "switchToDark": "Beralih ke mode gelap",
+    "tasks": "Tugas"
   },
   "notFound": {
     "title": "Halaman Tidak Ditemukan",
@@ -491,5 +492,70 @@
   },
   "a11y": {
     "skipToContent": "Lewati ke konten utama"
+  },
+  "tasks": {
+    "title": "Tugas",
+    "subtitle": "Kelola to-do dan tindak lanjut Anda",
+    "newTask": "Tugas Baru",
+    "editTask": "Edit Tugas",
+    "createTask": "Buat Tugas",
+    "viewArchive": "Arsip",
+    "viewActive": "Aktif",
+    "emptyActive": "Belum ada tugas",
+    "emptyActiveHint": "Buat tugas pertama Anda untuk memulai.",
+    "emptyArchive": "Tidak ada tugas yang diarsipkan",
+    "emptyArchiveHint": "Tugas yang Anda arsipkan akan muncul di sini.",
+    "loading": "Memuat tugas…",
+    "loadFailed": "Gagal memuat tugas",
+    "saveFailed": "Tidak dapat menyimpan tugas",
+    "moveFailed": "Tidak dapat memindahkan tugas",
+    "archiveFailed": "Tidak dapat mengarsipkan tugas",
+    "restoreFailed": "Tidak dapat memulihkan tugas",
+    "noteAddFailed": "Tidak dapat menambahkan catatan",
+    "noteDeleteFailed": "Tidak dapat menghapus catatan",
+    "titleRequired": "Judul wajib diisi",
+    "confirmArchive": "Arsipkan tugas ini?",
+    "created": "Tugas dibuat",
+    "updated": "Tugas diperbarui",
+    "archived": "Tugas diarsipkan",
+    "restored": "Tugas dipulihkan",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "cancel": "Batal",
+    "add": "Tambah",
+    "adding": "Menambahkan…",
+    "edit": "Edit",
+    "archive": "Arsipkan",
+    "restore": "Pulihkan",
+    "viewNotes": "Lihat catatan",
+    "notes": "Catatan",
+    "noNotes": "Belum ada catatan",
+    "addNotePlaceholder": "Tulis catatan…",
+    "unassigned": "Belum ditugaskan",
+    "colEmpty": "Tidak ada tugas di sini",
+    "dialogDescription": "Isi detail tugas dan tugaskan ke anggota tim.",
+    "fields": {
+      "title": "Judul",
+      "description": "Deskripsi",
+      "status": "Status",
+      "priority": "Prioritas",
+      "dueDate": "Tenggat",
+      "assignTo": "Tugaskan ke"
+    },
+    "col": {
+      "todo": "Akan Dikerjakan",
+      "in_progress": "Dikerjakan",
+      "done": "Selesai"
+    },
+    "priority": {
+      "low": "Rendah",
+      "medium": "Sedang",
+      "high": "Tinggi"
+    },
+    "advanceTo": {
+      "todo": "Pindah ke Akan Dikerjakan",
+      "in_progress": "Pindah ke Dikerjakan",
+      "done": "Tandai Selesai"
+    }
   }
 }

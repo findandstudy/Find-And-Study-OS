@@ -31,6 +31,7 @@ import quickLinksRouter from "./quickLinks";
 import exportRouter from "./export";
 import documentRequirementsRouter from "./documentRequirements";
 import websiteRouter from "./website";
+import tasksRouter from "./tasks";
 
 const router: IRouter = Router();
 
@@ -66,5 +67,6 @@ router.use(quickLinksRouter);
 router.use(exportRouter);
 router.use(documentRequirementsRouter);
 router.use(websiteRouter);
+router.use(tasksRouter);
 
 export default router;

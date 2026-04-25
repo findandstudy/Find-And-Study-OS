@@ -375,7 +375,8 @@
     "agent": "Acente",
     "subAgent": "Alt Acente",
     "switchToLight": "Açık moda geç",
-    "switchToDark": "Karanlık moda geç"
+    "switchToDark": "Karanlık moda geç",
+    "tasks": "Görevler"
   },
   "notFound": {
     "title": "Sayfa Bulunamadı",
@@ -500,5 +501,70 @@
   },
   "a11y": {
     "skipToContent": "Ana içeriğe geç"
+  },
+  "tasks": {
+    "title": "Görevler",
+    "subtitle": "Yapılacaklarınızı ve takiplerinizi yönetin",
+    "newTask": "Yeni Görev",
+    "editTask": "Görevi Düzenle",
+    "createTask": "Görev Oluştur",
+    "viewArchive": "Arşiv",
+    "viewActive": "Aktif",
+    "emptyActive": "Henüz görev yok",
+    "emptyActiveHint": "Başlamak için ilk görevinizi oluşturun.",
+    "emptyArchive": "Arşivlenmiş görev yok",
+    "emptyArchiveHint": "Arşivlediğiniz görevler burada görünür.",
+    "loading": "Görevler yükleniyor…",
+    "loadFailed": "Görevler yüklenemedi",
+    "saveFailed": "Görev kaydedilemedi",
+    "moveFailed": "Görev taşınamadı",
+    "archiveFailed": "Görev arşivlenemedi",
+    "restoreFailed": "Görev geri yüklenemedi",
+    "noteAddFailed": "Not eklenemedi",
+    "noteDeleteFailed": "Not silinemedi",
+    "titleRequired": "Başlık zorunludur",
+    "confirmArchive": "Bu görev arşivlensin mi?",
+    "created": "Görev oluşturuldu",
+    "updated": "Görev güncellendi",
+    "archived": "Görev arşivlendi",
+    "restored": "Görev geri yüklendi",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "cancel": "İptal",
+    "add": "Ekle",
+    "adding": "Ekleniyor…",
+    "edit": "Düzenle",
+    "archive": "Arşivle",
+    "restore": "Geri Yükle",
+    "viewNotes": "Notları görüntüle",
+    "notes": "Notlar",
+    "noNotes": "Henüz not yok",
+    "addNotePlaceholder": "Not yazın…",
+    "unassigned": "Atanmadı",
+    "colEmpty": "Burada görev yok",
+    "dialogDescription": "Görev detaylarını doldurun ve bir takım üyesine atayın.",
+    "fields": {
+      "title": "Başlık",
+      "description": "Açıklama",
+      "status": "Durum",
+      "priority": "Öncelik",
+      "dueDate": "Son Tarih",
+      "assignTo": "Ata"
+    },
+    "col": {
+      "todo": "Yapılacak",
+      "in_progress": "Devam Ediyor",
+      "done": "Tamamlandı"
+    },
+    "priority": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek"
+    },
+    "advanceTo": {
+      "todo": "Yapılacak'a taşı",
+      "in_progress": "Devam Ediyor'a taşı",
+      "done": "Tamamlandı olarak işaretle"
+    }
   }
 }
