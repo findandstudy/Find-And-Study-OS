@@ -176,6 +176,20 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+async function backfillConversationChannel() {
+  try {
+    const result = await pool.query(
+      `UPDATE conversations SET channel = 'internal' WHERE channel IS NULL`
+    );
+    const count = result.rowCount || 0;
+    if (count > 0) {
+      console.log(`[backfill] Set channel='internal' on ${count} conversations with NULL channel`);
+    }
+  } catch (err) {
+    console.error("[backfill] backfillConversationChannel error:", err);
+  }
+}
+
 async function backfillMissingCommissions() {
   try {
     const { resolveAgentCommission } = await import("./lib/agentCommission");
@@ -370,6 +384,7 @@ async function seedDocumentRequirements() {
   await linkAgentUser();
   await seedClaudeIntegration();
   await seedDocumentRequirements();
+  await backfillConversationChannel();
   await backfillMissingCommissions();
   await backfillStudentAppStatus();
   const { startEmailWorker } = await import("./lib/email");
