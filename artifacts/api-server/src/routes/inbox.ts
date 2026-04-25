@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   db,
   conversationsTable,
+  conversationParticipantsTable,
   messagesTable,
   externalContactsTable,
   leadsTable,
@@ -501,28 +502,63 @@ router.get(
       res.status(400).json({ error: "type and id required" });
       return;
     }
-    const where =
+    if (type !== "lead" && type !== "student" && type !== "agent") {
+      res.status(400).json({ error: "Invalid type" });
+      return;
+    }
+
+    // 1) External conversations linked via external_contacts (WA + web_form).
+    const extWhere =
       type === "lead"
         ? eq(externalContactsTable.leadId, id)
         : type === "student"
         ? eq(externalContactsTable.studentId, id)
-        : type === "agent"
-        ? eq(externalContactsTable.agentId, id)
-        : null;
-    if (!where) {
-      res.status(400).json({ error: "Invalid type" });
-      return;
-    }
-    const contacts = await db.select().from(externalContactsTable).where(where);
+        : eq(externalContactsTable.agentId, id);
+    const contacts = await db.select().from(externalContactsTable).where(extWhere);
     const contactIds = contacts.map((c) => c.id);
-    if (contactIds.length === 0) {
-      res.json({ conversations: [], messages: [] });
+
+    // 2) Internal conversations linked to the entity's user account, if any.
+    //    Students and agents have a userId on their row; leads do not (they are
+    //    pre-account prospects), so the internal union is a no-op for leads.
+    let entityUserId: number | null = null;
+    if (type === "student") {
+      const [s] = await db
+        .select({ userId: studentsTable.userId })
+        .from(studentsTable)
+        .where(eq(studentsTable.id, id))
+        .limit(1);
+      entityUserId = s?.userId ?? null;
+    } else if (type === "agent") {
+      const [a] = await db
+        .select({ userId: agentsTable.userId })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, id))
+        .limit(1);
+      entityUserId = a?.userId ?? null;
+    }
+
+    let internalConvIds: number[] = [];
+    if (entityUserId) {
+      const parts = await db
+        .select({ conversationId: conversationParticipantsTable.conversationId })
+        .from(conversationParticipantsTable)
+        .where(eq(conversationParticipantsTable.userId, entityUserId));
+      internalConvIds = parts.map((p) => p.conversationId);
+    }
+
+    if (contactIds.length === 0 && internalConvIds.length === 0) {
+      res.json({ conversations: [], messages: [], externalContacts: contacts });
       return;
     }
+
+    // Union: external_contact-linked OR internal-participant-linked.
+    const whereClauses = [];
+    if (contactIds.length > 0) whereClauses.push(inArray(conversationsTable.externalContactId, contactIds));
+    if (internalConvIds.length > 0) whereClauses.push(inArray(conversationsTable.id, internalConvIds));
     const conversations = await db
       .select()
       .from(conversationsTable)
-      .where(inArray(conversationsTable.externalContactId, contactIds))
+      .where(whereClauses.length === 1 ? whereClauses[0] : or(...whereClauses))
       .orderBy(desc(conversationsTable.lastMessageAt));
     const convIds = conversations.map((c) => c.id);
     const messages = convIds.length

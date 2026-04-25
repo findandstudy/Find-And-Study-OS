@@ -90,7 +90,11 @@ export async function processInboundMessage(opts: {
     const resolution = await resolveIdentity({ phone: contact.phone, email: contact.email });
     if (resolution.outcome === "strong") {
       const c = resolution.candidates[0];
-      const updates: any = { leadId: null, studentId: null, agentId: null };
+      const updates: { leadId: number | null; studentId: number | null; agentId: number | null } = {
+        leadId: null,
+        studentId: null,
+        agentId: null,
+      };
       if (c.type === "lead") updates.leadId = c.id;
       if (c.type === "student") updates.studentId = c.id;
       if (c.type === "agent") updates.agentId = c.id;
@@ -104,8 +108,11 @@ export async function processInboundMessage(opts: {
   // auto-create a lead with assignedAgentId set. Conversation ownership stays null.
   // Spec: lib/db/schema/leads.ts assignedAgentId path; conversation.assignedToId untouched.
   let subAgentMatch: { agentId: number; agencyCode: string | null; displayName: string } | null = null;
-  const agentRefRaw = (contact.metadata && typeof contact.metadata === "object" ? (contact.metadata as any).agentRef : null)
-    || (message.metadata && typeof message.metadata === "object" ? (message.metadata as any).agentRef : null);
+  const readAgentRef = (m: Record<string, unknown> | undefined): unknown => {
+    if (!m || typeof m !== "object") return null;
+    return (m as { agentRef?: unknown }).agentRef ?? null;
+  };
+  const agentRefRaw = readAgentRef(contact.metadata) || readAgentRef(message.metadata);
   const agentRef = agentRefRaw ? String(agentRefRaw).trim() : "";
   if (agentRef && !externalContact.leadId && !externalContact.studentId && !externalContact.agentId) {
     try {
@@ -247,22 +254,37 @@ export async function processInboundMessage(opts: {
     //   - if conversation has an assignee, send only to that user (assigned semantics).
     //   - else fall through to role-based routing in dispatchNotification.
     const recipientUserIds = conversation.assignedToId ? [conversation.assignedToId] : undefined;
+    const baseData = {
+      conversationId: conversation.id,
+      channel,
+      unmatched: !isLinked,
+      assignedToId: conversation.assignedToId || null,
+    };
+
+    // Always dispatch inbox.new_message on every new inbound (per spec).
     await dispatchNotification({
-      event: !isLinked ? "inbox.unmatched" : "inbox.new_message",
-      title: !isLinked
-        ? `New ${channel} message — needs matching`
-        : `New ${channel} message from ${contact.displayName || contact.phone || "contact"}`,
+      event: "inbox.new_message",
+      title: `New ${channel} message from ${contact.displayName || contact.phone || "contact"}`,
       body: message.text.slice(0, 280),
       actionUrl: `/staff/messages?conversation=${conversation.id}`,
       icon: "message",
       recipientUserIds,
-      data: {
-        conversationId: conversation.id,
-        channel,
-        unmatched: !isLinked,
-        assignedToId: conversation.assignedToId || null,
-      },
+      data: baseData,
     });
+
+    // Additionally dispatch inbox.unmatched when no identity was resolved, so
+    // the matching queue can route it to the appropriate role pool.
+    if (!isLinked) {
+      await dispatchNotification({
+        event: "inbox.unmatched",
+        title: `Unmatched ${channel} message — needs review`,
+        body: message.text.slice(0, 280),
+        actionUrl: `/staff/messages?conversation=${conversation.id}`,
+        icon: "alert",
+        // Unmatched fans out per its rule (no recipientUserIds override).
+        data: baseData,
+      });
+    }
   } catch (err) {
     console.error("[INBOX] Notification dispatch failed:", err);
   }

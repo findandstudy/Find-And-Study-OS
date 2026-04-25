@@ -1,12 +1,27 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { db, integrationsTable, channelAccountsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { processInboundMessage } from "../lib/inbox/processInbound";
 import { verifyWhatsAppSignature, parseWhatsAppWebhook, type WhatsAppConfig } from "../lib/inbox/channels/whatsapp";
 import { verifyWebFormSignature, parseWebFormPayload } from "../lib/inbox/channels/webForm";
 import { decryptConfig } from "../lib/encryption";
+import { logAudit } from "../lib/auth";
 import crypto from "crypto";
+
+/**
+ * Per-IP rate limiter for inbound webhook endpoints. Bounded to protect against
+ * floods from spoofed sources before signature checks run. Limits are generous
+ * enough not to throttle legitimate WA Cloud / web-form bursts.
+ */
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many webhook requests" },
+});
 
 const router: IRouter = Router();
 
@@ -86,7 +101,7 @@ async function ensureChannelAccount(channel: string, displayName: string, extern
   }
 }
 
-router.get("/webhooks/whatsapp", async (req: Request, res: Response): Promise<void> => {
+router.get("/webhooks/whatsapp", webhookLimiter, async (req: Request, res: Response): Promise<void> => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
@@ -96,10 +111,15 @@ router.get("/webhooks/whatsapp", async (req: Request, res: Response): Promise<vo
     res.status(200).send(String(challenge));
     return;
   }
+  logAudit(null, "webhook_auth_failed", "webhook:whatsapp:verify", undefined, {
+    mode: String(mode || ""),
+    hasToken: Boolean(token),
+    hasExpected: Boolean(expected),
+  }, req.ip);
   res.status(403).send("Forbidden");
 });
 
-router.post("/webhooks/whatsapp", rawJson, async (req: Request, res: Response): Promise<void> => {
+router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, res: Response): Promise<void> => {
   const config = await getWhatsAppConfig();
   if (!config) {
     res.status(200).json({ ok: true, ignored: "integration disabled" });
@@ -111,6 +131,11 @@ router.post("/webhooks/whatsapp", rawJson, async (req: Request, res: Response): 
   // Always verify — verifyWhatsAppSignature returns false when appSecret OR
   // the signature header is missing, so unsigned/legacy configs are rejected.
   if (!verifyWhatsAppSignature(raw, sig, config.appSecret)) {
+    logAudit(null, "webhook_auth_failed", "webhook:whatsapp", undefined, {
+      reason: "invalid_or_missing_signature",
+      hasSig: Boolean(sig),
+      hasSecret: Boolean(config.appSecret),
+    }, req.ip);
     console.warn("[WEBHOOK] WhatsApp signature verification failed", {
       hasSig: Boolean(sig),
       hasSecret: Boolean(config.appSecret),
@@ -206,6 +231,13 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
     const sigOk = sig ? verifyWebFormSignature(raw ?? Buffer.alloc(0), sig, cfg.secret) : false;
     const tokenOk = timingSafeEq(tokenHeader || tokenBody, cfg.secret);
     if (!sigOk && !tokenOk) {
+      logAudit(null, "webhook_auth_failed", "webhook:web_form", undefined, {
+        reason: "invalid_or_missing_secret",
+        formId: formIdParam || cfg.formId || null,
+        hasSig: Boolean(sig),
+        hasTokenHeader: Boolean(tokenHeader),
+        hasTokenBody: Boolean(tokenBody),
+      }, req.ip);
       console.warn("[WEBHOOK] web_form auth failed", {
         hasSig: Boolean(sig),
         hasTokenHeader: Boolean(tokenHeader),
@@ -261,7 +293,7 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   }
 }
 
-router.post("/webhooks/web-form", rawAny, parseRawByContentType, handleWebFormPost);
-router.post("/webhooks/web-form/:formId", rawAny, parseRawByContentType, handleWebFormPost);
+router.post("/webhooks/web-form", webhookLimiter, rawAny, parseRawByContentType, handleWebFormPost);
+router.post("/webhooks/web-form/:formId", webhookLimiter, rawAny, parseRawByContentType, handleWebFormPost);
 
 export default router;

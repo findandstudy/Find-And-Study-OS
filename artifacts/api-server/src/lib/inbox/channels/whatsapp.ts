@@ -43,18 +43,29 @@ export function verifyWhatsAppSignature(rawBody: Buffer | string, signatureHeade
  * with a synthesized externalMessageId so the rest of the pipeline can run.
  */
 /**
- * Send a WA Cloud API request with bounded retry+backoff for 429/5xx.
- * Backoff schedule: 250ms, 750ms, 1750ms (max 3 attempts total).
+ * Send a WA Cloud API request with bounded retry+backoff.
+ *
+ * Per the WhatsApp Cloud API rate-limit spec, on HTTP 429 we MUST back off for
+ * roughly a minute before retrying (or honor the Retry-After header if Meta
+ * returns one). For transient 5xx / network errors we use a much shorter
+ * exponential backoff so writes don't stall under brief upstream blips.
+ *
+ * Max 3 attempts total. Per-attempt delays are capped to keep p99 latency
+ * bounded for the calling request.
  */
+const WA_429_WAIT_MS = 60_000;
+const WA_5XX_BACKOFF_MS = [250, 750, 1750];
+const WA_429_MAX_WAIT_MS = 65_000; // hard cap on Retry-After to avoid request hangs
+
 async function sendWaApiRequest(
   url: string,
   accessToken: string,
-  body: Record<string, any>,
-): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
-  const delays = [0, 250, 750, 1750];
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: unknown } | { ok: false; status: number; error: string }> {
+  const maxAttempts = 3;
   let last: { status: number; error: string } = { status: 0, error: "no_attempt" };
-  for (let attempt = 0; attempt < delays.length; attempt++) {
-    if (delays[attempt] > 0) await new Promise((r) => setTimeout(r, delays[attempt]));
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -64,15 +75,36 @@ async function sendWaApiRequest(
         },
         body: JSON.stringify(body),
       });
-      const data: any = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => ({}));
       if (res.ok) return { ok: true, data };
-      const errMsg = data?.error?.message || `HTTP ${res.status}`;
+
+      const errObj = (data as { error?: { message?: string } })?.error;
+      const errMsg = errObj?.message || `HTTP ${res.status}`;
       last = { status: res.status, error: errMsg };
-      const retriable = res.status === 429 || (res.status >= 500 && res.status < 600);
-      if (!retriable) return { ok: false, status: res.status, error: errMsg };
-    } catch (err: any) {
-      last = { status: 0, error: err?.message || "network_error" };
-      // Network errors are retriable.
+
+      const isRateLimit = res.status === 429;
+      const is5xx = res.status >= 500 && res.status < 600;
+      const retriable = isRateLimit || is5xx;
+      if (!retriable || attempt === maxAttempts - 1) {
+        return { ok: false, status: res.status, error: errMsg };
+      }
+
+      let waitMs: number;
+      if (isRateLimit) {
+        const retryAfter = res.headers.get("retry-after");
+        const retryAfterMs = retryAfter ? Math.min(parseInt(retryAfter, 10) * 1000, WA_429_MAX_WAIT_MS) : NaN;
+        waitMs = Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : WA_429_WAIT_MS;
+      } else {
+        waitMs = WA_5XX_BACKOFF_MS[attempt] ?? WA_5XX_BACKOFF_MS[WA_5XX_BACKOFF_MS.length - 1];
+      }
+      await new Promise((r) => setTimeout(r, waitMs));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "network_error";
+      last = { status: 0, error: msg };
+      // Network errors are retriable; use short backoff.
+      if (attempt === maxAttempts - 1) break;
+      const waitMs = WA_5XX_BACKOFF_MS[attempt] ?? WA_5XX_BACKOFF_MS[WA_5XX_BACKOFF_MS.length - 1];
+      await new Promise((r) => setTimeout(r, waitMs));
     }
   }
   return { ok: false, status: last.status, error: last.error };
