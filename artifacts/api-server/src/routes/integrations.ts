@@ -67,6 +67,23 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     return;
   }
 
+  // WhatsApp cannot be enabled without an app secret — webhook signature
+  // verification is mandatory and would reject every inbound otherwise.
+  if (key === "whatsapp" && isEnabled === true) {
+    const incomingCfg = (config || {}) as Record<string, any>;
+    // We need the merged plaintext to validate; pull existing decrypted state.
+    const existingForCheck = (await db.select().from(integrationsTable).where(eq(integrationsTable.key, key)))[0];
+    const existingPlainCfg = existingForCheck ? decryptConfig(existingForCheck.config as Record<string, any>) : {};
+    const merged = { ...existingPlainCfg, ...incomingCfg };
+    if (!merged.appSecret || !merged.webhookVerifyToken) {
+      res.status(400).json({
+        error: "whatsapp_secrets_required",
+        message: "WhatsApp cannot be enabled without both an App Secret and a Webhook Verify Token (required to authenticate inbound webhooks).",
+      });
+      return;
+    }
+  }
+
   const [existing] = await db
     .select()
     .from(integrationsTable)
@@ -128,6 +145,18 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
         "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
     });
     return;
+  }
+
+  // Same WA secrets check as PUT — toggling must not bypass mandatory creds.
+  if (req.params.key === "whatsapp" && willEnable) {
+    const plain = decryptConfig(existing.config as Record<string, any>);
+    if (!plain.appSecret || !plain.webhookVerifyToken) {
+      res.status(400).json({
+        error: "whatsapp_secrets_required",
+        message: "WhatsApp cannot be enabled without both an App Secret and a Webhook Verify Token (required to authenticate inbound webhooks).",
+      });
+      return;
+    }
   }
 
   const [result] = await db

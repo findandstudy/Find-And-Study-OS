@@ -4,8 +4,10 @@ import {
   messagesTable,
   externalContactsTable,
   channelAccountsTable,
+  agentsTable,
+  leadsTable,
 } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { resolveIdentity } from "./identityResolver";
 import { toE164 } from "./phone";
 import { dispatchNotification } from "../notificationDispatcher";
@@ -97,6 +99,62 @@ export async function processInboundMessage(opts: {
     }
   }
 
+  // agent_ref pipeline (web_form sub-agent referrals): if no identity match yet
+  // and an agent_ref was provided, try to match it to an agent via agencyCode and
+  // auto-create a lead with assignedAgentId set. Conversation ownership stays null.
+  // Spec: lib/db/schema/leads.ts assignedAgentId path; conversation.assignedToId untouched.
+  let subAgentMatch: { agentId: number; agencyCode: string | null; displayName: string } | null = null;
+  const agentRefRaw = (contact.metadata && typeof contact.metadata === "object" ? (contact.metadata as any).agentRef : null)
+    || (message.metadata && typeof message.metadata === "object" ? (message.metadata as any).agentRef : null);
+  const agentRef = agentRefRaw ? String(agentRefRaw).trim() : "";
+  if (agentRef && !externalContact.leadId && !externalContact.studentId && !externalContact.agentId) {
+    try {
+      const [matched] = await db
+        .select({ id: agentsTable.id, code: agentsTable.agencyCode, name: agentsTable.companyName })
+        .from(agentsTable)
+        .where(sql`lower(${agentsTable.agencyCode}) = lower(${agentRef})`)
+        .limit(1);
+      if (matched) {
+        // Split displayName into first/last; fall back to channel handle.
+        const fullName = (contact.displayName || "").trim();
+        const parts = fullName.split(/\s+/).filter(Boolean);
+        const firstName = parts[0] || (contact.email?.split("@")[0]) || (contact.phone || "Web");
+        const lastName = parts.slice(1).join(" ") || "Lead";
+        const [createdLead] = await db
+          .insert(leadsTable)
+          .values({
+            firstName,
+            lastName,
+            email: contact.email ? String(contact.email).toLowerCase() : null,
+            phone: contact.phone || null,
+            phoneE164,
+            source: `web_form:${agentRef}`,
+            status: "new",
+            agentId: matched.id,
+            originType: "agent",
+            originEntityType: "agent",
+            originEntityId: matched.id,
+            originDisplayName: matched.name || matched.code || `Agent #${matched.id}`,
+          })
+          .returning({ id: leadsTable.id });
+        if (createdLead) {
+          await db
+            .update(externalContactsTable)
+            .set({ leadId: createdLead.id })
+            .where(eq(externalContactsTable.id, externalContact.id));
+          externalContact = { ...externalContact, leadId: createdLead.id };
+          subAgentMatch = {
+            agentId: matched.id,
+            agencyCode: matched.code,
+            displayName: matched.name || matched.code || `Agent #${matched.id}`,
+          };
+        }
+      }
+    } catch (err) {
+      console.error("[INBOX] agent_ref pipeline failed:", err);
+    }
+  }
+
   const isLinked = Boolean(externalContact.leadId || externalContact.studentId || externalContact.agentId);
 
   const externalThreadId = message.externalThreadId || contact.externalId;
@@ -129,7 +187,9 @@ export async function processInboundMessage(opts: {
         lastMessageAt: message.receivedAt || new Date(),
         lastMessagePreview: message.text.slice(0, 200),
         lastInboundAt: message.receivedAt || new Date(),
-        metadata: { source: channel },
+        metadata: subAgentMatch
+          ? { source: channel, subAgent: subAgentMatch }
+          : { source: channel },
       })
       .returning();
     conversation = created;
@@ -183,6 +243,10 @@ export async function processInboundMessage(opts: {
   }
 
   try {
+    // Targeting:
+    //   - if conversation has an assignee, send only to that user (assigned semantics).
+    //   - else fall through to role-based routing in dispatchNotification.
+    const recipientUserIds = conversation.assignedToId ? [conversation.assignedToId] : undefined;
     await dispatchNotification({
       event: !isLinked ? "inbox.unmatched" : "inbox.new_message",
       title: !isLinked
@@ -191,10 +255,12 @@ export async function processInboundMessage(opts: {
       body: message.text.slice(0, 280),
       actionUrl: `/staff/messages?conversation=${conversation.id}`,
       icon: "message",
+      recipientUserIds,
       data: {
         conversationId: conversation.id,
         channel,
         unmatched: !isLinked,
+        assignedToId: conversation.assignedToId || null,
       },
     });
   } catch (err) {

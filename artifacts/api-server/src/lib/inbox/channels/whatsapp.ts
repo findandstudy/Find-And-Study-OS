@@ -22,10 +22,12 @@ const SIMULATED_PREFIX = "sim_wa_";
 
 /**
  * Verify the X-Hub-Signature-256 header from a WhatsApp webhook request.
+ *
+ * Returns false (reject) when either appSecret or signatureHeader is missing,
+ * so unsigned spoofed payloads are never accepted in production.
  */
 export function verifyWhatsAppSignature(rawBody: Buffer | string, signatureHeader: string | undefined, appSecret: string | undefined): boolean {
-  if (!appSecret) return true;
-  if (!signatureHeader) return false;
+  if (!appSecret || !signatureHeader) return false;
   const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader));

@@ -90,27 +90,25 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
 
     let userIds: number[] = [];
 
+    // When the caller provides explicit recipients (e.g., the assigned staff
+    // for an assigned conversation), honor them exclusively and do NOT expand
+    // with role-based fanout. Otherwise apply the rule's recipientType.
     if (ctx.recipientUserIds && ctx.recipientUserIds.length > 0) {
       userIds = [...ctx.recipientUserIds];
-    }
-
-    if (recipientType === "role" && recipientRoles.length > 0) {
+    } else if (recipientType === "role" && recipientRoles.length > 0) {
       const users = await db.select({ id: usersTable.id })
         .from(usersTable)
         .where(and(
           inArray(usersTable.role, recipientRoles),
           eq(usersTable.isActive, true)
         ));
-      const roleIds = users.map(u => u.id);
-      for (const id of roleIds) {
-        if (!userIds.includes(id)) userIds.push(id);
-      }
+      userIds = users.map(u => u.id);
     } else if (recipientType === "all") {
       const users = await db.select({ id: usersTable.id })
         .from(usersTable)
         .where(eq(usersTable.isActive, true));
       userIds = users.map(u => u.id);
-    } else if ((recipientType === "assigned" || recipientType === "owner" || recipientType === "specific") && userIds.length === 0) {
+    } else if (recipientType === "assigned" || recipientType === "owner" || recipientType === "specific") {
       if (recipientRoles.length > 0) {
         const users = await db.select({ id: usersTable.id })
           .from(usersTable)

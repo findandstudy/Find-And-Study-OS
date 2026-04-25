@@ -108,8 +108,14 @@ router.post("/webhooks/whatsapp", rawJson, async (req: Request, res: Response): 
 
   const sig = req.headers["x-hub-signature-256"] as string | undefined;
   const raw = req.body as Buffer;
-  if (config.appSecret && !verifyWhatsAppSignature(raw, sig, config.appSecret)) {
-    res.status(401).json({ error: "Invalid signature" });
+  // Always verify — verifyWhatsAppSignature returns false when appSecret OR
+  // the signature header is missing, so unsigned/legacy configs are rejected.
+  if (!verifyWhatsAppSignature(raw, sig, config.appSecret)) {
+    console.warn("[WEBHOOK] WhatsApp signature verification failed", {
+      hasSig: Boolean(sig),
+      hasSecret: Boolean(config.appSecret),
+    });
+    res.status(401).json({ error: "Invalid or missing signature" });
     return;
   }
 
