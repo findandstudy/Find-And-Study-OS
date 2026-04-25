@@ -11,6 +11,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { resolveIdentity } from "./identityResolver";
 import { toE164 } from "./phone";
 import { dispatchNotification } from "../notificationDispatcher";
+import { inboxBus } from "./eventBus";
 
 export interface InboundContactInfo {
   externalId: string;
@@ -345,6 +346,20 @@ export async function processInboundMessage(opts: {
     }
   } catch (err) {
     console.error("[INBOX] Notification dispatch failed:", err);
+  }
+
+  // Push live update to any connected staff inbox streams.
+  try {
+    inboxBus.publish({
+      type: "message",
+      conversationId: conversation.id,
+      channel,
+      assignedToId: conversation.assignedToId ?? null,
+      unmatched: !isLinked,
+      direction: "inbound",
+    });
+  } catch (err) {
+    console.error("[INBOX] Live event publish failed:", err);
   }
 
   return {

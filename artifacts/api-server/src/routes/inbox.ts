@@ -28,12 +28,67 @@ import { directOrigin } from "../lib/originHelper";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { decryptConfig } from "../lib/encryption";
+import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 
 const router: IRouter = Router();
 
 router.get("/inbox/live-mode", requireAuth, async (_req, res): Promise<void> => {
   res.json({ live: isLiveIntegrationsEnabled() });
 });
+
+/**
+ * Live inbox stream (Server-Sent Events). Pushes `inbox_message` and
+ * `inbox_assigned` frames to the client so the UI can refresh without
+ * polling. Payloads carry just enough context for the client to decide
+ * what to refetch (the conversation list and, if open, the conversation
+ * detail). The connection self-pings every 25s to defeat idle proxies.
+ */
+router.get(
+  "/inbox/events",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  (req, res): void => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof (res as { flushHeaders?: () => void }).flushHeaders === "function") {
+      (res as { flushHeaders: () => void }).flushHeaders();
+    }
+
+    res.write(`retry: 5000\n\n`);
+    res.write(`: connected\n\n`);
+
+    const handler = (event: InboxBusEvent) => {
+      const eventName = event.type === "message" ? "inbox_message" : "inbox_assigned";
+      try {
+        res.write(`event: ${eventName}\n`);
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        // socket may have closed mid-write; cleanup happens via 'close'.
+      }
+    };
+
+    const unsubscribe = inboxBus.subscribe(handler);
+
+    const ping = setInterval(() => {
+      try {
+        res.write(`: ping\n\n`);
+      } catch {
+        // ignored — close handler will tear down.
+      }
+    }, 25000);
+
+    const cleanup = () => {
+      clearInterval(ping);
+      unsubscribe();
+      try { res.end(); } catch {}
+    };
+
+    req.on("close", cleanup);
+    req.on("error", cleanup);
+  },
+);
 
 router.get(
   "/inbox/conversations",
@@ -163,6 +218,10 @@ router.patch(
       return;
     }
     const assignedToId = userId === null ? null : (typeof userId === "number" ? userId : req.user!.id);
+    const [previous] = await db
+      .select({ assignedToId: conversationsTable.assignedToId })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id));
     const [updated] = await db
       .update(conversationsTable)
       .set({ assignedToId, status: assignedToId ? "open" : "open" })
@@ -173,6 +232,13 @@ router.patch(
       return;
     }
     await logAudit(req.user!.id, "assign_conversation", "conversation", id, { assignedToId }, req.ip);
+    inboxBus.publish({
+      type: "assigned",
+      conversationId: id,
+      assignedToId: updated.assignedToId ?? null,
+      previousAssignedToId: previous?.assignedToId ?? null,
+      actorUserId: req.user!.id,
+    });
     if (assignedToId && assignedToId !== req.user!.id) {
       try {
         await dispatchNotification({
@@ -356,6 +422,14 @@ router.post(
           .update(conversationsTable)
           .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
           .where(eq(conversationsTable.id, id));
+        inboxBus.publish({
+          type: "message",
+          conversationId: id,
+          channel: "whatsapp",
+          assignedToId: conv.assignedToId ?? null,
+          unmatched: conv.unmatched,
+          direction: "outbound",
+        });
       } else {
         // Notify staff of send failure (in_app + email per default rule).
         try {
@@ -392,6 +466,14 @@ router.post(
         .update(conversationsTable)
         .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
         .where(eq(conversationsTable.id, id));
+      inboxBus.publish({
+        type: "message",
+        conversationId: id,
+        channel: "web_form",
+        assignedToId: conv.assignedToId ?? null,
+        unmatched: conv.unmatched,
+        direction: "outbound",
+      });
 
       // Auto-email the original submitter when an email is on file.
       let emailSent = false;
@@ -505,6 +587,14 @@ router.post(
         .update(conversationsTable)
         .set({ lastMessageAt: new Date(), lastMessagePreview: renderedContent.slice(0, 200) })
         .where(eq(conversationsTable.id, id));
+      inboxBus.publish({
+        type: "message",
+        conversationId: id,
+        channel: "whatsapp",
+        assignedToId: conv.assignedToId ?? null,
+        unmatched: conv.unmatched,
+        direction: "outbound",
+      });
     }
     res.status(result.ok ? 201 : 502).json({ message: msg, simulated: result.simulated, error: result.error });
   },

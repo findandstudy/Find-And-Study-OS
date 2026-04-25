@@ -149,6 +149,44 @@ function InboxTab() {
     else setDetail(null);
   }, [selectedId, fetchDetail]);
 
+  // Live updates via Server-Sent Events. Refs let the long-lived EventSource
+  // see the freshest selection / fetchers without churning the connection
+  // every time the user switches tabs or opens a conversation.
+  const selectedIdRef = useRef<number | null>(selectedId);
+  const fetchInboxRef = useRef(fetchInbox);
+  const fetchDetailRef = useRef(fetchDetail);
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  useEffect(() => { fetchInboxRef.current = fetchInbox; }, [fetchInbox]);
+  useEffect(() => { fetchDetailRef.current = fetchDetail; }, [fetchDetail]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+    const es = new EventSource("/api/inbox/events", { withCredentials: true });
+
+    const refresh = (raw: MessageEvent) => {
+      let convId: number | null = null;
+      try {
+        const payload = JSON.parse(raw.data || "{}");
+        if (typeof payload.conversationId === "number") convId = payload.conversationId;
+      } catch {
+        // ignore malformed frames; still refresh the list as a safety net.
+      }
+      fetchInboxRef.current();
+      if (convId !== null && selectedIdRef.current === convId) {
+        fetchDetailRef.current(convId);
+      }
+    };
+
+    es.addEventListener("inbox_message", refresh);
+    es.addEventListener("inbox_assigned", refresh);
+
+    return () => {
+      es.removeEventListener("inbox_message", refresh);
+      es.removeEventListener("inbox_assigned", refresh);
+      es.close();
+    };
+  }, []);
+
   async function loadSuggestions() {
     if (!selectedId) return;
     try {
