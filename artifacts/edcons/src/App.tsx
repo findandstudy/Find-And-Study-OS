@@ -176,23 +176,36 @@ function PublicRoutes({ lang }: { lang: string }) {
   );
 }
 
-function AdminShell() {
+function StaffAdminShell() {
   return (
-    <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+    <ProtectedRoute allowedRoles={STAFF_ROLES}>
       <DashboardLayout>
         <Suspense fallback={<PageLoader />}>
         <Switch>
+          {/* Admin routes */}
           <Route path="/admin" component={AdminDashboard} />
-          <Route path="/admin/users" component={AdminUsers} />
-          <Route path="/admin/catalog" component={AdminCatalog} />
-          <Route path="/admin/campaigns" component={AdminCampaigns} />
-          <Route path="/admin/audit" component={AdminAuditLog} />
+          <Route path="/admin/users">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/catalog">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/campaigns">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCampaigns /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/audit">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>
+          </Route>
           <Route path="/admin/settings" component={StaffSettings} />
           <Route path="/admin/activity/:userId">
-            {(params) => <AdminActivity userId={Number(params.userId)} />}
+            {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity userId={Number(params.userId)} /></ProtectedRoute>}
           </Route>
-          <Route path="/admin/activity" component={AdminActivity} />
-          <Route path="/admin/embeds" component={AdminEmbeds} />
+          <Route path="/admin/activity">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminActivity /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/embeds">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
+          </Route>
           <Route path="/admin/website/pages/:id/edit">
             {(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePageEditor id={Number(params.id)} /></ProtectedRoute>}
           </Route>
@@ -226,20 +239,7 @@ function AdminShell() {
           <Route path="/admin/website/publish-history">
             <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePublishHistory /></ProtectedRoute>
           </Route>
-          <Route component={NotFound} />
-        </Switch>
-        </Suspense>
-      </DashboardLayout>
-    </ProtectedRoute>
-  );
-}
-
-function StaffShell() {
-  return (
-    <ProtectedRoute allowedRoles={STAFF_ROLES}>
-      <DashboardLayout>
-        <Suspense fallback={<PageLoader />}>
-        <Switch>
+          {/* Staff routes */}
           <Route path="/staff" component={StaffDashboard} />
           <Route path="/staff/leads/:id">
             {(params) => <LeadDetail id={Number(params.id)} />}
@@ -254,9 +254,7 @@ function StaffShell() {
           </Route>
           <Route path="/staff/applications" component={StaffApplications} />
           <Route path="/staff/documents" component={StaffDocuments} />
-          <Route path="/staff/course-finder">
-            <ProtectedRoute allowedRoles={[...STAFF_ROLES, ...AGENT_ROLES]} requiredPermission="course_finder"><StaffCourseFinder /></ProtectedRoute>
-          </Route>
+          <Route path="/staff/course-finder" component={StaffCourseFinder} />
           <Route path="/staff/agents/:id" component={StaffAgentDetail} />
           <Route path="/staff/agents">
             <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
@@ -328,6 +326,9 @@ function AgentShell() {
           <Route path="/agent/commissions">
             <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="commissions"><AgentCommissions /></ProtectedRoute>
           </Route>
+          <Route path="/agent/course-finder">
+            <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="course_finder"><StaffCourseFinder /></ProtectedRoute>
+          </Route>
           <Route path="/agent/account" component={AgentAccount} />
           <Route path="/agent/sub-agents">
             <ProtectedRoute allowedRoles={["agent"]}><AgentSubAgents /></ProtectedRoute>
@@ -346,17 +347,13 @@ function AgentShell() {
 function Router() {
   const [location] = useLocation();
 
-  const isAdminPath = location === "/admin" || location.startsWith("/admin/");
-  const isStaffPath = location === "/staff" || location.startsWith("/staff/");
+  const isStaffAdminPath = location === "/admin" || location.startsWith("/admin/") ||
+                            location === "/staff" || location.startsWith("/staff/");
   const isStudentPath = location === "/student" || location.startsWith("/student/");
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
 
-  if (isAdminPath) {
-    return <ErrorBoundary><AdminShell /></ErrorBoundary>;
-  }
-
-  if (isStaffPath) {
-    return <ErrorBoundary><StaffShell /></ErrorBoundary>;
+  if (isStaffAdminPath) {
+    return <ErrorBoundary><StaffAdminShell /></ErrorBoundary>;
   }
 
   if (isStudentPath) {

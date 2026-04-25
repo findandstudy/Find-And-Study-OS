@@ -196,7 +196,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t("dashboard.leads"),        icon: UserCheck,       url: '/agent/leads',         permKey: 'leads' },
       { title: t("dashboard.students"),     icon: GraduationCap,   url: '/agent/students',      permKey: 'students' },
       { title: t("dashboard.applications"), icon: FileText,        url: '/agent/applications',  permKey: 'applications' },
-      { title: t("dashboard.courseFinder"), icon: Search,          url: '/staff/course-finder', permKey: 'course_finder' },
+      { title: t("dashboard.courseFinder"), icon: Search,          url: '/agent/course-finder', permKey: 'course_finder' },
       { title: t("dashboard.messages"),     icon: MessageSquare,   url: '/agent/messages',      permKey: 'messages' },
       { title: t("dashboard.commissions"),  icon: TrendingUp,      url: '/agent/commissions',   permKey: 'commissions' },
     ];
