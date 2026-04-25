@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSeason } from "@/contexts/SeasonContext";
 import {
   useListCommissions, useListServiceFees, useGetFinanceSummary,
@@ -61,6 +60,7 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: 
   icon: any; label: string; value: string; sub?: string; color?: string;
 }) {
   return (
+    <>
     <Card>
       <CardContent className="p-4 flex items-start gap-3">
         <div className={`p-2 rounded-lg bg-slate-50 ${color}`}>
@@ -73,6 +73,7 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: 
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }
 
@@ -80,6 +81,7 @@ function FinanceStatCard({ icon: Icon, label, rows, color = "text-indigo-600", b
   icon: any; label: string; rows: { label: string; value: string }[]; color?: string; borderColor?: string;
 }) {
   return (
+    <>
     <Card className={`border-t-2 ${borderColor}`}>
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -98,15 +100,18 @@ function FinanceStatCard({ icon: Icon, label, rows, color = "text-indigo-600", b
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }
 
 function ProgressBar({ value, max, color = "bg-blue-500" }: { value: number; max: number; color?: string }) {
   const p = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
+    <>
     <div className="w-full bg-slate-100 rounded-full h-2 mt-1">
       <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${p}%` }} />
     </div>
+    </>
   );
 }
 
@@ -239,6 +244,7 @@ function CommissionModal({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -418,6 +424,7 @@ function CommissionModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -482,6 +489,7 @@ function ServiceFeeModal({
   const half = total / 2;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -574,6 +582,7 @@ function ServiceFeeModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -668,6 +677,7 @@ function TransactionModal({
   const isSubAgentPayment = type === "sub_agent_payment";
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -738,6 +748,7 @@ function TransactionModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -763,6 +774,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
   }
 
   return (
+    <>
     <>
       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setOpen(true)} title="View transactions">
         <Eye className="w-3.5 h-3.5" />
@@ -812,6 +824,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
           )}
         </DialogContent>
       </Dialog>
+    </>
     </>
   );
 }
@@ -1001,7 +1014,7 @@ export default function FinancePage() {
   const offSummary = summary?.offset || {};
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -1875,6 +1888,6 @@ export default function FinancePage() {
           universityName={txModal.universityName}
         />
       )}
-    </DashboardLayout>
+    </>
   );
 }

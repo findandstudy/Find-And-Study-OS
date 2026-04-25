@@ -1,6 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useGetStudent,
   useListApplications,
@@ -524,7 +523,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6 max-w-4xl">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/students`)}>
@@ -1191,7 +1190,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           studentId={id}
         />
       )}
-    </DashboardLayout>
+    </>
   );
 }
 
@@ -1258,6 +1257,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   }, [open]);
 
   return (
+    <>
     <div className="relative" ref={containerRef}>
       <Input
         value={open ? searchVal : value}
@@ -1280,6 +1280,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -1382,6 +1383,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
@@ -1508,6 +1510,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1548,6 +1551,7 @@ function InfoRow({
   };
 
   return (
+    <>
     <div className="flex items-start gap-2">
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0 flex-1">
@@ -1572,6 +1576,7 @@ function InfoRow({
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -1716,6 +1721,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
   const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf");
 
   return (
+    <>
     <>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <p className="text-sm text-muted-foreground">{documents.length} documents</p>
@@ -1875,6 +1881,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
           </table>
         )}
       </div>
+    </>
     </>
   );
 }

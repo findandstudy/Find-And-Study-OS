@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -358,7 +357,7 @@ export default function AgentSubAgents() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -768,6 +767,6 @@ export default function AgentSubAgents() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DashboardLayout>
+    </>
   );
 }

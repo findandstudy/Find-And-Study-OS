@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListApplications } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +23,6 @@ export default function StudentApplications() {
   const applications: any[] = (resp as any)?.data || resp || [];
 
   return (
-    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
@@ -163,6 +161,5 @@ export default function StudentApplications() {
           </div>
         )}
       </div>
-    </DashboardLayout>
   );
 }

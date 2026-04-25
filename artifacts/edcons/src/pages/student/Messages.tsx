@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -188,7 +187,6 @@ export default function StudentMessages() {
   );
 
   return (
-    <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-4">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setLocation("/student")}>
@@ -432,6 +430,5 @@ export default function StudentMessages() {
           </div>
         </Card>
       </div>
-    </DashboardLayout>
   );
 }

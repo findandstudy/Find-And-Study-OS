@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListUsers } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
@@ -1083,7 +1082,6 @@ function RolesTab() {
 
 export default function AdminUsers() {
   return (
-    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-display font-bold text-foreground">User Management</h1>
@@ -1109,6 +1107,5 @@ export default function AdminUsers() {
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -64,6 +63,7 @@ function getCompleteness(item: TranslationItem, locale: string, fields: string[]
 
 function LocaleIndicator({ item, locales, fields }: { item: TranslationItem; locales: string[]; fields: string[] }) {
   return (
+    <>
     <div className="flex gap-1.5 flex-wrap">
       {locales.map(locale => {
         if (locale === item.locale) {
@@ -75,6 +75,7 @@ function LocaleIndicator({ item, locales, fields }: { item: TranslationItem; loc
         return <Badge key={locale} variant="outline" className="text-[10px] gap-1 text-muted-foreground"><Circle className="w-2.5 h-2.5" /> {locale.toUpperCase()}</Badge>;
       })}
     </div>
+    </>
   );
 }
 
@@ -152,7 +153,7 @@ export default function WebsiteTranslations() {
   const translatableFields = editItem?.type === "page" ? TRANSLATABLE_PAGE_FIELDS : TRANSLATABLE_POST_FIELDS;
 
   return (
-    <DashboardLayout>
+    <>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> Translations</h1>
@@ -268,6 +269,6 @@ export default function WebsiteTranslations() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

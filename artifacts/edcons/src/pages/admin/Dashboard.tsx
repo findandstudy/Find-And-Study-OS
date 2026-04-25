@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -107,7 +106,6 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <DashboardLayout>
       <div className="space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -416,6 +414,5 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
-    </DashboardLayout>
   );
 }

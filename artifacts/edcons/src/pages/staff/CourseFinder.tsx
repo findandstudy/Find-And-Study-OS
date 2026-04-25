@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -442,7 +441,7 @@ export default function CourseFinder() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold tracking-tight">Course Finder</h1>
@@ -782,7 +781,7 @@ export default function CourseFinder() {
           allowNegative={!!canUseNegativeMarkup}
         />
       )}
-    </DashboardLayout>
+    </>
   );
 }
 
@@ -791,6 +790,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
 }) {
   const active = sortField === field;
   return (
+    <>
     <button onClick={() => onSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors group">
       <span>{label}</span>
       {active ? (
@@ -799,6 +799,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
         <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
       )}
     </button>
+    </>
   );
 }
 
@@ -819,6 +820,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
   onUniversityClick: (p: Program) => void;
 }) {
   return (
+    <>
     <div className="bg-card border rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -1000,6 +1002,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
         </table>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1022,6 +1025,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
   const websiteUrl = ensureUrl(p.universityWebsite);
 
   return (
+    <>
     <div className={`bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-200 group flex flex-col ${isSelected ? "ring-2 ring-primary border-primary/50" : ""}`}>
       <div className="p-5 space-y-4 flex-1">
         <div className="flex items-start gap-3">
@@ -1192,6 +1196,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
         </button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1203,6 +1208,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
   const websiteUrl = ensureUrl(p.universityWebsite);
 
   return (
+    <>
     <Dialog open={!!p} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -1332,6 +1338,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1389,6 +1396,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
   ];
 
   return (
+    <>
     <Dialog open={!!p} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -1448,6 +1456,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1563,6 +1572,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
 
   if (uploaded) {
     return (
+      <>
       <div className="relative flex flex-col items-center gap-1 p-2.5 border-2 border-green-300 bg-green-50 rounded-xl text-center min-h-[100px] justify-center">
         <button type="button" onClick={onRemove} className="absolute top-1.5 right-1.5 w-5 h-5 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-full flex items-center justify-center">
           <X className="w-3 h-3" />
@@ -1571,6 +1581,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
         <p className="text-[10px] font-semibold text-foreground truncate max-w-[80px]">{uploaded.file.name}</p>
         <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{docType.label}</span>
       </div>
+      </>
     );
   }
 
@@ -1579,6 +1590,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
     : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Optional</span>;
 
   return (
+    <>
     <div
       className={cn(
         "flex flex-col items-center gap-1 p-2.5 border-2 border-dashed rounded-xl text-center cursor-pointer min-h-[100px] justify-center transition-all",
@@ -1598,6 +1610,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
       />
     </div>
+    </>
   );
 }
 
@@ -1895,6 +1908,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
   const levelLabel = level === "pathway" ? "Language / Prep" : level === "undergraduate" ? "Bachelor / Associate" : level === "graduate" ? "Master's Degree" : "Doctorate (PhD)";
 
   return (
+    <>
     <Dialog open={!!p} onOpenChange={o => !o && handleClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -2253,5 +2267,6 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }

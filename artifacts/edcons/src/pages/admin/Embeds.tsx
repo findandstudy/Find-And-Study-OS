@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -96,7 +95,6 @@ export default function Embeds() {
   const subMeta = subsRes?.meta || { total: 0, page: 1, totalPages: 1 };
 
   return (
-    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -238,7 +236,6 @@ export default function Embeds() {
           <EmbedCodeDialog widget={codeDialog} onClose={() => setCodeDialog(null)} />
         )}
       </div>
-    </DashboardLayout>
   );
 }
 

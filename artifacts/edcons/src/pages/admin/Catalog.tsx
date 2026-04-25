@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useMemo } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,6 +110,7 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
   const reset = () => { setResult(null); setError(""); onClose(); };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={reset}>
       <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>Bulk Import — {title}</DialogTitle></DialogHeader>
@@ -138,6 +138,7 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
         <DialogFooter><Button variant="outline" onClick={reset}>Close</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -145,11 +146,13 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
 function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
   if (totalPages <= 1) return null;
   return (
+    <>
     <div className="flex items-center gap-2 justify-end mt-4">
       <Button size="icon" variant="ghost" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
       <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
       <Button size="icon" variant="ghost" disabled={page >= totalPages} onClick={() => onPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
     </div>
+    </>
   );
 }
 
@@ -166,6 +169,7 @@ function sortCompare<T>(a: T, b: T, key: keyof T, dir: "asc" | "desc"): number {
 function SortTh({ label, col, sort, onSort, className }: { label: string; col: string; sort: SortState; onSort: (col: string) => void; className?: string }) {
   const active = sort.col === col;
   return (
+    <>
     <th
       className={`text-left px-4 py-2 font-medium cursor-pointer select-none hover:bg-muted/80 transition-colors ${className ?? ""}`}
       onClick={() => onSort(col)}
@@ -180,6 +184,7 @@ function SortTh({ label, col, sort, onSort, className }: { label: string; col: s
         }
       </span>
     </th>
+    </>
   );
 }
 
@@ -261,6 +266,7 @@ function CountriesTab() {
   const headers = "name, code, flagEmoji (optional)";
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-xs">
@@ -374,6 +380,7 @@ function CountriesTab() {
 
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
+    </>
   );
 }
 
@@ -470,6 +477,7 @@ function CitiesTab() {
   const headers = "name, countryCode (ISO 2-letter country code)";
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
@@ -600,6 +608,7 @@ function CitiesTab() {
 
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
+    </>
   );
 }
 
@@ -721,6 +730,7 @@ function UniversitiesTab() {
   const headers = "name*, country*, city, website, description, ranking, universityType, taxType, taxPercent, qsRanking, timesRanking, shanghaiRanking, cwtsLeidenRanking, address, logoUrl, onlinePaymentUrl, cricosLink, documentsLink, currentFeeListLink, initialDepositOptions, admissionProcess, contactPersonName, contactPersonPhone, contactPersonEmail, status, isActive";
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-xs">
@@ -1080,6 +1090,7 @@ function UniversitiesTab() {
 
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
     </div>
+    </>
   );
 }
 
@@ -1199,6 +1210,7 @@ function ProgramsTab() {
   const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive";
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
@@ -1497,6 +1509,7 @@ function ProgramsTab() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }
 
@@ -1568,6 +1581,7 @@ function OptionsTab() {
   if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
+    <>
     <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4">
       <div className="space-y-1">
         {OPTION_CATEGORIES.map(cat => (
@@ -1655,6 +1669,7 @@ function OptionsTab() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1671,7 +1686,7 @@ export default function AdminCatalog() {
   ];
 
   return (
-    <DashboardLayout>
+    <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Catalog Management</h1>
         <p className="text-muted-foreground text-sm mt-1">Manage countries, cities, universities and programs</p>
@@ -1736,6 +1751,6 @@ export default function AdminCatalog() {
           </Card>
         </TabsContent>
       </Tabs>
-    </DashboardLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -110,7 +109,7 @@ export default function AgentTeam() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -299,7 +298,7 @@ export default function AgentTeam() {
           </AlertDialog>
         </>
       )}
-    </DashboardLayout>
+    </>
   );
 
   async function handleToggleStatus(s: StaffMember) {
@@ -341,6 +340,7 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
   const allSelected = PERMISSION_OPTIONS.every(p => value.includes(p.key));
 
   return (
+    <>
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium flex items-center gap-2">
@@ -384,6 +384,7 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
         ))}
       </div>
     </div>
+    </>
   );
 }
 
@@ -423,6 +424,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -485,6 +487,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -513,6 +516,7 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -556,6 +560,7 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -589,6 +594,7 @@ function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boo
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
@@ -621,5 +627,6 @@ function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boo
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

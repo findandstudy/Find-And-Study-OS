@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -215,7 +214,6 @@ export default function StudentAccount() {
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
 
   return (
-    <DashboardLayout>
       <div className="space-y-6 max-w-3xl">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">My Account</h1>
@@ -463,7 +461,6 @@ export default function StudentAccount() {
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
   );
 }
 

@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -311,6 +310,7 @@ function DropZone({
 
   if (uploaded) {
     return (
+      <>
       <div className="relative flex flex-col items-center gap-1.5 p-3 border-2 border-green-300 bg-green-50 rounded-2xl text-center min-h-[120px] justify-center">
         <button
           type="button"
@@ -326,10 +326,12 @@ function DropZone({
         </div>
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label}</span>
       </div>
+      </>
     );
   }
 
   return (
+    <>
     <div
       className={cn(
         "flex flex-col items-center gap-1.5 p-3 border-2 border-dashed rounded-2xl text-center cursor-pointer min-h-[120px] justify-center transition-all",
@@ -353,6 +355,7 @@ function DropZone({
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
       />
     </div>
+    </>
   );
 }
 
@@ -373,6 +376,7 @@ function FormField({
     onChange(v);
   };
   return (
+    <>
     <div className="space-y-1.5">
       <Label className="font-semibold text-sm flex items-center">
         {label}
@@ -391,6 +395,7 @@ function FormField({
         )}
       />
     </div>
+    </>
   );
 }
 
@@ -418,6 +423,7 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: { valu
   }, [open]);
 
   return (
+    <>
     <div className="relative" ref={containerRef}>
       <Input
         value={open ? searchVal : value}
@@ -440,6 +446,7 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: { valu
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -767,6 +774,7 @@ function AddStudentModal({
   const ef = extractedFields;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => { if (!o && step !== "analyzing") handleClose(); }}>
       <DialogContent
         className="sm:max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
@@ -1118,6 +1126,7 @@ function AddStudentModal({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1132,12 +1141,14 @@ function StuSortHeader({ label, sortKey, currentSort, onSort }: {
 }) {
   const active = currentSort.key === sortKey;
   return (
+    <>
     <TableHead className="cursor-pointer select-none hover:bg-muted/50 transition-colors" onClick={() => onSort(sortKey)}>
       <div className="flex items-center gap-1">
         {label}
         {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
       </div>
     </TableHead>
+    </>
   );
 }
 
@@ -1150,18 +1161,22 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
 
   if (student.hasPhoto && !imgError) {
     return (
+      <>
       <img
         src={`/api/students/${student.id}/photo`}
         alt={`${student.firstName} ${student.lastName}`}
         className={`${dim} rounded-full object-cover border border-primary/20 shrink-0`}
         onError={() => setImgError(true)}
       />
+      </>
     );
   }
   return (
+    <>
     <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0`}>
       <span className={`${textSize} font-bold text-primary`}>{student.firstName?.[0]}{student.lastName?.[0]}</span>
     </div>
+    </>
   );
 }
 
@@ -1175,6 +1190,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
     "bg-card border-border hover:shadow-md";
 
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
@@ -1199,6 +1215,7 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
         </button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1226,6 +1243,7 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
     null;
 
   return (
+    <>
     <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
@@ -1247,6 +1265,7 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
         </SortableContext>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1361,6 +1380,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
@@ -1479,6 +1499,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1486,6 +1507,7 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Delete {count} Student{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
@@ -1496,6 +1518,7 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1506,6 +1529,7 @@ function StuFilterPopover({ filters, onChange, stages }: {
   const [open, setOpen] = useState(false);
   const hasActive = filters.status !== "all";
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="icon" className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}>
@@ -1531,6 +1555,7 @@ function StuFilterPopover({ filters, onChange, stages }: {
         <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
       </PopoverContent>
     </Popover>
+    </>
   );
 }
 
@@ -1673,7 +1698,7 @@ export default function AgentStudentsPage() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
@@ -1768,6 +1793,6 @@ export default function AgentStudentsPage() {
 
       <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} stages={pipelineStages} />
       <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} defaultStatus={pipelineStages[0]?.key} />
-    </DashboardLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListDocuments, useCreateDocument, useDeleteDocument } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -22,6 +21,7 @@ function DocSortHeader({ label, sortKey, currentSort, onSort }: {
 }) {
   const active = currentSort.key === sortKey;
   return (
+    <>
     <TableHead
       className="font-semibold text-foreground cursor-pointer select-none hover:bg-muted/50 transition-colors"
       onClick={() => onSort(sortKey)}
@@ -31,6 +31,7 @@ function DocSortHeader({ label, sortKey, currentSort, onSort }: {
         {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
       </div>
     </TableHead>
+    </>
   );
 }
 
@@ -169,7 +170,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -375,6 +376,6 @@ export default function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

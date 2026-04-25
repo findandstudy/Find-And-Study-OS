@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -77,17 +76,20 @@ function seoScore(page: PageSeo): { score: number; label: string; color: string 
 function GooglePreview({ title, description, slug, baseUrl }: { title: string; description: string; slug: string; baseUrl: string }) {
   const displayUrl = `${baseUrl}/${slug}`;
   return (
+    <>
     <div className="bg-white rounded-xl border border-border p-4 space-y-1">
       <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1"><Search className="w-3 h-3" /> Google Search Preview</p>
       <p className="text-sm text-green-700 truncate">{displayUrl}</p>
       <p className="text-lg text-blue-700 hover:underline cursor-pointer truncate">{title || "Page Title"}</p>
       <p className="text-sm text-gray-600 line-clamp-2">{description || "No meta description set. Search engines will use page content."}</p>
     </div>
+    </>
   );
 }
 
 function SocialPreview({ title, description, image, siteName }: { title: string; description: string; image: string; siteName: string }) {
   return (
+    <>
     <div className="bg-white rounded-xl border border-border overflow-hidden">
       <p className="text-xs text-muted-foreground font-medium px-4 pt-3 pb-2 flex items-center gap-1"><Globe className="w-3 h-3" /> Social Share Preview</p>
       <div className="bg-gray-100 h-36 flex items-center justify-center">
@@ -103,6 +105,7 @@ function SocialPreview({ title, description, image, siteName }: { title: string;
         <p className="text-xs text-muted-foreground line-clamp-2">{description || "No description"}</p>
       </div>
     </div>
+    </>
   );
 }
 
@@ -164,7 +167,7 @@ export default function WebsiteSeoOverrides() {
   const siteName = globalSeo?.siteName || "Find & Study";
 
   return (
-    <DashboardLayout>
+    <>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -350,6 +353,6 @@ export default function WebsiteSeoOverrides() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

@@ -15,7 +15,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Megaphone, Plus, Pencil, Archive, RotateCcw, Building2, Globe2, Loader2, Search, Calendar as CalendarIcon, Percent, ChevronDown } from "lucide-react";
 
 type Status = "active" | "scheduled" | "expired" | "disabled" | "archived";
@@ -152,7 +151,6 @@ export default function CampaignsPage() {
   }
 
   return (
-    <DashboardLayout>
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto" data-testid="page-campaigns">
       <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
@@ -284,7 +282,6 @@ export default function CampaignsPage() {
         />
       )}
     </div>
-    </DashboardLayout>
   );
 }
 

@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -113,7 +112,6 @@ export default function AgentDashboard() {
   const contactPerson = user?.role === "sub_agent" ? parentAgent : assignedStaff;
 
   return (
-    <DashboardLayout>
       <div className="space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -415,6 +413,5 @@ export default function AgentDashboard() {
         </div>
 
       </div>
-    </DashboardLayout>
   );
 }

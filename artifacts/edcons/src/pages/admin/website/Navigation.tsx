@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -230,6 +229,7 @@ export default function WebsiteNavigation() {
     const children = childItems(item.id);
     const pageTitle = getPageTitle(item.pageId);
     return (
+      <>
       <div key={item.id}>
         <div className={`flex items-center gap-3 py-2.5 px-4 border-b border-border/30 hover:bg-secondary/30 transition-colors ${depth > 0 ? "pl-12 bg-muted/20" : ""}`}>
           <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0" />
@@ -255,11 +255,12 @@ export default function WebsiteNavigation() {
         </div>
         {children.map(c => renderItem(c, depth + 1))}
       </div>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div className="flex items-center gap-3">
           <Menu className="w-6 h-6 text-primary" />
@@ -401,6 +402,6 @@ export default function WebsiteNavigation() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -236,6 +235,7 @@ export default function WebsiteGlobalComponents() {
     switch (form.componentType) {
       case "cta_banner":
         return (
+          <>
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Heading</Label>
@@ -271,11 +271,13 @@ export default function WebsiteGlobalComponents() {
               </div>
             </div>
           </div>
+          </>
         );
 
       case "stats_strip": {
         const items = (c.items as Record<string, string>[]) || [];
         return (
+          <>
           <div className="space-y-3">
             {items.map((item, i) => (
               <div key={i} className="flex items-end gap-2">
@@ -296,12 +298,14 @@ export default function WebsiteGlobalComponents() {
               <Plus className="w-3 h-3 mr-1" /> Add Stat
             </Button>
           </div>
+          </>
         );
       }
 
       case "testimonials": {
         const items = (c.items as Record<string, string>[]) || [];
         return (
+          <>
           <div className="space-y-4">
             {items.map((item, i) => (
               <Card key={i} className="p-3">
@@ -325,11 +329,13 @@ export default function WebsiteGlobalComponents() {
               <Plus className="w-3 h-3 mr-1" /> Add Testimonial
             </Button>
           </div>
+          </>
         );
       }
 
       case "contact_strip":
         return (
+          <>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -350,11 +356,13 @@ export default function WebsiteGlobalComponents() {
               <Input value={(c.whatsapp as string) || ""} onChange={e => updateContent("whatsapp", e.target.value)} placeholder="+90 555 123 4567" />
             </div>
           </div>
+          </>
         );
 
       case "logo_grid": {
         const items = (c.items as Record<string, string>[]) || [];
         return (
+          <>
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Columns</Label>
@@ -388,11 +396,13 @@ export default function WebsiteGlobalComponents() {
               <Plus className="w-3 h-3 mr-1" /> Add Logo
             </Button>
           </div>
+          </>
         );
       }
 
       case "custom_html":
         return (
+          <>
           <div>
             <Label className="text-xs">HTML Content</Label>
             <Textarea
@@ -403,6 +413,7 @@ export default function WebsiteGlobalComponents() {
               className="font-mono text-xs"
             />
           </div>
+          </>
         );
 
       default:
@@ -411,7 +422,7 @@ export default function WebsiteGlobalComponents() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -600,6 +611,6 @@ export default function WebsiteGlobalComponents() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useGetApplication,
   useUpdateApplication,
@@ -168,7 +167,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const levelLabel = STUDY_LEVELS.find(l => l.value === app?.level)?.label || app?.level || "—";
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6 max-w-5xl">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/applications`)}>
@@ -534,7 +533,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }
 
@@ -588,6 +587,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
   }
 
   return (
+    <>
     <>
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -669,6 +669,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
       />
     )}
     </>
+    </>
   );
 }
 
@@ -682,6 +683,7 @@ function InfoRow({
   value?: string | null;
 }) {
   return (
+    <>
     <div className="flex items-start gap-2">
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0">
@@ -689,5 +691,6 @@ function InfoRow({
         <p className="font-medium text-foreground break-words">{value || "—"}</p>
       </div>
     </div>
+    </>
   );
 }

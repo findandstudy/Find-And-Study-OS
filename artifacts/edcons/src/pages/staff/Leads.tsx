@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
@@ -143,6 +142,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
   }
 
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
@@ -250,6 +250,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
         hideWhatsApp={!lead.phone}
       />
     </div>
+    </>
   );
 }
 
@@ -294,6 +295,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
     null;
 
   return (
+    <>
     <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
@@ -327,6 +329,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
         </SortableContext>
       </div>
     </div>
+    </>
   );
 }
 
@@ -375,6 +378,7 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
   }, [leads]);
 
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="icon" className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}>
@@ -524,6 +528,7 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
         <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
       </PopoverContent>
     </Popover>
+    </>
   );
 }
 
@@ -551,6 +556,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   }, [open]);
 
   return (
+    <>
     <div className="relative" ref={containerRef}>
       <Input
         value={open ? searchVal : value}
@@ -572,6 +578,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -623,6 +630,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
   }, [open]);
 
   return (
+    <>
     <div className="relative" ref={containerRef}>
       <button
         type="button"
@@ -662,6 +670,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -717,6 +726,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
@@ -801,6 +811,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -809,6 +820,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
@@ -825,6 +837,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -839,6 +852,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 }) {
   const active = currentSort.key === sortKey;
   return (
+    <>
     <TableHead
       className="cursor-pointer select-none hover:bg-muted/50 transition-colors"
       onClick={() => onSort(sortKey)}
@@ -852,6 +866,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
         )}
       </div>
     </TableHead>
+    </>
   );
 }
 
@@ -1239,14 +1254,14 @@ export default function LeadsPage() {
 
   if (isLoading) {
     return (
-      <DashboardLayout>
+      <>
         <TableSkeleton />
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         {/* ── Header ─────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
@@ -1618,6 +1633,6 @@ export default function LeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

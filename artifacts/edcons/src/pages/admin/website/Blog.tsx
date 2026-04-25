@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -413,7 +412,7 @@ export default function WebsiteBlog() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="flex items-center gap-3">
           <BookOpen className="w-6 h-6 text-primary" />
@@ -838,6 +837,6 @@ export default function WebsiteBlog() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

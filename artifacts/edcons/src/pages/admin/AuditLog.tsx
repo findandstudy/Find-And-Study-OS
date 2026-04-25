@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -73,7 +72,6 @@ export default function AdminAuditLog() {
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -185,6 +183,5 @@ export default function AdminAuditLog() {
           />
         </Card>
       </div>
-    </DashboardLayout>
   );
 }

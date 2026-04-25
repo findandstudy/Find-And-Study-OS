@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -173,7 +172,7 @@ export default function AgentMessages() {
   const otherParticipant = activeConv?.participants?.find((p: any) => p.userId !== user?.id);
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -427,6 +426,6 @@ export default function AgentMessages() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

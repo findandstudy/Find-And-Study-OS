@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -298,7 +297,7 @@ export default function WebsiteForms() {
   const totalSubmissions = submissionsData?.meta?.total || 0;
 
   return (
-    <DashboardLayout>
+    <>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -631,6 +630,6 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -161,12 +160,14 @@ function LiveStatusIndicator({
   );
 
   return (
+    <>
     <Tooltip>
       <TooltipTrigger asChild>{content}</TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs">
         {config.tooltip}
       </TooltipContent>
     </Tooltip>
+    </>
   );
 }
 
@@ -417,6 +418,7 @@ function InboxTab() {
     ext?.agentId ? `/staff/agents/${ext.agentId}` : null;
 
   return (
+    <>
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
       <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
         <div className={`lg:col-span-4 border-r border-border/50 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
@@ -656,6 +658,7 @@ function InboxTab() {
         </DialogContent>
       </Dialog>
     </Card>
+    </>
   );
 }
 
@@ -672,6 +675,7 @@ function ConversationList({
   const { user } = useAuth();
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border/50 space-y-3">
         <div className="flex items-center justify-between">
@@ -728,6 +732,7 @@ function ConversationList({
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -871,6 +876,7 @@ function MessageThread({
   const ChannelIcon = channelIcon[channel] || MessageSquare;
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border/50 flex items-center gap-3">
         <Button size="icon" variant="ghost" className="lg:hidden w-8 h-8" onClick={onBack}>
@@ -1012,6 +1018,7 @@ function MessageThread({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1074,6 +1081,7 @@ function BroadcastTab() {
   };
 
   return (
+    <>
     <div className="space-y-6">
       <Card className="p-6 border-none shadow-lg shadow-black/5">
         <h3 className="font-semibold text-foreground flex items-center gap-2 mb-4">
@@ -1170,6 +1178,7 @@ function BroadcastTab() {
         )}
       </Card>
     </div>
+    </>
   );
 }
 
@@ -1371,6 +1380,7 @@ function TemplatesTab() {
   };
 
   return (
+    <>
     <div className="space-y-4">
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -1620,6 +1630,7 @@ function TemplatesTab() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }
 
@@ -1701,7 +1712,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6">
         <h1 className="text-2xl font-display font-bold text-foreground">Communication Center</h1>
 
@@ -1821,6 +1832,6 @@ export default function MessagesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
   );
 }

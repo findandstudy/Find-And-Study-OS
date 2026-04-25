@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
@@ -58,7 +57,6 @@ export default function AgentCommissions() {
   const fs = summary?.serviceFees || { potential: 0, confirmed: 0, paid: 0, pending: 0 };
 
   return (
-    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
@@ -264,6 +262,5 @@ export default function AgentCommissions() {
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
   );
 }

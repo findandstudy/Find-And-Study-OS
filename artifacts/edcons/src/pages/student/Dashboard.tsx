@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { useListApplications, useListDocuments, customFetch } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -64,7 +63,6 @@ export default function StudentDashboard() {
   const pendingDocs = (documents || []).filter(d => d.status === 'pending' || d.status === 'requested').length;
 
   return (
-    <DashboardLayout>
       <div className="space-y-8">
         <div className="bg-gradient-to-r from-primary to-accent rounded-2xl p-8 text-white relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/10 -translate-y-16 translate-x-16" />
@@ -273,6 +271,5 @@ export default function StudentDashboard() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
   );
 }

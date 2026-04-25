@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -375,29 +374,24 @@ export default function PageEditor({ id }: { id: number }) {
 
   if (pageLoading) {
     return (
-      <DashboardLayout>
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
         </div>
-      </DashboardLayout>
     );
   }
 
   if (!page) {
     return (
-      <DashboardLayout>
         <div className="flex flex-col items-center justify-center py-20">
           <p className="text-muted-foreground">Page not found.</p>
           <Button variant="link" onClick={() => setLocation("/admin/website/pages")}>
             Back to Pages
           </Button>
         </div>
-      </DashboardLayout>
     );
   }
 
   return (
-    <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-3.5rem)]">
         <div className="h-12 border-b bg-card flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -740,7 +734,6 @@ export default function PageEditor({ id }: { id: number }) {
           </div>
         </div>
       </div>
-    </DashboardLayout>
   );
 }
 

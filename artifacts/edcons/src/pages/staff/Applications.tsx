@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -184,6 +183,7 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
 
   if (value) {
     return (
+      <>
       <div className="flex items-center gap-2 p-2.5 border border-primary rounded-xl bg-primary/5">
         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
           <User className="w-4 h-4 text-primary" />
@@ -196,10 +196,12 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
           <X className="w-4 h-4" />
         </button>
       </div>
+      </>
     );
   }
 
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div className="relative cursor-text" onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}>
@@ -221,6 +223,7 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
         ))}
       </PopoverContent>
     </Popover>
+    </>
   );
 }
 
@@ -239,6 +242,7 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
   });
 
   return (
+    <>
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         {isLoading ? (
@@ -309,6 +313,7 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -323,6 +328,7 @@ function ProgramInfoPopup({ programId, onClose }: { programId: number; onClose: 
   const fmtCur = (v: any, cur = "USD") => v != null && v !== "" ? `$${Number(v).toLocaleString()}` : null;
 
   return (
+    <>
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         {isLoading ? (
@@ -391,6 +397,7 @@ function ProgramInfoPopup({ programId, onClose }: { programId: number; onClose: 
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -419,6 +426,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
   const studentName = `${app.studentFirstName || ""} ${app.studentLastName || ""}`.trim() || "Student";
 
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
@@ -527,6 +535,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
         <ProgramInfoPopup programId={progInfoId} onClose={() => setProgInfoId(null)} />
       )}
     </div>
+    </>
   );
 }
 
@@ -571,6 +580,7 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
     null;
 
   return (
+    <>
     <div className={`w-72 flex flex-col max-h-full rounded-2xl border overflow-hidden ${colBg}`}>
       <div className={`p-4 border-b shrink-0 ${headerBg}`}>
         <div className="flex justify-between items-center">
@@ -600,6 +610,7 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
         </SortableContext>
       </div>
     </div>
+    </>
   );
 }
 
@@ -612,12 +623,14 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 }) {
   const active = currentSort.key === sortKey;
   return (
+    <>
     <TableHead className="cursor-pointer select-none hover:bg-muted/50 transition-colors" onClick={() => onSort(sortKey)}>
       <div className="flex items-center gap-1">
         {label}
         {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
       </div>
     </TableHead>
+    </>
   );
 }
 
@@ -752,6 +765,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 
   return (
     <>
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Edit Application</DialogTitle></DialogHeader>
@@ -863,6 +877,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
       />
     )}
     </>
+    </>
   );
 }
 
@@ -871,6 +886,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Delete {count} Application{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
@@ -881,6 +897,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -931,6 +948,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
   }, [apps]);
 
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="icon" className={`rounded-full relative ${hasActive ? "border-primary text-primary bg-primary/5" : ""}`}>
@@ -1047,6 +1065,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
         <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
       </PopoverContent>
     </Popover>
+    </>
   );
 }
 
@@ -1136,6 +1155,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
   const addHasDiscountedFee = addSelProgForFee != null && addSelProgForFee.discountedFee != null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle className="text-xl font-display">New Application</DialogTitle></DialogHeader>
@@ -1214,6 +1234,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1447,7 +1468,7 @@ export default function ApplicationsPage() {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
@@ -1638,6 +1659,6 @@ export default function ApplicationsPage() {
       {tableProgInfoId && (
         <ProgramInfoPopup programId={tableProgInfoId} onClose={() => setTableProgInfoId(null)} />
       )}
-    </DashboardLayout>
+    </>
   );
 }

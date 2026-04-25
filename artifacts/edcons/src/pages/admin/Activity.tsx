@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { customFetch } from "@workspace/api-client-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Card } from "@/components/ui/card";
@@ -57,7 +56,9 @@ function StatusDot({ status }: { status: string }) {
     offline: "bg-gray-300",
   };
   return (
+    <>
     <span className={`inline-block w-2.5 h-2.5 rounded-full ${colors[status] || colors.offline}`} />
+    </>
   );
 }
 
@@ -153,6 +154,7 @@ function OverviewPage() {
   function SortTh({ label, sortKey, className }: { label: string; sortKey: string; className?: string }) {
     const active = sort.key === sortKey;
     return (
+      <>
       <th className={`px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:bg-muted/50 transition-colors ${className || ""}`}
         onClick={() => handleSort(sortKey)}>
         <div className="flex items-center gap-1">
@@ -160,6 +162,7 @@ function OverviewPage() {
           {active ? (sort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
         </div>
       </th>
+      </>
     );
   }
 
@@ -171,6 +174,7 @@ function OverviewPage() {
   ];
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -336,6 +340,7 @@ function OverviewPage() {
         />
       </Card>
     </div>
+    </>
   );
 }
 
@@ -366,6 +371,7 @@ function UserDetailPage({ userId }: { userId: number }) {
   const totalDuration = sessions.reduce((s: number, x: any) => s + (x.totalDurationSeconds || 0), 0);
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" className="rounded-xl gap-1.5" onClick={() => setLocation("/admin/activity")}>
@@ -549,13 +555,14 @@ function UserDetailPage({ userId }: { userId: number }) {
         </Card>
       )}
     </div>
+    </>
   );
 }
 
 export default function AdminActivity({ userId }: { userId?: number }) {
   return (
-    <DashboardLayout>
+    <>
       {userId ? <UserDetailPage userId={userId} /> : <OverviewPage />}
-    </DashboardLayout>
+    </>
   );
 }

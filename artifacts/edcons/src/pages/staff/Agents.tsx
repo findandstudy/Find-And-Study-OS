@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -542,6 +541,7 @@ export default function AgentsPage() {
   }) {
     const active = currentSort.key === sortKey;
     return (
+      <>
       <th className={`py-3 px-3 font-semibold text-muted-foreground cursor-pointer select-none hover:bg-muted/50 transition-colors ${className || ""}`}
         onClick={() => onSort(sortKey)}>
         <div className="flex items-center gap-1.5">
@@ -549,6 +549,7 @@ export default function AgentsPage() {
           {active ? (currentSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
         </div>
       </th>
+      </>
     );
   }
 
@@ -578,6 +579,7 @@ export default function AgentsPage() {
       }
     });
     return (
+      <>
       <div className="overflow-x-auto">
         {isManager && someChecked && (
           <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/20 flex-wrap">
@@ -755,22 +757,25 @@ export default function AgentsPage() {
           </tbody>
         </table>
       </div>
+      </>
     );
   }
 
   function AgentPagination({ currentPage, totalItems, setPageFn }: { currentPage: number; totalItems: number; setPageFn: (p: number) => void }) {
     return (
+      <>
       <TablePagination
         currentPage={currentPage}
         totalItems={totalItems}
         pageSize={20}
         onPageChange={setPageFn}
       />
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -1275,6 +1280,6 @@ export default function AgentsPage() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

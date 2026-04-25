@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +65,6 @@ export default function AgentDetailPage() {
   if (!agentId) return null;
 
   return (
-    <DashboardLayout>
       <div className="max-w-6xl mx-auto space-y-6">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/staff/agents")} className="gap-1.5 text-muted-foreground hover:text-foreground">
           <ArrowLeft className="w-4 h-4" /> Back to Agents
@@ -268,6 +266,5 @@ export default function AgentDetailPage() {
           <div className="text-center py-20 text-muted-foreground">Agent not found</div>
         )}
       </div>
-    </DashboardLayout>
   );
 }

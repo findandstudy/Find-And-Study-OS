@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, Link } from "wouter";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   useGetLead,
   useUpdateLead,
@@ -298,7 +297,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="space-y-6 max-w-4xl">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/leads`)}>
@@ -754,7 +753,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           leadId={id}
         />
       )}
-    </DashboardLayout>
+    </>
   );
 }
 
@@ -781,6 +780,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   }, [open]);
 
   return (
+    <>
     <div className="relative" ref={containerRef}>
       <Input
         value={open ? searchVal : value}
@@ -802,6 +802,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -849,6 +850,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
   }, [open]);
 
   return (
+    <>
     <div className="relative" ref={containerRef}>
       <button
         type="button"
@@ -888,6 +890,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -940,6 +943,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
@@ -1008,6 +1012,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1021,6 +1026,7 @@ function InfoRow({
   value?: string | null;
 }) {
   return (
+    <>
     <div className="flex items-start gap-2">
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <div>
@@ -1028,5 +1034,6 @@ function InfoRow({
         <p className="font-medium text-foreground">{value || "—"}</p>
       </div>
     </div>
+    </>
   );
 }

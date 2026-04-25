@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -106,14 +105,11 @@ export default function StaffDashboard() {
 
   if (isLoading) {
     return (
-      <DashboardLayout>
         <DashboardSkeleton />
-      </DashboardLayout>
     );
   }
 
   return (
-    <DashboardLayout>
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">Welcome Back</h1>
@@ -409,6 +405,5 @@ export default function StaffDashboard() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
   );
 }
