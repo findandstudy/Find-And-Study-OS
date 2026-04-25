@@ -106,6 +106,14 @@ const WEBSITE_ADMIN_ROLES = ["super_admin", "admin"];
 const STUDENT_ROLES = ["student"];
 const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
+function ShellLoader() {
+  return (
+    <div className="flex h-48 items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+    </div>
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -180,7 +188,7 @@ function StaffAdminShell() {
   return (
     <ProtectedRoute allowedRoles={STAFF_ROLES}>
       <DashboardLayout>
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<ShellLoader />}>
         <Switch>
           {/* Admin routes */}
           <Route path="/admin" component={AdminDashboard} />
@@ -278,7 +286,7 @@ function StudentShell() {
     <ProtectedRoute allowedRoles={STUDENT_ROLES}>
       <EmailVerificationGuard>
         <DashboardLayout>
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<ShellLoader />}>
           <Switch>
             <Route path="/student" component={StudentDashboard} />
             <Route path="/student/wishlist" component={StudentWishlist} />
@@ -299,7 +307,7 @@ function AgentShell() {
   return (
     <ProtectedRoute allowedRoles={AGENT_ROLES}>
       <DashboardLayout>
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<ShellLoader />}>
         <Switch>
           <Route path="/agent" component={AgentDashboard} />
           <Route path="/agent/leads/:id">

@@ -1,5 +1,5 @@
-import { ReactNode, useEffect } from "react";
-import { useLocation, Link } from "wouter";
+import { ReactNode, useEffect, startTransition } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -240,7 +240,9 @@ const ROLE_COLORS: Record<string, string> = {
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth(true);
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+
+  const navigate = (url: string) => startTransition(() => setLocation(url));
   const { t } = useI18n();
   useSeo({ title: "Portal", noindex: true });
   const { season, setSeason, availableYears } = useSeason();
@@ -389,7 +391,10 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               data-active={isActive}
                               className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm"
                             >
-                              <Link href={item.url}>
+                              <a
+                                href={item.url}
+                                onClick={(e) => { e.preventDefault(); navigate(item.url); }}
+                              >
                                 <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
                                 <span className="flex-1">{item.title}</span>
                                 {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
@@ -412,7 +417,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                     {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
                                   </span>
                                 )}
-                              </Link>
+                              </a>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         );
@@ -444,10 +449,17 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" className="w-56 mb-1">
                   <DropdownMenuItem asChild>
-                    <Link href={['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}>
+                    <a
+                      href={['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const url = ['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings';
+                        navigate(url);
+                      }}
+                    >
                       <User className="w-4 h-4 mr-2" />
                       {t("dashboard.profileSettings")}
-                    </Link>
+                    </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
