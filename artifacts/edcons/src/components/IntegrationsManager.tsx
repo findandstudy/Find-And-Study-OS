@@ -534,6 +534,53 @@ export function IntegrationsManager() {
                     </div>
                   </div>
                 ))}
+                {editDef.key === "whatsapp" && (() => {
+                  const callbackUrl = `${window.location.origin}/api/webhooks/whatsapp`;
+                  const verifyToken = editConfig.webhookVerifyToken || "(set Webhook Verify Token above first)";
+                  return (
+                    <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
+                      <p className="text-xs font-semibold">Meta Cloud API webhook setup</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        In Meta &rarr; App Dashboard &rarr; WhatsApp &rarr; Configuration, paste the
+                        <strong> Callback URL</strong> and <strong>Verify Token</strong> below, then
+                        subscribe the <code>messages</code> field. Meta will GET this URL with
+                        <code> hub.verify_token</code>; the handshake passes only if the token matches exactly.
+                      </p>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px]">Callback URL</Label>
+                        <div className="flex items-center gap-1.5">
+                          <Input readOnly value={callbackUrl} className="h-8 rounded-lg text-[11px] font-mono" />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs rounded-lg gap-1 shrink-0"
+                            onClick={() => copyToClipboard(callbackUrl, "Callback URL")}
+                          >
+                            <Copy className="w-3 h-3" /> Copy
+                          </Button>
+                        </div>
+                        <Label className="text-[11px] mt-1.5">Verify Token (paste into Meta)</Label>
+                        <div className="flex items-center gap-1.5">
+                          <Input readOnly value={verifyToken} className="h-8 rounded-lg text-[11px] font-mono" />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs rounded-lg gap-1 shrink-0"
+                            onClick={() => copyToClipboard(verifyToken, "Verify Token")}
+                            disabled={!editConfig.webhookVerifyToken}
+                          >
+                            <Copy className="w-3 h-3" /> Copy
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-amber-700">
+                        The App Secret is required separately for HMAC signature checks on every
+                        inbound message. Both fields must be saved before the integration can be
+                        enabled in production.
+                      </p>
+                    </div>
+                  );
+                })()}
                 {editDef.key === "web_form" && editConfig.formId && (() => {
                   const secret = editConfig.secret || "YOUR_SECRET_TOKEN_HERE";
                   const snippet = `<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input type="hidden" name="secret_token" value="${secret}" />\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`;
