@@ -1,11 +1,11 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
@@ -256,6 +256,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const isStaff = ["super_admin","admin","manager","staff","consultant","editor","accountant"].includes(user?.role || "");
   const isStudent = user?.role === "student";
+  const queryClient = useQueryClient();
 
   const { data: unreadMsgData } = useQuery({
     queryKey: ["unread-messages-count"],
@@ -269,6 +270,28 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     refetchInterval: 15000,
     staleTime: 10000,
   });
+
+  // Subscribe to the same SSE inbox stream that powers /staff/messages so the
+  // unread badge in the side-nav reflects new inbound messages and assignments
+  // within ~1s, even when staff are on other pages. The EventSource auto-
+  // reconnects; we just need to invalidate the cached count on each event so
+  // the next render picks up the fresh number from /api/conversations.
+  useEffect(() => {
+    if (!isStaff) return;
+    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+    const es = new EventSource("/api/inbox/events", { withCredentials: true });
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["unread-messages-count"] });
+      queryClient.invalidateQueries({ queryKey: ["notification-section-counts"] });
+    };
+    es.addEventListener("inbox_message", refresh);
+    es.addEventListener("inbox_assigned", refresh);
+    return () => {
+      es.removeEventListener("inbox_message", refresh);
+      es.removeEventListener("inbox_assigned", refresh);
+      es.close();
+    };
+  }, [isStaff, queryClient]);
 
   const { data: studentUnreadData } = useQuery({
     queryKey: ["student-unread-messages"],
