@@ -191,6 +191,17 @@ router.get(
     const [externalContact] = conv.externalContactId
       ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
       : [null];
+    const [assignedTo] = conv.assignedToId
+      ? await db
+          .select({
+            id: usersTable.id,
+            firstName: usersTable.firstName,
+            lastName: usersTable.lastName,
+            avatarUrl: usersTable.avatarUrl,
+          })
+          .from(usersTable)
+          .where(eq(usersTable.id, conv.assignedToId))
+      : [null];
     const messages = await db
       .select()
       .from(messagesTable)
@@ -198,7 +209,7 @@ router.get(
       .orderBy(messagesTable.createdAt);
 
     res.json({
-      conversation: conv,
+      conversation: { ...conv, assignedTo: assignedTo ?? null },
       externalContact,
       messages,
       withinWindow: conv.channel === "whatsapp" ? isWithin24hWindow(conv.lastInboundAt) : true,
