@@ -100,6 +100,12 @@ export const NOTIFICATION_EVENTS = {
       "message.mention": { name: "Mentioned in Message", description: "When you are mentioned in a message" },
     },
   },
+  tasks: {
+    label: "Tasks",
+    events: {
+      "task.mention": { name: "Mentioned in Task Note", description: "When a teammate mentions you with @ in a task note" },
+    },
+  },
 } as const;
 
 export const DEFAULT_NOTIFICATION_RULES = [
@@ -125,4 +131,5 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "system.announcement", name: "Announcement", category: "system", channels: ["in_app"], recipientType: "all", recipientRoles: [] },
   { event: "message.new", name: "New Message", category: "messages", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
   { event: "message.mention", name: "Mentioned in Message", category: "messages", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "task.mention", name: "Mentioned in Task Note", category: "tasks", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
 ];

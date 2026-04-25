@@ -557,7 +557,8 @@
       "todo": "移至待办",
       "in_progress": "移至进行中",
       "done": "标记为完成"
-    }
+    },
+    "mentionHint": "输入 @ 提及队友"
   },
   "campaigns": {
     "title": "Campaigns",

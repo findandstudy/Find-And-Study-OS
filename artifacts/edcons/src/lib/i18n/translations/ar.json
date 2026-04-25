@@ -557,7 +557,8 @@
       "todo": "نقل إلى للقيام به",
       "in_progress": "نقل إلى قيد التنفيذ",
       "done": "تعليم كمكتمل"
-    }
+    },
+    "mentionHint": "اكتب @ لتذكر زميلًا"
   },
   "campaigns": {
     "title": "Campaigns",

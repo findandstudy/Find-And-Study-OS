@@ -25,6 +25,7 @@ export type TaskNote = {
   text: string;
   createdAt: string;
   authorName: string;
+  mentions?: number[];
 };
 
 export type Task = typeof tasksTable.$inferSelect;

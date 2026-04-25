@@ -557,7 +557,8 @@
       "todo": "Mover a Por hacer",
       "in_progress": "Mover a En progreso",
       "done": "Marcar como hecho"
-    }
+    },
+    "mentionHint": "Escribe @ para mencionar a un compañero"
   },
   "campaigns": {
     "title": "Campaigns",

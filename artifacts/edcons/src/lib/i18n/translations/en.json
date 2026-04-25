@@ -566,7 +566,8 @@
       "todo": "Move to To Do",
       "in_progress": "Move to In Progress",
       "done": "Mark as Done"
-    }
+    },
+    "mentionHint": "Type @ to mention a teammate"
   },
   "campaigns": {
     "title": "Campaigns",

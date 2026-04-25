@@ -557,7 +557,8 @@
       "todo": "Déplacer vers À faire",
       "in_progress": "Déplacer vers En cours",
       "done": "Marquer comme terminé"
-    }
+    },
+    "mentionHint": "Tapez @ pour mentionner un coéquipier"
   },
   "campaigns": {
     "title": "Campaigns",

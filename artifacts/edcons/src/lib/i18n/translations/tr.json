@@ -566,7 +566,8 @@
       "todo": "Yapılacak'a taşı",
       "in_progress": "Devam Ediyor'a taşı",
       "done": "Tamamlandı olarak işaretle"
-    }
+    },
+    "mentionHint": "Bir takım arkadaşından bahsetmek için @ yazın"
   },
   "campaigns": {
     "title": "Kampanyalar",

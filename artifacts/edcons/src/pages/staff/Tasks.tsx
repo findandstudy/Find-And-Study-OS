@@ -13,13 +13,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Archive, ArchiveRestore, GripVertical, ArrowRight, MessageSquarePlus,
-  Pencil, Trash2, RotateCcw, X, ClipboardList, CheckCircle2, Circle, Clock,
+  Pencil, Trash2, RotateCcw, X, ClipboardList, CheckCircle2, Circle, Clock, AtSign,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["super_admin", "admin", "manager"] as const;
 const MANAGE_ROLES = [...ADMIN_ROLES, "staff", "consultant", "editor", "accountant"] as const;
 
-type TaskNote = { id: string; text: string; createdAt: string; authorName: string };
+type TaskNote = { id: string; text: string; createdAt: string; authorName: string; mentions?: number[] };
 type Task = {
   id: number;
   title: string;
@@ -86,6 +86,65 @@ function displayName(u: Assignee): string {
   return full || u.email || `User #${u.id}`;
 }
 
+// Detect an active "@query" token immediately preceding the caret. The token
+// starts at an `@` that is at the beginning of the text or preceded by
+// whitespace, and may contain letters, digits, underscores, and single spaces.
+function detectMentionTrigger(text: string, caret: number): { atIndex: number; query: string } | null {
+  if (caret <= 0) return null;
+  // Walk backwards from the caret looking for a triggering `@`.
+  // Stop early on a newline or after too many chars to keep this cheap.
+  const max = Math.max(0, caret - 60);
+  for (let i = caret - 1; i >= max; i--) {
+    const ch = text[i];
+    if (ch === "\n") return null;
+    if (ch === "@") {
+      const prev = i === 0 ? "" : text[i - 1];
+      if (i !== 0 && !/\s/.test(prev)) return null;
+      const query = text.slice(i + 1, caret);
+      // Allow letters, digits, spaces, underscores, dots, hyphens.
+      if (/^[\p{L}\p{N}_.\- ]*$/u.test(query)) return { atIndex: i, query };
+      return null;
+    }
+  }
+  return null;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Render note text, highlighting `@DisplayName` substrings for any of the
+// given mentioned users. Falls back to plain text when no mentions resolve.
+function renderNoteText(text: string, mentionIds: number[] | undefined, byId: Map<number, Assignee>): React.ReactNode {
+  if (!mentionIds || mentionIds.length === 0) return text;
+  const names = mentionIds
+    .map(id => byId.get(id))
+    .filter((u): u is Assignee => !!u)
+    .map(u => displayName(u))
+    .filter(n => n.length > 0)
+    // Longest names first so "John Smith" wins over "John".
+    .sort((a, b) => b.length - a.length);
+  if (names.length === 0) return text;
+  const pattern = new RegExp(`@(?:${names.map(escapeRegExp).join("|")})`, "g");
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(
+      <span
+        key={`m-${m.index}`}
+        className="inline-flex items-center rounded bg-primary/10 text-primary font-medium px-1"
+      >
+        {m[0]}
+      </span>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 type TaskFormState = {
   title: string;
   description: string;
@@ -122,6 +181,12 @@ export default function TasksPage() {
   const [notesTask, setNotesTask] = useState<Task | null>(null);
   const [newNoteText, setNewNoteText] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  // Mention autocomplete state for the note textarea.
+  const [noteMentionIds, setNoteMentionIds] = useState<number[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionAnchorIdx, setMentionAnchorIdx] = useState<number>(-1);
+  const [mentionActiveIdx, setMentionActiveIdx] = useState<number>(0);
+  const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const role = user?.role || "";
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(role);
@@ -265,23 +330,86 @@ export default function TasksPage() {
     }
   }
 
+  function resetNoteEditor() {
+    setNewNoteText("");
+    setNoteMentionIds([]);
+    setMentionQuery(null);
+    setMentionAnchorIdx(-1);
+    setMentionActiveIdx(0);
+  }
+
   async function addNote() {
     if (!notesTask || !newNoteText.trim()) return;
+    const text = newNoteText.trim();
+    // Only send mentions whose `@DisplayName` substring is still present in
+    // the final text (handles cases where the user deleted a mention).
+    const idToName = new Map(assignees.map(a => [a.id, displayName(a)]));
+    const finalMentions = Array.from(new Set(noteMentionIds)).filter(id => {
+      const name = idToName.get(id);
+      return !!name && text.includes(`@${name}`);
+    });
     setAddingNote(true);
     try {
       const res = await customFetch<Task>(`/api/tasks/${notesTask.id}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: newNoteText.trim() }),
+        body: JSON.stringify({ text, mentions: finalMentions }),
       });
       setNotesTask(res);
       setTasks(prev => prev.map(tk => tk.id === res.id ? res : tk));
-      setNewNoteText("");
+      resetNoteEditor();
     } catch (err) {
       toastApiError(toast, err, t("tasks.noteAddFailed"));
     } finally {
       setAddingNote(false);
     }
+  }
+
+  // Update mention autocomplete state based on current text + caret.
+  function updateMentionTrigger(text: string, caret: number) {
+    const trig = detectMentionTrigger(text, caret);
+    if (!trig) {
+      setMentionQuery(null);
+      setMentionAnchorIdx(-1);
+      return;
+    }
+    setMentionQuery(trig.query);
+    setMentionAnchorIdx(trig.atIndex);
+    setMentionActiveIdx(0);
+  }
+
+  function handleNoteChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setNewNoteText(value);
+    const caret = e.target.selectionStart ?? value.length;
+    updateMentionTrigger(value, caret);
+  }
+
+  function handleNoteSelect(e: React.SyntheticEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+    updateMentionTrigger(el.value, el.selectionStart ?? el.value.length);
+  }
+
+  function pickMention(a: Assignee) {
+    if (mentionAnchorIdx < 0) return;
+    const ta = noteTextareaRef.current;
+    const caret = ta?.selectionStart ?? newNoteText.length;
+    const before = newNoteText.slice(0, mentionAnchorIdx);
+    const after = newNoteText.slice(caret);
+    const insert = `@${displayName(a)} `;
+    const next = before + insert + after;
+    const nextCaret = (before + insert).length;
+    setNewNoteText(next);
+    setNoteMentionIds(ids => (ids.includes(a.id) ? ids : [...ids, a.id]));
+    setMentionQuery(null);
+    setMentionAnchorIdx(-1);
+    // Restore caret position right after the inserted mention.
+    requestAnimationFrame(() => {
+      const el = noteTextareaRef.current;
+      if (!el) return;
+      el.focus();
+      try { el.setSelectionRange(nextCaret, nextCaret); } catch { /* ignore */ }
+    });
   }
 
   async function deleteNote(noteId: string) {
@@ -302,6 +430,27 @@ export default function TasksPage() {
   }, [tasks]);
 
   const totalCount = tasks.length;
+
+  const assigneesById = useMemo(() => {
+    const m = new Map<number, Assignee>();
+    for (const a of assignees) m.set(a.id, a);
+    return m;
+  }, [assignees]);
+
+  // Active autocomplete suggestions, filtered by query and excluding self.
+  const mentionSuggestions = useMemo(() => {
+    if (mentionQuery === null) return [] as Assignee[];
+    const q = mentionQuery.trim().toLowerCase();
+    const list = assignees.filter(a => a.id !== user?.id);
+    const matches = !q
+      ? list
+      : list.filter(a => {
+          const name = displayName(a).toLowerCase();
+          const email = (a.email ?? "").toLowerCase();
+          return name.includes(q) || email.includes(q);
+        });
+    return matches.slice(0, 8);
+  }, [assignees, mentionQuery, user?.id]);
 
   // ------------------------ Drag & Drop ------------------------
   const [dragging, setDragging] = useState<{ id: number; status: Task["status"]; x: number; y: number } | null>(null);
@@ -685,7 +834,7 @@ export default function TasksPage() {
       </Dialog>
 
       {/* Notes Dialog */}
-      <Dialog open={!!notesTask} onOpenChange={(o) => { if (!o) { setNotesTask(null); setNewNoteText(""); } }}>
+      <Dialog open={!!notesTask} onOpenChange={(o) => { if (!o) { setNotesTask(null); resetNoteEditor(); } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{notesTask?.title}</DialogTitle>
@@ -720,7 +869,12 @@ export default function TasksPage() {
                   notesTask.taskNotes.map(n => (
                     <div key={n.id} className="rounded-md border bg-muted/40 p-2 group">
                       <div className="flex items-start gap-2">
-                        <p className="flex-1 text-sm whitespace-pre-wrap break-words">{n.text}</p>
+                        <p
+                          className="flex-1 text-sm whitespace-pre-wrap break-words"
+                          data-testid={`note-text-${n.id}`}
+                        >
+                          {renderNoteText(n.text, n.mentions, assigneesById)}
+                        </p>
                         {isAdmin && (
                           <Button
                             type="button"
@@ -745,16 +899,87 @@ export default function TasksPage() {
               {(() => {
                 const canComment = isAdmin || notesTask.assignedTo === user?.id || notesTask.assignedTo === null;
                 if (!canComment) return null;
+                const showSuggestions = mentionQuery !== null;
+                const suggestions = showSuggestions
+                  ? mentionSuggestions
+                  : [];
+                const safeActiveIdx = suggestions.length === 0
+                  ? 0
+                  : Math.min(mentionActiveIdx, suggestions.length - 1);
                 return (
                   <div className="border-t pt-3 space-y-2">
-                    <Textarea
-                      rows={2}
-                      placeholder={t("tasks.addNotePlaceholder")}
-                      value={newNoteText}
-                      onChange={e => setNewNoteText(e.target.value)}
-                      data-testid="input-new-note"
-                    />
-                    <div className="flex justify-end">
+                    <div className="relative">
+                      <Textarea
+                        ref={noteTextareaRef}
+                        rows={2}
+                        placeholder={t("tasks.addNotePlaceholder")}
+                        value={newNoteText}
+                        onChange={handleNoteChange}
+                        onSelect={handleNoteSelect}
+                        onClick={handleNoteSelect}
+                        onKeyUp={handleNoteSelect}
+                        onBlur={() => {
+                          // Hide on blur after a tick so click on suggestion still fires.
+                          setTimeout(() => {
+                            setMentionQuery(null);
+                            setMentionAnchorIdx(-1);
+                          }, 120);
+                        }}
+                        onKeyDown={(e) => {
+                          if (showSuggestions && suggestions.length > 0) {
+                            if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              setMentionActiveIdx(i => (i + 1) % suggestions.length);
+                              return;
+                            }
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              setMentionActiveIdx(i => (i - 1 + suggestions.length) % suggestions.length);
+                              return;
+                            }
+                            if (e.key === "Enter" || e.key === "Tab") {
+                              e.preventDefault();
+                              pickMention(suggestions[safeActiveIdx]);
+                              return;
+                            }
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              setMentionQuery(null);
+                              setMentionAnchorIdx(-1);
+                              return;
+                            }
+                          }
+                        }}
+                        data-testid="input-new-note"
+                      />
+                      {showSuggestions && suggestions.length > 0 && (
+                        <div
+                          className="absolute z-10 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border bg-popover shadow-lg"
+                          data-testid="mention-suggestions"
+                        >
+                          {suggestions.map((a, idx) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); pickMention(a); }}
+                              onMouseEnter={() => setMentionActiveIdx(idx)}
+                              className={`w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 ${
+                                idx === safeActiveIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
+                              }`}
+                              data-testid={`mention-option-${a.id}`}
+                            >
+                              <AtSign className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="truncate">{displayName(a)}</span>
+                              {a.email && (
+                                <span className="ml-auto text-[11px] text-muted-foreground truncate">{a.email}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-muted-foreground">{t("tasks.mentionHint")}</p>
                       <Button
                         size="sm"
                         disabled={!newNoteText.trim() || addingNote}

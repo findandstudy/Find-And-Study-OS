@@ -557,7 +557,8 @@
       "todo": "Pindah ke Akan Dikerjakan",
       "in_progress": "Pindah ke Dikerjakan",
       "done": "Tandai Selesai"
-    }
+    },
+    "mentionHint": "Ketik @ untuk menyebut rekan tim"
   },
   "campaigns": {
     "title": "Campaigns",

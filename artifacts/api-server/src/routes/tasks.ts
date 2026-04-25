@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, tasksTable, usersTable, type TaskNote } from "@workspace/db";
-import { eq, and, desc, isNull, isNotNull, or, sql } from "drizzle-orm";
+import { eq, and, desc, isNull, isNotNull, or, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -243,12 +244,34 @@ router.post("/tasks/:id/notes", requireAuth, async (req, res): Promise<void> => 
     if (!allowed) { res.status(403).json({ error: "You cannot comment on this task" }); return; }
   }
 
+  // Validate mention IDs: must be active, non-deleted users; dedupe and exclude self.
+  const rawMentions = Array.isArray(req.body?.mentions) ? req.body.mentions : [];
+  const requestedIds = Array.from(new Set(
+    rawMentions
+      .map((v: unknown) => Number(v))
+      .filter((n: number) => Number.isFinite(n) && n !== me.id)
+  )) as number[];
+
+  let validMentions: number[] = [];
+  if (requestedIds.length > 0) {
+    const validUsers = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(
+        inArray(usersTable.id, requestedIds),
+        eq(usersTable.isActive, true),
+        isNull(usersTable.deletedAt),
+      ));
+    validMentions = validUsers.map(u => u.id);
+  }
+
   const authorName = await getUserDisplayName(me.id);
   const note: TaskNote = {
     id: crypto.randomUUID(),
     text,
     createdAt: new Date().toISOString(),
     authorName,
+    ...(validMentions.length > 0 ? { mentions: validMentions } : {}),
   };
   // Atomic JSONB append to avoid races where two concurrent appends
   // both read the same baseline and one overwrites the other.
@@ -261,6 +284,25 @@ router.post("/tasks/:id/notes", requireAuth, async (req, res): Promise<void> => 
     })
     .where(eq(tasksTable.id, id))
     .returning();
+
+  if (validMentions.length > 0) {
+    const snippet = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+    dispatchNotification({
+      actorUserId: me.id,
+      event: "task.mention",
+      title: `${authorName} mentioned you in a task`,
+      body: `${authorName} mentioned you in a note on "${task.title}": ${snippet}`,
+      actionUrl: `/staff/tasks?taskId=${task.id}`,
+      icon: "AtSign",
+      recipientUserIds: validMentions,
+      templateVars: {
+        authorName,
+        taskTitle: task.title,
+        snippet,
+      },
+    }).catch(() => {});
+  }
+
   res.status(201).json(updated);
 });
 
