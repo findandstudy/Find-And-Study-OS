@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, startTransition } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
@@ -239,10 +239,13 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
-  const { user, isLoading } = useAuth(true);
-  const [location, setLocation] = useLocation();
+  const { user: liveUser, isLoading } = useAuth(true);
+  const prevUserRef = useRef(liveUser);
+  if (liveUser) prevUserRef.current = liveUser;
+  const user = prevUserRef.current;
 
-  const navigate = (url: string) => startTransition(() => setLocation(url));
+  const [location, setLocation] = useLocation();
+  const navigate = (url: string) => setLocation(url);
   const { t } = useI18n();
   useSeo({ title: "Portal", noindex: true });
   const { season, setSeason, availableYears } = useSeason();
@@ -321,7 +324,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 10000,
   });
 
-  if (isLoading || !user) return null;
+  if (!user && isLoading) return null;
+  if (!user) return null;
 
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
   const { groups } = getMenuForRole(user.role, t, staffPerms);

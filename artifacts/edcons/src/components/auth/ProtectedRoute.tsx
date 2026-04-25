@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
@@ -51,10 +52,13 @@ function AccessDeniedScreen() {
 }
 
 export function ProtectedRoute({ children, allowedRoles, requiredPermission }: Props) {
-  const { user, isLoading } = useAuth(true, allowedRoles);
+  const { user: liveUser, isLoading } = useAuth(true, allowedRoles);
 
-  if (isLoading) return null;
+  const prevUserRef = useRef(liveUser);
+  if (liveUser) prevUserRef.current = liveUser;
+  const user = prevUserRef.current;
 
+  if (!user && isLoading) return null;
   if (!user) return null;
 
   if (user.role === "pending") {
