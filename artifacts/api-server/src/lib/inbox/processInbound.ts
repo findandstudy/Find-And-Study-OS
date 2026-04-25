@@ -7,7 +7,7 @@ import {
   agentsTable,
   leadsTable,
 } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { resolveIdentity } from "./identityResolver";
 import { toE164 } from "./phone";
 import { dispatchNotification } from "../notificationDispatcher";
@@ -166,16 +166,26 @@ export async function processInboundMessage(opts: {
 
   const externalThreadId = message.externalThreadId || contact.externalId;
 
+  // Conversation identity is keyed by (channel, channelAccountId, externalThreadId)
+  // so multiple WA business accounts (or web-form forms) cannot collide on the
+  // same externalThreadId. When channelAccountId is null (legacy / unknown),
+  // we fall back to channel + thread to preserve idempotency.
+  const convIdentityWhere = channelAccountId == null
+    ? and(
+        eq(conversationsTable.channel, channel),
+        isNull(conversationsTable.channelAccountId),
+        eq(conversationsTable.externalThreadId, externalThreadId),
+      )
+    : and(
+        eq(conversationsTable.channel, channel),
+        eq(conversationsTable.channelAccountId, channelAccountId),
+        eq(conversationsTable.externalThreadId, externalThreadId),
+      );
   let conversation = (
     await db
       .select()
       .from(conversationsTable)
-      .where(
-        and(
-          eq(conversationsTable.channel, channel),
-          eq(conversationsTable.externalThreadId, externalThreadId),
-        ),
-      )
+      .where(convIdentityWhere)
       .limit(1)
   )[0];
 

@@ -137,7 +137,11 @@ export async function linkExternalContact(
   externalContactId: number,
   candidate: IdentityCandidate,
 ): Promise<void> {
-  const updates: any = { leadId: null, studentId: null, agentId: null };
+  const updates: { leadId: number | null; studentId: number | null; agentId: number | null } = {
+    leadId: null,
+    studentId: null,
+    agentId: null,
+  };
   if (candidate.type === "lead") updates.leadId = candidate.id;
   if (candidate.type === "student") updates.studentId = candidate.id;
   if (candidate.type === "agent") updates.agentId = candidate.id;

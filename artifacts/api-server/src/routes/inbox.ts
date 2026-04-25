@@ -12,7 +12,8 @@ import {
   messageTemplatesTable,
   integrationsTable,
 } from "@workspace/db";
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import type { ExternalContact } from "@workspace/db";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { resolveIdentity } from "../lib/inbox/identityResolver";
@@ -43,14 +44,21 @@ router.get(
     const tab = String(req.query.tab || "mine"); // mine | unassigned | unmatched | all
     const channel = req.query.channel ? String(req.query.channel) : null;
 
-    const where: any[] = [eq(conversationsTable.isArchived, false)];
-    if (channel) where.push(eq(conversationsTable.channel, channel));
+    const where: SQL[] = [eq(conversationsTable.isArchived, false)];
+
+    // Channel filter has full parity, including the value 'internal'. When NO
+    // channel is requested, default the inbox scope to external channels only
+    // so user-DMs (internal conversations) don't pollute the staff inbox feed
+    // — internal conversations remain reachable by passing channel=internal.
+    if (channel) {
+      where.push(eq(conversationsTable.channel, channel));
+    } else {
+      where.push(sql`${conversationsTable.channel} != 'internal'`);
+    }
 
     if (tab === "mine") where.push(eq(conversationsTable.assignedToId, userId));
     else if (tab === "unassigned") where.push(isNull(conversationsTable.assignedToId));
     else if (tab === "unmatched") where.push(eq(conversationsTable.unmatched, true));
-
-    where.push(sql`${conversationsTable.channel} != 'internal'`);
 
     const rows = await db
       .select({
@@ -76,7 +84,14 @@ router.get(
     const externalIds = rows.map((r) => r.externalContactId).filter((x): x is number => !!x);
     const assignedIds = rows.map((r) => r.assignedToId).filter((x): x is number => !!x);
 
-    const contactsMap = new Map<number, any>();
+    type AssignedUserSummary = {
+      id: number;
+      firstName: string | null;
+      lastName: string | null;
+      email: string;
+    };
+
+    const contactsMap = new Map<number, ExternalContact>();
     if (externalIds.length > 0) {
       const contacts = await db
         .select()
@@ -84,7 +99,7 @@ router.get(
         .where(inArray(externalContactsTable.id, externalIds));
       for (const c of contacts) contactsMap.set(c.id, c);
     }
-    const usersMap = new Map<number, any>();
+    const usersMap = new Map<number, AssignedUserSummary>();
     if (assignedIds.length > 0) {
       const users = await db
         .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email })
@@ -192,7 +207,11 @@ router.post(
       res.status(404).json({ error: "Conversation has no external contact" });
       return;
     }
-    const updates: any = { leadId: null, studentId: null, agentId: null };
+    const updates: { leadId: number | null; studentId: number | null; agentId: number | null } = {
+      leadId: null,
+      studentId: null,
+      agentId: null,
+    };
     if (type === "lead") updates.leadId = entityId;
     if (type === "student") updates.studentId = entityId;
     if (type === "agent") updates.agentId = entityId;
