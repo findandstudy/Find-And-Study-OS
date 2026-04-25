@@ -1028,7 +1028,11 @@ export default function TasksPage() {
                 {(!notesTask.taskNotes || notesTask.taskNotes.length === 0) ? (
                   <p className="text-xs text-muted-foreground italic">{t("tasks.noNotes")}</p>
                 ) : (
-                  notesTask.taskNotes.map(n => (
+                  notesTask.taskNotes.map(n => {
+                    const mentionIds = Array.isArray(n.mentions) ? n.mentions : [];
+                    const dedupMentionIds = Array.from(new Set(mentionIds));
+                    const youAreMentioned = user?.id != null && dedupMentionIds.includes(user.id);
+                    return (
                     <div key={n.id} className="rounded-md border bg-muted/40 p-2 group">
                       <div className="flex items-start gap-2">
                         <p
@@ -1050,11 +1054,51 @@ export default function TasksPage() {
                           </Button>
                         )}
                       </div>
+                      {dedupMentionIds.length > 0 && (
+                        <div
+                          className="mt-1.5 flex flex-wrap items-center gap-1"
+                          data-testid={`note-tagged-${n.id}`}
+                        >
+                          {youAreMentioned && (
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-medium px-1.5 py-0.5"
+                              data-testid={`note-you-mentioned-${n.id}`}
+                            >
+                              <AtSign className="w-2.5 h-2.5" />
+                              {t("tasks.youWereMentioned")}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {t("tasks.taggedLabel")}:
+                          </span>
+                          {dedupMentionIds.map(uid => {
+                            const a = assigneesById.get(uid);
+                            const label = a ? displayName(a) : t("tasks.unknownUser");
+                            const isYou = user?.id != null && uid === user.id;
+                            return (
+                              <span
+                                key={uid}
+                                className={`inline-flex items-center rounded-full text-[10px] px-1.5 py-0.5 border ${
+                                  isYou
+                                    ? "bg-primary/10 text-primary border-primary/20"
+                                    : a
+                                      ? "bg-background text-foreground"
+                                      : "bg-muted text-muted-foreground italic"
+                                }`}
+                                data-testid={`note-mention-${n.id}-${uid}`}
+                              >
+                                {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                       <p className="text-[10px] text-muted-foreground mt-1">
                         {n.authorName} — {formatNoteDate(n.createdAt)}
                       </p>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
