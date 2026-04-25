@@ -180,6 +180,7 @@ function AdminShell() {
   return (
     <ProtectedRoute allowedRoles={ADMIN_ROLES}>
       <DashboardLayout>
+        <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/users" component={AdminUsers} />
@@ -227,6 +228,7 @@ function AdminShell() {
           </Route>
           <Route component={NotFound} />
         </Switch>
+        </Suspense>
       </DashboardLayout>
     </ProtectedRoute>
   );
@@ -236,6 +238,7 @@ function StaffShell() {
   return (
     <ProtectedRoute allowedRoles={STAFF_ROLES}>
       <DashboardLayout>
+        <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/staff" component={StaffDashboard} />
           <Route path="/staff/leads/:id">
@@ -266,6 +269,7 @@ function StaffShell() {
           <Route path="/staff/tasks" component={StaffTasks} />
           <Route component={NotFound} />
         </Switch>
+        </Suspense>
       </DashboardLayout>
     </ProtectedRoute>
   );
@@ -276,6 +280,7 @@ function StudentShell() {
     <ProtectedRoute allowedRoles={STUDENT_ROLES}>
       <EmailVerificationGuard>
         <DashboardLayout>
+          <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/student" component={StudentDashboard} />
             <Route path="/student/wishlist" component={StudentWishlist} />
@@ -285,6 +290,7 @@ function StudentShell() {
             <Route path="/student/account" component={StudentAccount} />
             <Route component={NotFound} />
           </Switch>
+          </Suspense>
         </DashboardLayout>
       </EmailVerificationGuard>
     </ProtectedRoute>
@@ -295,6 +301,7 @@ function AgentShell() {
   return (
     <ProtectedRoute allowedRoles={AGENT_ROLES}>
       <DashboardLayout>
+        <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/agent" component={AgentDashboard} />
           <Route path="/agent/leads/:id">
@@ -330,6 +337,7 @@ function AgentShell() {
           </Route>
           <Route component={NotFound} />
         </Switch>
+        </Suspense>
       </DashboardLayout>
     </ProtectedRoute>
   );
@@ -344,43 +352,19 @@ function Router() {
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
 
   if (isAdminPath) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<PageLoader />}>
-          <AdminShell />
-        </Suspense>
-      </ErrorBoundary>
-    );
+    return <ErrorBoundary><AdminShell /></ErrorBoundary>;
   }
 
   if (isStaffPath) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<PageLoader />}>
-          <StaffShell />
-        </Suspense>
-      </ErrorBoundary>
-    );
+    return <ErrorBoundary><StaffShell /></ErrorBoundary>;
   }
 
   if (isStudentPath) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<PageLoader />}>
-          <StudentShell />
-        </Suspense>
-      </ErrorBoundary>
-    );
+    return <ErrorBoundary><StudentShell /></ErrorBoundary>;
   }
 
   if (isAgentPath) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<PageLoader />}>
-          <AgentShell />
-        </Suspense>
-      </ErrorBoundary>
-    );
+    return <ErrorBoundary><AgentShell /></ErrorBoundary>;
   }
 
   return (
