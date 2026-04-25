@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1514,12 +1514,56 @@ function InfoRow({
   label: string;
   value?: string | null;
 }) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const hasValue = !!(value && value.trim());
+
+  const handleCopy = async () => {
+    if (!hasValue) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value!);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = value!;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      toast({ title: `${label} kopyalandı`, description: value! });
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast({ title: "Kopyalanamadı", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="flex items-start gap-2">
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-medium text-foreground">{value || "\u2014"}</p>
+        {hasValue ? (
+          <button
+            type="button"
+            onClick={handleCopy}
+            title={`Kopyala: ${value}`}
+            className="group inline-flex items-center gap-1.5 max-w-full text-left font-medium text-foreground rounded px-1 -mx-1 py-0.5 hover:bg-muted/60 active:bg-muted transition-colors cursor-pointer"
+            data-testid={`copy-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+          >
+            <span className="truncate">{value}</span>
+            {copied ? (
+              <Check className="w-3 h-3 shrink-0 text-green-600" />
+            ) : (
+              <Copy className="w-3 h-3 shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground transition-colors" />
+            )}
+          </button>
+        ) : (
+          <p className="font-medium text-foreground">{"\u2014"}</p>
+        )}
       </div>
     </div>
   );
