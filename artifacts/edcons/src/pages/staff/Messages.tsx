@@ -16,8 +16,9 @@ import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
   FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download,
-  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput
+  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Conversation {
   id: number;
@@ -102,6 +103,73 @@ interface InboxConversation {
   assignedTo: { id: number; firstName: string; lastName: string } | null;
 }
 
+function LiveStatusIndicator({
+  status,
+  onReconnect,
+}: {
+  status: "connecting" | "open" | "offline";
+  onReconnect: () => void;
+}) {
+  const config = {
+    open: {
+      label: "Live",
+      tooltip: "Live — real-time updates active",
+      dotClass: "bg-emerald-500",
+      ringClass: "bg-emerald-500/30",
+      textClass: "text-emerald-700",
+      animate: false,
+    },
+    connecting: {
+      label: "Reconnecting",
+      tooltip: "Reconnecting…",
+      dotClass: "bg-amber-500",
+      ringClass: "bg-amber-500/40",
+      textClass: "text-amber-700",
+      animate: true,
+    },
+    offline: {
+      label: "Offline",
+      tooltip: "Offline — click to retry",
+      dotClass: "bg-red-500",
+      ringClass: "bg-red-500/30",
+      textClass: "text-red-700",
+      animate: false,
+    },
+  }[status];
+
+  const isOffline = status === "offline";
+
+  const content = (
+    <button
+      type="button"
+      onClick={isOffline ? onReconnect : undefined}
+      aria-label={config.tooltip}
+      aria-disabled={!isOffline}
+      className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${config.textClass} border-current/20 ${
+        isOffline ? "cursor-pointer hover:bg-red-500/10" : "cursor-default"
+      }`}
+    >
+      <span className="relative flex h-2 w-2">
+        {config.animate && (
+          <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${config.ringClass}`} />
+        )}
+        <span className={`relative inline-flex h-2 w-2 rounded-full ${config.dotClass}`} />
+      </span>
+      <span>{config.label}</span>
+      {isOffline && <RefreshCw className="w-3 h-3" />}
+    </button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        {config.tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function InboxTab() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -119,6 +187,8 @@ function InboxTab() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplId, setTplId] = useState<string>("");
   const [tplParams, setTplParams] = useState<string>("");
+  const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "offline">("connecting");
+  const [reconnectKey, setReconnectKey] = useState(0);
 
   const fetchInbox = useCallback(async () => {
     setLoading(true);
@@ -161,6 +231,8 @@ function InboxTab() {
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+    setLiveStatus("connecting");
+    let failureCount = 0;
     const es = new EventSource("/api/inbox/events", { withCredentials: true });
 
     const refresh = (raw: MessageEvent) => {
@@ -177,6 +249,28 @@ function InboxTab() {
       }
     };
 
+    es.onopen = () => {
+      failureCount = 0;
+      setLiveStatus("open");
+    };
+
+    es.onerror = () => {
+      // The browser auto-reconnects EventSource while readyState is CONNECTING.
+      // Give it a few attempts before declaring the stream offline and forcing
+      // a manual retry, so a single proxy hiccup doesn't scare staff.
+      if (es.readyState === EventSource.CLOSED) {
+        setLiveStatus("offline");
+        return;
+      }
+      failureCount += 1;
+      if (failureCount >= 4) {
+        es.close();
+        setLiveStatus("offline");
+      } else {
+        setLiveStatus("connecting");
+      }
+    };
+
     es.addEventListener("inbox_message", refresh);
     es.addEventListener("inbox_assigned", refresh);
 
@@ -185,6 +279,11 @@ function InboxTab() {
       es.removeEventListener("inbox_assigned", refresh);
       es.close();
     };
+  }, [reconnectKey]);
+
+  const reconnectLive = useCallback(() => {
+    setLiveStatus("connecting");
+    setReconnectKey((k) => k + 1);
   }, []);
 
   async function loadSuggestions() {
@@ -322,6 +421,12 @@ function InboxTab() {
       <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
         <div className={`lg:col-span-4 border-r border-border/50 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
           <div className="p-3 border-b border-border/50 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <InboxIcon className="w-3.5 h-3.5" /> Inbox
+              </div>
+              <LiveStatusIndicator status={liveStatus} onReconnect={reconnectLive} />
+            </div>
             <div className="flex gap-1 flex-wrap">
               {tabs.map((t) => {
                 const Icon = t.icon;
