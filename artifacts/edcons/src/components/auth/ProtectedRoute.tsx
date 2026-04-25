@@ -1,6 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useSeo } from "@/hooks/use-seo";
-import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { ShieldX, Clock } from "lucide-react";
 
@@ -54,13 +53,7 @@ function AccessDeniedScreen() {
 export function ProtectedRoute({ children, allowedRoles, requiredPermission }: Props) {
   const { user, isLoading } = useAuth(true, allowedRoles);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner className="w-8 h-8 text-primary" />
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   if (!user) return null;
 

@@ -321,16 +321,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 10000,
   });
 
-  if (isLoading || !user) {
-    return (
-      <div className="h-screen w-full flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full" />
-          <p className="text-muted-foreground font-medium text-sm">{t("dashboard.loadingPortal")}</p>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading || !user) return null;
 
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
   const { groups } = getMenuForRole(user.role, t, staffPerms);

@@ -14,6 +14,7 @@ import { PageLoader } from "@/components/ui/page-loader";
 import { I18nProvider, useI18nContext } from "@/lib/i18n/context";
 import { isValidLanguage, DEFAULT_LANGUAGE, type Language } from "@/lib/i18n/index";
 import NotFound from "@/pages/not-found";
+import { useGetMe } from "@workspace/api-client-react";
 
 import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
@@ -409,9 +410,15 @@ function Router() {
   );
 }
 
+function AuthPrefetch() {
+  useGetMe({ query: { retry: false, staleTime: 30_000 } as any });
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <AuthPrefetch />
       <ThemeProvider>
         <SeasonProvider>
           <I18nProvider>
