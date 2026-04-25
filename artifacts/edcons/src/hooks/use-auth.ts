@@ -1,10 +1,18 @@
 import { useGetMe } from "@workspace/api-client-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
+import { getAuthCache } from "@/lib/auth-cache";
 
 export function useAuth(requireAuth = false, allowedRoles?: string[]) {
+  const cachedUser = useMemo(() => getAuthCache(), []);
   const { data: user, isLoading, error } = useGetMe({
-    query: { retry: false, staleTime: 30_000 } as any,
+    query: {
+      retry: false,
+      staleTime: 30_000,
+      ...(cachedUser !== undefined
+        ? { initialData: cachedUser as any, initialDataUpdatedAt: 0 }
+        : {}),
+    } as any,
   });
 
   const [, setLocation] = useLocation();

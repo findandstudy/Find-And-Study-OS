@@ -1,3 +1,4 @@
+import "./lib/navigation";
 import "./lib/csrfSetup";
 import { createRoot } from "react-dom/client";
 import App from "./App";

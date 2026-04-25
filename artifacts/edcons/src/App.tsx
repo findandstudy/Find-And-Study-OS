@@ -1,4 +1,6 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useCustomBrowserLocation } from "@/lib/navigation";
+import { getAuthCache, setAuthCache, clearAuthCache } from "@/lib/auth-cache";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
@@ -411,7 +413,23 @@ function Router() {
 }
 
 function AuthPrefetch() {
-  useGetMe({ query: { retry: false, staleTime: 30_000 } as any });
+  const [cachedUser] = useState(() => getAuthCache());
+  const result = useGetMe({
+    query: {
+      retry: false,
+      staleTime: 30_000,
+      ...(cachedUser !== undefined
+        ? { initialData: cachedUser as any, initialDataUpdatedAt: 0 }
+        : {}),
+    } as any,
+  });
+  useEffect(() => {
+    if (result.data) {
+      setAuthCache(result.data);
+    } else if (result.error) {
+      clearAuthCache();
+    }
+  }, [result.data, result.error]);
   return null;
 }
 
@@ -423,7 +441,7 @@ function App() {
         <SeasonProvider>
           <I18nProvider>
             <TooltipProvider>
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")} hook={useCustomBrowserLocation as any}>
                 <ActivityTrackerProvider>
                   <Router />
                 </ActivityTrackerProvider>
