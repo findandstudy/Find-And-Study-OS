@@ -52,6 +52,7 @@ import {
   BookOpen,
   Layers,
   ClipboardList,
+  Megaphone,
   Palette,
   Languages,
   History,
@@ -102,6 +103,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
         label: t("dashboard.admin"),
         items: [
           { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
+          { title: t("dashboard.campaigns"), icon: Megaphone, url: '/admin/campaigns' },
           { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },

@@ -8,6 +8,7 @@ import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, get
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
+import { findActiveCampaign, applyCampaignToFees } from "../lib/campaigns";
 
 const router: IRouter = Router();
 
@@ -329,6 +330,47 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     }
   }
 
+  // -------- Campaign price adjustment --------
+  // If an active campaign matches this program's university and (when set)
+  // the agent's country, apply its percentage to all snapshotted fees.
+  // The result becomes the on-record price, so commission and service-fee
+  // math automatically inherits the campaign price.
+  let appliedCampaignId: number | null = null;
+  let appliedCampaignName: string | null = null;
+  let appliedCampaignType: string | null = null;
+  let appliedCampaignPercent: number | null = null;
+  if (snapshotUniversityId) {
+    let campaignAgentCountry: string | null = null;
+    if (resolvedAgentId) {
+      const [ag] = await db.select({ country: agentsTable.country }).from(agentsTable).where(eq(agentsTable.id, resolvedAgentId));
+      campaignAgentCountry = ag?.country || null;
+    }
+    const campaign = await findActiveCampaign(snapshotUniversityId, campaignAgentCountry);
+    if (campaign) {
+      const adjusted = applyCampaignToFees({
+        tuitionFee: snapshotTuitionFee,
+        discountedFee: snapshotDiscountedFee,
+        serviceFeeAmount: snapshotServiceFeeAmount,
+        applicationFee: snapshotApplicationFee,
+        depositFee: snapshotDepositFee,
+        advancedFee: snapshotAdvancedFee,
+        languageFee: snapshotLanguageFee,
+      }, campaign);
+      snapshotTuitionFee = adjusted.tuitionFee ?? null;
+      snapshotDiscountedFee = adjusted.discountedFee ?? null;
+      snapshotServiceFeeAmount = adjusted.serviceFeeAmount ?? null;
+      snapshotApplicationFee = adjusted.applicationFee ?? null;
+      snapshotDepositFee = adjusted.depositFee ?? null;
+      snapshotAdvancedFee = adjusted.advancedFee ?? null;
+      snapshotLanguageFee = adjusted.languageFee ?? null;
+      appliedCampaignId = campaign.id;
+      appliedCampaignName = campaign.name;
+      appliedCampaignType = campaign.changeType;
+      appliedCampaignPercent = Number(campaign.changePercent);
+    }
+  }
+  // ------------------------------------------
+
   // studentFull already contains origin fields — no extra query needed
   const origin: OriginMeta = studentFull.originType
     ? { originType: studentFull.originType as any, originEntityType: studentFull.originEntityType, originEntityId: studentFull.originEntityId, originDisplayName: studentFull.originDisplayName }
@@ -359,6 +401,10 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     languageFee: snapshotLanguageFee,
     currency: snapshotCurrency,
     notes: notes || null,
+    campaignId: appliedCampaignId,
+    campaignName: appliedCampaignName,
+    campaignType: appliedCampaignType,
+    campaignPercent: appliedCampaignPercent,
     ...origin,
     originStudentId: parseInt(studentId, 10),
   }).returning();

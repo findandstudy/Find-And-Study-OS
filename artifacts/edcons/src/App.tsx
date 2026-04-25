@@ -66,6 +66,7 @@ const StaffTasks = lazyRetry(() => import("@/pages/staff/Tasks"));
 const AdminDashboard = lazyRetry(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazyRetry(() => import("@/pages/admin/Users"));
 const AdminCatalog = lazyRetry(() => import("@/pages/admin/Catalog"));
+const AdminCampaigns = lazyRetry(() => import("@/pages/admin/Campaigns"));
 const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
 const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
@@ -195,6 +196,9 @@ function Router() {
         </Route>
         <Route path="/admin/catalog">
           <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>
+        </Route>
+        <Route path="/admin/campaigns">
+          <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCampaigns /></ProtectedRoute>
         </Route>
         <Route path="/admin/audit">
           <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>

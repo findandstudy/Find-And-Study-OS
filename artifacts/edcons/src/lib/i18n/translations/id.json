@@ -367,7 +367,8 @@
     "subAgent": "Sub-Agen",
     "switchToLight": "Beralih ke mode terang",
     "switchToDark": "Beralih ke mode gelap",
-    "tasks": "Tugas"
+    "tasks": "Tugas",
+    "campaigns": "Campaigns"
   },
   "notFound": {
     "title": "Halaman Tidak Ditemukan",
@@ -557,5 +558,74 @@
       "in_progress": "Pindah ke Dikerjakan",
       "done": "Tandai Selesai"
     }
+  },
+  "campaigns": {
+    "title": "Campaigns",
+    "subtitle": "Time-bound price adjustments per university and agent country",
+    "newCampaign": "New Campaign",
+    "createTitle": "Create Campaign",
+    "editTitle": "Edit Campaign",
+    "none": "No campaigns yet",
+    "noneArchived": "No archived campaigns",
+    "createFirst": "Create First Campaign",
+    "searchPlaceholder": "Search campaigns…",
+    "searchUniversities": "Search universities…",
+    "searchCountries": "Search countries…",
+    "noUniversities": "No universities found",
+    "noCountries": "No agent countries available",
+    "allAgents": "All agents (no country filter)",
+    "allAgentsHint": "Leave empty to apply to all agents",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "archive": "Archive",
+    "archiveConfirm": "Archive campaign \"{name}\"?",
+    "archived": "Campaign archived",
+    "archiveFailed": "Failed to archive campaign",
+    "restore": "Restore",
+    "restored": "Campaign restored",
+    "restoreFailed": "Failed to restore campaign",
+    "created": "Campaign created",
+    "createFailed": "Failed to create campaign",
+    "updated": "Campaign updated",
+    "updateFailed": "Failed to update campaign",
+    "loadFailed": "Failed to load campaigns",
+    "clearAll": "Clear all",
+    "tabs": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "type": {
+      "discount": "Discount",
+      "markup": "Markup"
+    },
+    "status": {
+      "active": "Active",
+      "scheduled": "Scheduled",
+      "expired": "Expired",
+      "disabled": "Disabled",
+      "archived": "Archived"
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Summer 2026 — South Asia Promo",
+      "description": "Description",
+      "type": "Adjustment Type",
+      "percent": "Percent",
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "universities": "Universities",
+      "universitiesPlaceholder": "Pick universities…",
+      "agentCountries": "Agent Countries (optional)",
+      "agentCountriesPlaceholder": "All agents (any country)"
+    },
+    "errors": {
+      "nameRequired": "Name is required",
+      "percentRange": "Percent must be between 0 and 100",
+      "datesRequired": "Start and end dates are required",
+      "dateOrder": "Start date must be on or before end date",
+      "uniRequired": "Select at least one university"
+    },
+    "universitiesCount": "{count} universities",
+    "countriesCount": "{count} countries"
   }
 }

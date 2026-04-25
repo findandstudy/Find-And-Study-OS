@@ -376,7 +376,8 @@
     "subAgent": "Alt Acente",
     "switchToLight": "Açık moda geç",
     "switchToDark": "Karanlık moda geç",
-    "tasks": "Görevler"
+    "tasks": "Görevler",
+    "campaigns": "Kampanyalar"
   },
   "notFound": {
     "title": "Sayfa Bulunamadı",
@@ -566,5 +567,74 @@
       "in_progress": "Devam Ediyor'a taşı",
       "done": "Tamamlandı olarak işaretle"
     }
+  },
+  "campaigns": {
+    "title": "Kampanyalar",
+    "subtitle": "Üniversite ve acente ülkesine göre süreli fiyat ayarlamaları",
+    "newCampaign": "Yeni Kampanya",
+    "createTitle": "Kampanya Oluştur",
+    "editTitle": "Kampanyayı Düzenle",
+    "none": "Henüz kampanya yok",
+    "noneArchived": "Arşivde kampanya yok",
+    "createFirst": "İlk Kampanyayı Oluştur",
+    "searchPlaceholder": "Kampanya ara…",
+    "searchUniversities": "Üniversite ara…",
+    "searchCountries": "Ülke ara…",
+    "noUniversities": "Üniversite bulunamadı",
+    "noCountries": "Acente ülkesi yok",
+    "allAgents": "Tüm acenteler (ülke filtresi yok)",
+    "allAgentsHint": "Boş bırakırsanız tüm acenteler için geçerlidir",
+    "enabled": "Aktif",
+    "disabled": "Pasif",
+    "archive": "Arşivle",
+    "archiveConfirm": "\"{name}\" kampanyası arşivlensin mi?",
+    "archived": "Kampanya arşivlendi",
+    "archiveFailed": "Kampanya arşivlenemedi",
+    "restore": "Geri yükle",
+    "restored": "Kampanya geri yüklendi",
+    "restoreFailed": "Kampanya geri yüklenemedi",
+    "created": "Kampanya oluşturuldu",
+    "createFailed": "Kampanya oluşturulamadı",
+    "updated": "Kampanya güncellendi",
+    "updateFailed": "Kampanya güncellenemedi",
+    "loadFailed": "Kampanyalar yüklenemedi",
+    "clearAll": "Tümünü temizle",
+    "tabs": {
+      "active": "Aktif",
+      "archived": "Arşiv"
+    },
+    "type": {
+      "discount": "İndirim",
+      "markup": "Artış"
+    },
+    "status": {
+      "active": "Aktif",
+      "scheduled": "Planlanmış",
+      "expired": "Sona Erdi",
+      "disabled": "Pasif",
+      "archived": "Arşivlendi"
+    },
+    "fields": {
+      "name": "Ad",
+      "namePlaceholder": "ör. Yaz 2026 — Güney Asya Promosyonu",
+      "description": "Açıklama",
+      "type": "Ayarlama Türü",
+      "percent": "Yüzde",
+      "startDate": "Başlangıç Tarihi",
+      "endDate": "Bitiş Tarihi",
+      "universities": "Üniversiteler",
+      "universitiesPlaceholder": "Üniversite seçin…",
+      "agentCountries": "Acente Ülkeleri (opsiyonel)",
+      "agentCountriesPlaceholder": "Tüm acenteler (her ülke)"
+    },
+    "errors": {
+      "nameRequired": "Ad gereklidir",
+      "percentRange": "Yüzde 0 ile 100 arasında olmalıdır",
+      "datesRequired": "Başlangıç ve bitiş tarihleri gereklidir",
+      "dateOrder": "Başlangıç tarihi bitiş tarihinden önce olmalıdır",
+      "uniRequired": "En az bir üniversite seçin"
+    },
+    "universitiesCount": "{count} üniversite",
+    "countriesCount": "{count} ülke"
   }
 }

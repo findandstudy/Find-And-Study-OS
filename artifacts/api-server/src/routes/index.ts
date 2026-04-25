@@ -32,6 +32,7 @@ import exportRouter from "./export";
 import documentRequirementsRouter from "./documentRequirements";
 import websiteRouter from "./website";
 import tasksRouter from "./tasks";
+import campaignsRouter from "./campaigns";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(exportRouter);
 router.use(documentRequirementsRouter);
 router.use(websiteRouter);
 router.use(tasksRouter);
+router.use(campaignsRouter);
 
 export default router;
