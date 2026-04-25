@@ -558,7 +558,18 @@
       "in_progress": "Pindah ke Dikerjakan",
       "done": "Tandai Selesai"
     },
-    "mentionHint": "Ketik @ untuk menyebut rekan tim"
+    "mentionHint": "Ketik @ untuk menyebut rekan tim",
+    "overduePill": "Terlambat",
+    "dueSoonPill": "Segera jatuh tempo",
+    "filterEmpty": "Tidak ada tugas yang cocok dengan filter ini",
+    "filterEmptyHint": "Coba filter lain atau hapus untuk melihat semua tugas.",
+    "filters": {
+      "label": "Filter tanggal jatuh tempo",
+      "all": "Semua",
+      "dueWeek": "Pekan ini",
+      "overdue": "Terlambat",
+      "noDue": "Tanpa tanggal"
+    }
   },
   "campaigns": {
     "title": "Campaigns",

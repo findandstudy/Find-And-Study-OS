@@ -558,7 +558,18 @@
       "in_progress": "移至进行中",
       "done": "标记为完成"
     },
-    "mentionHint": "输入 @ 提及队友"
+    "mentionHint": "输入 @ 提及队友",
+    "overduePill": "已逾期",
+    "dueSoonPill": "即将到期",
+    "filterEmpty": "没有符合此筛选的任务",
+    "filterEmptyHint": "试试其他筛选，或清除筛选以查看所有任务。",
+    "filters": {
+      "label": "截止日期筛选",
+      "all": "全部",
+      "dueWeek": "本周到期",
+      "overdue": "已逾期",
+      "noDue": "无截止日期"
+    }
   },
   "campaigns": {
     "title": "Campaigns",

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Archive, ArchiveRestore, GripVertical, ArrowRight, MessageSquarePlus,
   Pencil, Trash2, RotateCcw, X, ClipboardList, CheckCircle2, Circle, Clock, AtSign,
+  AlertTriangle, CalendarClock,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["super_admin", "admin", "manager"] as const;
@@ -84,6 +85,31 @@ function formatNoteDate(iso: string): string {
 function displayName(u: Assignee): string {
   const full = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
   return full || u.email || `User #${u.id}`;
+}
+
+// Local-time YYYY-MM-DD for `dueDate` lexicographic comparisons.
+function toLocalIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+type DueFilter = "all" | "dueWeek" | "overdue" | "noDue";
+
+type DueState = "none" | "overdue" | "soon" | "future";
+
+function classifyDue(
+  dueDate: string | null,
+  status: Task["status"],
+  todayIso: string,
+  threeDaysIso: string,
+): DueState {
+  if (!dueDate) return "none";
+  if (status === "done") return "future";
+  if (dueDate < todayIso) return "overdue";
+  if (dueDate <= threeDaysIso) return "soon";
+  return "future";
 }
 
 // Detect an active "@query" token immediately preceding the caret. The token
@@ -174,6 +200,7 @@ export default function TasksPage() {
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  const [dueFilter, setDueFilter] = useState<DueFilter>("all");
   const [editOpen, setEditOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [form, setForm] = useState<TaskFormState>(EMPTY_FORM);
@@ -423,13 +450,58 @@ export default function TasksPage() {
     }
   }
 
+  // Today + window boundaries (local time) for due-date classification.
+  // Recomputed on each render — cheap and keeps the boundaries fresh if the
+  // page is left open across midnight.
+  const todayIso = toLocalIsoDate(new Date());
+  const threeDaysIso = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return toLocalIsoDate(d);
+  }, [todayIso]);
+  const sevenDaysIso = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return toLocalIsoDate(d);
+  }, [todayIso]);
+
+  // Counts for filter chips, computed from the full task list (so chip totals
+  // don't change when a chip is selected). Both "Overdue" and "Due this week"
+  // count only actionable work — done tasks are excluded from each.
+  const filterCounts = useMemo(() => {
+    let dueWeek = 0, overdue = 0, noDue = 0;
+    for (const tk of tasks) {
+      if (!tk.dueDate) { noDue += 1; continue; }
+      if (tk.status === "done") continue;
+      if (tk.dueDate < todayIso) overdue += 1;
+      else if (tk.dueDate <= sevenDaysIso) dueWeek += 1;
+    }
+    return { all: tasks.length, dueWeek, overdue, noDue };
+  }, [tasks, todayIso, sevenDaysIso]);
+
+  const visibleTasks = useMemo(() => {
+    if (dueFilter === "all") return tasks;
+    return tasks.filter(tk => {
+      if (dueFilter === "noDue") return !tk.dueDate;
+      if (!tk.dueDate) return false;
+      if (dueFilter === "overdue") {
+        return tk.status !== "done" && tk.dueDate < todayIso;
+      }
+      if (dueFilter === "dueWeek") {
+        return tk.status !== "done" && tk.dueDate >= todayIso && tk.dueDate <= sevenDaysIso;
+      }
+      return true;
+    });
+  }, [tasks, dueFilter, todayIso, sevenDaysIso]);
+
   const grouped = useMemo(() => {
     const out: Record<Task["status"], Task[]> = { todo: [], in_progress: [], done: [] };
-    for (const tk of tasks) out[tk.status].push(tk);
+    for (const tk of visibleTasks) out[tk.status].push(tk);
     return out;
-  }, [tasks]);
+  }, [visibleTasks]);
 
   const totalCount = tasks.length;
+  const visibleCount = visibleTasks.length;
 
   const assigneesById = useMemo(() => {
     const m = new Map<number, Assignee>();
@@ -545,6 +617,50 @@ export default function TasksPage() {
           </div>
         </div>
 
+        {/* Filter chips */}
+        {!loading && totalCount > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label={t("tasks.filters.label")}
+            data-testid="due-filter-bar"
+          >
+            {(["all", "dueWeek", "overdue", "noDue"] as const).map(key => {
+              const active = dueFilter === key;
+              const count = filterCounts[key];
+              const isOverdue = key === "overdue";
+              const baseCls = active
+                ? isOverdue && count > 0
+                  ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
+                  : "bg-primary text-primary-foreground border-primary"
+                : isOverdue && count > 0
+                  ? "bg-background text-red-700 border-red-300 hover:bg-red-50 dark:text-red-300 dark:border-red-900/60 dark:hover:bg-red-950/40"
+                  : "bg-background text-foreground border-border hover:bg-muted";
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setDueFilter(key)}
+                  aria-pressed={active}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${baseCls}`}
+                  data-testid={`filter-${key}`}
+                >
+                  {isOverdue && <AlertTriangle className="w-3.5 h-3.5" />}
+                  {key === "dueWeek" && <CalendarClock className="w-3.5 h-3.5" />}
+                  <span>{t(`tasks.filters.${key}`)}</span>
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[1.25rem] h-4 rounded-full px-1 text-[10px] ${
+                      active ? "bg-white/20 text-current" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Empty / Loading */}
         {loading ? (
           <div className="text-sm text-muted-foreground">{t("tasks.loading")}</div>
@@ -561,6 +677,21 @@ export default function TasksPage() {
                 {t("tasks.createTask")}
               </Button>
             )}
+          </div>
+        ) : visibleCount === 0 ? (
+          <div className="border-2 border-dashed border-border rounded-xl p-10 text-center" data-testid="filter-empty">
+            <ClipboardList className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+            <h3 className="text-base font-semibold">{t("tasks.filterEmpty")}</h3>
+            <p className="text-sm text-muted-foreground mt-1">{t("tasks.filterEmptyHint")}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-4"
+              onClick={() => setDueFilter("all")}
+              data-testid="button-clear-filter"
+            >
+              {t("tasks.filters.all")}
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -587,10 +718,14 @@ export default function TasksPage() {
                       const noteCount = (task.taskNotes?.length) || 0;
                       const next = STATUS_FLOW[task.status];
                       const canEditThis = isAdmin || (canManage && task.assignedTo === user?.id);
+                      const dueState = classifyDue(task.dueDate, task.status, todayIso, threeDaysIso);
+                      const overdueRing = dueState === "overdue"
+                        ? "border-red-500 ring-1 ring-red-500/30 dark:border-red-500/80"
+                        : "";
                       return (
                         <div
                           key={task.id}
-                          className={`group rounded-lg border bg-background p-3 cursor-pointer transition ${
+                          className={`group rounded-lg border bg-background p-3 cursor-pointer transition ${overdueRing} ${
                             isDragSelf ? "opacity-40 scale-95" : "hover:border-primary/50 hover:shadow-sm"
                           }`}
                           onClick={() => setNotesTask(task)}
@@ -619,9 +754,36 @@ export default function TasksPage() {
                                   {t(`tasks.priority.${task.priority}`)}
                                 </Badge>
                                 {task.dueDate && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[10px] ${
+                                      dueState === "overdue"
+                                        ? "text-red-700 dark:text-red-400 font-medium"
+                                        : dueState === "soon"
+                                          ? "text-amber-700 dark:text-amber-400 font-medium"
+                                          : "text-muted-foreground"
+                                    }`}
+                                    data-testid={`task-due-${task.id}`}
+                                  >
                                     <Clock className="w-3 h-3" />
                                     {task.dueDate}
+                                  </span>
+                                )}
+                                {dueState === "overdue" && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] h-5 px-1.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 font-medium"
+                                    data-testid={`pill-overdue-${task.id}`}
+                                  >
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {t("tasks.overduePill")}
+                                  </span>
+                                )}
+                                {dueState === "soon" && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] h-5 px-1.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-medium"
+                                    data-testid={`pill-due-soon-${task.id}`}
+                                  >
+                                    <CalendarClock className="w-3 h-3" />
+                                    {t("tasks.dueSoonPill")}
                                   </span>
                                 )}
                                 {task.assignedToName && (

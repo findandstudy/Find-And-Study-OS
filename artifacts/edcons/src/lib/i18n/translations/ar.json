@@ -558,7 +558,18 @@
       "in_progress": "نقل إلى قيد التنفيذ",
       "done": "تعليم كمكتمل"
     },
-    "mentionHint": "اكتب @ لتذكر زميلًا"
+    "mentionHint": "اكتب @ لتذكر زميلًا",
+    "overduePill": "متأخرة",
+    "dueSoonPill": "تستحق قريبًا",
+    "filterEmpty": "لا توجد مهام مطابقة لهذا الفلتر",
+    "filterEmptyHint": "جرب فلترًا آخر أو امسحه لعرض جميع المهام.",
+    "filters": {
+      "label": "تصفية حسب تاريخ الاستحقاق",
+      "all": "الكل",
+      "dueWeek": "هذا الأسبوع",
+      "overdue": "متأخرة",
+      "noDue": "بدون تاريخ"
+    }
   },
   "campaigns": {
     "title": "Campaigns",

@@ -567,7 +567,18 @@
       "in_progress": "Move to In Progress",
       "done": "Mark as Done"
     },
-    "mentionHint": "Type @ to mention a teammate"
+    "mentionHint": "Type @ to mention a teammate",
+    "overduePill": "Overdue",
+    "dueSoonPill": "Due soon",
+    "filterEmpty": "No tasks match this filter",
+    "filterEmptyHint": "Try a different filter or clear it to see all tasks.",
+    "filters": {
+      "label": "Due date filter",
+      "all": "All",
+      "dueWeek": "Due this week",
+      "overdue": "Overdue",
+      "noDue": "No due date"
+    }
   },
   "campaigns": {
     "title": "Campaigns",

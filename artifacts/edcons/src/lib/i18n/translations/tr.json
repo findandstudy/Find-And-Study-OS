@@ -567,7 +567,18 @@
       "in_progress": "Devam Ediyor'a taşı",
       "done": "Tamamlandı olarak işaretle"
     },
-    "mentionHint": "Bir takım arkadaşından bahsetmek için @ yazın"
+    "mentionHint": "Bir takım arkadaşından bahsetmek için @ yazın",
+    "overduePill": "Gecikmiş",
+    "dueSoonPill": "Yakında",
+    "filterEmpty": "Bu filtreye uyan görev yok",
+    "filterEmptyHint": "Farklı bir filtre deneyin veya tümünü görmek için temizleyin.",
+    "filters": {
+      "label": "Bitiş tarihi filtresi",
+      "all": "Tümü",
+      "dueWeek": "Bu hafta",
+      "overdue": "Gecikmiş",
+      "noDue": "Tarihsiz"
+    }
   },
   "campaigns": {
     "title": "Kampanyalar",

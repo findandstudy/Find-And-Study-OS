@@ -558,7 +558,18 @@
       "in_progress": "Déplacer vers En cours",
       "done": "Marquer comme terminé"
     },
-    "mentionHint": "Tapez @ pour mentionner un coéquipier"
+    "mentionHint": "Tapez @ pour mentionner un coéquipier",
+    "overduePill": "En retard",
+    "dueSoonPill": "Bientôt due",
+    "filterEmpty": "Aucune tâche ne correspond à ce filtre",
+    "filterEmptyHint": "Essayez un autre filtre ou effacez-le pour voir toutes les tâches.",
+    "filters": {
+      "label": "Filtre par date d'échéance",
+      "all": "Toutes",
+      "dueWeek": "Cette semaine",
+      "overdue": "En retard",
+      "noDue": "Sans échéance"
+    }
   },
   "campaigns": {
     "title": "Campaigns",

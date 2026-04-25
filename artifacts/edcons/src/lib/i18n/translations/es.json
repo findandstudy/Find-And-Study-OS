@@ -558,7 +558,18 @@
       "in_progress": "Mover a En progreso",
       "done": "Marcar como hecho"
     },
-    "mentionHint": "Escribe @ para mencionar a un compañero"
+    "mentionHint": "Escribe @ para mencionar a un compañero",
+    "overduePill": "Vencida",
+    "dueSoonPill": "Vence pronto",
+    "filterEmpty": "Ninguna tarea coincide con este filtro",
+    "filterEmptyHint": "Prueba con otro filtro o quítalo para ver todas las tareas.",
+    "filters": {
+      "label": "Filtro por fecha de vencimiento",
+      "all": "Todas",
+      "dueWeek": "Esta semana",
+      "overdue": "Vencidas",
+      "noDue": "Sin fecha"
+    }
   },
   "campaigns": {
     "title": "Campaigns",
