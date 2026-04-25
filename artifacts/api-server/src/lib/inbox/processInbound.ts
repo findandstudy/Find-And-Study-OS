@@ -184,7 +184,7 @@ export async function processInboundMessage(opts: {
 
   try {
     await dispatchNotification({
-      event: !isLinked ? "inbox.unmatched_inbound" : "inbox.inbound_message",
+      event: !isLinked ? "inbox.unmatched" : "inbox.new_message",
       title: !isLinked
         ? `New ${channel} message — needs matching`
         : `New ${channel} message from ${contact.displayName || contact.phone || "contact"}`,

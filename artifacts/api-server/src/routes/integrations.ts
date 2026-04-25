@@ -8,6 +8,7 @@ import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
 import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
 import crypto from "crypto";
 import { isLiveIntegrationsEnabled, liveModeReason } from "../lib/inbox/liveMode";
+import { encryptConfig, decryptConfig } from "../lib/encryption";
 
 const router: IRouter = Router();
 
@@ -25,7 +26,7 @@ router.get("/integrations", requireAuth, requireRole(...ADMIN_ROLES), async (_re
 
   const masked = integrations.map((i) => ({
     ...i,
-    config: maskSecrets(i.config as Record<string, any>),
+    config: maskSecrets(decryptConfig(i.config as Record<string, any>)),
   }));
 
   res.json({ data: masked });
@@ -44,7 +45,7 @@ router.get("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
 
   res.json({
     ...integration,
-    config: maskSecrets(integration.config as Record<string, any>),
+    config: maskSecrets(decryptConfig(integration.config as Record<string, any>)),
   });
 });
 
@@ -73,16 +74,19 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
 
   let result;
   if (existing) {
-    const mergedConfig = mergeConfig(existing.config as Record<string, any>, config || {});
+    // Decrypt the stored config before merging so masked-incoming detection works on plaintext.
+    const existingPlain = decryptConfig(existing.config as Record<string, any>);
+    const mergedConfig = mergeConfig(existingPlain, config || {});
     if (key === "web_form" && !mergedConfig.formId) mergedConfig.formId = crypto.randomUUID();
     if (key === "web_form" && !mergedConfig.secret) mergedConfig.secret = crypto.randomBytes(24).toString("hex");
+    const toStore = encryptConfig(mergedConfig);
     [result] = await db
       .update(integrationsTable)
       .set({
         name,
         category,
         isEnabled: isEnabled ?? existing.isEnabled,
-        config: mergedConfig,
+        config: toStore,
       })
       .where(eq(integrationsTable.key, key))
       .returning();
@@ -92,16 +96,17 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
       if (!initialConfig.formId) initialConfig.formId = crypto.randomUUID();
       if (!initialConfig.secret) initialConfig.secret = crypto.randomBytes(24).toString("hex");
     }
+    const toStore = encryptConfig(initialConfig);
     [result] = await db
       .insert(integrationsTable)
-      .values({ key, name, category, isEnabled: isEnabled ?? false, config: initialConfig })
+      .values({ key, name, category, isEnabled: isEnabled ?? false, config: toStore })
       .returning();
   }
 
   if (key === "claude") clearConfigCache();
   if (key === "smtp") invalidateSmtpCache();
   await logAudit(req.user!.id, "update_integration", "integration", result.id, { key, isEnabled: result.isEnabled }, req.ip);
-  res.json({ ...result, config: maskSecrets(result.config as Record<string, any>) });
+  res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
 router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -134,7 +139,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   if (req.params.key === "claude") clearConfigCache();
   if (req.params.key === "smtp") invalidateSmtpCache();
   await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: req.params.key, isEnabled: result.isEnabled }, req.ip);
-  res.json({ ...result, config: maskSecrets(result.config as Record<string, any>) });
+  res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
 router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -148,7 +153,7 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     return;
   }
 
-  const config = integration.config as Record<string, any>;
+  const config = decryptConfig(integration.config as Record<string, any>);
 
   if (req.params.key === "claude") {
     if (!config.apiKey) {

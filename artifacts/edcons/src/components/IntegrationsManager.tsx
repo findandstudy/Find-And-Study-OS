@@ -534,28 +534,32 @@ export function IntegrationsManager() {
                     </div>
                   </div>
                 ))}
-                {editDef.key === "web_form" && editConfig.formId && (
-                  <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
-                    <p className="text-xs font-semibold">Embed snippet</p>
-                    <p className="text-[11px] text-muted-foreground">Paste this HTML into your website:</p>
-                    <textarea
-                      readOnly
-                      className="w-full h-24 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
-                      value={`<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs rounded-lg gap-1"
-                      onClick={() => copyToClipboard(
-                        `<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`,
-                        "Snippet",
-                      )}
-                    >
-                      <Copy className="w-3 h-3" /> Copy snippet
-                    </Button>
-                  </div>
-                )}
+                {editDef.key === "web_form" && editConfig.formId && (() => {
+                  const secret = editConfig.secret || "YOUR_SECRET_TOKEN_HERE";
+                  const snippet = `<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input type="hidden" name="secret_token" value="${secret}" />\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`;
+                  return (
+                    <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
+                      <p className="text-xs font-semibold">Embed snippet</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Paste this HTML into your website. The hidden <code>secret_token</code> field
+                        authenticates submissions; rotate the secret to invalidate old embeds.
+                      </p>
+                      <textarea
+                        readOnly
+                        className="w-full h-32 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
+                        value={snippet}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs rounded-lg gap-1"
+                        onClick={() => copyToClipboard(snippet, "Snippet")}
+                      >
+                        <Copy className="w-3 h-3" /> Copy snippet
+                      </Button>
+                    </div>
+                  );
+                })()}
               </div>
 
               <DialogFooter>

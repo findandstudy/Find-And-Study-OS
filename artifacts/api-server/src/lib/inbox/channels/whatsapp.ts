@@ -40,6 +40,42 @@ export function verifyWhatsAppSignature(rawBody: Buffer | string, signatureHeade
  * In dev (and without ALLOW_LIVE_INTEGRATIONS), returns a simulated success
  * with a synthesized externalMessageId so the rest of the pipeline can run.
  */
+/**
+ * Send a WA Cloud API request with bounded retry+backoff for 429/5xx.
+ * Backoff schedule: 250ms, 750ms, 1750ms (max 3 attempts total).
+ */
+async function sendWaApiRequest(
+  url: string,
+  accessToken: string,
+  body: Record<string, any>,
+): Promise<{ ok: true; data: any } | { ok: false; status: number; error: string }> {
+  const delays = [0, 250, 750, 1750];
+  let last: { status: number; error: string } = { status: 0, error: "no_attempt" };
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) await new Promise((r) => setTimeout(r, delays[attempt]));
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const data: any = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, data };
+      const errMsg = data?.error?.message || `HTTP ${res.status}`;
+      last = { status: res.status, error: errMsg };
+      const retriable = res.status === 429 || (res.status >= 500 && res.status < 600);
+      if (!retriable) return { ok: false, status: res.status, error: errMsg };
+    } catch (err: any) {
+      last = { status: 0, error: err?.message || "network_error" };
+      // Network errors are retriable.
+    }
+  }
+  return { ok: false, status: last.status, error: last.error };
+}
+
 export async function sendWhatsAppText(opts: {
   config: WhatsAppConfig;
   toPhoneE164: string;
@@ -61,29 +97,17 @@ export async function sendWhatsAppText(opts: {
 
   const cleaned = toPhoneE164.replace(/^\+/, "");
   const url = `https://graph.facebook.com/${WA_API_VERSION}/${config.phoneNumberId}/messages`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: cleaned,
-        type: "text",
-        text: { body: text },
-      }),
-    });
-    const data: any = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { ok: false, error: data?.error?.message || `HTTP ${res.status}`, simulated: false };
-    }
-    const externalMessageId = data?.messages?.[0]?.id;
-    return { ok: true, externalMessageId, simulated: false };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "Send failed", simulated: false };
+  const result = await sendWaApiRequest(url, config.accessToken, {
+    messaging_product: "whatsapp",
+    to: cleaned,
+    type: "text",
+    text: { body: text },
+  });
+  if (!result.ok) {
+    return { ok: false, error: result.error, simulated: false };
   }
+  const externalMessageId = result.data?.messages?.[0]?.id;
+  return { ok: true, externalMessageId, simulated: false };
 }
 
 /**
@@ -120,33 +144,21 @@ export async function sendWhatsAppTemplate(opts: {
       }]
     : undefined;
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: cleaned,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: language },
-          ...(components ? { components } : {}),
-        },
-      }),
-    });
-    const data: any = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { ok: false, error: data?.error?.message || `HTTP ${res.status}`, simulated: false };
-    }
-    const externalMessageId = data?.messages?.[0]?.id;
-    return { ok: true, externalMessageId, simulated: false };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "Send failed", simulated: false };
+  const result = await sendWaApiRequest(url, config.accessToken, {
+    messaging_product: "whatsapp",
+    to: cleaned,
+    type: "template",
+    template: {
+      name: templateName,
+      language: { code: language },
+      ...(components ? { components } : {}),
+    },
+  });
+  if (!result.ok) {
+    return { ok: false, error: result.error, simulated: false };
   }
+  const externalMessageId = result.data?.messages?.[0]?.id;
+  return { ok: true, externalMessageId, simulated: false };
 }
 
 export interface WhatsAppInbound {

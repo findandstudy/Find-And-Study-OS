@@ -24,6 +24,8 @@ import {
 import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
 import { directOrigin } from "../lib/originHelper";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { sendEmail } from "../lib/email";
+import { decryptConfig } from "../lib/encryption";
 
 const router: IRouter = Router();
 
@@ -299,9 +301,10 @@ router.post(
         return;
       }
       const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "whatsapp"));
-      const cfg: WhatsAppConfig = (integ?.config as WhatsAppConfig) || {};
-      const result = await sendWhatsAppText({ config: cfg, toPhoneE164: contact.phoneE164, text: content });
-      const [msg] = await db
+      const cfg: WhatsAppConfig = (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
+
+      // Persist a 'pending' row first so the client can observe lifecycle.
+      const [pending] = await db
         .insert(messagesTable)
         .values({
           conversationId: id,
@@ -309,18 +312,44 @@ router.post(
           content,
           channel: "whatsapp",
           direction: "outbound",
+          status: "pending",
+          metadata: {},
+        })
+        .returning();
+
+      const result = await sendWhatsAppText({ config: cfg, toPhoneE164: contact.phoneE164, text: content });
+
+      const [msg] = await db
+        .update(messagesTable)
+        .set({
           status: result.ok ? "sent" : "failed",
           externalMessageId: result.externalMessageId || null,
           failedReason: result.ok ? null : result.error || "send_failed",
           sentAt: result.ok ? new Date() : null,
-          metadata: { simulated: result.simulated },
+          metadata: { simulated: result.simulated, ...(result.ok ? {} : { error: result.error }) },
         })
+        .where(eq(messagesTable.id, pending.id))
         .returning();
+
       if (result.ok) {
         await db
           .update(conversationsTable)
           .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
           .where(eq(conversationsTable.id, id));
+      } else {
+        // Notify staff of send failure (in_app + email per default rule).
+        try {
+          await dispatchNotification({
+            event: "inbox.send_failed",
+            title: `WhatsApp send failed for conversation #${id}`,
+            body: result.error || "Send failed",
+            actionUrl: `/staff/messages?conversation=${id}`,
+            icon: "alert",
+            data: { conversationId: id, channel: "whatsapp", error: result.error },
+          });
+        } catch (err) {
+          console.error("[INBOX] send_failed dispatch error:", err);
+        }
       }
       res.status(result.ok ? 201 : 502).json({ message: msg, simulated: result.simulated, error: result.error });
       return;
@@ -343,7 +372,47 @@ router.post(
         .update(conversationsTable)
         .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
         .where(eq(conversationsTable.id, id));
-      res.status(201).json({ message: msg, note: "Web form replies are recorded only; recipient must check email/portal." });
+
+      // Auto-email the original submitter when an email is on file.
+      let emailSent = false;
+      let emailError: string | undefined;
+      try {
+        const [contact] = conv.externalContactId
+          ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
+          : [null];
+        if (contact?.email) {
+          const subject = "Reply from our team";
+          const text = content;
+          const html = `<p>${content.replace(/\n/g, "<br/>")}</p>`;
+          await sendEmail(contact.email, { subject, html, text });
+          emailSent = true;
+          await db
+            .update(messagesTable)
+            .set({ metadata: { emailedTo: contact.email } })
+            .where(eq(messagesTable.id, msg.id));
+        }
+      } catch (err: any) {
+        emailError = String(err?.message || err);
+        console.error("[INBOX] web_form email auto-reply failed:", err);
+        try {
+          await dispatchNotification({
+            event: "inbox.send_failed",
+            title: `Web form reply email failed for conversation #${id}`,
+            body: emailError,
+            actionUrl: `/staff/messages?conversation=${id}`,
+            icon: "alert",
+            data: { conversationId: id, channel: "web_form", error: emailError },
+          });
+        } catch {}
+      }
+      res.status(201).json({
+        message: msg,
+        emailSent,
+        ...(emailError ? { emailError } : {}),
+        note: emailSent
+          ? "Reply emailed to submitter."
+          : "Recorded; submitter has no email on file.",
+      });
       return;
     }
 
@@ -382,7 +451,7 @@ router.post(
       return;
     }
     const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "whatsapp"));
-    const cfg: WhatsAppConfig = (integ?.config as WhatsAppConfig) || {};
+    const cfg: WhatsAppConfig = (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
     const result = await sendWhatsAppTemplate({
       config: cfg,
       toPhoneE164: contact.phoneE164,

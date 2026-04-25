@@ -5,6 +5,8 @@ import { eq, and } from "drizzle-orm";
 import { processInboundMessage } from "../lib/inbox/processInbound";
 import { verifyWhatsAppSignature, parseWhatsAppWebhook, type WhatsAppConfig } from "../lib/inbox/channels/whatsapp";
 import { verifyWebFormSignature, parseWebFormPayload } from "../lib/inbox/channels/webForm";
+import { decryptConfig } from "../lib/encryption";
+import crypto from "crypto";
 
 const router: IRouter = Router();
 
@@ -54,7 +56,7 @@ function parseRawByContentType(req: Request, _res: Response, next: NextFunction)
 async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
   const [row] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "whatsapp"));
   if (!row || !row.isEnabled) return null;
-  return (row.config as WhatsAppConfig) || {};
+  return (decryptConfig(row.config as Record<string, any>) as WhatsAppConfig) || {};
 }
 
 async function ensureChannelAccount(channel: string, displayName: string, externalAccountId?: string): Promise<number | null> {
@@ -155,29 +157,57 @@ router.post("/webhooks/whatsapp", rawJson, async (req: Request, res: Response): 
   res.status(200).json({ ok: true, processed });
 });
 
+function timingSafeEq(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  try {
+    return crypto.timingSafeEqual(ab, bb);
+  } catch {
+    return false;
+  }
+}
+
 async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "web_form"));
   if (!integ || !integ.isEnabled) {
     res.status(200).json({ ok: true, ignored: "integration disabled" });
     return;
   }
-  const cfg = (integ.config as any) || {};
+  const cfg = decryptConfig((integ.config as Record<string, any>) || {});
 
   // If a formId path param was supplied, verify it matches the configured formId.
   const formIdParam = req.params.formId;
   if (formIdParam && cfg.formId && formIdParam !== cfg.formId) {
+    console.warn("[WEBHOOK] web_form formId mismatch", { provided: formIdParam });
     res.status(404).json({ error: "Unknown form id" });
     return;
   }
 
-  const sig = req.headers["x-webform-signature"] as string | undefined;
-  const raw = (req as any).rawBody as Buffer | undefined;
-  // HMAC is verified against the raw bytes when a secret + signature are provided.
-  // For HTML form posts (no signature header), the secret check is permissive — the formId
-  // in the URL is the shared identifier; this matches the public embed snippet flow.
-  if (cfg.secret && sig && !verifyWebFormSignature(raw ?? Buffer.alloc(0), sig, cfg.secret)) {
-    res.status(401).json({ error: "Invalid signature" });
-    return;
+  // Mandatory secret enforcement when a secret is configured.
+  // Accepts either:
+  //   - HMAC-SHA256 signature in X-Webform-Signature (raw hex digest of the raw body), OR
+  //   - shared token in X-Webform-Token header / body field `secret_token` / body field `secret`.
+  // All comparisons are constant-time.
+  if (cfg.secret) {
+    const sig = req.headers["x-webform-signature"] as string | undefined;
+    const raw = (req as any).rawBody as Buffer | undefined;
+    const tokenHeader = (req.headers["x-webform-token"] as string | undefined) || undefined;
+    const body = (req.body && typeof req.body === "object") ? (req.body as Record<string, any>) : {};
+    const tokenBody = (body.secret_token || body.secret) as string | undefined;
+
+    const sigOk = sig ? verifyWebFormSignature(raw ?? Buffer.alloc(0), sig, cfg.secret) : false;
+    const tokenOk = timingSafeEq(tokenHeader || tokenBody, cfg.secret);
+    if (!sigOk && !tokenOk) {
+      console.warn("[WEBHOOK] web_form auth failed", {
+        hasSig: Boolean(sig),
+        hasTokenHeader: Boolean(tokenHeader),
+        hasTokenBody: Boolean(tokenBody),
+      });
+      res.status(401).json({ error: "Invalid or missing webhook secret" });
+      return;
+    }
   }
 
   const payload = req.body;
