@@ -42,6 +42,9 @@ type NavSubscriber = () => void;
 const _subscribers = new Set<NavSubscriber>();
 
 function _notify() {
+  if (import.meta.env.DEV) {
+    console.log("[nav] _notify path=" + window.location.pathname + " subscribers=" + _subscribers.size);
+  }
   _subscribers.forEach((fn) => fn());
 }
 

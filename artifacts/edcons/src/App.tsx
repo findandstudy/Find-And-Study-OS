@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useCustomBrowserLocation } from "@/lib/navigation";
-import { getAuthCache, setAuthCache, clearAuthCache } from "@/lib/auth-cache";
+import { getAuthCache, setAuthCache, clearAuthCache, getStickyUser, setStickyUser } from "@/lib/auth-cache";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
@@ -188,6 +188,10 @@ function PublicRoutes({ lang }: { lang: string }) {
 }
 
 function StaffAdminShell() {
+  useEffect(() => {
+    console.log("[StaffAdminShell] MOUNTED");
+    return () => console.log("[StaffAdminShell] UNMOUNTED");
+  }, []);
   return (
     <ProtectedRoute allowedRoles={STAFF_ROLES}>
       <DashboardLayout>
@@ -363,6 +367,15 @@ function Router() {
   const isStudentPath = location === "/student" || location.startsWith("/student/");
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
 
+  const prevBranch = useRef<string | null>(null);
+  const branch = isStaffAdminPath ? "staff" : isStudentPath ? "student" : isAgentPath ? "agent" : "public";
+  if (prevBranch.current !== branch) {
+    console.log("[Router] branch change:", prevBranch.current, "→", branch, "location=", location);
+    prevBranch.current = branch;
+  } else {
+    console.log("[Router] re-render, branch=", branch, "location=", location);
+  }
+
   if (isStaffAdminPath) {
     return <ErrorBoundary><StaffAdminShell /></ErrorBoundary>;
   }
@@ -413,19 +426,20 @@ function Router() {
 }
 
 function AuthPrefetch() {
-  const [cachedUser] = useState(() => getAuthCache());
+  const [initialUser] = useState(() => getStickyUser() ?? getAuthCache());
   const result = useGetMe({
     query: {
       retry: false,
       staleTime: 30_000,
-      ...(cachedUser !== undefined
-        ? { initialData: cachedUser as any, initialDataUpdatedAt: 0 }
+      ...(initialUser !== undefined
+        ? { initialData: initialUser as any, initialDataUpdatedAt: 0 }
         : {}),
     } as any,
   });
   useEffect(() => {
     if (result.data) {
       setAuthCache(result.data);
+      setStickyUser(result.data);
     } else if (result.error) {
       clearAuthCache();
     }

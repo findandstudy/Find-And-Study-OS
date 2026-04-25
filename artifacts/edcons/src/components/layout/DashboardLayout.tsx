@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { getStickyUser } from "@/lib/auth-cache";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -238,11 +239,25 @@ const ROLE_COLORS: Record<string, string> = {
   agent_staff: "bg-teal-500/10 text-teal-600",
 };
 
+// DEV-only: module-level mount counter to detect unexpected remounts
+let _devMountCount = 0;
+
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const { user: liveUser, isLoading } = useAuth(true);
-  const prevUserRef = useRef(liveUser);
+  // Three-tier sticky: liveUser → prevUserRef (survives re-renders) → getStickyUser() (survives remounts)
+  const prevUserRef = useRef(liveUser ?? (getStickyUser() as typeof liveUser));
   if (liveUser) prevUserRef.current = liveUser;
-  const user = prevUserRef.current;
+  const user = prevUserRef.current ?? (getStickyUser() as typeof liveUser);
+
+  // DEV-only: track mount count to detect unexpected remounts
+  const mountSessionRef = useRef(import.meta.env.DEV ? ++_devMountCount : 0);
+  const renderCountRef = useRef(0);
+  if (import.meta.env.DEV) renderCountRef.current++;
+
+  useEffect(() => {
+    console.log("[DashboardLayout] MOUNTED session #" + mountSessionRef.current);
+    return () => console.log("[DashboardLayout] UNMOUNTED session #" + mountSessionRef.current);
+  }, []);
 
   const [location, setLocation] = useLocation();
   const navigate = (url: string) => setLocation(url);
@@ -324,8 +339,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 10000,
   });
 
-  if (!user && isLoading) return null;
-  if (!user) return null;
+  if (!user && isLoading) {
+    console.warn("[DashboardLayout] returning null — no user yet, isLoading=true");
+    return null;
+  }
+  if (!user) {
+    console.warn("[DashboardLayout] returning null — no user and not loading");
+    return null;
+  }
 
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
   const { groups } = getMenuForRole(user.role, t, staffPerms);
@@ -348,6 +369,11 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
+      {import.meta.env.DEV && (
+        <div style={{position:'fixed',top:0,right:0,zIndex:99999,background:'#ef4444',color:'white',padding:'2px 8px',fontSize:'10px',fontFamily:'monospace',pointerEvents:'none'}}>
+          layout #{mountSessionRef.current} render #{renderCountRef.current}
+        </div>
+      )}
       <div className="flex min-h-screen w-full bg-secondary/20">
         <Sidebar className="border-r border-border/60 shadow-sm">
           <SidebarContent className="bg-card">

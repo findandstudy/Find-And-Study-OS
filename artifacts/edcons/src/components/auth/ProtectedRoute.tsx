@@ -1,5 +1,6 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { getStickyUser } from "@/lib/auth-cache";
 import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
 import { ShieldX, Clock } from "lucide-react";
@@ -54,12 +55,24 @@ function AccessDeniedScreen() {
 export function ProtectedRoute({ children, allowedRoles, requiredPermission }: Props) {
   const { user: liveUser, isLoading } = useAuth(true, allowedRoles);
 
-  const prevUserRef = useRef(liveUser);
-  if (liveUser) prevUserRef.current = liveUser;
-  const user = prevUserRef.current;
+  useEffect(() => {
+    console.log("[ProtectedRoute] MOUNTED roles=" + (allowedRoles?.join(",") ?? "any"));
+    return () => console.log("[ProtectedRoute] UNMOUNTED roles=" + (allowedRoles?.join(",") ?? "any"));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!user && isLoading) return null;
-  if (!user) return null;
+  // Three-tier sticky: liveUser → prevUserRef → getStickyUser()
+  const prevUserRef = useRef(liveUser ?? (getStickyUser() as typeof liveUser));
+  if (liveUser) prevUserRef.current = liveUser;
+  const user = prevUserRef.current ?? (getStickyUser() as typeof liveUser);
+
+  if (!user && isLoading) {
+    console.warn("[ProtectedRoute] returning null — user=", user, "isLoading=", isLoading, "sticky=", getStickyUser());
+    return null;
+  }
+  if (!user) {
+    console.warn("[ProtectedRoute] returning null (no user, not loading, sticky=", getStickyUser(), ")");
+    return null;
+  }
 
   if (user.role === "pending") {
     return <PendingScreen />;

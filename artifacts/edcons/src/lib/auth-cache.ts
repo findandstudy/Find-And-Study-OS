@@ -1,16 +1,36 @@
 /**
- * Lightweight localStorage auth cache.
+ * Two-layer auth cache:
  *
- * On a canvas-triggered full-page reload (caused by the Replit canvas
- * intercepting navigation events), React Query's in-memory cache is wiped.
- * Without a persistent cache, `isLoading = true` for ~200-400ms after reload,
- * making ProtectedRoute and DashboardLayout return null — the white flash.
+ * Layer 1 — module-level in-memory "sticky user":
+ *   Set the first time the real API user is resolved, never expires until
+ *   page unload. Survives component remounts (e.g. React tree rebuilds on
+ *   navigation) because it lives outside React's lifecycle.
  *
- * This cache lets us provide `initialData` to useGetMe so the app
- * renders the full layout immediately on reload, then validates the session
- * in the background.
+ * Layer 2 — localStorage cache with TTL:
+ *   Survives hard page reloads (e.g. login redirect) so the layout renders
+ *   immediately without waiting for the /api/auth/me round-trip.
+ *
+ * Both layers are used as `initialData` for useGetMe, so the layout is
+ * never blocked by an empty auth state after SPA navigation.
  */
 
+// ─── Layer 1: module-level sticky user (no expiry) ────────────────────────
+let _stickyUser: unknown | undefined;
+
+export function getStickyUser(): unknown | undefined {
+  return _stickyUser;
+}
+
+/** Call this whenever the real API user is resolved (non-null). */
+export function setStickyUser(data: unknown): void {
+  if (data) _stickyUser = data;
+}
+
+export function clearStickyUser(): void {
+  _stickyUser = undefined;
+}
+
+// ─── Layer 2: localStorage cache with TTL ─────────────────────────────────
 const CACHE_KEY = "edcons_auth_v2";
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -46,6 +66,7 @@ export function setAuthCache(data: unknown): void {
 export function clearAuthCache(): void {
   try {
     window.localStorage.removeItem(CACHE_KEY);
+    clearStickyUser();
   } catch {
     // Ignore
   }
