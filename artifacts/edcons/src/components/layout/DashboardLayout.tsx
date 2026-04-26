@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import {
   DropdownMenu,
@@ -282,14 +283,19 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const isStudent = user?.role === "student";
   const queryClient = useQueryClient();
 
-  const { data: unreadMsgData } = useQuery({
+  const { data: unreadMsgData } = useQuery<{ total: number; mine: number }>({
     queryKey: ["unread-messages-count"],
     enabled: isStaff,
     queryFn: async () => {
       const res = await customFetch<{ data: any[] }>("/api/conversations");
       const convs = (res as any)?.data || res || [];
       const total = convs.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
-      return total;
+      const mine = convs.reduce(
+        (sum: number, c: any) =>
+          sum + (c.assignedToId === user?.id ? c.unreadCount || 0 : 0),
+        0,
+      );
+      return { total, mine };
     },
     refetchInterval: 15000,
     staleTime: 10000,
@@ -330,7 +336,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 10000,
   });
 
-  const totalUnreadMessages = (isStaff ? (unreadMsgData || 0) : 0) + (isStudent ? (studentUnreadData || 0) : 0);
+  const staffUnreadTotal = isStaff ? unreadMsgData?.total || 0 : 0;
+  const staffUnreadMine = isStaff ? unreadMsgData?.mine || 0 : 0;
+  const totalUnreadMessages = staffUnreadTotal + (isStudent ? studentUnreadData || 0 : 0);
 
   const { data: sectionCounts } = useQuery<Record<string, number>>({
     queryKey: ["notification-section-counts"],
@@ -419,9 +427,51 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
                               <span className="flex-1">{item.title}</span>
                               {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
-                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                  {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
-                                </span>
+                                <TooltipProvider delayDuration={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        className="ml-auto flex items-center gap-1 shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                        data-testid="badge-messages-counts"
+                                      >
+                                        {isStaff && staffUnreadMine > 0 && (
+                                          <span
+                                            className="min-w-5 h-5 px-1 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+                                            data-testid="badge-messages-mine"
+                                          >
+                                            {staffUnreadMine > 99 ? "99+" : staffUnreadMine}
+                                          </span>
+                                        )}
+                                        <span
+                                          className="min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+                                          data-testid="badge-messages-total"
+                                        >
+                                          {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
+                                        </span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="text-xs">
+                                      {isStaff && staffUnreadMine > 0 ? (
+                                        <div className="space-y-1">
+                                          <div>
+                                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1.5 align-middle" />
+                                            {staffUnreadMine} assigned to you
+                                          </div>
+                                          <div>
+                                            <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
+                                            {totalUnreadMessages} total unread
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div>
+                                          <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
+                                          {totalUnreadMessages} total unread
+                                        </div>
+                                      )}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               )}
                               {item.url.endsWith("/leads") && (sectionCounts?.leads || 0) > 0 && (
                                 <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">

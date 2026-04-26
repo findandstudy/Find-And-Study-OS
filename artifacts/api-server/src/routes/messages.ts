@@ -79,6 +79,7 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
       type: conversationsTable.type,
       title: conversationsTable.title,
       createdById: conversationsTable.createdById,
+      assignedToId: conversationsTable.assignedToId,
       isArchived: conversationsTable.isArchived,
       lastMessageAt: conversationsTable.lastMessageAt,
       lastMessagePreview: conversationsTable.lastMessagePreview,
