@@ -173,6 +173,27 @@ export default function AdminDashboard() {
           </Card>
         )}
 
+        {/* Quick Nav */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[
+            { label: "Users", icon: Users, href: "/admin/users", color: "text-blue-500 bg-blue-500/10" },
+            { label: "Leads", icon: Users, href: "/staff/leads", color: "text-purple-500 bg-purple-500/10" },
+            { label: "Applications", icon: FileText, href: "/staff/applications", color: "text-green-500 bg-green-500/10" },
+            { label: "Finance", icon: DollarSign, href: "/staff/finance", color: "text-amber-500 bg-amber-500/10" },
+            { label: "Settings", icon: Shield, href: "/admin/settings", color: "text-primary bg-primary/10" },
+            { label: "Audit Log", icon: Activity, href: "/admin/audit", color: "text-rose-500 bg-rose-500/10" },
+          ].map((item, i) => (
+            <Link key={i} href={item.href}>
+              <Card className="p-5 text-center border-none shadow-md shadow-black/5 hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-pointer group">
+                <div className={`w-12 h-12 rounded-xl ${item.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
+                  <item.icon className="w-5 h-5" />
+                </div>
+                <p className="text-sm font-semibold text-foreground">{item.label}</p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+
         {/* Charts Row */}
         <div className="grid lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
@@ -393,26 +414,6 @@ export default function AdminDashboard() {
           </div>
         </Card>
 
-        {/* Quick Nav */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[
-            { label: "Users", icon: Users, href: "/admin/users", color: "text-blue-500 bg-blue-500/10" },
-            { label: "Leads", icon: Users, href: "/staff/leads", color: "text-purple-500 bg-purple-500/10" },
-            { label: "Applications", icon: FileText, href: "/staff/applications", color: "text-green-500 bg-green-500/10" },
-            { label: "Finance", icon: DollarSign, href: "/staff/finance", color: "text-amber-500 bg-amber-500/10" },
-            { label: "Settings", icon: Shield, href: "/admin/settings", color: "text-primary bg-primary/10" },
-            { label: "Audit Log", icon: Activity, href: "/admin/audit", color: "text-rose-500 bg-rose-500/10" },
-          ].map((item, i) => (
-            <Link key={i} href={item.href}>
-              <Card className="p-5 text-center border-none shadow-md shadow-black/5 hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-pointer group">
-                <div className={`w-12 h-12 rounded-xl ${item.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
-                  <item.icon className="w-5 h-5" />
-                </div>
-                <p className="text-sm font-semibold text-foreground">{item.label}</p>
-              </Card>
-            </Link>
-          ))}
-        </div>
       </div>
   );
 }
