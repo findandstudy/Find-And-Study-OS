@@ -104,17 +104,38 @@ interface InboxConversation {
   assignedTo: { id: number; firstName: string; lastName: string; avatarUrl: string | null } | null;
 }
 
+// If no event/heartbeat arrives within this window, the indicator switches
+// from "Live" (green) to "Stalled" (amber) even though the EventSource is
+// still technically open. Heartbeats fire every 25s, so 60s gives a 2x+
+// safety margin before alerting staff.
+const STALE_AFTER_MS = 60_000;
+
+function formatLastUpdate(lastEventAt: number | null, now: number): string {
+  if (!lastEventAt) return "no updates received yet";
+  const diffMs = Math.max(0, now - lastEventAt);
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 5) return "last update just now";
+  if (seconds < 60) return `last update ${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `last update ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `last update ${hours}h ago`;
+}
+
 function LiveStatusIndicator({
   status,
+  lastEventAt,
+  now,
   onReconnect,
 }: {
-  status: "connecting" | "open" | "offline";
+  status: "connecting" | "open" | "offline" | "stale";
+  lastEventAt: number | null;
+  now: number;
   onReconnect: () => void;
 }) {
   const config = {
     open: {
       label: "Live",
-      tooltip: "Live — real-time updates active",
       dotClass: "bg-emerald-500",
       ringClass: "bg-emerald-500/30",
       textClass: "text-emerald-700",
@@ -122,7 +143,13 @@ function LiveStatusIndicator({
     },
     connecting: {
       label: "Reconnecting",
-      tooltip: "Reconnecting…",
+      dotClass: "bg-amber-500",
+      ringClass: "bg-amber-500/40",
+      textClass: "text-amber-700",
+      animate: true,
+    },
+    stale: {
+      label: "Stalled",
       dotClass: "bg-amber-500",
       ringClass: "bg-amber-500/40",
       textClass: "text-amber-700",
@@ -130,7 +157,6 @@ function LiveStatusIndicator({
     },
     offline: {
       label: "Offline",
-      tooltip: "Offline — click to retry",
       dotClass: "bg-red-500",
       ringClass: "bg-red-500/30",
       textClass: "text-red-700",
@@ -138,13 +164,21 @@ function LiveStatusIndicator({
     },
   }[status];
 
+  const lastUpdateText = formatLastUpdate(lastEventAt, now);
+  const tooltip = (() => {
+    if (status === "open") return `Live · ${lastUpdateText}`;
+    if (status === "stale") return `Stalled · ${lastUpdateText} — stream may be stuck`;
+    if (status === "connecting") return `Reconnecting… · ${lastUpdateText}`;
+    return "Offline — click to retry";
+  })();
+
   const isOffline = status === "offline";
 
   const content = (
     <button
       type="button"
       onClick={isOffline ? onReconnect : undefined}
-      aria-label={config.tooltip}
+      aria-label={tooltip}
       aria-disabled={!isOffline}
       className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${config.textClass} border-current/20 ${
         isOffline ? "cursor-pointer hover:bg-red-500/10" : "cursor-default"
@@ -166,7 +200,7 @@ function LiveStatusIndicator({
     <Tooltip>
       <TooltipTrigger asChild>{content}</TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs">
-        {config.tooltip}
+        {tooltip}
       </TooltipContent>
     </Tooltip>
     </>
@@ -193,6 +227,25 @@ function InboxTab() {
   const [tplParams, setTplParams] = useState<string>("");
   const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "offline">("connecting");
   const [reconnectKey, setReconnectKey] = useState(0);
+  const [lastEventAt, setLastEventAt] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  // Tick once every 5s so the tooltip's "Xs ago" text stays roughly fresh
+  // and the derived "stale" status flips after the threshold without needing
+  // a separate timer per event.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Even though the EventSource may be technically open, surface a "Stalled"
+  // amber state when no event/heartbeat has arrived in over STALE_AFTER_MS.
+  // This catches the "looks live but isn't" failure mode where the push
+  // pipeline silently stops emitting but the socket stays connected.
+  const effectiveLiveStatus: "connecting" | "open" | "offline" | "stale" =
+    liveStatus === "open" && lastEventAt !== null && now - lastEventAt > STALE_AFTER_MS
+      ? "stale"
+      : liveStatus;
 
   const fetchInbox = useCallback(async () => {
     setLoading(true);
@@ -240,6 +293,7 @@ function InboxTab() {
     const es = new EventSource("/api/inbox/events", { withCredentials: true });
 
     const refresh = (raw: MessageEvent) => {
+      setLastEventAt(Date.now());
       let convId: number | null = null;
       try {
         const payload = JSON.parse(raw.data || "{}");
@@ -253,9 +307,18 @@ function InboxTab() {
       }
     };
 
+    // Heartbeats arrive every ~25s and don't trigger any data refresh — they
+    // just keep proxies happy and let the client prove the stream is alive.
+    const onHeartbeat = () => {
+      setLastEventAt(Date.now());
+    };
+
     es.onopen = () => {
       failureCount = 0;
       setLiveStatus("open");
+      // The server emits an initial heartbeat right after connect, but mark
+      // "now" too so a freshly opened indicator never shows "no updates yet".
+      setLastEventAt(Date.now());
     };
 
     es.onerror = () => {
@@ -277,10 +340,12 @@ function InboxTab() {
 
     es.addEventListener("inbox_message", refresh);
     es.addEventListener("inbox_assigned", refresh);
+    es.addEventListener("heartbeat", onHeartbeat);
 
     return () => {
       es.removeEventListener("inbox_message", refresh);
       es.removeEventListener("inbox_assigned", refresh);
+      es.removeEventListener("heartbeat", onHeartbeat);
       es.close();
     };
   }, [reconnectKey]);
@@ -430,7 +495,12 @@ function InboxTab() {
               <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <InboxIcon className="w-3.5 h-3.5" /> Inbox
               </div>
-              <LiveStatusIndicator status={liveStatus} onReconnect={reconnectLive} />
+              <LiveStatusIndicator
+                status={effectiveLiveStatus}
+                lastEventAt={lastEventAt}
+                now={now}
+                onReconnect={reconnectLive}
+              />
             </div>
             <div className="flex gap-1 flex-wrap">
               {tabs.map((t) => {

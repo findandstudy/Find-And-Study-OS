@@ -41,7 +41,11 @@ router.get("/inbox/live-mode", requireAuth, async (_req, res): Promise<void> => 
  * `inbox_assigned` frames to the client so the UI can refresh without
  * polling. Payloads carry just enough context for the client to decide
  * what to refetch (the conversation list and, if open, the conversation
- * detail). The connection self-pings every 25s to defeat idle proxies.
+ * detail). The connection emits a named `heartbeat` event every 25s so the
+ * client can both defeat idle proxies AND surface a "last update" timestamp
+ * — staff see the indicator turn amber if no heartbeat arrives for > 60s,
+ * catching "looks live but isn't" failures where the socket stays open but
+ * the push pipeline silently stops emitting.
  */
 router.get(
   "/inbox/events",
@@ -57,7 +61,19 @@ router.get(
     }
 
     res.write(`retry: 5000\n\n`);
-    res.write(`: connected\n\n`);
+
+    const writeHeartbeat = () => {
+      try {
+        res.write(`event: heartbeat\n`);
+        res.write(`data: ${JSON.stringify({ ts: Date.now() })}\n\n`);
+      } catch {
+        // ignored — close handler will tear down.
+      }
+    };
+
+    // Send an initial heartbeat immediately so the client's "last update"
+    // timestamp is populated before the first real event arrives.
+    writeHeartbeat();
 
     const handler = (event: InboxBusEvent) => {
       const eventName = event.type === "message" ? "inbox_message" : "inbox_assigned";
@@ -71,13 +87,7 @@ router.get(
 
     const unsubscribe = inboxBus.subscribe(handler);
 
-    const ping = setInterval(() => {
-      try {
-        res.write(`: ping\n\n`);
-      } catch {
-        // ignored — close handler will tear down.
-      }
-    }, 25000);
+    const ping = setInterval(writeHeartbeat, 25000);
 
     const cleanup = () => {
       clearInterval(ping);
