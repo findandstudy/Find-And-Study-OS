@@ -391,6 +391,7 @@ async function seedDocumentRequirements() {
   await backfillStudentAppStatus();
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
+    console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
     const { startEmailWorker } = await import("./lib/email");
     startEmailWorker();
     const { startContractChecker } = await import("./lib/contractChecker");
