@@ -19,6 +19,7 @@ import {
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Conversation {
   id: number;
@@ -100,7 +101,7 @@ interface InboxConversation {
     studentId: number | null;
     agentId: number | null;
   } | null;
-  assignedTo: { id: number; firstName: string; lastName: string } | null;
+  assignedTo: { id: number; firstName: string; lastName: string; avatarUrl: string | null } | null;
 }
 
 function LiveStatusIndicator({
@@ -521,10 +522,29 @@ function InboxTab() {
                       </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {ext?.phone || ext?.email || ""}
-                    {conv.assignedTo ? ` • assigned to ${conv.assignedTo.firstName} ${conv.assignedTo.lastName}` : ""}
-                  </p>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+                    {(ext?.phone || ext?.email) && (
+                      <span className="truncate">{ext?.phone || ext?.email}</span>
+                    )}
+                    {conv.assignedTo && (
+                      <>
+                        {(ext?.phone || ext?.email) && <span aria-hidden>•</span>}
+                        <span>assigned to</span>
+                        <Avatar className="h-4 w-4">
+                          {conv.assignedTo.avatarUrl ? (
+                            <AvatarImage
+                              src={conv.assignedTo.avatarUrl}
+                              alt={`${conv.assignedTo.firstName} ${conv.assignedTo.lastName}`}
+                            />
+                          ) : null}
+                          <AvatarFallback className="text-[8px] font-medium bg-primary/10 text-primary">
+                            {((conv.assignedTo.firstName?.[0] ?? "") + (conv.assignedTo.lastName?.[0] ?? "")).toUpperCase() || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">{conv.assignedTo.firstName} {conv.assignedTo.lastName}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-1.5">
                   {conv.assignedToId !== user?.id && (
