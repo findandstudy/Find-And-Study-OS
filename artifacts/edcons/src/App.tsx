@@ -427,41 +427,64 @@ function Router() {
     return <ErrorBoundary><AgentShell /></ErrorBoundary>;
   }
 
-  return (
-    <ErrorBoundary>
-    <Suspense fallback={<PageLoader />}>
-      <Switch>
-        <Route path="/">
+  // ── Public branch ────────────────────────────────────────────────────────────
+  // We intentionally do NOT use Wouter <Switch>/<Route> here.  The old approach
+  // had two separate Route entries — `/:lang` (matches `/en`) and `/:lang/:rest*`
+  // (matches `/en/about`).  When navigating between different path depths, Wouter
+  // would match a DIFFERENT Route element each time, so React would unmount and
+  // remount PublicRoutes (and everything inside it — PublicLayout, header, footer)
+  // on every nav.  That was the "reload on every route change" the user saw.
+  //
+  // Fix: inspect the path directly and render from a SINGLE stable JSX position
+  // so React reconciles without remounting, regardless of path depth.
+
+  if (location === "/" || location === "") {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
           <LanguageRedirect />
-        </Route>
-        <Route path="/login">
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (location === "/login") {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
           <LoginRedirect />
-        </Route>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
-        {/* Language-prefixed public routes */}
-        <Route path="/:lang">
-          {(params) => {
-            if (isValidLanguage(params.lang)) {
-              return <PublicRoutes lang={params.lang} />;
-            }
-            return <InvalidLangRedirect segment={params.lang} rest="" />;
-          }}
-        </Route>
-        <Route path="/:lang/:rest*">
-          {(params: Record<string, string>) => {
-            if (isValidLanguage(params.lang)) {
-              return <PublicRoutes lang={params.lang} />;
-            }
-            const rest = params["rest*"] || params.rest || "";
-            return <InvalidLangRedirect segment={params.lang} rest={rest} />;
-          }}
-        </Route>
+  // Extract first path segment (language code or unrecognised slug)
+  const firstSegment = location.split("/").filter(Boolean)[0] ?? "";
+  const rest = location.split("/").filter(Boolean).slice(1).join("/");
 
-        <Route component={NotFound} />
-      </Switch>
-    </Suspense>
-    </ErrorBoundary>
-  );
+  if (isValidLanguage(firstSegment)) {
+    // Stable branch: always renders PublicRoutes at the same tree position,
+    // regardless of whether location is `/en`, `/en/about`, or `/en/countries/uk`.
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <PublicRoutes lang={firstSegment} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (firstSegment) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <InvalidLangRedirect segment={firstSegment} rest={rest} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  return <ErrorBoundary><NotFound /></ErrorBoundary>;
 }
 
 function AuthPrefetch() {
