@@ -22,18 +22,17 @@ const PasswordSchema = z
   .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
   .regex(/[0-9]/, "Password must contain at least one number");
 
-import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
+import { RateLimiterPostgres } from "rate-limiter-flexible";
+import { pool } from "@workspace/db";
 
 const router: IRouter = Router();
 
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
-const MAX_LOGIN_ATTEMPTS = 10;
-const MAX_VERIFY_ATTEMPTS = 5;
-const MAX_RESEND_ATTEMPTS = 3;
-
-async function checkRateLimit(key: string, max: number): Promise<boolean> {
-  return checkAndIncrementRateLimit(key, max, RATE_LIMIT_WINDOW);
-}
+const rateLimiter = new RateLimiterPostgres({
+  storeClient: pool,
+  tableName: "rate_limits",
+  points: 5,
+  duration: 900,
+});
 
 function setSessionCookie(res: Response, sid: string) {
   res.cookie(SESSION_COOKIE, sid, {
@@ -135,7 +134,10 @@ router.post("/auth/login", async (req: Request, res: Response) => {
 
   const normalizedEmail = email.toLowerCase().trim();
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`login:${ip}`, MAX_LOGIN_ATTEMPTS)) || !(await checkRateLimit(`login:${normalizedEmail}`, MAX_LOGIN_ATTEMPTS))) {
+  try {
+    await rateLimiter.consume(`login:${ip}`);
+    await rateLimiter.consume(`login:${normalizedEmail}`);
+  } catch {
     res.status(429).json({ error: "Too many login attempts. Please try again later." });
     return;
   }
@@ -182,7 +184,9 @@ router.post("/auth/register", async (req: Request, res: Response) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`register:${ip}`, 5))) {
+  try {
+    await rateLimiter.consume(`register:${ip}`);
+  } catch {
     res.status(429).json({ error: "Too many registration attempts. Please try again later." });
     return;
   }
@@ -276,7 +280,10 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`verify:${ip}`, MAX_VERIFY_ATTEMPTS)) || !(await checkRateLimit(`verify:${normalizedEmail}`, MAX_VERIFY_ATTEMPTS))) {
+  try {
+    await rateLimiter.consume(`verify:${ip}`);
+    await rateLimiter.consume(`verify:${normalizedEmail}`);
+  } catch {
     res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
     return;
   }
@@ -335,7 +342,10 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`resend:${ip}`, MAX_RESEND_ATTEMPTS)) || !(await checkRateLimit(`resend:${normalizedEmail}`, MAX_RESEND_ATTEMPTS))) {
+  try {
+    await rateLimiter.consume(`resend:${ip}`);
+    await rateLimiter.consume(`resend:${normalizedEmail}`);
+  } catch {
     res.status(429).json({ error: "Too many resend attempts. Please wait before requesting a new code." });
     return;
   }
@@ -385,7 +395,10 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`forgot:${ip}`, 5)) || !(await checkRateLimit(`forgot:${normalizedEmail}`, 3))) {
+  try {
+    await rateLimiter.consume(`forgot:${ip}`);
+    await rateLimiter.consume(`forgot:${normalizedEmail}`);
+  } catch {
     res.status(429).json({ error: "Too many reset requests. Please try again later." });
     return;
   }
@@ -435,7 +448,9 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
   }
 
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`set-password:${ip}`, 5))) {
+  try {
+    await rateLimiter.consume(`set-password:${ip}`);
+  } catch {
     res.status(429).json({ error: "Too many attempts. Please try again later." });
     return;
   }
@@ -472,7 +487,9 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
 
 router.get("/auth/verify-email-token/:token", async (req: Request, res: Response) => {
   const ip = req.ip || "unknown";
-  if (!(await checkRateLimit(`verify-token:${ip}`, MAX_VERIFY_ATTEMPTS))) {
+  try {
+    await rateLimiter.consume(`verify-token:${ip}`);
+  } catch {
     res.redirect("/login?verifyError=invalid");
     return;
   }
@@ -515,7 +532,10 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
 
   const ip = req.ip || "unknown";
   const rateLimitKey = req.user ? `resend-verify:${req.user.id}` : `resend-verify:${emailParam}`;
-  if (!(await checkRateLimit(`resend-verify:${ip}`, MAX_RESEND_ATTEMPTS)) || !(await checkRateLimit(rateLimitKey, MAX_RESEND_ATTEMPTS))) {
+  try {
+    await rateLimiter.consume(`resend-verify:${ip}`);
+    await rateLimiter.consume(rateLimitKey);
+  } catch {
     res.status(429).json({ error: "Too many attempts. Please wait before requesting again." });
     return;
   }
