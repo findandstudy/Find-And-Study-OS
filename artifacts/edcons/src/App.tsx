@@ -110,11 +110,7 @@ const STUDENT_ROLES = ["student"];
 const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
 function ShellLoader() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
-    </div>
-  );
+  return <div className="flex-1 min-h-0 bg-secondary/20" />;
 }
 
 const queryClient = new QueryClient({
@@ -459,6 +455,7 @@ function AuthPrefetch() {
   useEffect(() => {
     if (!result.data) return;
     Promise.allSettled([
+      import("@/pages/staff/Dashboard"),
       import("@/pages/staff/Leads"),
       import("@/pages/staff/Students"),
       import("@/pages/staff/Applications"),
@@ -470,6 +467,7 @@ function AuthPrefetch() {
       import("@/pages/staff/Documents"),
       import("@/pages/staff/CourseFinder"),
       import("@/pages/staff/Agents"),
+      import("@/pages/staff/AgentDetail"),
       import("@/pages/staff/Messages"),
       import("@/pages/staff/Tasks"),
       import("@/pages/admin/Dashboard"),
@@ -477,6 +475,8 @@ function AuthPrefetch() {
       import("@/pages/admin/Catalog"),
       import("@/pages/admin/Campaigns"),
       import("@/pages/admin/AuditLog"),
+      import("@/pages/admin/Activity"),
+      import("@/pages/admin/Embeds"),
     ]);
   }, [!!result.data]);
 

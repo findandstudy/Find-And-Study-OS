@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -60,19 +60,21 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      if (returnTo) {
-        setLocation(returnTo);
-      } else if (["super_admin", "admin", "manager"].includes(user.role)) {
-        setLocation("/admin");
-      } else if (["staff", "consultant", "accountant", "editor"].includes(user.role)) {
-        setLocation("/staff");
-      } else if (user.role === "student") {
-        setLocation("/student");
-      } else if (["agent", "sub_agent", "agent_staff"].includes(user.role)) {
-        setLocation("/agent");
-      } else {
-        setLocation("/staff");
-      }
+      startTransition(() => {
+        if (returnTo) {
+          setLocation(returnTo);
+        } else if (["super_admin", "admin", "manager"].includes(user.role)) {
+          setLocation("/admin");
+        } else if (["staff", "consultant", "accountant", "editor"].includes(user.role)) {
+          setLocation("/staff");
+        } else if (user.role === "student") {
+          setLocation("/student");
+        } else if (["agent", "sub_agent", "agent_staff"].includes(user.role)) {
+          setLocation("/agent");
+        } else {
+          setLocation("/staff");
+        }
+      });
     }
   }, [user, isLoading, setLocation, returnTo]);
 
