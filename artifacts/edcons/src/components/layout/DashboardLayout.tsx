@@ -6,6 +6,7 @@ import { useSeo } from "@/hooks/use-seo";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { clearAuthCache } from "@/lib/auth-cache";
 import { customFetch } from "@workspace/api-client-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
@@ -524,11 +525,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     {t("dashboard.profileSettings")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
-                    <a href="/api/auth/logout">
-                      <LogOut className="w-4 h-4 mr-2" />
-                      {t("dashboard.signOut")}
-                    </a>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive cursor-pointer"
+                    onSelect={() => {
+                      clearAuthCache();
+                      queryClient.clear();
+                      window.location.href = "/api/auth/logout";
+                    }}
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    {t("dashboard.signOut")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
