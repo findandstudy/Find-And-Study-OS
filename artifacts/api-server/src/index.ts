@@ -378,25 +378,44 @@ async function seedDocumentRequirements() {
 }
 
 (async () => {
+  // Step 1: Create system_flags table — runs on all processes, idempotent.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_flags (
+      key TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Step 2: Create rate-limits table — runs on all processes, idempotent.
   const { ensureRateLimitsTable } = await import("./lib/pgRateLimiter");
   await ensureRateLimitsTable();
-  await ensureSuperAdmin();
-  await ensureAgentUser();
-  await runSeedSQL();
-  await linkAgentUser();
-  await seedClaudeIntegration();
-  await seedDocumentRequirements();
-  await backfillConversationChannel();
-  await backfillMissingCommissions();
-  await backfillStudentAppStatus();
+
+  // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
+    // DB-based lock: only one process wins the INSERT; others skip seeds.
+    const lockResult = await pool.query(
+      `INSERT INTO system_flags (key) VALUES ('bootstrap_done') ON CONFLICT DO NOTHING RETURNING key`
+    );
+    if (lockResult.rows.length > 0) {
+      await ensureSuperAdmin();
+      await ensureAgentUser();
+      await runSeedSQL();
+      await linkAgentUser();
+      await seedClaudeIntegration();
+      await seedDocumentRequirements();
+      await backfillConversationChannel();
+      await backfillMissingCommissions();
+      await backfillStudentAppStatus();
+    }
+
     console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
     const { startEmailWorker } = await import("./lib/email");
     startEmailWorker();
     const { startContractChecker } = await import("./lib/contractChecker");
     startContractChecker();
   }
+
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
