@@ -27,7 +27,7 @@ import { useState, useCallback, useEffect } from "react";
 // patching. Setting it here (before Wouter's module evaluates) stops the patch.
 if (typeof window !== "undefined") {
   const WOUTER_PATCH_KEY = Symbol.for("wouter_v3");
-  if (typeof (window as Record<symbol, unknown>)[WOUTER_PATCH_KEY] === "undefined") {
+  if (typeof (window as unknown as Record<symbol, unknown>)[WOUTER_PATCH_KEY] === "undefined") {
     Object.defineProperty(window, WOUTER_PATCH_KEY, {
       value: true,
       configurable: false,

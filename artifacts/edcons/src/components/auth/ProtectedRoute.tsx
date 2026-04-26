@@ -5,6 +5,12 @@ import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
 import { ShieldX, Clock } from "lucide-react";
 
+function AuthLoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background" />
+  );
+}
+
 interface Props {
   children: React.ReactNode;
   allowedRoles?: string[];
@@ -53,37 +59,43 @@ function AccessDeniedScreen() {
 }
 
 export function ProtectedRoute({ children, allowedRoles, requiredPermission }: Props) {
-  const { user: liveUser, isLoading } = useAuth(true, allowedRoles);
+  // useAuth already applies the sticky-user fallback internally, so `user`
+  // here is liveUser ?? getStickyUser(). It is non-null whenever the user
+  // has ever authenticated in this page session.
+  const { user, isLoading } = useAuth(true, allowedRoles);
 
   useEffect(() => {
     console.log("[ProtectedRoute] MOUNTED roles=" + (allowedRoles?.join(",") ?? "any"));
     return () => console.log("[ProtectedRoute] UNMOUNTED roles=" + (allowedRoles?.join(",") ?? "any"));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Three-tier sticky: liveUser → prevUserRef → getStickyUser()
-  const prevUserRef = useRef(liveUser ?? (getStickyUser() as typeof liveUser));
-  if (liveUser) prevUserRef.current = liveUser;
-  const user = prevUserRef.current ?? (getStickyUser() as typeof liveUser);
+  // prevUserRef gives an additional safety net: if somehow `user` from
+  // useAuth flickers to undefined across renders, we keep the last value.
+  const prevUserRef = useRef(user);
+  if (user) prevUserRef.current = user;
+  const effectiveUser = prevUserRef.current ?? user;
 
-  if (!user && isLoading) {
-    console.warn("[ProtectedRoute] returning null — user=", user, "isLoading=", isLoading, "sticky=", getStickyUser());
-    return null;
+  if (!effectiveUser && isLoading) {
+    // Auth check in-flight (cold start / hard reload) — show blank bg instead
+    // of null so the layout doesn't flash white while we wait.
+    return <AuthLoadingScreen />;
   }
-  if (!user) {
-    console.warn("[ProtectedRoute] returning null (no user, not loading, sticky=", getStickyUser(), ")");
-    return null;
+  if (!effectiveUser) {
+    // Genuinely unauthenticated. useAuth's effect will redirect to /login;
+    // render nothing in the meantime so there's no content flash.
+    return <AuthLoadingScreen />;
   }
 
-  if (user.role === "pending") {
+  if (effectiveUser.role === "pending") {
     return <PendingScreen />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !allowedRoles.includes(effectiveUser.role)) {
     return <AccessDeniedScreen />;
   }
 
-  if (requiredPermission && user.role === "agent_staff") {
-    const perms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
+  if (requiredPermission && effectiveUser.role === "agent_staff") {
+    const perms = (effectiveUser as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
     if (!perms || !perms.includes(requiredPermission)) {
       return <AccessDeniedScreen />;
     }

@@ -432,7 +432,12 @@ function AuthPrefetch() {
       retry: false,
       staleTime: 30_000,
       ...(initialUser !== undefined
-        ? { initialData: initialUser as any, initialDataUpdatedAt: 0 }
+        ? {
+            initialData: initialUser as any,
+            // Mark initial data as fresh so TanStack Query doesn't
+            // immediately schedule a background refetch on mount.
+            initialDataUpdatedAt: Date.now(),
+          }
         : {}),
     } as any,
   });
@@ -441,7 +446,13 @@ function AuthPrefetch() {
       setAuthCache(result.data);
       setStickyUser(result.data);
     } else if (result.error) {
-      clearAuthCache();
+      // Only clear the auth cache (and sticky user) on confirmed auth errors.
+      // Do NOT clear on transient network errors — that would wipe the
+      // sticky user and cause white flashes on the next navigation.
+      const status = (result.error as any)?.status as number | undefined;
+      if (status === 401 || status === 403) {
+        clearAuthCache();
+      }
     }
   }, [result.data, result.error]);
 

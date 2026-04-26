@@ -1,7 +1,6 @@
 import { ReactNode, useEffect, useRef, useTransition } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { getStickyUser } from "@/lib/auth-cache";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -243,11 +242,12 @@ const ROLE_COLORS: Record<string, string> = {
 let _devMountCount = 0;
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
+  // useAuth returns liveUser ?? getStickyUser() — never undefined after first
+  // authentication. prevUserRef adds one more layer of defense.
   const { user: liveUser, isLoading } = useAuth(true);
-  // Three-tier sticky: liveUser → prevUserRef (survives re-renders) → getStickyUser() (survives remounts)
-  const prevUserRef = useRef(liveUser ?? (getStickyUser() as typeof liveUser));
+  const prevUserRef = useRef(liveUser);
   if (liveUser) prevUserRef.current = liveUser;
-  const user = prevUserRef.current ?? (getStickyUser() as typeof liveUser);
+  const user = prevUserRef.current ?? liveUser;
 
   // DEV-only: track mount count to detect unexpected remounts
   const mountSessionRef = useRef(import.meta.env.DEV ? ++_devMountCount : 0);
@@ -341,12 +341,12 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   if (!user && isLoading) {
-    console.warn("[DashboardLayout] returning null — no user yet, isLoading=true");
-    return null;
+    // Still resolving auth — show a blank bg so there's no white flash
+    return <div className="min-h-screen bg-secondary/20" />;
   }
   if (!user) {
-    console.warn("[DashboardLayout] returning null — no user and not loading");
-    return null;
+    // useAuth's effect will redirect to /login; show nothing in the meantime
+    return <div className="min-h-screen bg-secondary/20" />;
   }
 
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
