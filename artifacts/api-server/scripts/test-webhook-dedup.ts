@@ -56,10 +56,63 @@ function assert(cond: boolean, msg: string, details: string[]): boolean {
 }
 
 /**
+ * Seed an active staff user that matches the active `inbox.new_message` rule
+ * so the "dispatched at least once" assertion is always exercised, regardless
+ * of how sparse the local CI/dev DB is. The seeded user is tagged with the
+ * RUN_ID so it can be removed in cleanup and never collides with reruns.
+ *
+ * The seeded role is chosen from the rule's recipient roles when available
+ * (defaulting to "staff", which is in the default rule set) to make the test
+ * self-correcting if the recipient roles drift over time.
+ */
+async function seedRecipient(): Promise<{ userId: number; email: string; role: string }> {
+  const [rule] = await db
+    .select()
+    .from(notificationRulesTable)
+    .where(
+      and(
+        eq(notificationRulesTable.event, "inbox.new_message"),
+        eq(notificationRulesTable.isActive, true),
+      ),
+    );
+  const roles = (rule?.recipientRoles as string[] | null) || [];
+  const recipientType = rule?.recipientType ?? "role";
+  // For recipientType="all" any active user qualifies; otherwise pick a role
+  // that the rule actually targets. Fall back to "staff" which is in the
+  // default rule set (DEFAULT_NOTIFICATION_RULES in lib/db/src/schema/notifications.ts).
+  const role = recipientType === "all" ? "staff" : roles[0] ?? "staff";
+
+  const email = `dedup-recipient-${RUN_ID}@test.local`;
+  const [created] = await db
+    .insert(usersTable)
+    .values({
+      email,
+      firstName: "Dedup",
+      lastName: `Recipient ${RUN_ID}`,
+      role,
+      isActive: true,
+      emailVerified: true,
+    })
+    .returning({ id: usersTable.id });
+  return { userId: created.id, email, role };
+}
+
+async function cleanupRecipient(userId: number): Promise<void> {
+  // notifications.user_id has ON DELETE CASCADE so deleting the user wipes
+  // their notification rows in the same transaction.
+  try {
+    await db.delete(usersTable).where(eq(usersTable.id, userId));
+  } catch (err) {
+    console.warn(`[cleanup recipient ${userId}] non-fatal:`, err);
+  }
+}
+
+/**
  * Mirror of notificationDispatcher.ts recipient resolution for the
- * `inbox.new_message` rule, used as an environment-aware sanity check so the
- * "dispatched at least once" assertion is only enforced when the local DB
- * actually has eligible recipients (sparse CI/dev DBs may have none).
+ * `inbox.new_message` rule. After `seedRecipient()` runs, this is expected
+ * to return at least 1 — used as a precondition sanity check at startup so
+ * a drift in the rule definition (e.g. role list changes) surfaces as an
+ * explicit, actionable failure rather than a silent zero count.
  */
 async function getEligibleRecipientCount(): Promise<number> {
   const [rule] = await db
@@ -133,6 +186,7 @@ async function runScenario(opts: {
   contactPhone?: string | null;
   contactEmail?: string | null;
   externalThreadId: string;
+  seededRecipientUserId: number;
 }): Promise<ScenarioResult> {
   const details: string[] = [];
 
@@ -267,28 +321,29 @@ async function runScenario(opts: {
     )
     .groupBy(notificationsTable.userId);
 
-  // Best-effort presence check: only enforce "dispatched at least once" when
-  // we can independently confirm the environment has eligible recipients. If
-  // recipient discovery fails or returns zero, we skip this assertion rather
-  // than fail (sparse CI/dev environments may have no active staff users).
-  let expectedRecipients: number | null = null;
-  try {
-    const eligible = await getEligibleRecipientCount();
-    expectedRecipients = eligible;
-  } catch {
-    expectedRecipients = null;
-  }
-  if (expectedRecipients !== null && expectedRecipients > 0) {
-    ok = assert(
-      notifs.length > 0,
-      `inbox.new_message dispatched at least once for this conversation (recipients=${notifs.length}, eligible=${expectedRecipients})`,
-      details,
-    ) && ok;
-  } else {
-    details.push(
-      `SKIP  recipient presence check (eligible=${expectedRecipients ?? "unknown"}; dedupe correctness still validated)`,
-    );
-  }
+  // Hard assertion: the run-scoped seeded recipient guarantees the rule
+  // resolves to at least one user, so a dispatch fanout MUST have produced
+  // at least one notification row. A regression that breaks notification
+  // fanout (e.g. the dispatcher no longer fires on processInboundMessage)
+  // will fail this assertion in any environment, sparse or not.
+  ok = assert(
+    notifs.length > 0,
+    `inbox.new_message dispatched at least once for this conversation (recipients=${notifs.length})`,
+    details,
+  ) && ok;
+
+  // Stronger check: the seeded recipient specifically must appear in the
+  // dispatch fanout. This proves the dispatcher targets the active rule's
+  // role set correctly — if the role-resolution logic ever silently drops
+  // matching users, this catches it even when other recipients still exist.
+  const seededReceived = notifs.some(
+    (r) => Number(r.userId) === opts.seededRecipientUserId,
+  );
+  ok = assert(
+    seededReceived,
+    `seeded eligible recipient (userId=${opts.seededRecipientUserId}) received the inbox.new_message notification`,
+    details,
+  ) && ok;
 
   const dupedUsers = notifs.filter((r) => Number(r.cnt) > 1);
   ok = assert(
@@ -391,6 +446,23 @@ interface ScenarioSpec {
 async function main(): Promise<void> {
   console.log(`[webhook-dedup] starting run ${RUN_ID}`);
 
+  // Seed a guaranteed-eligible staff user BEFORE any scenario runs so the
+  // notification dispatch fanout always has at least one target. Stored in
+  // a top-level binding so the finally block can tear it down even if a
+  // scenario throws.
+  let seededRecipient: { userId: number; email: string; role: string } | null = null;
+  try {
+    seededRecipient = await seedRecipient();
+    console.log(
+      `[webhook-dedup] seeded recipient userId=${seededRecipient.userId} role=${seededRecipient.role}`,
+    );
+  } catch (err) {
+    // No outer finally to run yet — seedRecipient() failed before any rows
+    // were inserted, so there's nothing to clean up.
+    console.error("[webhook-dedup] failed to seed recipient:", err);
+    process.exit(1);
+  }
+
   const waPhone = `+15555${RUN_ID.slice(0, 6).replace(/[^0-9]/g, "0").padEnd(6, "0")}`;
   const wfEmail = `dedup_${RUN_ID}@example.test`;
 
@@ -418,68 +490,88 @@ async function main(): Promise<void> {
   ];
 
   const results: ScenarioResult[] = [];
-  for (const s of scenarios) {
-    let result: ScenarioResult;
-    let channelAccountId = 0;
-    let channelAccountWasCreated = false;
-    try {
-      // Track whether we created the channel_accounts row so cleanup only
-      // removes rows we own.
-      const before = await db
-        .select({ id: channelAccountsTable.id })
-        .from(channelAccountsTable)
-        .where(
-          and(
-            eq(channelAccountsTable.channel, s.channel),
-            eq(channelAccountsTable.externalAccountId, s.externalAccountId),
-          ),
-        );
-      channelAccountWasCreated = before.length === 0;
-      channelAccountId = await ensureChannelAccount(
-        s.channel,
-        s.channelAccountDisplayName,
-        s.externalAccountId,
+  let allOk = true;
+  try {
+    // Precondition: the freshly-seeded user must satisfy the active rule's
+    // recipient query. If not, the rule definition has drifted (e.g. role
+    // list changed) and the test would silently miss recipients — fail loud.
+    // Throw (don't process.exit) so the outer finally still tears the
+    // seeded recipient down.
+    const eligible = await getEligibleRecipientCount();
+    if (eligible < 1) {
+      throw new Error(
+        `precondition failed: 0 eligible recipients after seeding (rule recipient roles may have drifted)`,
       );
+    }
 
-      result = await runScenario({
-        channel: s.channel,
-        channelAccountId,
-        externalMessageId: s.externalMessageId,
-        externalContactId: s.externalContactId,
-        externalThreadId: s.externalThreadId,
-        text: s.text,
-        contactPhone: s.contactPhone ?? null,
-        contactEmail: s.contactEmail ?? null,
-      });
-    } catch (err) {
-      result = {
-        channel: s.channel,
-        ok: false,
-        details: [`FAIL  scenario threw: ${err instanceof Error ? err.message : String(err)}`],
-      };
-    } finally {
-      if (channelAccountId > 0) {
-        await cleanup({
+    for (const s of scenarios) {
+      let result: ScenarioResult;
+      let channelAccountId = 0;
+      let channelAccountWasCreated = false;
+      try {
+        // Track whether we created the channel_accounts row so cleanup only
+        // removes rows we own.
+        const before = await db
+          .select({ id: channelAccountsTable.id })
+          .from(channelAccountsTable)
+          .where(
+            and(
+              eq(channelAccountsTable.channel, s.channel),
+              eq(channelAccountsTable.externalAccountId, s.externalAccountId),
+            ),
+          );
+        channelAccountWasCreated = before.length === 0;
+        channelAccountId = await ensureChannelAccount(
+          s.channel,
+          s.channelAccountDisplayName,
+          s.externalAccountId,
+        );
+
+        result = await runScenario({
           channel: s.channel,
           channelAccountId,
           externalMessageId: s.externalMessageId,
           externalContactId: s.externalContactId,
           externalThreadId: s.externalThreadId,
-          channelAccountWasCreated,
+          text: s.text,
+          contactPhone: s.contactPhone ?? null,
+          contactEmail: s.contactEmail ?? null,
+          seededRecipientUserId: seededRecipient!.userId,
         });
+      } catch (err) {
+        result = {
+          channel: s.channel,
+          ok: false,
+          details: [`FAIL  scenario threw: ${err instanceof Error ? err.message : String(err)}`],
+        };
+      } finally {
+        if (channelAccountId > 0) {
+          await cleanup({
+            channel: s.channel,
+            channelAccountId,
+            externalMessageId: s.externalMessageId,
+            externalContactId: s.externalContactId,
+            externalThreadId: s.externalThreadId,
+            channelAccountWasCreated,
+          });
+        }
       }
+      results.push(result);
     }
-    results.push(result);
+
+    for (const r of results) {
+      console.log(`\n=== ${r.channel} ${r.ok ? "PASS" : "FAIL"} ===`);
+      for (const d of r.details) console.log("  " + d);
+      if (!r.ok) allOk = false;
+    }
+
+    console.log(`\n[webhook-dedup] ${allOk ? "PASS" : "FAIL"} (run ${RUN_ID})`);
+  } finally {
+    // Always tear down the seeded recipient — even when scenarios threw —
+    // so reruns stay idempotent and a failed run doesn't leak users.
+    await cleanupRecipient(seededRecipient!.userId);
   }
 
-  let allOk = true;
-  for (const r of results) {
-    console.log(`\n=== ${r.channel} ${r.ok ? "PASS" : "FAIL"} ===`);
-    for (const d of r.details) console.log("  " + d);
-    if (!r.ok) allOk = false;
-  }
-
-  console.log(`\n[webhook-dedup] ${allOk ? "PASS" : "FAIL"} (run ${RUN_ID})`);
   // Don't await pool.end() — the inboxBus LISTEN client holds an open
   // connection for the lifetime of the process, so pool.end() would hang.
   // process.exit() tears everything down cleanly for a one-shot script.
