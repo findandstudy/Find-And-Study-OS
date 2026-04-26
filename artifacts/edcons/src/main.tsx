@@ -1,9 +1,14 @@
-import "./lib/navigation";
+import { activateInMemoryRouting } from "./lib/navigation";
 import "./lib/csrfSetup";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./assets/fonts/inter.css";
 import "./index.css";
+
+// Activate in-memory routing immediately — before React mounts — so the
+// Replit canvas proxy never sees a URL change for any navigation (public or
+// admin). The browser URL stays frozen at the initial canvas path forever.
+activateInMemoryRouting(window.location.pathname);
 
 if (import.meta.env.DEV) {
   // Increment a sessionStorage counter on every real page load.

@@ -1,6 +1,5 @@
 import { ReactNode, useEffect, useRef, useTransition } from "react";
 import { useLocation } from "wouter";
-import { activateInMemoryRouting, deactivateInMemoryRouting } from "@/lib/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -257,14 +256,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     console.log("[DashboardLayout] MOUNTED session #" + mountSessionRef.current);
-    // Activate in-memory routing: freeze the browser URL so the Replit canvas
-    // proxy cannot detect pathname changes and reload the iframe on every click.
-    // The browser URL stays at the portal entry point (e.g. /admin) while React
-    // state handles all sub-navigation internally.
-    activateInMemoryRouting(window.location.pathname);
     return () => {
       console.log("[DashboardLayout] UNMOUNTED session #" + mountSessionRef.current);
-      deactivateInMemoryRouting();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

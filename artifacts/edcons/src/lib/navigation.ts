@@ -80,25 +80,29 @@ if (typeof history !== "undefined" && _originalPush && _originalReplace) {
   };
 }
 
-// ─── 3. In-memory routing (portal shell) ─────────────────────────────────────
+// ─── 3. In-memory routing (global) ───────────────────────────────────────────
 /**
  * When non-null, this is the current route path used by the app instead of
  * window.location.pathname. The browser URL is NOT changed during navigation.
+ *
+ * Activated once at startup (main.tsx) with window.location.pathname.
+ * This covers ALL pages — public and admin — so the proxy never sees a URL
+ * change and never reloads the iframe for any navigation.
  */
 let _inMemoryPath: string | null = null;
 
 /**
- * Call from DashboardLayout on mount.
- * Freezes the browser URL at its current value; all subsequent navigate() calls
- * will update _inMemoryPath (and React state) without touching history.
+ * Activate in-memory routing. Safe to call multiple times — if already active
+ * the existing path is preserved (not overwritten).
  */
 export function activateInMemoryRouting(initialPath: string) {
-  _inMemoryPath = initialPath;
+  if (_inMemoryPath === null) {
+    _inMemoryPath = initialPath;
+  }
 }
 
 /**
- * Call from DashboardLayout on unmount.
- * Restores normal history-based navigation for public pages.
+ * Deactivate in-memory routing (rarely needed).
  */
 export function deactivateInMemoryRouting() {
   _inMemoryPath = null;
