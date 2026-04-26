@@ -1,4 +1,3 @@
-import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -32,7 +31,7 @@ export default function Home() {
   ]);
 
   return (
-    <PublicLayout>
+    <>
       <section className="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img 
@@ -120,6 +119,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-    </PublicLayout>
+    </>
   );
 }

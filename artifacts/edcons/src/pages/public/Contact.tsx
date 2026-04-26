@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -173,7 +172,7 @@ export default function Contact() {
   };
 
   return (
-    <PublicLayout>
+    <>
       <section className="pt-24 pb-16 bg-gradient-to-br from-primary/5 to-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -346,6 +345,6 @@ export default function Contact() {
           </motion.div>
         </div>
       </section>
-    </PublicLayout>
+    </>
   );
 }

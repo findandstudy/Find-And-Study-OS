@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, Home, BookOpen, Globe2, Phone, ArrowRight } from "lucide-react";
+import { BookOpen, Globe2, Home, Phone, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 const NAV_LINKS = [
@@ -43,66 +43,51 @@ export default function NotFound() {
   return (
     <div
       dir={isRTL ? "rtl" : "ltr"}
-      className="min-h-screen w-full flex flex-col bg-gradient-to-b from-background to-muted/30"
+      className="flex flex-col items-center justify-center px-4 py-24 text-center"
     >
-      <header className="w-full px-6 py-5 flex items-center border-b border-border/50 bg-background/80 backdrop-blur">
-        <Link href={localePath("/")}>
-          <span className="flex items-center gap-2 cursor-pointer">
-            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-md">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-display font-bold text-lg text-foreground tracking-tight">
-              Find &amp; Study
-            </span>
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="w-full max-w-lg"
+      >
+        <div className="mb-6 select-none">
+          <span className="text-[7rem] md:text-[9rem] font-display font-extrabold leading-none bg-gradient-to-br from-primary via-primary/70 to-primary/30 bg-clip-text text-transparent">
+            404
           </span>
-        </Link>
-      </header>
+        </div>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-16 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="w-full max-w-lg"
-        >
-          <div className="mb-6 select-none">
-            <span className="text-[7rem] md:text-[9rem] font-display font-extrabold leading-none bg-gradient-to-br from-primary via-primary/70 to-primary/30 bg-clip-text text-transparent">
-              404
-            </span>
-          </div>
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3">
+          {t("notFound.title")}
+        </h1>
+        <p className="text-muted-foreground mb-10 max-w-sm mx-auto leading-relaxed">
+          {t("notFound.description")}
+        </p>
 
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3">
-            {t("notFound.title")}
-          </h1>
-          <p className="text-muted-foreground mb-10 max-w-sm mx-auto leading-relaxed">
-            {t("notFound.description")}
-          </p>
-
-          <div className="grid grid-cols-2 gap-3 mb-8">
-            {NAV_LINKS.map(({ icon: Icon, labelKey, path, color, bg }) => (
-              <Link key={path} href={localePath(path)}>
-                <div
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer transition-all duration-200 ${bg} border border-transparent hover:border-border/50 group`}
-                >
-                  <div className={`shrink-0 ${color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <span className="font-medium text-sm text-foreground">
-                    {t(labelKey)}
-                  </span>
-                  <ArrowRight
-                    className={`w-3.5 h-3.5 ms-auto opacity-0 group-hover:opacity-100 transition-opacity ${color}`}
-                  />
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {NAV_LINKS.map(({ icon: Icon, labelKey, path, color, bg }) => (
+            <Link key={path} href={localePath(path)}>
+              <div
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer transition-all duration-200 ${bg} border border-transparent hover:border-border/50 group`}
+              >
+                <div className={`shrink-0 ${color}`}>
+                  <Icon className="w-5 h-5" />
                 </div>
-              </Link>
-            ))}
-          </div>
+                <span className="font-medium text-sm text-foreground">
+                  {t(labelKey)}
+                </span>
+                <ArrowRight
+                  className={`w-3.5 h-3.5 ms-auto opacity-0 group-hover:opacity-100 transition-opacity ${color}`}
+                />
+              </div>
+            </Link>
+          ))}
+        </div>
 
-          <Button size="lg" className="rounded-full px-8 h-12 shadow-lg shadow-primary/20" asChild>
-            <Link href={localePath("/")}>{t("notFound.goHome")}</Link>
-          </Button>
-        </motion.div>
-      </main>
+        <Button size="lg" className="rounded-full px-8 h-12 shadow-lg shadow-primary/20" asChild>
+          <Link href={localePath("/")}>{t("notFound.goHome")}</Link>
+        </Button>
+      </motion.div>
     </div>
   );
 }

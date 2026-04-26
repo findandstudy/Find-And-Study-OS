@@ -44,6 +44,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 - **Data Handling:** Consistent data structures with paginated API responses and extensive use of soft deletes for various entities.
 - **Type Safety:** Extensive use of TypeScript across the monorepo.
 - **Production Deployment:** Configured for Hostinger VPS with Nginx, PM2, and a build/deploy pipeline.
+- **Zero-Flash Routing:** Global in-memory routing (`activateInMemoryRouting` in `main.tsx`) blocks `history.pushState` so the Replit canvas proxy never detects URL changes. `PublicLayout` is lifted to `PublicRoutes` in `App.tsx` (same pattern as `DashboardLayout` for portals) so the nav/footer are never unmounted on public page transitions. Login renders without `PublicLayout` (location check in `PublicRoutes`).
 
 ## External Dependencies
 

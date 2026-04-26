@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useCustomBrowserLocation } from "@/lib/navigation";
 import { getAuthCache, setAuthCache, clearAuthCache, getStickyUser, setStickyUser } from "@/lib/auth-cache";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PublicLayout } from "@/components/layout/PublicLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -163,22 +164,29 @@ function LanguageSync({ lang }: { lang: string }) {
 }
 
 function PublicRoutes({ lang }: { lang: string }) {
+  const [location] = useLocation();
+  const isLoginPage = location === `/${lang}/login`;
   return (
     <>
       <LanguageSync lang={lang} />
-      <Switch>
-        <Route path={`/${lang}`} component={Home} />
-        <Route path={`/${lang}/about`} component={About} />
-        <Route path={`/${lang}/countries`} component={Countries} />
-        <Route path={`/${lang}/countries/:slug`}>
-          {(params) => <CountryDetail slug={params.slug} />}
-        </Route>
-        <Route path={`/${lang}/programs`} component={Programs} />
-        <Route path={`/${lang}/blog`} component={Blog} />
-        <Route path={`/${lang}/contact`} component={Contact} />
-        <Route path={`/${lang}/login`} component={Login} />
-        <Route component={NotFound} />
-      </Switch>
+      {isLoginPage ? (
+        <Login />
+      ) : (
+        <PublicLayout>
+          <Switch>
+            <Route path={`/${lang}`} component={Home} />
+            <Route path={`/${lang}/about`} component={About} />
+            <Route path={`/${lang}/countries`} component={Countries} />
+            <Route path={`/${lang}/countries/:slug`}>
+              {(params) => <CountryDetail slug={params.slug} />}
+            </Route>
+            <Route path={`/${lang}/programs`} component={Programs} />
+            <Route path={`/${lang}/blog`} component={Blog} />
+            <Route path={`/${lang}/contact`} component={Contact} />
+            <Route component={NotFound} />
+          </Switch>
+        </PublicLayout>
+      )}
     </>
   );
 }

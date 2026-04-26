@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
@@ -138,28 +137,24 @@ export default function CountryDetail({ slug }: { slug: string }) {
 
   if (isLoading) {
     return (
-      <PublicLayout>
-        <div className="pt-24 pb-16 max-w-7xl mx-auto px-4">
-          <div className="h-64 rounded-3xl bg-secondary animate-pulse mb-8" />
-          <div className="h-8 w-64 bg-secondary animate-pulse rounded mb-4" />
-          <div className="h-4 w-full max-w-xl bg-secondary animate-pulse rounded" />
-        </div>
-      </PublicLayout>
+      <div className="pt-24 pb-16 max-w-7xl mx-auto px-4">
+        <div className="h-64 rounded-3xl bg-secondary animate-pulse mb-8" />
+        <div className="h-8 w-64 bg-secondary animate-pulse rounded mb-4" />
+        <div className="h-4 w-full max-w-xl bg-secondary animate-pulse rounded" />
+      </div>
     );
   }
 
   if (error || !data) {
     return (
-      <PublicLayout>
-        <div className="pt-24 pb-16 text-center max-w-7xl mx-auto px-4">
-          <Globe2 className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-foreground mb-2">{t("countryDetail.notFound")}</h2>
-          <p className="text-muted-foreground mb-6">{t("countryDetail.notFoundDesc")}</p>
-          <Button asChild variant="outline" className="rounded-full">
-            <Link href={localePath("/countries")}><ArrowLeft className="w-4 h-4 mr-2" /> {t("countryDetail.backToDestinations")}</Link>
-          </Button>
-        </div>
-      </PublicLayout>
+      <div className="pt-24 pb-16 text-center max-w-7xl mx-auto px-4">
+        <Globe2 className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-foreground mb-2">{t("countryDetail.notFound")}</h2>
+        <p className="text-muted-foreground mb-6">{t("countryDetail.notFoundDesc")}</p>
+        <Button asChild variant="outline" className="rounded-full">
+          <Link href={localePath("/countries")}><ArrowLeft className="w-4 h-4 mr-2" /> {t("countryDetail.backToDestinations")}</Link>
+        </Button>
+      </div>
     );
   }
 
@@ -170,7 +165,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const uniMap = new Map(universities.map(u => [u.id, u]));
 
   return (
-    <PublicLayout>
+    <>
       <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link href={localePath("/countries")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
@@ -330,6 +325,6 @@ export default function CountryDetail({ slug }: { slug: string }) {
           </div>
         </div>
       </section>
-    </PublicLayout>
+    </>
   );
 }

@@ -1,4 +1,3 @@
-import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -48,7 +47,7 @@ export default function About() {
   ];
 
   return (
-    <PublicLayout>
+    <>
       <section className="relative pt-24 pb-20 overflow-hidden bg-gradient-to-br from-primary/5 via-background to-accent/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
@@ -141,6 +140,6 @@ export default function About() {
           </div>
         </div>
       </section>
-    </PublicLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
@@ -85,7 +84,7 @@ export default function Blog() {
   ]);
 
   return (
-    <PublicLayout>
+    <>
       <section className="pt-24 pb-16 bg-gradient-to-br from-accent/5 via-background to-primary/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -184,6 +183,6 @@ export default function Blog() {
           )}
         </div>
       </section>
-    </PublicLayout>
+    </>
   );
 }
