@@ -409,37 +409,32 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                         return (
                           <SidebarMenuItem key={item.title}>
                             <SidebarMenuButton
-                              asChild
                               data-active={isActive}
                               className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm"
+                              onClick={() => navigate(item.url)}
                             >
-                              <a
-                                href={item.url}
-                                onClick={(e) => { e.preventDefault(); navigate(item.url); }}
-                              >
-                                <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
-                                <span className="flex-1">{item.title}</span>
-                                {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
-                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                    {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
-                                  </span>
-                                )}
-                                {item.url.endsWith("/leads") && (sectionCounts?.leads || 0) > 0 && (
-                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                    {(sectionCounts?.leads || 0) > 99 ? "99+" : sectionCounts?.leads}
-                                  </span>
-                                )}
-                                {item.url.endsWith("/students") && (sectionCounts?.students || 0) > 0 && (
-                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                    {(sectionCounts?.students || 0) > 99 ? "99+" : sectionCounts?.students}
-                                  </span>
-                                )}
-                                {item.url.endsWith("/applications") && (sectionCounts?.applications || 0) > 0 && (
-                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                    {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
-                                  </span>
-                                )}
-                              </a>
+                              <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
+                              <span className="flex-1">{item.title}</span>
+                              {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
+                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                  {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
+                                </span>
+                              )}
+                              {item.url.endsWith("/leads") && (sectionCounts?.leads || 0) > 0 && (
+                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                  {(sectionCounts?.leads || 0) > 99 ? "99+" : sectionCounts?.leads}
+                                </span>
+                              )}
+                              {item.url.endsWith("/students") && (sectionCounts?.students || 0) > 0 && (
+                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                  {(sectionCounts?.students || 0) > 99 ? "99+" : sectionCounts?.students}
+                                </span>
+                              )}
+                              {item.url.endsWith("/applications") && (sectionCounts?.applications || 0) > 0 && (
+                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
+                                  {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
+                                </span>
+                              )}
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         );
@@ -470,18 +465,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" className="w-56 mb-1">
-                  <DropdownMenuItem asChild>
-                    <a
-                      href={['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings'}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const url = ['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings';
-                        navigate(url);
-                      }}
-                    >
-                      <User className="w-4 h-4 mr-2" />
-                      {t("dashboard.profileSettings")}
-                    </a>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const url = ['super_admin','admin','manager'].includes(user.role) ? '/admin/settings' : ['agent','sub_agent'].includes(user.role) ? '/agent/account' : user.role === 'student' ? '/student/account' : '/staff/settings';
+                      navigate(url);
+                    }}
+                  >
+                    <User className="w-4 h-4 mr-2" />
+                    {t("dashboard.profileSettings")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
@@ -498,11 +489,18 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Main Content */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          {navPending && (
-            <div className="fixed top-0 left-0 right-0 z-[100000] h-[2px] bg-primary/20 overflow-hidden" style={{pointerEvents:'none'}}>
-              <div className="h-full bg-primary w-full animate-pulse" />
-            </div>
-          )}
+          <div
+            className="fixed top-0 left-0 right-0 z-[100000] h-[2px] pointer-events-none"
+            style={{ opacity: navPending ? 1 : 0, transition: 'opacity 0.15s ease' }}
+          >
+            <div
+              className="h-full bg-primary"
+              style={{
+                width: navPending ? '85%' : '0%',
+                transition: navPending ? 'width 1.2s cubic-bezier(0.1,0.8,0.2,1)' : 'none',
+              }}
+            />
+          </div>
           <header className="h-14 flex items-center justify-between px-5 bg-card/80 backdrop-blur-sm border-b border-border/50 sticky top-0 z-30">
             <div className="flex items-center gap-3">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
