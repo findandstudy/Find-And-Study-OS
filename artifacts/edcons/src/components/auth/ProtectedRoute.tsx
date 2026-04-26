@@ -1,4 +1,5 @@
 import { useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { getStickyUser } from "@/lib/auth-cache";
 import { useSeo } from "@/hooks/use-seo";
@@ -18,6 +19,7 @@ interface Props {
 }
 
 function PendingScreen() {
+  const [, setLocation] = useLocation();
   useSeo({ title: "Account Pending", noindex: true });
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-background">
@@ -30,7 +32,7 @@ function PendingScreen() {
           Your account has been registered and is awaiting approval from an administrator.
           Please contact your team to get your account activated.
         </p>
-        <Button variant="outline" onClick={() => window.location.href = "/"}>
+        <Button variant="outline" onClick={() => setLocation("/")}>
           Back to Home
         </Button>
       </div>

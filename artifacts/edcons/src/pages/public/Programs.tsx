@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
@@ -299,7 +299,8 @@ function StepIndicator({ current, steps }: { current: number; steps: string[] })
 }
 
 function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
-  const { t } = useI18n();
+  const { t, localePath } = useI18n();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState<ApplyStep>("personal");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
@@ -715,7 +716,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               <Button variant="outline" onClick={reset} className="flex-1 rounded-xl">
                 {t("common.close")}
               </Button>
-              <Button onClick={() => { reset(); window.location.href = "/login"; }} className="flex-1 rounded-xl gap-2">
+              <Button onClick={() => { reset(); setLocation(localePath("/login")); }} className="flex-1 rounded-xl gap-2">
                 {t("apply.goToLogin")}
               </Button>
             </div>

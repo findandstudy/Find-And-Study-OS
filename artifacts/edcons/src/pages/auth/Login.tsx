@@ -165,7 +165,7 @@ export default function Login() {
         setError(data.error || t("login.connectionError"));
         return;
       }
-      window.location.href = "/login";  // /login redirects to /:lang/login
+      setTab("login");
     } catch {
       setError(t("login.connectionError"));
     } finally {
@@ -687,7 +687,7 @@ export default function Login() {
                     <p className="text-muted-foreground text-sm mb-6">
                       {t("login.setPasswordSubtitle")}
                     </p>
-                    <Button size="lg" onClick={() => { setTab("login"); setError(""); setSuccessMessage(""); window.history.replaceState({}, "", "/login"); }}
+                    <Button size="lg" onClick={() => { setTab("login"); setError(""); setSuccessMessage(""); }}
                       className="w-full rounded-xl py-6 text-base font-semibold shadow-lg shadow-primary/25">
                       <ArrowRight className="w-5 h-5 mr-2" />
                       {t("login.goToSignIn")}
@@ -751,7 +751,7 @@ export default function Login() {
                         {t("login.setPasswordButton")}
                       </Button>
 
-                      <button type="button" onClick={() => { setTab("login"); setError(""); window.history.replaceState({}, "", "/login"); }}
+                      <button type="button" onClick={() => { setTab("login"); setError(""); }}
                         className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
                         {t("login.backToLogin")}
                       </button>

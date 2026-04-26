@@ -174,7 +174,6 @@ export default function CourseFinder() {
           if (prog) setSelectedProgram(prog);
         })
         .catch(() => {});
-      window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
