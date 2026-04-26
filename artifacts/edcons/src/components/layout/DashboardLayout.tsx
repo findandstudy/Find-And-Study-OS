@@ -432,7 +432,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                     <TooltipTrigger asChild>
                                       <span
                                         className="ml-auto flex items-center gap-1 shrink-0"
-                                        onClick={(e) => e.stopPropagation()}
                                         data-testid="badge-messages-counts"
                                       >
                                         {isStaff && staffUnreadMine > 0 && (
