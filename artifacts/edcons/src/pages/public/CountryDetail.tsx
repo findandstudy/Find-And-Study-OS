@@ -325,7 +325,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
               <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="rounded-full px-8 text-white border-white/30 hover:bg-white/10 font-bold">
-              <a href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</a>
+              <Link href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link>
             </Button>
           </div>
         </div>

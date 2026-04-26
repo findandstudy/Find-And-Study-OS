@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -174,6 +175,7 @@ function LiveStatusIndicator({
 function InboxTab() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all">("mine");
   const [channel, setChannel] = useState<string>("all");
   const [convs, setConvs] = useState<InboxConversation[]>([]);
@@ -512,11 +514,11 @@ function InboxTab() {
                     <p className="font-semibold text-sm truncate">{ext?.displayName || conv.title || "(unknown)"}</p>
                     <Badge variant="secondary" className={`text-[10px] ${channelColor[conv.channel] || ""}`}>{conv.channel}</Badge>
                     {linked && linkedHref && (
-                      <a href={linkedHref}>
+                      <button type="button" onClick={() => setLocation(linkedHref)}>
                         <Badge variant="outline" className="text-[10px] gap-1 cursor-pointer hover:bg-primary/10">
                           <Link2 className="w-3 h-3" /> {linkedLabel} #{ext.leadId || ext.studentId || ext.agentId}
                         </Badge>
-                      </a>
+                      </button>
                     )}
                   </div>
                   <p className="text-[11px] text-muted-foreground truncate">

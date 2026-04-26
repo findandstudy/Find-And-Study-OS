@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Link } from "wouter";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -1620,7 +1621,7 @@ export default function Programs() {
           <h2 className="text-3xl font-display font-bold mb-4">{t("programs.cantFind")}</h2>
           <p className="text-white/80 mb-8">{t("programs.cantFindDesc")}</p>
           <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold shadow-xl shadow-black/10 hover:-translate-y-1 transition-all duration-300">
-            <a href={localePath("/contact")}>{t("programs.talkToAdvisor")}</a>
+            <Link href={localePath("/contact")}>{t("programs.talkToAdvisor")}</Link>
           </Button>
         </div>
       </section>

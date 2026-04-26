@@ -265,7 +265,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [navPending, startNavTransition] = useTransition();
   const navigate = (url: string) => startNavTransition(() => setLocation(url));
-  const { t } = useI18n();
+  const { t, localePath } = useI18n();
   useSeo({ title: "Portal", noindex: true });
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
@@ -383,7 +383,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           <SidebarContent className="bg-card">
             {/* Logo */}
             <div className="p-5 pb-4 border-b border-border/40">
-               <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/`} className="flex items-center gap-2.5 group">
+               <button type="button" onClick={() => navigate(localePath("/"))} className="flex items-center gap-2.5 group">
                 {sidebarLogo ? (
                   <img src={sidebarLogo} alt="Logo" className="h-9 max-w-[120px] object-contain group-hover:scale-105 transition-transform" />
                 ) : (
@@ -394,7 +394,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 <div>
                   {!sidebarLogo && <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>}
                 </div>
-              </a>
+              </button>
             </div>
 
             {/* Navigation */}

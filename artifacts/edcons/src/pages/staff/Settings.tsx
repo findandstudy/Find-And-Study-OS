@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -207,6 +208,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
+  const [, setLocation] = useLocation();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phone: "", avatarUrl: "", email: "", startDate: "", homeAddress: "", passportNumber: "", contractUrl: "", passportUrl: "", emergencyContactName: "", emergencyPhoneCode: "+90", emergencyPhone: "" });
@@ -843,7 +845,7 @@ export default function SettingsPage() {
         <Card className="p-4 bg-blue-50 border-blue-200">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-blue-800">These are global defaults. Override per page in <a href="/admin/website/seo" className="font-semibold underline">Website &gt; SEO Overrides</a>.</p>
+            <p className="text-sm text-blue-800">These are global defaults. Override per page in <button type="button" onClick={() => setLocation("/admin/website/seo")} className="font-semibold underline cursor-pointer">Website &gt; SEO Overrides</button>.</p>
           </div>
         </Card>
 
@@ -2148,13 +2150,14 @@ function StudentDocumentsTab() {
 
 function WebToLeadTab() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [copied, setCopied] = useState(false);
   const [formTitle, setFormTitle] = useState("Get in Touch");
   const crossLink = (
     <Card className="p-4 bg-blue-50 border-blue-200 mb-6">
       <div className="flex items-start gap-3">
         <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-        <p className="text-sm text-blue-800">Full form management is available in <a href="/admin/website/forms" className="font-semibold underline">Website &gt; Forms</a>. This page provides a quick embed snippet for external sites.</p>
+        <p className="text-sm text-blue-800">Full form management is available in <button type="button" onClick={() => setLocation("/admin/website/forms")} className="font-semibold underline cursor-pointer">Website &gt; Forms</button>. This page provides a quick embed snippet for external sites.</p>
       </div>
     </Card>
   );
