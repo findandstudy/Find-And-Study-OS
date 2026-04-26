@@ -194,70 +194,6 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Charts Row */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-display font-bold text-lg">Lead & Application Trends</h3>
-              <Badge variant="outline">Last 6 months</Badge>
-            </div>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="admLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="admApps" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }} />
-                  <Area type="monotone" dataKey="leads" name="Leads" stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#admLeads)" />
-                  <Area type="monotone" dataKey="applications" name="Applications" stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2 mb-6">
-              <CalendarClock className="w-5 h-5 text-primary" />
-              <h3 className="font-display font-bold text-lg">Upcoming Follow-ups</h3>
-            </div>
-            <div className="space-y-3">
-              {(upcomingFollowUps as any[]).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
-              ) : (
-                (upcomingFollowUps as any[]).slice(0, 5).map((fu: any) => (
-                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : "#"}>
-                    <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
-                      isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
-                    }`}>
-                      <div className="flex items-start justify-between">
-                        <p className="text-sm font-medium text-foreground line-clamp-1">{fu.title}</p>
-                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
-                      </div>
-                      {fu.leadName && <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>}
-                      <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                        {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                        {" "}
-                        {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                        {isOverdue(fu.scheduledAt) && " — Overdue"}
-                      </p>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
         {/* Latest Students, Latest Updates, Notifications */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-6 border-none shadow-lg shadow-black/5">
@@ -391,6 +327,70 @@ export default function AdminDashboard() {
                     </div>
                   );
                 })
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Charts Row */}
+        <div className="grid lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-display font-bold text-lg">Lead & Application Trends</h3>
+              <Badge variant="outline">Last 6 months</Badge>
+            </div>
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="admLeads" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="admApps" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }} />
+                  <Area type="monotone" dataKey="leads" name="Leads" stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#admLeads)" />
+                  <Area type="monotone" dataKey="applications" name="Applications" stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-6">
+              <CalendarClock className="w-5 h-5 text-primary" />
+              <h3 className="font-display font-bold text-lg">Upcoming Follow-ups</h3>
+            </div>
+            <div className="space-y-3">
+              {(upcomingFollowUps as any[]).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
+              ) : (
+                (upcomingFollowUps as any[]).slice(0, 5).map((fu: any) => (
+                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : "#"}>
+                    <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
+                      isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-foreground line-clamp-1">{fu.title}</p>
+                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                      </div>
+                      {fu.leadName && <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>}
+                      <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                        {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {" "}
+                        {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                        {isOverdue(fu.scheduledAt) && " — Overdue"}
+                      </p>
+                    </div>
+                  </Link>
+                ))
               )}
             </div>
           </Card>
