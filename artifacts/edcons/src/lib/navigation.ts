@@ -1,30 +1,34 @@
 /**
  * Custom navigation module — must be imported FIRST in main.tsx, before App.tsx.
  *
- * ROOT CAUSE OF THE WHITE FLASH:
- * 1. Wouter v3 monkey-patches history.pushState and dispatches a "pushState"
- *    window event on every SPA navigation, which the Replit canvas iframe
- *    wrapper intercepts and may use to reload the frame.
- * 2. useSyncExternalStore explicitly opts out of React 18's concurrent
- *    transition features, so startTransition cannot defer Suspense fallbacks
- *    when using it — causing a brief white ShellLoader flash in the content
- *    area every time a lazy-loaded route is first visited.
+ * ROOT CAUSE OF THE RELOAD ON EVERY ROUTE CHANGE:
+ * The Replit canvas wraps our app in an inner iframe and monitors
+ * `iframe.contentWindow.location.pathname`. Whenever the SPA calls
+ * history.pushState (which changes the pathname), the canvas proxy detects the
+ * change and reloads the inner iframe at the new path — causing a full page
+ * reload on every navigation.
  *
- * FIX:
- * 1. Set Wouter's internal patch key early so Wouter skips its own patching.
- * 2. Apply our own silent patch: call the real history.pushState/replaceState
- *    with no window event dispatch; notify subscribers via in-memory Set.
- * 3. Export useCustomBrowserLocation — a Wouter-compatible location hook that
- *    uses useState (not useSyncExternalStore) so that startTransition() in
- *    DashboardLayout.navigate() can defer Suspense fallbacks during navigation,
- *    keeping the old content visible until the new chunk is ready.
+ * FIX — in-memory routing for the portal shell:
+ * 1. A module-level `_inMemoryPath` variable acts as the authoritative route
+ *    when set (non-null). When it's null, real browser location is used.
+ * 2. DashboardLayout calls `activateInMemoryRouting(initialPath)` on mount
+ *    and `deactivateInMemoryRouting()` on unmount.
+ * 3. While in-memory routing is active, navigate() skips history.pushState
+ *    entirely — the browser URL stays frozen at the portal entry point (e.g.
+ *    /admin). The proxy never detects a URL change, so no reload occurs.
+ * 4. React state is updated via _notify() → setPathname() exactly as before,
+ *    so transitions, Suspense, and concurrent features all keep working.
+ *
+ * Additional fixes that remain in place:
+ * 5. Wouter v3 patch key: prevents Wouter from dispatching a "pushState" window
+ *    event that the canvas may also use to detect URL changes.
+ * 6. useState (not useSyncExternalStore): allows startTransition() to defer
+ *    Suspense fallbacks, keeping old content visible during navigation.
  */
 
 import { useState, useCallback, useEffect } from "react";
 
 // ─── 1. Prevent Wouter from monkey-patching ───────────────────────────────────
-// Wouter checks `typeof window[Symbol.for("wouter_v3")] === "undefined"` before
-// patching. Setting it here (before Wouter's module evaluates) stops the patch.
 if (typeof window !== "undefined") {
   const WOUTER_PATCH_KEY = Symbol.for("wouter_v3");
   if (typeof (window as unknown as Record<symbol, unknown>)[WOUTER_PATCH_KEY] === "undefined") {
@@ -76,22 +80,37 @@ if (typeof history !== "undefined" && _originalPush && _originalReplace) {
   };
 }
 
-// ─── 3. Custom Wouter location hook ──────────────────────────────────────────
+// ─── 3. In-memory routing (portal shell) ─────────────────────────────────────
 /**
- * Drop-in replacement for Wouter's useBrowserLocation.
- * Uses useState (not useSyncExternalStore) so that calling:
- *
- *   startTransition(() => setLocation(url))
- *
- * in DashboardLayout.navigate() makes React treat the navigation as a
- * low-priority transition: if the new lazy route chunk needs to download,
- * React keeps showing the current page until it's ready — no Suspense
- * fallback / white flash is shown to the user.
- *
- * Usage: <WouterRouter hook={useCustomBrowserLocation}>
+ * When non-null, this is the current route path used by the app instead of
+ * window.location.pathname. The browser URL is NOT changed during navigation.
  */
+let _inMemoryPath: string | null = null;
+
+/**
+ * Call from DashboardLayout on mount.
+ * Freezes the browser URL at its current value; all subsequent navigate() calls
+ * will update _inMemoryPath (and React state) without touching history.
+ */
+export function activateInMemoryRouting(initialPath: string) {
+  _inMemoryPath = initialPath;
+}
+
+/**
+ * Call from DashboardLayout on unmount.
+ * Restores normal history-based navigation for public pages.
+ */
+export function deactivateInMemoryRouting() {
+  _inMemoryPath = null;
+}
+
+// ─── 4. Custom Wouter location hook ──────────────────────────────────────────
 export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) {
   const getPath = useCallback((): string => {
+    // In-memory routing: return the frozen internal path instead of the real URL
+    if (_inMemoryPath !== null) {
+      return _inMemoryPath;
+    }
     const raw = window.location.pathname;
     if (base && raw.startsWith(base)) {
       return raw.slice(base.length) || "/";
@@ -101,7 +120,6 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
 
   const [pathname, setPathname] = useState(getPath);
 
-  // Re-sync on external navigation events (pushState/replaceState/popstate/hashchange)
   useEffect(() => {
     const onNav = () => setPathname(getPath());
     _subscribers.add(onNav);
@@ -118,19 +136,26 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
     (to: string, opts: { replace?: boolean; state?: unknown } = {}) => {
       const { replace = false, state = null } = opts;
       const absolute = base + (to.startsWith("/") ? to : `/${to}`);
+      const result = base && absolute.startsWith(base)
+        ? absolute.slice(base.length) || "/"
+        : absolute;
+
+      // ── In-memory mode: skip history API, update internal state only ──
+      // This keeps the browser URL frozen so the Replit canvas proxy cannot
+      // detect URL changes and reload the iframe.
+      if (_inMemoryPath !== null) {
+        _inMemoryPath = result;
+        _notify();
+        setPathname(result);
+        return;
+      }
+
+      // ── Normal mode: real history navigation ──
       if (replace) {
         history.replaceState(state, "", absolute);
       } else {
         history.pushState(state, "", absolute);
       }
-      // setPathname is called by the _subscribers / popstate handlers above
-      // when _notify() fires inside our patched pushState/replaceState.
-      // However, if startTransition wraps the navigate() call, React needs
-      // the setState to happen inside the transition. We call it explicitly
-      // here so the caller's startTransition context applies.
-      const result = base && absolute.startsWith(base)
-        ? absolute.slice(base.length) || "/"
-        : absolute;
       setPathname(result);
     },
     [base]

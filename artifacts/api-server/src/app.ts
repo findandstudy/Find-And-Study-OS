@@ -20,6 +20,10 @@ function getAllowedOrigins(): string[] {
   if (process.env.ALLOWED_ORIGINS) {
     process.env.ALLOWED_ORIGINS.split(",").forEach(d => origins.push(d.trim()));
   }
+  if (process.env.NODE_ENV !== "production") {
+    origins.push("http://localhost:25197");
+    origins.push("http://localhost:5173");
+  }
   return origins;
 }
 

@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, startTransition } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { setStickyUser } from "@/lib/auth-cache";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
@@ -19,6 +21,7 @@ export default function Login() {
   const { settings, resolvedTheme } = useTheme();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
   const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const returnTo = useMemo(() => {
@@ -94,7 +97,10 @@ export default function Login() {
         setError(data.error || t("login.connectionError"));
         return;
       }
-      window.location.href = returnTo ? decodeURIComponent(returnTo) : "/login";  // /login redirects to /:lang/login
+      if (data.user) {
+        setStickyUser(data.user as any);
+        queryClient.setQueryData(["/api/auth/me"], data.user);
+      }
     } catch {
       setError(t("login.connectionError"));
     } finally {
