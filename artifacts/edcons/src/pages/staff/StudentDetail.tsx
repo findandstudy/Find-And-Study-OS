@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { OriginBadge, OriginSection } from "@/components/OriginBadge";
+import { OriginBadge } from "@/components/OriginBadge";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
