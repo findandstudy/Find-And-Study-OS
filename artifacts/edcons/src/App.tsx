@@ -61,7 +61,6 @@ const StaffSettings = lazyRetry(() => import("@/pages/staff/Settings"));
 const LeadDetail = lazyRetry(() => import("@/pages/staff/LeadDetail"));
 const StudentDetail = lazyRetry(() => import("@/pages/staff/StudentDetail"));
 const ApplicationDetail = lazyRetry(() => import("@/pages/staff/ApplicationDetail"));
-const StaffDocuments = lazyRetry(() => import("@/pages/staff/Documents"));
 const StaffCourseFinder = lazyRetry(() => import("@/pages/staff/CourseFinder"));
 const StaffAgents = lazyRetry(() => import("@/pages/staff/Agents"));
 const StaffAgentDetail = lazyRetry(() => import("@/pages/staff/AgentDetail"));
@@ -307,7 +306,6 @@ function StaffAdminShell() {
             {(params) => <ApplicationDetail id={Number(params.id)} />}
           </Route>
           <Route path="/staff/applications" component={StaffApplications} />
-          <Route path="/staff/documents" component={StaffDocuments} />
           <Route path="/staff/course-finder" component={StaffCourseFinder} />
           <Route path="/staff/agents/:id" component={StaffAgentDetail} />
           <Route path="/staff/agents">
@@ -531,7 +529,6 @@ function AuthPrefetch() {
       import("@/pages/staff/LeadDetail"),
       import("@/pages/staff/StudentDetail"),
       import("@/pages/staff/ApplicationDetail"),
-      import("@/pages/staff/Documents"),
       import("@/pages/staff/CourseFinder"),
       import("@/pages/staff/Agents"),
       import("@/pages/staff/AgentDetail"),
