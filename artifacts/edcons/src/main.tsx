@@ -12,18 +12,23 @@ import "./index.css";
 //
 // 1. localStorage saved path (highest priority)
 //    Every in-memory navigate() writes the current path to localStorage key
-//    "_edcons_nav_path" as { path, ts }.  localStorage survives both
-//    window.location.reload() AND iframe element recreation (the Replit canvas
-//    proxy destroys and recreates the iframe on every Vite-server reconnect,
-//    which wipes sessionStorage but leaves localStorage intact).
-//    The saved path is only used when the user also has a valid auth-cache
-//    entry (≤ 2 h old), so a logged-out user is never routed to a stale portal.
+//    "_edcons_nav_path" as { path, ts } with an 8-hour TTL.  localStorage
+//    survives both window.location.reload() AND iframe element recreation
+//    (the Replit canvas proxy destroys and recreates the iframe on every Vite
+//    server reconnect, which wipes sessionStorage but leaves localStorage
+//    intact because it is scoped to the origin, not the iframe element).
+//
+//    Security note: auth cache validation is NOT required here.  ProtectedRoute
+//    validates the actual session cookie on every render, so routing to a stale
+//    portal path at most shows a blank screen for one tick before the redirect
+//    to /login fires.  Requiring auth cache here would silently fall back to the
+//    public branch after 2 hours even for active users — exactly the flash we
+//    are trying to prevent.
 //
 // 2. Auth-cache redirect (middle priority)
-//    If there is no saved path (first visit) but the browser pathname is an
-//    unrecognised route (e.g. /en/dashboard from the canvas initialPath),
-//    read the auth cache and jump straight to the correct portal root.
-//    Avoids any flash of the public branch on hard Vite reconnects.
+//    If there is no saved path (first visit, cleared storage) and the browser
+//    pathname is an unrecognised route (e.g. /en/dashboard from the canvas
+//    initialPath), read the auth cache and jump to the correct portal root.
 //
 // 3. Browser pathname (fallback)
 //    Handles normal direct-URL navigations and the very first visit.
@@ -44,17 +49,10 @@ function _isPortalPath(p: string) {
   return _PORTAL_PREFIXES.some((prefix) => p === prefix || p.startsWith(prefix + "/"));
 }
 
-// ── Priority 1: localStorage saved path (paired with auth cache) ──────────────
-const _savedPath  = getSavedNavPath();
-const _cachedAuth = getAuthCache() as { role?: string } | undefined;
-// Use the saved path only when:
-//   a) it exists, AND
-//   b) the auth cache is still valid (user is likely still logged in), AND
-//   c) the saved path points at a portal or a known public route
-const _savedOk =
-  !!_savedPath &&
-  !!_cachedAuth &&
-  (_isPortalPath(_savedPath) || _isKnownPublicPath(_savedPath));
+// ── Priority 1: localStorage saved path ──────────────────────────────────────
+// No auth-cache pairing: ProtectedRoute handles session validation.
+const _savedPath = getSavedNavPath();
+const _savedOk = !!_savedPath && (_isPortalPath(_savedPath) || _isKnownPublicPath(_savedPath));
 
 let _startPath: string;
 
@@ -65,8 +63,10 @@ if (_savedOk) {
   _startPath = window.location.pathname || "/";
 
   if (!_isPortalPath(_startPath) && !_isKnownPublicPath(_startPath)) {
-    // Unrecognised path (e.g. /en/dashboard from the canvas initialPath):
-    // redirect to the portal matching the cached role — avoids public-branch flash.
+    // Unrecognised path (e.g. /en/dashboard from the canvas initialPath).
+    // Use auth cache to redirect to the correct portal root — avoids the
+    // public-branch flash on the very first canvas load before any navigation.
+    const _cachedAuth = getAuthCache() as { role?: string } | undefined;
     if (_cachedAuth?.role && _cachedAuth.role !== "pending") {
       const _ADMIN = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
       if (_ADMIN.includes(_cachedAuth.role)) {
@@ -87,7 +87,9 @@ activateInMemoryRouting(_startPath);
 if (import.meta.env.DEV) {
   const count = parseInt(sessionStorage.getItem("_appInitCount") || "0") + 1;
   sessionStorage.setItem("_appInitCount", String(count));
-  const restoreTag = _savedOk ? "(restored from localStorage)" : "(fresh start)";
+  const restoreTag = _savedOk
+    ? "(restored from localStorage: " + _savedPath + ")"
+    : "(fresh start)";
   console.log(
     "[main] APP INIT #" + count,
     "at", _startPath,

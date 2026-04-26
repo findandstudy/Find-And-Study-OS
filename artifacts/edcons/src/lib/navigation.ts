@@ -26,7 +26,7 @@
  *    Suspense fallbacks, keeping old content visible during navigation.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, startTransition } from "react";
 
 // ─── 1. Prevent Wouter from monkey-patching ───────────────────────────────────
 if (typeof window !== "undefined") {
@@ -100,9 +100,12 @@ let _inMemoryPath: string | null = null;
  * to the origin, not to the iframe context.
  *
  * The entry is a JSON object { path, ts } so we can enforce an 8-hour TTL.
- * Auth-cache validation in main.tsx adds an additional check: the saved path
- * is only used when the user still has a valid auth cache entry (≤ 2 h old),
- * preventing a logged-out user from being routed to a stale portal path.
+ * Security: auth-cache validation is intentionally NOT required here.
+ * ProtectedRoute validates the real session cookie on every render, so routing
+ * to a stale portal path at most shows a blank AuthLoadingScreen for one tick
+ * before the redirect to /login fires.  Pairing with the auth cache caused a
+ * regression where sessions &gt; 2 h long would fall back to the public branch
+ * on every Vite reconnect — exactly the flash we are preventing.
  */
 export const NAV_SESSION_KEY = "_edcons_nav_path";
 const _NAV_PATH_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
@@ -186,11 +189,19 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
       // ── In-memory mode: skip history API, update internal state only ──
       // This keeps the browser URL frozen so the Replit canvas proxy cannot
       // detect URL changes and reload the iframe.
+      //
+      // We update _inMemoryPath synchronously (module-level, not React state)
+      // then fire the React state update inside startTransition.  This lets
+      // React keep showing the current content while any lazy chunk for the
+      // next page is being downloaded, preventing the Suspense fallback flash
+      // (the visual "reload" the user sees on every route change).
       if (_inMemoryPath !== null) {
         _inMemoryPath = result;
         _saveSession(result);   // persist so Vite HMR reload restores this page
-        _notify();
-        setPathname(result);
+        startTransition(() => {
+          _notify();
+          setPathname(result);
+        });
         return;
       }
 
@@ -200,7 +211,9 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
       } else {
         history.pushState(state, "", absolute);
       }
-      setPathname(result);
+      startTransition(() => {
+        setPathname(result);
+      });
     },
     [base]
   );
