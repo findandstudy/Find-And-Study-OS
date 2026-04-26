@@ -389,10 +389,13 @@ async function seedDocumentRequirements() {
   await backfillConversationChannel();
   await backfillMissingCommissions();
   await backfillStudentAppStatus();
-  const { startEmailWorker } = await import("./lib/email");
-  startEmailWorker();
-  const { startContractChecker } = await import("./lib/contractChecker");
-  startContractChecker();
+  const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
+  if (isWorkerZero) {
+    const { startEmailWorker } = await import("./lib/email");
+    startEmailWorker();
+    const { startContractChecker } = await import("./lib/contractChecker");
+    startContractChecker();
+  }
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
