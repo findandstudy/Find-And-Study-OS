@@ -22,13 +22,13 @@ declare global {
   }
 }
 
-async function rehydrateUser(sessionUser: SessionUser): Promise<SessionUser | null> {
-  const [dbUser] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, sessionUser.id));
-  if (!dbUser) return null;
-  return {
+async function fetchDbUser(id: number): Promise<typeof usersTable.$inferSelect | null> {
+  const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  return dbUser ?? null;
+}
+
+function buildSessionUser(dbUser: typeof usersTable.$inferSelect): SessionUser {
+  const result: SessionUser = {
     id: dbUser.id,
     replitId: dbUser.replitId || `local-${dbUser.id}`,
     email: dbUser.email,
@@ -39,7 +39,19 @@ async function rehydrateUser(sessionUser: SessionUser): Promise<SessionUser | nu
     language: dbUser.language,
     isActive: dbUser.isActive,
     emailVerified: dbUser.emailVerified,
+    phone: dbUser.phone,
+    startDate: dbUser.startDate,
+    homeAddress: dbUser.homeAddress,
+    passportNumber: dbUser.passportNumber,
+    contractUrl: dbUser.contractUrl,
+    passportUrl: dbUser.passportUrl,
+    emergencyContactName: dbUser.emergencyContactName,
+    emergencyContactPhone: dbUser.emergencyContactPhone,
   };
+  if (dbUser.role === "agent_staff" && dbUser.agentStaffPermissions) {
+    result.agentStaffPermissions = dbUser.agentStaffPermissions as string[];
+  }
+  return result;
 }
 
 export async function authMiddleware(
@@ -64,14 +76,35 @@ export async function authMiddleware(
     return;
   }
 
-  const freshUser = await rehydrateUser(session.user);
-  if (!freshUser) {
+  const dbUser = await fetchDbUser(session.user.id);
+  if (!dbUser) {
     await clearSession(res, sid);
     next();
     return;
   }
 
-  req.user = freshUser;
+  // a) Soft-deleted account
+  if (dbUser.deletedAt !== null) {
+    await clearSession(res, sid);
+    res.status(401).json({ error: "Account not found" });
+    return;
+  }
+
+  // b) Deactivated account
+  if (dbUser.isActive === false) {
+    await clearSession(res, sid);
+    res.status(403).json({ error: "Account deactivated" });
+    return;
+  }
+
+  // c) Unverified email
+  if (dbUser.emailVerified === false) {
+    await clearSession(res, sid);
+    res.status(403).json({ error: "Email not verified" });
+    return;
+  }
+
+  req.user = buildSessionUser(dbUser);
 
   // Slide session expiry on every authenticated request (fire-and-forget).
   setImmediate(() => {
