@@ -92,16 +92,42 @@ if (typeof history !== "undefined" && _originalPush && _originalReplace) {
 let _inMemoryPath: string | null = null;
 
 /**
- * sessionStorage key where we persist the current in-memory path.
- * sessionStorage survives Vite HMR full-reloads (window.location.reload())
- * but is cleared when the browser tab is closed — so it is always fresh per
- * session and safe to use as a "restore the last page" mechanism.
+ * localStorage key where we persist the current in-memory path.
+ *
+ * We use localStorage (not sessionStorage) because the Replit canvas proxy
+ * recreates the iframe element on every Vite server reconnect, which wipes
+ * sessionStorage.  localStorage survives iframe recreation since it is scoped
+ * to the origin, not to the iframe context.
+ *
+ * The entry is a JSON object { path, ts } so we can enforce an 8-hour TTL.
+ * Auth-cache validation in main.tsx adds an additional check: the saved path
+ * is only used when the user still has a valid auth cache entry (≤ 2 h old),
+ * preventing a logged-out user from being routed to a stale portal path.
  */
 export const NAV_SESSION_KEY = "_edcons_nav_path";
+const _NAV_PATH_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
-/** Persist the current path so Vite-reload restores exactly where we were. */
+/** Read the saved path from localStorage; returns null if absent or expired. */
+export function getSavedNavPath(): string | null {
+  try {
+    const raw = localStorage.getItem(NAV_SESSION_KEY);
+    if (!raw) return null;
+    const { path, ts } = JSON.parse(raw) as { path: string; ts: number };
+    if (Date.now() - ts > _NAV_PATH_TTL_MS) {
+      localStorage.removeItem(NAV_SESSION_KEY);
+      return null;
+    }
+    return path || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the current path so a Vite-reload or iframe-recreate restores it. */
 function _saveSession(path: string) {
-  try { sessionStorage.setItem(NAV_SESSION_KEY, path); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(NAV_SESSION_KEY, JSON.stringify({ path, ts: Date.now() }));
+  } catch { /* ignore quota errors */ }
 }
 
 /**

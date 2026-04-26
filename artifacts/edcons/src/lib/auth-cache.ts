@@ -32,7 +32,7 @@ export function clearStickyUser(): void {
 
 // ─── Layer 2: localStorage cache with TTL ─────────────────────────────────
 const CACHE_KEY = "edcons_auth_v2";
-const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 interface AuthCacheEntry {
   data: unknown;
