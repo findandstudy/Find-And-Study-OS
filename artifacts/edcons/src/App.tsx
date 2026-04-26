@@ -24,7 +24,7 @@ import Login from "@/pages/auth/Login";
 
 function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
-  retries = 2
+  retries = 4
 ): React.LazyExoticComponent<T["default"]> {
   return lazy(() => {
     const attempt = (remaining: number): Promise<T> =>
@@ -521,6 +521,7 @@ function AuthPrefetch() {
   useEffect(() => {
     if (!result.data) return;
     Promise.allSettled([
+      // Staff
       import("@/pages/staff/Dashboard"),
       import("@/pages/staff/Leads"),
       import("@/pages/staff/Students"),
@@ -536,6 +537,7 @@ function AuthPrefetch() {
       import("@/pages/staff/AgentDetail"),
       import("@/pages/staff/Messages"),
       import("@/pages/staff/Tasks"),
+      // Admin
       import("@/pages/admin/Dashboard"),
       import("@/pages/admin/Users"),
       import("@/pages/admin/Catalog"),
@@ -543,6 +545,34 @@ function AuthPrefetch() {
       import("@/pages/admin/AuditLog"),
       import("@/pages/admin/Activity"),
       import("@/pages/admin/Embeds"),
+      // Website admin
+      import("@/pages/admin/website/Pages"),
+      import("@/pages/admin/website/GlobalComponents"),
+      import("@/pages/admin/website/Navigation"),
+      import("@/pages/admin/website/Blog"),
+      import("@/pages/admin/website/Collections"),
+      import("@/pages/admin/website/Forms"),
+      import("@/pages/admin/website/SeoOverrides"),
+      import("@/pages/admin/website/ThemeBuilder"),
+      import("@/pages/admin/website/Translations"),
+      import("@/pages/admin/website/PublishHistory"),
+      import("@/pages/admin/website/PageEditor"),
+      // Student
+      import("@/pages/student/Dashboard"),
+      import("@/pages/student/Applications"),
+      import("@/pages/student/Wishlist"),
+      import("@/pages/student/Messages"),
+      import("@/pages/student/Account"),
+      // Agent
+      import("@/pages/agent/Dashboard"),
+      import("@/pages/agent/AgentApps"),
+      import("@/pages/agent/Leads"),
+      import("@/pages/agent/Students"),
+      import("@/pages/agent/Commissions"),
+      import("@/pages/agent/Account"),
+      import("@/pages/agent/SubAgents"),
+      import("@/pages/agent/Messages"),
+      import("@/pages/agent/Team"),
     ]);
   }, [!!result.data]);
 
