@@ -1718,7 +1718,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
     );
   };
 
-  const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf");
+  const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf" && (d.fileData || d.fileUrl));
 
   return (
     <>
@@ -1817,7 +1817,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                 <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors">
                   {pdfDocs.length >= 2 && (
                     <td className="px-2 py-3 text-center">
-                      {doc.mimeType === "application/pdf" && (
+                      {(doc.mimeType === "application/pdf" && (doc.fileData || doc.fileUrl)) && (
                         <input
                           type="checkbox"
                           checked={selectedForMerge.includes(doc.id)}
