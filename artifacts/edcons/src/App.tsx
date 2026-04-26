@@ -163,6 +163,41 @@ function LanguageSync({ lang }: { lang: string }) {
   return null;
 }
 
+/**
+ * Catch-all for unrecognised public paths (e.g. /en/dashboard when the canvas
+ * loads at that URL).  Checks the React Query cache (already populated by
+ * AuthPrefetch) and redirects logged-in users to their portal immediately.
+ * Falls back to the real 404 page only when we're certain the user is not
+ * authenticated.
+ */
+function AuthFallback() {
+  const [, setLocation] = useLocation();
+  const { data: me, isLoading } = useGetMe();
+
+  useEffect(() => {
+    if (isLoading || !me) return;
+    const role = (me as { role?: string }).role;
+    if (!role || role === "pending") return;
+    if (STAFF_ROLES.includes(role)) { setLocation("/admin"); return; }
+    if (STUDENT_ROLES.includes(role)) { setLocation("/student"); return; }
+    if (AGENT_ROLES.includes(role)) { setLocation("/agent"); return; }
+  }, [me, isLoading, setLocation]);
+
+  // Use cached auth (localStorage) for a synchronous signal while the API
+  // call is in-flight — avoids flashing the 404 page for logged-in users.
+  const cached = getStickyUser() ?? getAuthCache();
+  const cachedRole = cached ? (cached as { role?: string }).role : undefined;
+  const hasPortalRole =
+    cachedRole &&
+    cachedRole !== "pending" &&
+    (STAFF_ROLES.includes(cachedRole) ||
+      STUDENT_ROLES.includes(cachedRole) ||
+      AGENT_ROLES.includes(cachedRole));
+
+  if (hasPortalRole || isLoading) return <PageLoader />;
+  return <NotFound />;
+}
+
 function PublicRoutes({ lang }: { lang: string }) {
   const [location] = useLocation();
   const isLoginPage = location === `/${lang}/login`;
@@ -183,7 +218,7 @@ function PublicRoutes({ lang }: { lang: string }) {
             <Route path={`/${lang}/programs`} component={Programs} />
             <Route path={`/${lang}/blog`} component={Blog} />
             <Route path={`/${lang}/contact`} component={Contact} />
-            <Route component={NotFound} />
+            <Route component={AuthFallback} />
           </Switch>
         </PublicLayout>
       )}
