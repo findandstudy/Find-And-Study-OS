@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useRef, useTransition } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { getStickyUser } from "@/lib/auth-cache";
@@ -260,7 +260,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   }, []);
 
   const [location, setLocation] = useLocation();
-  const navigate = (url: string) => setLocation(url);
+  const [navPending, startNavTransition] = useTransition();
+  const navigate = (url: string) => startNavTransition(() => setLocation(url));
   const { t } = useI18n();
   useSeo({ title: "Portal", noindex: true });
   const { season, setSeason, availableYears } = useSeason();
@@ -497,6 +498,11 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Main Content */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          {navPending && (
+            <div className="fixed top-0 left-0 right-0 z-[100000] h-[2px] bg-primary/20 overflow-hidden" style={{pointerEvents:'none'}}>
+              <div className="h-full bg-primary w-full animate-pulse" />
+            </div>
+          )}
           <header className="h-14 flex items-center justify-between px-5 bg-card/80 backdrop-blur-sm border-b border-border/50 sticky top-0 z-30">
             <div className="flex items-center gap-3">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />

@@ -2,21 +2,25 @@
  * Custom navigation module — must be imported FIRST in main.tsx, before App.tsx.
  *
  * ROOT CAUSE OF THE WHITE FLASH:
- * Wouter v3 monkey-patches `history.pushState` so that every SPA navigation
- * dispatches a `new Event("pushState")` on `window`. The Replit canvas iframe
- * wrapper listens for that event on the inner frame's contentWindow and reloads
- * the iframe with the new URL as the starting path — causing a full-page white
- * flash on every sidebar click.
+ * 1. Wouter v3 monkey-patches history.pushState and dispatches a "pushState"
+ *    window event on every SPA navigation, which the Replit canvas iframe
+ *    wrapper intercepts and may use to reload the frame.
+ * 2. useSyncExternalStore explicitly opts out of React 18's concurrent
+ *    transition features, so startTransition cannot defer Suspense fallbacks
+ *    when using it — causing a brief white ShellLoader flash in the content
+ *    area every time a lazy-loaded route is first visited.
  *
  * FIX:
  * 1. Set Wouter's internal patch key early so Wouter skips its own patching.
- * 2. Apply our own silent patch: call the real `history.pushState/replaceState`
- *    + notify React subscribers via an in-memory Set (no `window` event dispatch).
- * 3. Export `useCustomBrowserLocation` — a Wouter-compatible location hook that
- *    passes to `<WouterRouter hook={useCustomBrowserLocation}>`.
+ * 2. Apply our own silent patch: call the real history.pushState/replaceState
+ *    with no window event dispatch; notify subscribers via in-memory Set.
+ * 3. Export useCustomBrowserLocation — a Wouter-compatible location hook that
+ *    uses useState (not useSyncExternalStore) so that startTransition() in
+ *    DashboardLayout.navigate() can defer Suspense fallbacks during navigation,
+ *    keeping the old content visible until the new chunk is ready.
  */
 
-import { useSyncExternalStore, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 // ─── 1. Prevent Wouter from monkey-patching ───────────────────────────────────
 // Wouter checks `typeof window[Symbol.for("wouter_v3")] === "undefined"` before
@@ -42,9 +46,6 @@ type NavSubscriber = () => void;
 const _subscribers = new Set<NavSubscriber>();
 
 function _notify() {
-  if (import.meta.env.DEV) {
-    console.log("[nav] _notify path=" + window.location.pathname + " subscribers=" + _subscribers.size);
-  }
   _subscribers.forEach((fn) => fn());
 }
 
@@ -75,31 +76,43 @@ if (typeof history !== "undefined" && _originalPush && _originalReplace) {
   };
 }
 
-// Also handle browser back/forward (native popstate) and hash navigation
-if (typeof window !== "undefined") {
-  window.addEventListener("popstate", _notify);
-  window.addEventListener("hashchange", _notify);
-}
-
 // ─── 3. Custom Wouter location hook ──────────────────────────────────────────
 /**
- * Drop-in replacement for Wouter's `useBrowserLocation`.
+ * Drop-in replacement for Wouter's useBrowserLocation.
+ * Uses useState (not useSyncExternalStore) so that calling:
+ *
+ *   startTransition(() => setLocation(url))
+ *
+ * in DashboardLayout.navigate() makes React treat the navigation as a
+ * low-priority transition: if the new lazy route chunk needs to download,
+ * React keeps showing the current page until it's ready — no Suspense
+ * fallback / white flash is shown to the user.
+ *
  * Usage: <WouterRouter hook={useCustomBrowserLocation}>
  */
 export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) {
-  const getSnapshot = useCallback((): string => {
-    const path = window.location.pathname;
-    if (base && path.startsWith(base)) {
-      return path.slice(base.length) || "/";
+  const getPath = useCallback((): string => {
+    const raw = window.location.pathname;
+    if (base && raw.startsWith(base)) {
+      return raw.slice(base.length) || "/";
     }
-    return path;
+    return raw;
   }, [base]);
 
-  const pathname = useSyncExternalStore(
-    subscribeToNavigation,
-    getSnapshot,
-    getSnapshot
-  );
+  const [pathname, setPathname] = useState(getPath);
+
+  // Re-sync on external navigation events (pushState/replaceState/popstate/hashchange)
+  useEffect(() => {
+    const onNav = () => setPathname(getPath());
+    _subscribers.add(onNav);
+    window.addEventListener("popstate", onNav);
+    window.addEventListener("hashchange", onNav);
+    return () => {
+      _subscribers.delete(onNav);
+      window.removeEventListener("popstate", onNav);
+      window.removeEventListener("hashchange", onNav);
+    };
+  }, [getPath]);
 
   const navigate = useCallback(
     (to: string, opts: { replace?: boolean; state?: unknown } = {}) => {
@@ -110,6 +123,15 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
       } else {
         history.pushState(state, "", absolute);
       }
+      // setPathname is called by the _subscribers / popstate handlers above
+      // when _notify() fires inside our patched pushState/replaceState.
+      // However, if startTransition wraps the navigate() call, React needs
+      // the setState to happen inside the transition. We call it explicitly
+      // here so the caller's startTransition context applies.
+      const result = base && absolute.startsWith(base)
+        ? absolute.slice(base.length) || "/"
+        : absolute;
+      setPathname(result);
     },
     [base]
   );

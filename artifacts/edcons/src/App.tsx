@@ -444,6 +444,31 @@ function AuthPrefetch() {
       clearAuthCache();
     }
   }, [result.data, result.error]);
+
+  useEffect(() => {
+    if (!result.data) return;
+    Promise.allSettled([
+      import("@/pages/staff/Leads"),
+      import("@/pages/staff/Students"),
+      import("@/pages/staff/Applications"),
+      import("@/pages/staff/Finance"),
+      import("@/pages/staff/Settings"),
+      import("@/pages/staff/LeadDetail"),
+      import("@/pages/staff/StudentDetail"),
+      import("@/pages/staff/ApplicationDetail"),
+      import("@/pages/staff/Documents"),
+      import("@/pages/staff/CourseFinder"),
+      import("@/pages/staff/Agents"),
+      import("@/pages/staff/Messages"),
+      import("@/pages/staff/Tasks"),
+      import("@/pages/admin/Dashboard"),
+      import("@/pages/admin/Users"),
+      import("@/pages/admin/Catalog"),
+      import("@/pages/admin/Campaigns"),
+      import("@/pages/admin/AuditLog"),
+    ]);
+  }, [!!result.data]);
+
   return null;
 }
 
