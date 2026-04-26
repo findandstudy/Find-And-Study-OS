@@ -8,23 +8,28 @@ import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, send
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
+import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 const router: IRouter = Router();
 
+const APPLY_WINDOW_MS = 15 * 60 * 1000;
+
 const applyLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: APPLY_WINDOW_MS,
   max: 10,
   message: { error: "Too many applications. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  store: new PgRateLimitStore(APPLY_WINDOW_MS),
 });
 
 const aiExtractLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: APPLY_WINDOW_MS,
   max: 5,
   message: { error: "Too many AI extraction requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  store: new PgRateLimitStore(APPLY_WINDOW_MS),
 });
 
 async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {

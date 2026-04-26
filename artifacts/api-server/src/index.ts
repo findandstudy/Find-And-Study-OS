@@ -378,6 +378,8 @@ async function seedDocumentRequirements() {
 }
 
 (async () => {
+  const { ensureRateLimitsTable } = await import("./lib/pgRateLimiter");
+  await ensureRateLimitsTable();
   await ensureSuperAdmin();
   await ensureAgentUser();
   await runSeedSQL();

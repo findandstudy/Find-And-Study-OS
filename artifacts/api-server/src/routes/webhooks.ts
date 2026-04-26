@@ -9,18 +9,21 @@ import { verifyWebFormSignature, parseWebFormPayload } from "../lib/inbox/channe
 import { decryptConfig } from "../lib/encryption";
 import { logAudit } from "../lib/auth";
 import crypto from "crypto";
+import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 /**
- * Per-IP rate limiter for inbound webhook endpoints. Bounded to protect against
- * floods from spoofed sources before signature checks run. Limits are generous
- * enough not to throttle legitimate WA Cloud / web-form bursts.
+ * Per-IP rate limiter for inbound webhook endpoints. Backed by PostgreSQL so
+ * all PM2 workers share the same counters. Limits are generous enough not to
+ * throttle legitimate WA Cloud / web-form bursts.
  */
+const WEBHOOK_WINDOW_MS = 60 * 1000;
 const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: WEBHOOK_WINDOW_MS,
   max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many webhook requests" },
+  store: new PgRateLimitStore(WEBHOOK_WINDOW_MS),
 });
 
 const router: IRouter = Router();

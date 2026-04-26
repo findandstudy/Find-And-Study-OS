@@ -1,0 +1,100 @@
+import { pool } from "@workspace/db";
+
+/**
+ * Ensures the rate_limits table exists. Called once at startup.
+ */
+export async function ensureRateLimitsTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+}
+
+/**
+ * Atomic check-and-increment for a named rate-limit bucket.
+ * Returns true if the request is allowed, false if the limit is exceeded.
+ * Uses an upsert so all PM2 workers share the same state.
+ */
+export async function checkAndIncrementRateLimit(
+  key: string,
+  max: number,
+  windowMs: number,
+): Promise<boolean> {
+  const now = Date.now();
+  const resetAt = new Date(now + windowMs);
+
+  const result = await pool.query<{ count: number; reset_at: Date }>(
+    `INSERT INTO rate_limits (key, count, reset_at)
+       VALUES ($1, 1, $2)
+     ON CONFLICT (key) DO UPDATE
+       SET count    = CASE
+                        WHEN rate_limits.reset_at <= NOW() THEN 1
+                        ELSE rate_limits.count + 1
+                      END,
+           reset_at = CASE
+                        WHEN rate_limits.reset_at <= NOW() THEN $2
+                        ELSE rate_limits.reset_at
+                      END
+     RETURNING count, reset_at`,
+    [key, resetAt],
+  );
+
+  const row = result.rows[0];
+  return row ? row.count <= max : true;
+}
+
+/**
+ * express-rate-limit Store backed by PostgreSQL.
+ * Compatible with express-rate-limit v7 Store interface.
+ */
+export class PgRateLimitStore {
+  private windowMs: number;
+
+  constructor(windowMs: number) {
+    this.windowMs = windowMs;
+  }
+
+  async increment(key: string): Promise<{ totalHits: number; resetTime: Date }> {
+    const resetAt = new Date(Date.now() + this.windowMs);
+
+    const result = await pool.query<{ count: number; reset_at: Date }>(
+      `INSERT INTO rate_limits (key, count, reset_at)
+         VALUES ($1, 1, $2)
+       ON CONFLICT (key) DO UPDATE
+         SET count    = CASE
+                          WHEN rate_limits.reset_at <= NOW() THEN 1
+                          ELSE rate_limits.count + 1
+                        END,
+             reset_at = CASE
+                          WHEN rate_limits.reset_at <= NOW() THEN $2
+                          ELSE rate_limits.reset_at
+                        END
+       RETURNING count, reset_at`,
+      [key, resetAt],
+    );
+
+    const row = result.rows[0];
+    return {
+      totalHits: row?.count ?? 1,
+      resetTime: row?.reset_at ?? resetAt,
+    };
+  }
+
+  async decrement(key: string): Promise<void> {
+    await pool.query(
+      `UPDATE rate_limits SET count = GREATEST(count - 1, 0) WHERE key = $1`,
+      [key],
+    );
+  }
+
+  async resetKey(key: string): Promise<void> {
+    await pool.query(`DELETE FROM rate_limits WHERE key = $1`, [key]);
+  }
+
+  async resetAll(): Promise<void> {
+    await pool.query(`DELETE FROM rate_limits`);
+  }
+}

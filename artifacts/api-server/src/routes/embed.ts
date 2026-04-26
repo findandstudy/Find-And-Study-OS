@@ -5,15 +5,18 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
+import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 const router: IRouter = Router();
 
+const EMBED_WINDOW_MS = 15 * 60 * 1000;
 const embedSubmitLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: EMBED_WINDOW_MS,
   max: 15,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
+  store: new PgRateLimitStore(EMBED_WINDOW_MS),
 });
 
 function validateDomain(widget: any, origin: string | undefined, referer: string | undefined): boolean {

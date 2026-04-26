@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { ObjectPermission } from "../lib/objectAcl";
 import { requireAuth } from "../lib/auth";
+import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 
 const RequestUploadUrlBody = z.object({
   name: z.string(),
@@ -24,22 +25,15 @@ const RequestUploadUrlResponse = z.object({
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
-const uploadLimiter = new Map<number, { count: number; resetAt: number }>();
 const UPLOAD_LIMIT = 30;
 const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
 
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
-  const now = Date.now();
-  const entry = uploadLimiter.get(userId);
-  if (entry && now < entry.resetAt) {
-    if (entry.count >= UPLOAD_LIMIT) {
-      res.status(429).json({ error: "Too many upload requests. Try again later." });
-      return;
-    }
-    entry.count++;
-  } else {
-    uploadLimiter.set(userId, { count: 1, resetAt: now + UPLOAD_WINDOW_MS });
+  const allowed = await checkAndIncrementRateLimit(`upload:${userId}`, UPLOAD_LIMIT, UPLOAD_WINDOW_MS);
+  if (!allowed) {
+    res.status(429).json({ error: "Too many upload requests. Try again later." });
+    return;
   }
 
   const parsed = RequestUploadUrlBody.safeParse(req.body);
