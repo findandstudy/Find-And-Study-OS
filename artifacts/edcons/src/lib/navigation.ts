@@ -92,6 +92,19 @@ if (typeof history !== "undefined" && _originalPush && _originalReplace) {
 let _inMemoryPath: string | null = null;
 
 /**
+ * sessionStorage key where we persist the current in-memory path.
+ * sessionStorage survives Vite HMR full-reloads (window.location.reload())
+ * but is cleared when the browser tab is closed — so it is always fresh per
+ * session and safe to use as a "restore the last page" mechanism.
+ */
+export const NAV_SESSION_KEY = "_edcons_nav_path";
+
+/** Persist the current path so Vite-reload restores exactly where we were. */
+function _saveSession(path: string) {
+  try { sessionStorage.setItem(NAV_SESSION_KEY, path); } catch { /* ignore */ }
+}
+
+/**
  * Activate in-memory routing. Safe to call multiple times — if already active
  * the existing path is preserved (not overwritten).
  */
@@ -149,6 +162,7 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
       // detect URL changes and reload the iframe.
       if (_inMemoryPath !== null) {
         _inMemoryPath = result;
+        _saveSession(result);   // persist so Vite HMR reload restores this page
         _notify();
         setPathname(result);
         return;

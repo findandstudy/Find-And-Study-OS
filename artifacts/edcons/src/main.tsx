@@ -1,4 +1,4 @@
-import { activateInMemoryRouting } from "./lib/navigation";
+import { activateInMemoryRouting, NAV_SESSION_KEY } from "./lib/navigation";
 import { getAuthCache } from "./lib/auth-cache";
 import "./lib/csrfSetup";
 import { createRoot } from "react-dom/client";
@@ -6,44 +6,67 @@ import App from "./App";
 import "./assets/fonts/inter.css";
 import "./index.css";
 
-// ─── Determine starting in-memory path ───────────────────────────────────────
-// The Replit canvas proxy loads the app with window.location.pathname set to
-// something like "/en/dashboard" (from ?initialPath in the wrapper URL).
-// "/en/dashboard" is not a real public route, so the Router would briefly flash
-// the NotFound page before the auth-cache redirect fires.
+// ─── Determine the starting in-memory path ───────────────────────────────────
 //
-// Fix: check the localStorage auth cache RIGHT NOW (before React mounts) and,
-// if the path is not a recognised public or portal path, jump straight to the
-// user's portal.  This is zero-render — the Router never sees the wrong path.
-
-function _isKnownPublicPath(path: string): boolean {
-  const PUBLIC_SUB = new Set(["", "about", "countries", "programs", "blog", "contact", "login"]);
-  const parts = path.split("/").filter(Boolean); // ["en","about"] etc.
-  if (parts.length === 0) return true;            // "/"
-  if (parts.length === 1) return true;            // "/:lang"
-  if (parts.length >= 2 && PUBLIC_SUB.has(parts[1])) return true;   // "/:lang/about" etc.
-  if (parts.length >= 3 && parts[1] === "countries") return true;   // "/:lang/countries/:slug"
-  return false;
-}
+// Three-tier priority for choosing where the app begins:
+//
+// 1. sessionStorage (highest priority)
+//    sessionStorage survives Vite HMR full-reloads (window.location.reload())
+//    but clears on tab close.  Every in-memory navigation saves the current
+//    path here, so after a Vite reconnect-reload the app resumes EXACTLY where
+//    the user was — no flash, no lost position.
+//
+// 2. Auth-cache redirect (middle priority)
+//    If sessionStorage is empty (fresh tab) and the browser pathname is an
+//    unrecognised route (e.g. /en/dashboard from the canvas initialPath),
+//    check localStorage auth cache.  If a valid session is found, jump
+//    straight to the user's portal — never render the public/404 branch.
+//
+// 3. Browser pathname (lowest priority / fallback)
+//    Used when neither sessionStorage nor auth-cache redirect applies.
 
 const _PORTAL_PREFIXES = ["/admin", "/staff", "/student", "/agent"];
 
-let _startPath = window.location.pathname || "/";
+function _isKnownPublicPath(path: string): boolean {
+  const PUBLIC_SUB = new Set(["", "about", "countries", "programs", "blog", "contact", "login"]);
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length === 0) return true;            // "/"
+  if (parts.length === 1) return true;            // "/:lang"
+  if (parts.length >= 2 && PUBLIC_SUB.has(parts[1])) return true;
+  if (parts.length >= 3 && parts[1] === "countries") return true;
+  return false;
+}
 
-const _isPortal = _PORTAL_PREFIXES.some(
-  (p) => _startPath === p || _startPath.startsWith(p + "/")
-);
+function _isPortalPath(p: string) {
+  return _PORTAL_PREFIXES.some((prefix) => p === prefix || p.startsWith(prefix + "/"));
+}
 
-if (!_isPortal && !_isKnownPublicPath(_startPath)) {
-  const _cached = getAuthCache() as { role?: string } | undefined;
-  if (_cached?.role && _cached.role !== "pending") {
-    const _ADMIN = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
-    if (_ADMIN.includes(_cached.role)) {
-      _startPath = "/admin";
-    } else if (_cached.role === "student") {
-      _startPath = "/student";
-    } else if (["agent", "sub_agent", "agent_staff"].includes(_cached.role)) {
-      _startPath = "/agent";
+// ── Priority 1: sessionStorage ────────────────────────────────────────────────
+const _savedPath = (() => { try { return sessionStorage.getItem(NAV_SESSION_KEY); } catch { return null; } })();
+const _savedOk = _savedPath && (_isPortalPath(_savedPath) || _isKnownPublicPath(_savedPath));
+
+let _startPath: string;
+
+if (_savedOk) {
+  // Resume from where the user was before the Vite reload
+  _startPath = _savedPath!;
+} else {
+  // ── Priority 2 & 3: auth-cache redirect or browser pathname ──────────────
+  _startPath = window.location.pathname || "/";
+
+  if (!_isPortalPath(_startPath) && !_isKnownPublicPath(_startPath)) {
+    // Unrecognised path (e.g. /en/dashboard from canvas initialPath).
+    // Check auth cache and redirect to the appropriate portal.
+    const _cached = getAuthCache() as { role?: string } | undefined;
+    if (_cached?.role && _cached.role !== "pending") {
+      const _ADMIN = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
+      if (_ADMIN.includes(_cached.role)) {
+        _startPath = "/admin";
+      } else if (_cached.role === "student") {
+        _startPath = "/student";
+      } else if (["agent", "sub_agent", "agent_staff"].includes(_cached.role)) {
+        _startPath = "/agent";
+      }
     }
   }
 }
@@ -54,19 +77,20 @@ if (!_isPortal && !_isKnownPublicPath(_startPath)) {
 activateInMemoryRouting(_startPath);
 
 if (import.meta.env.DEV) {
-  // Increment a sessionStorage counter on every real page load.
-  // sessionStorage survives SPA navigation (pushState) but is cleared on
-  // actual page reload — so if this counter grows past 1 while the user
-  // navigates, the page is genuinely reloading.
   const count = parseInt(sessionStorage.getItem("_appInitCount") || "0") + 1;
   sessionStorage.setItem("_appInitCount", String(count));
-  console.log("[main] APP INIT #" + count, "at", _startPath, "(browser:", window.location.pathname + ")", new Date().toISOString());
+  console.log(
+    "[main] APP INIT #" + count,
+    "at", _startPath,
+    "(browser:", window.location.pathname + ")",
+    _savedOk ? "(restored from session)" : "(fresh start)",
+    new Date().toISOString()
+  );
 
   window.addEventListener("beforeunload", () => {
     console.log("[main] BEFOREUNLOAD — page is being destroyed at", window.location.pathname);
   });
 
-  // Show init count in DOM so the user can see it without opening DevTools
   const badge = document.createElement("div");
   badge.id = "_app_init_badge";
   badge.style.cssText =
