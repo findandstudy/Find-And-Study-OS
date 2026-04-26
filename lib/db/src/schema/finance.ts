@@ -13,8 +13,8 @@ export const invoicesTable = pgTable("invoices", {
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("USD"),
   status: text("status").notNull().default("draft"),
-  dueDate: text("due_date"),
-  paidAt: text("paid_at"),
+  dueDate: timestamp("due_date", { withTimezone: true }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -54,7 +54,7 @@ export const commissionsTable = pgTable("commissions", {
   subAgentPaid: numeric("sub_agent_paid", { precision: 12, scale: 2 }).default("0"),
 
   status: text("status").notNull().default("potential"),
-  confirmedAt: text("confirmed_at"),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
 
   offsetAmount: numeric("offset_amount", { precision: 12, scale: 2 }).default("0"),
 
@@ -85,10 +85,10 @@ export const serviceFeesTable = pgTable("service_fees", {
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
 
   firstInstallmentAmount: numeric("first_installment_amount", { precision: 12, scale: 2 }),
-  firstInstallmentPaidAt: text("first_installment_paid_at"),
+  firstInstallmentPaidAt: timestamp("first_installment_paid_at", { withTimezone: true }),
 
   secondInstallmentAmount: numeric("second_installment_amount", { precision: 12, scale: 2 }),
-  secondInstallmentPaidAt: text("second_installment_paid_at"),
+  secondInstallmentPaidAt: timestamp("second_installment_paid_at", { withTimezone: true }),
 
   financeStatus: text("finance_status").notNull().default("potential"),
   status: text("status").notNull().default("pending"),
@@ -108,7 +108,7 @@ export const financialTransactionsTable = pgTable("financial_transactions", {
   type: text("type").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("USD"),
-  transactionDate: text("transaction_date").notNull(),
+  transactionDate: timestamp("transaction_date", { withTimezone: true }),
   reference: text("reference"),
   universityName: text("university_name"),
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
