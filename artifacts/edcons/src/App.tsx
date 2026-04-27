@@ -71,6 +71,7 @@ const AdminDashboard = lazyRetry(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazyRetry(() => import("@/pages/admin/Users"));
 const AdminCatalog = lazyRetry(() => import("@/pages/admin/Catalog"));
 const AdminCampaigns = lazyRetry(() => import("@/pages/admin/Campaigns"));
+const AdminPopups = lazyRetry(() => import("@/pages/admin/Popups"));
 const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
 const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
@@ -246,6 +247,9 @@ function StaffAdminShell() {
           </Route>
           <Route path="/admin/campaigns">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCampaigns /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/popups">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminPopups /></ProtectedRoute>
           </Route>
           <Route path="/admin/audit">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAuditLog /></ProtectedRoute>
@@ -541,6 +545,7 @@ function AuthPrefetch() {
       import("@/pages/admin/Users"),
       import("@/pages/admin/Catalog"),
       import("@/pages/admin/Campaigns"),
+      import("@/pages/admin/Popups"),
       import("@/pages/admin/AuditLog"),
       import("@/pages/admin/Activity"),
       import("@/pages/admin/Embeds"),

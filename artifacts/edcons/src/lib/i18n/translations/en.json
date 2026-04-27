@@ -377,7 +377,8 @@
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
     "tasks": "Tasks",
-    "campaigns": "Campaigns"
+    "campaigns": "Campaigns",
+    "popupAds": "Pop-up Ads"
   },
   "notFound": {
     "title": "Page Not Found",
@@ -702,5 +703,64 @@
     "prodOnlyEnable": "Settings can be saved (disabled) but enabling requires production.",
     "embedSnippet": "Embed snippet",
     "copySnippet": "Copy snippet"
+  },
+  "popups": {
+    "title": "Pop-up Ads",
+    "subtitle": "Create and manage pop-up notices shown to agents on their dashboard.",
+    "newPopup": "New Pop-up",
+    "none": "No pop-up ads yet",
+    "createFirst": "Create your first pop-up",
+    "searchPlaceholder": "Search pop-ups…",
+    "loadFailed": "Failed to load pop-ups",
+    "created": "Pop-up created",
+    "updated": "Pop-up updated",
+    "deleted": "Pop-up deleted",
+    "createFailed": "Failed to create pop-up",
+    "updateFailed": "Failed to update pop-up",
+    "deleteFailed": "Failed to delete pop-up",
+    "deleteConfirm": "Delete this pop-up? This cannot be undone.",
+    "createTitle": "Create Pop-up Ad",
+    "editTitle": "Edit Pop-up Ad",
+    "audience": {
+      "all_users": "All Users",
+      "all_agents": "All Agents",
+      "specific_agents": "Specific Agents"
+    },
+    "frequency": {
+      "every_session": "Every Session",
+      "every_login": "Every Login",
+      "once_per_user": "Once Per User"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "fields": {
+      "title": "Title",
+      "titlePlaceholder": "Enter popup title…",
+      "content": "Content",
+      "contentPlaceholder": "Enter popup message…",
+      "imageUrl": "Image URL",
+      "imageUrlPlaceholder": "https://…",
+      "linkUrl": "Link URL",
+      "linkUrlPlaceholder": "https://…",
+      "linkText": "Link Button Text",
+      "linkTextPlaceholder": "Learn more",
+      "targetAudience": "Target Audience",
+      "frequency": "Show Frequency",
+      "status": "Status",
+      "startsAt": "Start Date/Time",
+      "expiresAt": "End Date/Time",
+      "agents": "Target Agents"
+    },
+    "errors": {
+      "titleRequired": "Title is required",
+      "contentRequired": "Content is required"
+    },
+    "dontShowAgain": "Don't show again",
+    "close": "Close",
+    "agentSearchPlaceholder": "Search agents by name or email…",
+    "noAgents": "No agents found",
+    "selectedAgents": "{count} agent(s) selected"
   }
 }

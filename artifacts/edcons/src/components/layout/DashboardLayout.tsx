@@ -56,7 +56,9 @@ import {
   Palette,
   Languages,
   History,
+  Bell,
 } from "lucide-react";
+import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -104,6 +106,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
         items: [
           { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
           { title: t("dashboard.campaigns"), icon: Megaphone, url: '/admin/campaigns' },
+          { title: t("dashboard.popupAds"), icon: Bell, url: '/admin/popups' },
           { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
@@ -622,6 +625,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
+      <PopupRenderer />
     </SidebarProvider>
   );
 }
