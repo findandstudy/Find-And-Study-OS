@@ -36,11 +36,6 @@ const TEST_EMAIL = `inbox_${RUN_ID}@e2e.test`;
 const TEST_MESSAGE = `automated e2e webhook ${RUN_ID}`;
 
 test.describe("inbox e2e: webhook -> assign -> mine", () => {
-  test.skip(
-    !STAFF_EMAIL || !STAFF_PASS,
-    "PLAYWRIGHT_STAFF_EMAIL/PASS must be set to run the inbox e2e",
-  );
-
   test("inbound webhook lands, can be assigned, and moves to Mine", async ({
     page,
     request,
