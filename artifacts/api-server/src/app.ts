@@ -64,6 +64,8 @@ app.use((req, res, next) => {
       credentials: true,
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
+        // Always allow localhost origins (needed for local dev and e2e tests)
+        if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
         const allowed = getAllowedOrigins();
         if (allowed.length === 0 || allowed.includes(origin)) {
           return callback(null, true);

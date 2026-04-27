@@ -80,9 +80,22 @@ if (_savedOk) {
   }
 }
 
-// Activate in-memory routing before React mounts so the Replit canvas proxy
-// never sees a URL change for any navigation (public or admin).
-activateInMemoryRouting(_startPath);
+// Activate in-memory routing ONLY when the app is embedded in the Replit
+// canvas iframe.  The in-memory mode freezes the browser URL to prevent the
+// canvas proxy from detecting URL changes and reloading the iframe.
+//
+// When the app is accessed directly (e.g. Playwright e2e tests, standalone
+// browser tab), real history.pushState is used so that window.location
+// reflects each navigation — required for page.waitForURL() to work.
+try {
+  if (window.top !== window.self) {
+    activateInMemoryRouting(_startPath);
+  }
+} catch {
+  // Cross-origin iframe: window.top access throws SecurityError — assume
+  // we are embedded and activate in-memory routing to be safe.
+  activateInMemoryRouting(_startPath);
+}
 
 if (import.meta.env.DEV) {
   const count = parseInt(sessionStorage.getItem("_appInitCount") || "0") + 1;

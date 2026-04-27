@@ -171,6 +171,12 @@ export function useCustomBrowserLocation({ base = "" }: { base?: string } = {}) 
     _subscribers.add(onNav);
     window.addEventListener("popstate", onNav);
     window.addEventListener("hashchange", onNav);
+
+    // Sync: a child component's useEffect may have navigated *before* this
+    // subscriber was registered (React runs child effects before parent
+    // effects).  Re-read the current path now so this instance is up-to-date.
+    onNav();
+
     return () => {
       _subscribers.delete(onNav);
       window.removeEventListener("popstate", onNav);

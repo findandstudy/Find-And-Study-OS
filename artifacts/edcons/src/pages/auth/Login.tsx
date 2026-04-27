@@ -67,9 +67,9 @@ export default function Login() {
         if (returnTo) {
           setLocation(returnTo);
         } else if (["super_admin", "admin", "manager"].includes(user.role)) {
-          setLocation("/admin");
+          setLocation("/admin/dashboard");
         } else if (["staff", "consultant", "accountant", "editor"].includes(user.role)) {
-          setLocation("/staff");
+          setLocation("/staff/dashboard");
         } else if (user.role === "student") {
           setLocation("/student");
         } else if (["agent", "sub_agent", "agent_staff"].includes(user.role)) {
@@ -331,6 +331,7 @@ export default function Login() {
           {tab !== "verify" && tab !== "set-password" && tab !== "forgot-password" && (
             <div className="flex rounded-xl bg-secondary/50 p-1 mb-8">
               <button
+                aria-label="Login tab"
                 onClick={() => { setTab("login"); setError(""); }}
                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${tab === "login" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
@@ -353,8 +354,9 @@ export default function Login() {
 
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> {t("login.emailLabel")}</Label>
+                    <Label htmlFor="login-email" className="flex items-center gap-1.5 text-sm font-semibold"><Mail className="w-3.5 h-3.5" /> {t("login.emailLabel")}</Label>
                     <Input
+                      id="login-email"
                       type="email"
                       value={loginForm.email}
                       onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
@@ -365,9 +367,10 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> {t("login.passwordLabel")}</Label>
+                    <Label htmlFor="login-password" className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="w-3.5 h-3.5" /> {t("login.passwordLabel")}</Label>
                     <div className="relative">
                       <Input
+                        id="login-password"
                         type={showPassword ? "text" : "password"}
                         value={loginForm.password}
                         onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}

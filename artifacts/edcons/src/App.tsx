@@ -237,6 +237,7 @@ function StaffAdminShell() {
         <Switch>
           {/* Admin routes */}
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/dashboard" component={AdminDashboard} />
           <Route path="/admin/users">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
           </Route>
@@ -294,6 +295,7 @@ function StaffAdminShell() {
           </Route>
           {/* Staff routes */}
           <Route path="/staff" component={StaffDashboard} />
+          <Route path="/staff/dashboard" component={StaffDashboard} />
           <Route path="/staff/leads/:id">
             {(params) => <LeadDetail id={Number(params.id)} />}
           </Route>

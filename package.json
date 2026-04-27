@@ -7,11 +7,13 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "build:prod": "bash deploy/build-production.sh",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test:e2e": "PLAYWRIGHT_BASE_URL=http://localhost:25197 playwright test"
   },
   "private": true,
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "@playwright/test": "^1.59.1",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
   }
 }

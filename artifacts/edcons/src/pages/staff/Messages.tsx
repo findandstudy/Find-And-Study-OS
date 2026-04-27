@@ -212,6 +212,7 @@ function InboxTab() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all">("mine");
+  const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
   const [convs, setConvs] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -404,7 +405,8 @@ function InboxTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
       });
-      toast({ title: "Assigned to you" });
+      setAssignedNotice(true);
+      setTimeout(() => setAssignedNotice(false), 3000);
       fetchInbox();
       fetchDetail(selectedId);
     } catch {
@@ -545,6 +547,7 @@ function InboxTab() {
               return (
                 <div
                   key={c.id}
+                  data-testid="inbox-conversation-item"
                   onClick={() => setSelectedId(c.id)}
                   className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 ${isSel ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-secondary/50"}`}
                 >
@@ -616,11 +619,14 @@ function InboxTab() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 items-center">
                   {conv.assignedToId !== user?.id && (
                     <Button size="sm" variant="outline" onClick={assignToMe} className="h-7 text-xs gap-1">
-                      <UserCheck className="w-3 h-3" /> Assign me
+                      <UserCheck className="w-3 h-3" /> Assign to me
                     </Button>
+                  )}
+                  {assignedNotice && (
+                    <span className="text-xs text-green-600 font-medium">Assigned to you</span>
                   )}
                 </div>
               </div>

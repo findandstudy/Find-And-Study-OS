@@ -24,18 +24,33 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "webhook-dedup"
-
-[[workflows.workflow]]
-name = "webhook-dedup"
-author = "agent"
+args = "inbox-tests"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run test:webhook-dedup"
+task = "workflow.run"
+args = "inbox-e2e"
+
+[[workflows.workflow]]
+name = "inbox-tests"
+author = "agent"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server test"
+
+[[workflows.workflow]]
+name = "inbox-e2e"
+author = "agent"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm test:e2e"
 
 [agent]
 stack = "PNPM_WORKSPACE"
@@ -53,3 +68,7 @@ channel = "stable-25_05"
 [userenv.development]
 SEED_ADMIN_PASSWORD = "En9881274!"
 SEED_AGENT_PASSWORD = "findandstudy123"
+PLAYWRIGHT_BASE_URL = "http://localhost:25197"
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium"
+PLAYWRIGHT_STAFF_EMAIL = "en@findandstudy.com"
+PLAYWRIGHT_STAFF_PASS = "En9881274!"

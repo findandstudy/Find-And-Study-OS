@@ -53,6 +53,7 @@ import { resolveIdentity } from "../src/lib/inbox/identityResolver";
 import { verifyWhatsAppSignature } from "../src/lib/inbox/channels/whatsapp";
 import { verifyWebFormSignature } from "../src/lib/inbox/channels/webForm";
 import { encryptConfig } from "../src/lib/encryption";
+import { ensureRateLimitsTable } from "../src/lib/pgRateLimiter";
 import webhooksRouter from "../src/routes/webhooks";
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -516,6 +517,7 @@ interface RouteServer {
 }
 
 async function startRouteServer(): Promise<RouteServer> {
+  await ensureRateLimitsTable();
   const app: Express = express();
   app.use("/api", webhooksRouter);
   const server = http.createServer(app);
