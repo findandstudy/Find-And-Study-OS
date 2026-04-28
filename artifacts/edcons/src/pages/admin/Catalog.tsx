@@ -565,10 +565,17 @@ function CitiesTab() {
             <div><Label>City Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div>
               <Label>Country *</Label>
-              <Select value={form?.countryId ? String(form.countryId) : ""} onValueChange={v => setForm(f => ({ ...f, countryId: Number(v) }))}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select country" /></SelectTrigger>
-                <SelectContent>{countries.map(c => <SelectItem key={c.id} value={String(c.id)}><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span></SelectItem>)}</SelectContent>
-              </Select>
+              <SearchableSelect
+                className="mt-1"
+                value={form?.countryId ? String(form.countryId) : ""}
+                onValueChange={v => setForm(f => ({ ...f, countryId: Number(v) }))}
+                placeholder="Select country"
+                options={countries.map(c => ({
+                  value: String(c.id),
+                  label: c.name,
+                  icon: c.code ? <CountryFlag code={c.code} size="sm" /> : undefined,
+                }))}
+              />
             </div>
             <div className="flex items-center justify-between">
               <Label>Active</Label>
