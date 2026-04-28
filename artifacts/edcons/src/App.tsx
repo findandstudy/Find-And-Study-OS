@@ -22,6 +22,16 @@ import { useGetMe } from "@workspace/api-client-react";
 import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
 
+function cacheBustedReload(): void {
+  // Bypass HTTP cache by appending a one-shot query param. A plain
+  // window.location.reload() will happily serve the stale index.html
+  // out of the browser's HTTP cache, which is exactly what causes the
+  // post-deploy ChunkLoadError loop.
+  const url = new URL(window.location.href);
+  url.searchParams.set("_cb", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
   retries = 4
@@ -33,7 +43,7 @@ function lazyRetry<T extends { default: React.ComponentType<any> }>(
           const reloaded = sessionStorage.getItem("chunk_reload");
           if (!reloaded) {
             sessionStorage.setItem("chunk_reload", "1");
-            window.location.reload();
+            cacheBustedReload();
           }
           throw err;
         }
@@ -43,6 +53,17 @@ function lazyRetry<T extends { default: React.ComponentType<any> }>(
       });
     return attempt(retries);
   });
+}
+
+if (typeof window !== "undefined") {
+  // Strip the cache-buster query param after a successful load so the URL
+  // stays clean and we don't pollute share/bookmark links.
+  if (window.location.search.includes("_cb=")) {
+    const cleaned = new URL(window.location.href);
+    cleaned.searchParams.delete("_cb");
+    const next = cleaned.pathname + (cleaned.search ? cleaned.search : "") + cleaned.hash;
+    window.history.replaceState(null, "", next);
+  }
 }
 
 const About = lazyRetry(() => import("@/pages/public/About"));

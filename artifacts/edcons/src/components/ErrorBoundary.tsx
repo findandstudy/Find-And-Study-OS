@@ -63,13 +63,18 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleReload = () => {
     sessionStorage.removeItem("chunk_reload");
-    window.location.reload();
+    // Bypass HTTP cache so a stale index.html doesn't trigger the same
+    // ChunkLoadError loop after a fresh deploy.
+    const url = new URL(window.location.href);
+    url.searchParams.set("_cb", Date.now().toString());
+    window.location.replace(url.toString());
   };
 
   handleHome = () => {
+    sessionStorage.removeItem("chunk_reload");
     const lang = this.state.lang;
     const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-    window.location.href = `${base}/${lang}/`;
+    window.location.href = `${base}/${lang}/?_cb=${Date.now()}`;
   };
 
   render() {
