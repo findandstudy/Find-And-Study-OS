@@ -29,6 +29,7 @@ const router: IRouter = Router();
 
 const rateLimiter = new RateLimiterPostgres({
   storeClient: pool,
+  storeType: "pool",
   tableName: "rate_limits",
   points: 5,
   duration: 900,
