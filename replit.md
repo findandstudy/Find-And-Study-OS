@@ -45,6 +45,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 - **Type Safety:** Extensive use of TypeScript across the monorepo.
 - **Production Deployment:** Configured for Hostinger VPS with Nginx, PM2, and a build/deploy pipeline.
 - **Zero-Flash Routing:** Global in-memory routing (`activateInMemoryRouting` in `main.tsx`) blocks `history.pushState` so the Replit canvas proxy never detects URL changes. `PublicLayout` is lifted to `PublicRoutes` in `App.tsx` (same pattern as `DashboardLayout` for portals) so the nav/footer are never unmounted on public page transitions. Login renders without `PublicLayout` (location check in `PublicRoutes`).
+- **Resilient Error Recovery:** Each lazy route is wrapped in `ErrorBoundary` (`artifacts/edcons/src/components/ErrorBoundary.tsx`). On any caught error the boundary attempts a single cache-busted reload per pathname per session (sessionStorage key `edcons_recover:<pathname>`), then on the next failure shows the localized "Page could not be loaded" UI with a collapsible **Technical details** panel exposing `error.name`, `error.message`, and a 6-line stack so users can report the actual error. `componentDidMount` clears the recovery flag on success. `lazyRetry` in `App.tsx` retries dynamic imports 4× with backoff before bubbling to the boundary. Cache-busted reloads append `?_cb=<timestamp>` and the param is stripped via `history.replaceState` after load.
 
 ## External Dependencies
 

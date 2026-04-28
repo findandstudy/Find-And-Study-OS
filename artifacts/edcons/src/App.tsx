@@ -22,31 +22,17 @@ import { useGetMe } from "@workspace/api-client-react";
 import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
 
-function cacheBustedReload(): void {
-  // Bypass HTTP cache by appending a one-shot query param. A plain
-  // window.location.reload() will happily serve the stale index.html
-  // out of the browser's HTTP cache, which is exactly what causes the
-  // post-deploy ChunkLoadError loop.
-  const url = new URL(window.location.href);
-  url.searchParams.set("_cb", Date.now().toString());
-  window.location.replace(url.toString());
-}
-
 function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
   retries = 4
 ): React.LazyExoticComponent<T["default"]> {
+  // Retry the dynamic import a few times with a short backoff to ride
+  // through transient network blips. If it still fails we throw and let
+  // the surrounding ErrorBoundary do its single cache-busted reload.
   return lazy(() => {
     const attempt = (remaining: number): Promise<T> =>
       factory().catch((err: Error) => {
-        if (remaining <= 0) {
-          const reloaded = sessionStorage.getItem("chunk_reload");
-          if (!reloaded) {
-            sessionStorage.setItem("chunk_reload", "1");
-            cacheBustedReload();
-          }
-          throw err;
-        }
+        if (remaining <= 0) throw err;
         return new Promise<T>((resolve) =>
           setTimeout(() => resolve(attempt(remaining - 1)), 800)
         );
