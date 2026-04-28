@@ -9,6 +9,21 @@ import { Link } from "wouter";
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 function isOverdue(d: string) { return new Date(d) < new Date(); }
 
+// Normalize anything we got back from the API into an array. Endpoints
+// occasionally return `null`, an error envelope (`{message: "..."}`), or a
+// `{data: [...]}` paginated wrapper. Without this guard, `.slice()` /
+// `.map()` on the result throws and crashes the entire dashboard.
+function toArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const data = (value as any).data;
+    if (Array.isArray(data)) return data;
+    const items = (value as any).items;
+    if (Array.isArray(items)) return items;
+  }
+  return [];
+}
+
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#22c55e', '#f59e0b'];
 
@@ -64,38 +79,41 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 export default function AdminDashboard() {
   const { data: stats, isLoading } = useGetOverviewStats();
 
-  const { data: growthData = [] } = useQuery<any[]>({
+  const { data: growthRaw } = useQuery<unknown>({
     queryKey: ["/api/stats/growth"],
-    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()).catch(() => []),
   });
+  const growthData: any[] = toArray(growthRaw);
 
-  const { data: upcomingFollowUps = [] } = useQuery<any[]>({
+  const { data: upcomingRaw } = useQuery<unknown>({
     queryKey: ["/api/follow-ups/upcoming"],
-    queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()).catch(() => []),
   });
+  const upcomingFollowUps: any[] = toArray(upcomingRaw);
 
-  const { data: latestStudentsData } = useQuery<any>({
+  const { data: latestStudentsRaw } = useQuery<unknown>({
     queryKey: ["/api/students", "dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/students?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/students?limit=5&page=1`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
   });
-  const latestStudents: any[] = latestStudentsData?.data || [];
+  const latestStudents: any[] = toArray(latestStudentsRaw);
 
-  const { data: latestAuditData } = useQuery<any>({
+  const { data: latestAuditRaw } = useQuery<unknown>({
     queryKey: ["/api/audit", "dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
   });
-  const latestUpdates: any[] = latestAuditData?.data || [];
+  const latestUpdates: any[] = toArray(latestAuditRaw);
 
-  const { data: notificationsData } = useQuery<any>({
+  const { data: notificationsRaw } = useQuery<unknown>({
     queryKey: ["/api/notifications", "dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
   });
-  const latestNotifications: any[] = notificationsData?.data || [];
+  const latestNotifications: any[] = toArray(notificationsRaw);
 
-  const { data: contractAgents = [] } = useQuery<any[]>({
+  const { data: contractAgentsRaw } = useQuery<unknown>({
     queryKey: ["/api/agents/contract-alerts"],
-    queryFn: () => fetch(`${BASE}/api/agents/contract-alerts`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/agents/contract-alerts`, { credentials: "include" }).then(r => r.json()).catch(() => []),
   });
+  const contractAgents: any[] = toArray(contractAgentsRaw);
 
   const s: any = stats || {};
   const statCards = [
