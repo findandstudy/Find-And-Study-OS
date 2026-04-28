@@ -29,3 +29,13 @@ serve = "static"
 [[services.production.rewrites]]
 from = "/*"
 to = "/index.html"
+
+[[services.production.headers]]
+path = "/index.html"
+[services.production.headers.values]
+"Cache-Control" = "no-cache, no-store, must-revalidate"
+
+[[services.production.headers]]
+path = "/assets/*"
+[services.production.headers.values]
+"Cache-Control" = "public, max-age=31536000, immutable"
