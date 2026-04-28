@@ -6,6 +6,8 @@ import {
   getSessionId,
   getSession,
   touchSession,
+  SESSION_COOKIE,
+  SESSION_TTL,
   type SessionUser,
 } from "../lib/replitAuth";
 
@@ -109,6 +111,18 @@ export async function authMiddleware(
   // Slide session expiry on every authenticated request (fire-and-forget).
   setImmediate(() => {
     touchSession(sid).catch(() => {});
+  });
+
+  // Slide the BROWSER cookie expiry forward to match the server-side session.
+  // Without this, the cookie's maxAge is fixed at login time (30 min) and
+  // disappears even though the user is actively using the app — leading to
+  // unexpected 401 "Authentication required" errors on the next mutation.
+  res.cookie(SESSION_COOKIE, sid, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
   });
 
   next();
