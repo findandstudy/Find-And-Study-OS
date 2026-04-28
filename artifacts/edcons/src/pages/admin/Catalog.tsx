@@ -402,7 +402,7 @@ function CitiesTab() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: countriesData } = useQuery({
-    queryKey: ["countries", 1, ""],
+    queryKey: ["all-countries-cities"],
     queryFn: () => api("/api/countries?limit=500"),
   });
   const countries: Country[] = countriesData?.data ?? [];
