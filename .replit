@@ -4,7 +4,7 @@ modules = ["nodejs-24", "javascript", "postgresql-16"]
 id = "artifacts/api-server"
 
 [[artifacts]]
-id = "artifacts/mockup-sandbox"
+id = "artifacts/edcons"
 
 [deployment]
 router = "application"
