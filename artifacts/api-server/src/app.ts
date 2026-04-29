@@ -42,11 +42,16 @@ const cspDirectives = {
 };
 
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api/public/embed/") && req.path.endsWith("/widget")) {
+  const isEmbed = req.path.startsWith("/api/public/embed/");
+  const isWidget = isEmbed && req.path.endsWith("/widget");
+
+  if (isEmbed) {
     helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: isWidget ? false : { directives: cspDirectives },
       crossOriginEmbedderPolicy: false,
-      frameguard: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      crossOriginOpenerPolicy: false,
+      frameguard: isWidget ? false : undefined,
     })(req, res, next);
   } else {
     helmet({
