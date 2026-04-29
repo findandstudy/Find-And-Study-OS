@@ -590,6 +590,45 @@ function AuthPrefetch() {
   return null;
 }
 
+// Listen for 401 responses from the shared API client. When the server
+// reports the session is gone (e.g. cookie expired, deploy invalidated
+// sessions, manual signout in another tab), wipe local cached user state
+// and bounce the user to the login page so they don't get stuck looking
+// at stale UI with broken images and confusing "Authentication required"
+// toasts. Preserve where they were so login can return them after auth.
+function setupUnauthorizedHandler() {
+  if (typeof window === "undefined") return;
+  if ((window as any).__unauthorizedHandlerInstalled) return;
+  (window as any).__unauthorizedHandlerInstalled = true;
+
+  let redirecting = false;
+  window.addEventListener("api:unauthorized", () => {
+    if (redirecting) return;
+
+    const { pathname, search } = window.location;
+    // Don't redirect away from the login page or the public site.
+    const langSegment = pathname.split("/")[1] || DEFAULT_LANGUAGE;
+    const isOnLogin = /\/login(\/|$|\?)/.test(pathname);
+    const isOnPublic = !/\/(admin|agent|student|staff)(\/|$)/.test(pathname);
+    if (isOnLogin || isOnPublic) return;
+
+    redirecting = true;
+
+    // Wipe the in-memory + localStorage user cache so the next page render
+    // doesn't show a stale "logged in" header.
+    try { clearAuthCache(); } catch {}
+    try { queryClient.clear(); } catch {}
+
+    const lang = isValidLanguage(langSegment) ? langSegment : DEFAULT_LANGUAGE;
+    const returnTo = encodeURIComponent(pathname + search);
+    window.location.replace(`/${lang}/login?returnTo=${returnTo}`);
+  });
+}
+
+if (typeof window !== "undefined") {
+  setupUnauthorizedHandler();
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>

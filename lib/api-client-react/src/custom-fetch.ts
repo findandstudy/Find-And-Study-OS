@@ -310,6 +310,23 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+
+    // When the server says we're unauthenticated (e.g. session cookie expired
+    // or invalidated), notify any browser listeners so the host app can clear
+    // cached user state and redirect to login. We use a CustomEvent so this
+    // shared library remains agnostic to any specific app/router/storage layer.
+    if (response.status === 401 && typeof window !== "undefined") {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("api:unauthorized", {
+            detail: { url: requestInfo.url, method: requestInfo.method },
+          }),
+        );
+      } catch {
+        // Ignore dispatch failures (e.g. older browsers without CustomEvent).
+      }
+    }
+
     throw new ApiError(response, errorData, requestInfo);
   }
 
