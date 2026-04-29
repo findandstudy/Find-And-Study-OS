@@ -882,43 +882,35 @@ function UniversitiesTab() {
                 </div>
                 <div>
                   <Label>Country *</Label>
-                  <Select
+                  <SearchableSelect
+                    className="mt-1"
                     value={form?.country ?? ""}
                     onValueChange={v => {
                       const found = allCountries.find(c => c.name === v);
                       setF({ country: v, city: null });
                       setSelCountryId(found?.id ?? null);
                     }}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select country…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allCountries.map(c => (
-                        <SelectItem key={c.id} value={c.name}>
-                          <span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="sm" /> : null}{c.name}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select country…"
+                    options={allCountries.map(c => ({
+                      value: c.name,
+                      label: c.name,
+                      icon: c.code ? <CountryFlag code={c.code} size="sm" /> : undefined,
+                    }))}
+                  />
                 </div>
                 <div>
                   <Label>City</Label>
-                  <Select
+                  <SearchableSelect
+                    className="mt-1"
                     value={form?.city ?? ""}
                     onValueChange={v => setF({ city: v === "__none__" ? null : (v || null) })}
                     disabled={!selCountryId}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={selCountryId ? "Select city…" : "Select country first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— No city —</SelectItem>
-                      {formCities.map(c => (
-                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={selCountryId ? "Select city…" : "Select country first"}
+                    options={[
+                      { value: "__none__", label: "— No city —" },
+                      ...formCities.map(c => ({ value: c.name, label: c.name })),
+                    ]}
+                  />
                 </div>
                 <div>
                   <Label>University Type</Label>
