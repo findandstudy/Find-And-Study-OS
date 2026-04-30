@@ -564,7 +564,7 @@ function generateEmbedScript(baseUrl: string): string {
           var rect = iframe.getBoundingClientRect();
           var vh = window.innerHeight || document.documentElement.clientHeight || 0;
           if (rect.bottom < 80 || rect.top > vh - 80) {
-            iframe.scrollIntoView({block: 'start'});
+            iframe.scrollIntoView({block: 'start', behavior: 'smooth'});
           }
         }catch(err){}
         lockScroll();
