@@ -458,10 +458,129 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
     el.appendChild(iframe);
-    window.addEventListener('message', function(e) {
-      if (e.data && e.data.type === 'edcons-resize' && e.data.slug === slug) {
-        iframe.style.height = e.data.height + 'px';
+    var savedScroll = null;
+    var savedBodyStyle = null;
+    var rafScheduled = false;
+    var scrollGuardActive = false;
+    function scrollGuardLoop(){
+      if (!scrollGuardActive) return;
+      if (savedScroll !== null && Math.abs(window.pageYOffset - savedScroll) > 1) {
+        window.scrollTo(0, savedScroll);
       }
+      var raf = window.requestAnimationFrame || function(cb){return setTimeout(cb,16);};
+      raf(scrollGuardLoop);
+    }
+    function getIframeTop(){
+      try{
+        var rect = iframe.getBoundingClientRect();
+        var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
+        if (savedScroll !== null) return rect.top + savedScroll;
+        return rect.top + sy;
+      }catch(e){return 0;}
+    }
+    function sendViewport(){
+      try{
+        if (!iframe.contentWindow) return;
+        var rect = iframe.getBoundingClientRect();
+        var scrollY = savedScroll !== null ? savedScroll : (window.pageYOffset || document.documentElement.scrollTop || 0);
+        iframe.contentWindow.postMessage({
+          type: 'edcons-viewport',
+          slug: slug,
+          parentScrollY: scrollY,
+          parentViewportHeight: window.innerHeight || document.documentElement.clientHeight || 0,
+          iframeTop: getIframeTop(),
+          iframeHeight: rect.height
+        }, '*');
+      }catch(e){}
+    }
+    function scheduleSendViewport(){
+      if (rafScheduled) return;
+      rafScheduled = true;
+      var raf = window.requestAnimationFrame || function(cb){return setTimeout(cb,16);};
+      raf(function(){ rafScheduled = false; sendViewport(); });
+    }
+    function lockScroll(){
+      if (savedBodyStyle !== null) return;
+      var html = document.documentElement;
+      var b = document.body;
+      savedScroll = window.pageYOffset || html.scrollTop || 0;
+      savedBodyStyle = {
+        position: b.style.position,
+        top: b.style.top,
+        left: b.style.left,
+        right: b.style.right,
+        width: b.style.width,
+        overflow: b.style.overflow,
+        htmlOverflow: html.style.overflow,
+        touchAction: b.style.touchAction
+      };
+      b.style.position = 'fixed';
+      b.style.top = '-' + savedScroll + 'px';
+      b.style.left = '0';
+      b.style.right = '0';
+      b.style.width = '100%';
+      b.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      b.style.touchAction = 'none';
+      if (!scrollGuardActive) {
+        scrollGuardActive = true;
+        var raf = window.requestAnimationFrame || function(cb){return setTimeout(cb,16);};
+        raf(scrollGuardLoop);
+      }
+    }
+    function unlockScroll(){
+      if (savedBodyStyle === null) return;
+      var html = document.documentElement;
+      var b = document.body;
+      b.style.position = savedBodyStyle.position;
+      b.style.top = savedBodyStyle.top;
+      b.style.left = savedBodyStyle.left;
+      b.style.right = savedBodyStyle.right;
+      b.style.width = savedBodyStyle.width;
+      b.style.overflow = savedBodyStyle.overflow;
+      html.style.overflow = savedBodyStyle.htmlOverflow;
+      b.style.touchAction = savedBodyStyle.touchAction;
+      savedBodyStyle = null;
+      var s = savedScroll;
+      function snap(){ if (s !== null) window.scrollTo(0, s); }
+      snap();
+      var raf = window.requestAnimationFrame || function(cb){return setTimeout(cb,16);};
+      raf(snap);
+      setTimeout(snap, 50);
+      setTimeout(snap, 200);
+      setTimeout(snap, 500);
+      setTimeout(function(){
+        scrollGuardActive = false;
+        savedScroll = null;
+      }, 1500);
+    }
+    window.addEventListener('message', function(e) {
+      var d = e.data;
+      if (!d || d.slug !== slug) return;
+      if (d.type === 'edcons-resize') {
+        iframe.style.height = d.height + 'px';
+      } else if (d.type === 'edcons-modal-open') {
+        try{
+          var rect = iframe.getBoundingClientRect();
+          var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+          if (rect.bottom < 80 || rect.top > vh - 80) {
+            iframe.scrollIntoView({block: 'start'});
+          }
+        }catch(err){}
+        lockScroll();
+        sendViewport();
+      } else if (d.type === 'edcons-modal-close') {
+        unlockScroll();
+      } else if (d.type === 'edcons-viewport-request') {
+        sendViewport();
+      }
+    });
+    window.addEventListener('scroll', scheduleSendViewport, {passive:true});
+    window.addEventListener('resize', scheduleSendViewport);
+    window.addEventListener('orientationchange', scheduleSendViewport);
+    iframe.addEventListener('load', function(){
+      sendViewport();
+      setTimeout(sendViewport, 200);
     });
   });
 })();`;
@@ -516,8 +635,8 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-pagination button{padding:8px 14px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:0.875rem;color:#374151}
 .ew-pagination button:disabled{opacity:.4;cursor:default}
 .ew-pagination button.active{background:${primaryColor};color:#fff;border-color:${primaryColor}}
-.ew-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px}
-.ew-modal{background:#fff;border-radius:${borderRadius};max-width:540px;width:100%;max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.ew-modal-overlay{position:absolute;top:0;left:0;width:100%;min-height:100%;background:rgba(0,0,0,.5);z-index:9999;padding:0}
+.ew-modal{position:absolute;left:50%;transform:translateX(-50%);top:24px;background:#fff;border-radius:${borderRadius};max-width:540px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
 .ew-modal h3{font-size:1.25rem;font-weight:700;margin-bottom:4px;color:#1f2937}
 .ew-modal .ew-modal-subtitle{font-size:0.85rem;color:#64748b;margin-bottom:20px}
 .ew-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -530,7 +649,6 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-form-actions{display:flex;gap:10px;margin-top:16px}
 .ew-close-btn{position:absolute;top:16px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#9ca3af;line-height:1}
 .ew-close-btn:hover{color:#374151}
-.ew-modal{position:relative}
 .ew-success{text-align:center;padding:40px 20px}
 .ew-success svg{width:64px;height:64px;color:#22c55e;margin-bottom:16px}
 .ew-success h3{font-size:1.3rem;color:#1f2937;margin-bottom:8px}
@@ -610,6 +728,9 @@ var aiResult=null;
 var extractedFields={};
 var searchDebounce=null;
 var userFilters={};
+var parentViewport=null;
+var modalElements=null;
+var modalNotified=false;
 
 var ALLOWED_MIMES=['application/pdf','image/jpeg','image/png'];
 var ALLOWED_EXTS=['.pdf','.jpg','.jpeg','.png'];
@@ -965,6 +1086,62 @@ function renderSuccess(){
   return '<div class="ew-success"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>Application Submitted!</h3><p>Thank you! Your application'+docMsg+' has been received. We will review it and get back to you shortly.</p></div>';
 }
 
+function computeModalPosition(modalHeight){
+  var ROOT=document.querySelector('.ew-root');
+  var rootHeight=ROOT?ROOT.offsetHeight:document.body.scrollHeight;
+  if(!parentViewport){
+    return {top:24,maxHeight:Math.max(300,Math.min(rootHeight-32,window.innerHeight-32||600))};
+  }
+  var pv=parentViewport;
+  var visibleTopInIframe=Math.max(0,pv.parentScrollY-pv.iframeTop);
+  var visibleBottomInIframe=Math.min(pv.iframeHeight||rootHeight,(pv.parentScrollY+pv.parentViewportHeight)-pv.iframeTop);
+  var visibleHeight=Math.max(0,visibleBottomInIframe-visibleTopInIframe);
+  var maxHeight=Math.max(240,pv.parentViewportHeight-32);
+  if(visibleHeight<120){
+    return {top:visibleTopInIframe+16,maxHeight:maxHeight};
+  }
+  var mh=modalHeight||0;
+  var top;
+  if(mh>0&&mh<visibleHeight){
+    top=visibleTopInIframe+Math.max(8,(visibleHeight-mh)/2);
+  } else {
+    top=visibleTopInIframe+16;
+  }
+  return {top:top,maxHeight:maxHeight};
+}
+
+function repositionModal(){
+  if(!modalElements)return;
+  var modal=modalElements.modal;
+  var pos=computeModalPosition(0);
+  modal.style.maxHeight=pos.maxHeight+'px';
+  var measured=modal.offsetHeight;
+  var posFinal=computeModalPosition(measured);
+  modal.style.top=posFinal.top+'px';
+  modal.style.maxHeight=posFinal.maxHeight+'px';
+}
+
+function notifyParentModalOpen(){
+  try{window.parent.postMessage({type:'edcons-modal-open',slug:SLUG},'*');}catch(e){}
+  try{window.parent.postMessage({type:'edcons-viewport-request',slug:SLUG},'*');}catch(e){}
+}
+
+function notifyParentModalClose(){
+  try{window.parent.postMessage({type:'edcons-modal-close',slug:SLUG},'*');}catch(e){}
+}
+
+function closeModal(){
+  formOpen=false;
+  if(modalElements){
+    modalElements.overlay.remove();
+    modalElements=null;
+  }
+  if(modalNotified){
+    modalNotified=false;
+    notifyParentModalClose();
+  }
+}
+
 function showModal(){
   var existing=$('.ew-modal-overlay');
   if(existing)existing.remove();
@@ -973,15 +1150,22 @@ function showModal(){
   modal.innerHTML='<button class="ew-close-btn" id="ew-modal-close">&times;</button>'+(formSubmitted?renderSuccess():renderFormContent(formProgram));
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  overlay.addEventListener('click',function(e){if(e.target===overlay){formOpen=false;overlay.remove()}});
+  modalElements={overlay:overlay,modal:modal};
+  overlay.addEventListener('click',function(e){if(e.target===overlay){closeModal();}});
   bindModalEvents(modal,overlay);
+  if(!modalNotified){
+    modalNotified=true;
+    notifyParentModalOpen();
+  }
+  repositionModal();
+  setTimeout(repositionModal,60);
 }
 
 function bindModalEvents(modal,overlay){
   var closeBtn=$('#ew-modal-close',modal);
-  if(closeBtn)closeBtn.addEventListener('click',function(){formOpen=false;overlay.remove()});
+  if(closeBtn)closeBtn.addEventListener('click',function(){closeModal();});
   var cancelBtn=$('#ew-cancel',modal);
-  if(cancelBtn)cancelBtn.addEventListener('click',function(){formOpen=false;overlay.remove()});
+  if(cancelBtn)cancelBtn.addEventListener('click',function(){closeModal();});
   var form=$('#ew-form',modal);
   if(form)form.addEventListener('submit',handleFormSubmit);
   $$('[data-doc-input]',modal).forEach(function(input){
@@ -1163,13 +1347,31 @@ function esc(s){if(!s)return '';var d=document.createElement('div');d.textConten
 
 function resizeParent(){
   try{
-    var h=document.body.scrollHeight;
+    var root=document.querySelector('.ew-root');
+    var h=root?(root.offsetHeight+32):document.body.scrollHeight;
     window.parent.postMessage({type:'edcons-resize',slug:SLUG,height:h},'*');
   }catch(e){}
 }
 
 var ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(resizeParent):null;
-if(ro)ro.observe(document.body);
+if(ro){
+  var rootEl=document.querySelector('.ew-root');
+  ro.observe(rootEl||document.body);
+}
+
+window.addEventListener('message',function(e){
+  var d=e.data;
+  if(!d||d.slug!==SLUG)return;
+  if(d.type==='edcons-viewport'){
+    parentViewport={
+      parentScrollY:d.parentScrollY||0,
+      parentViewportHeight:d.parentViewportHeight||0,
+      iframeTop:d.iframeTop||0,
+      iframeHeight:d.iframeHeight||0
+    };
+    if(modalElements)repositionModal();
+  }
+});
 
 init();
 })();
