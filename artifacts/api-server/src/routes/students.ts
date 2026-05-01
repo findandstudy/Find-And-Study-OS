@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -417,7 +417,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     : isAgent
     ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId" && f !== "status")
     : STUDENT_PATCH_FIELDS;
-  if (role !== "super_admin" && !isAgent && !isStudent) {
+  if (!isAdmin && !isAgent && !isStudent) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }
   if (!isAdmin && !isAgent) {
@@ -478,6 +478,21 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   await logAudit(req.user!.id, "update_student", "student", id, updates, req.ip);
+
+  // T4: Cross-sync contact info back to source lead(s) (best-effort)
+  const studentSyncFields: Record<string, unknown> = {};
+  for (const f of ["firstName", "lastName", "email", "phone", "phoneE164", "nationality"]) {
+    if (Object.prototype.hasOwnProperty.call(normUpdates, f)) {
+      studentSyncFields[f] = (normUpdates as any)[f];
+    }
+  }
+  if (Object.keys(studentSyncFields).length > 0) {
+    try {
+      await db.update(leadsTable).set(studentSyncFields).where(eq(leadsTable.convertedStudentId, id));
+    } catch (err) {
+      console.warn("[student->lead sync] failed:", err);
+    }
+  }
 
   if (updates.status && updates.status !== existing.status) {
     const recipientIds: number[] = [];
@@ -786,12 +801,13 @@ router.get("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES),
       completedAt: followUpsTable.completedAt,
       notes: followUpsTable.notes,
       createdById: followUpsTable.createdById,
-      createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      createdByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', cu.first_name, cu.last_name), '') FROM users cu WHERE cu.id = ${followUpsTable.createdById})`,
+      updatedById: followUpsTable.updatedById,
+      updatedByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', uu.first_name, uu.last_name), '') FROM users uu WHERE uu.id = ${followUpsTable.updatedById})`,
       createdAt: followUpsTable.createdAt,
       updatedAt: followUpsTable.updatedAt,
     })
     .from(followUpsTable)
-    .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
     .where(eq(followUpsTable.studentId, id))
     .orderBy(asc(followUpsTable.scheduledAt))
     .limit(limitNum)

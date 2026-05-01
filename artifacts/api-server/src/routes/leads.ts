@@ -301,7 +301,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   let allowedFields = isAgent ? AGENT_LEAD_PATCH_FIELDS : LEAD_PATCH_FIELDS;
-  if (user.role !== "super_admin") {
+  if (!isAdmin) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }
   if (!isAdmin && !isAgent) {
@@ -345,6 +345,23 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   await logAudit(user.id, "update_lead", "lead", id, updates, req.ip);
+
+  // T4: Cross-sync contact info to converted student (best-effort, ignore unique conflicts)
+  if (lead.convertedStudentId) {
+    const syncFields: Record<string, unknown> = {};
+    for (const f of ["firstName", "lastName", "email", "phone", "phoneE164", "nationality"]) {
+      if (Object.prototype.hasOwnProperty.call(normUpdates, f)) {
+        syncFields[f] = (normUpdates as any)[f];
+      }
+    }
+    if (Object.keys(syncFields).length > 0) {
+      try {
+        await db.update(studentsTable).set(syncFields).where(eq(studentsTable.id, lead.convertedStudentId));
+      } catch (err) {
+        console.warn("[lead->student sync] failed:", err);
+      }
+    }
+  }
 
   if (updates.status && updates.status !== existing.status) {
     dispatchNotification({
@@ -721,12 +738,13 @@ router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), as
       completedAt: followUpsTable.completedAt,
       notes: followUpsTable.notes,
       createdById: followUpsTable.createdById,
-      createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      createdByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', cu.first_name, cu.last_name), '') FROM users cu WHERE cu.id = ${followUpsTable.createdById})`,
+      updatedById: followUpsTable.updatedById,
+      updatedByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', uu.first_name, uu.last_name), '') FROM users uu WHERE uu.id = ${followUpsTable.updatedById})`,
       createdAt: followUpsTable.createdAt,
       updatedAt: followUpsTable.updatedAt,
     })
     .from(followUpsTable)
-    .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
     .where(eq(followUpsTable.leadId, id))
     .orderBy(asc(followUpsTable.scheduledAt))
     .limit(limitNum)
@@ -768,11 +786,12 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { completed, title, scheduledAt, notes } = req.body;
   const updates: Record<string, unknown> = {};
+  let isContentEdit = false;
   if (completed !== undefined) {
     updates.completed = completed;
     updates.completedAt = completed ? new Date() : null;
   }
-  if (title !== undefined) updates.title = String(title).slice(0, 500);
+  if (title !== undefined) { updates.title = String(title).slice(0, 500); isContentEdit = true; }
   if (scheduledAt !== undefined) {
     const scheduledDate = new Date(scheduledAt);
     if (isNaN(scheduledDate.getTime())) {
@@ -784,13 +803,17 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
       return;
     }
     updates.scheduledAt = scheduledDate;
+    isContentEdit = true;
   }
-  if (notes !== undefined) updates.notes = notes ? String(notes).slice(0, 2000) : null;
+  if (notes !== undefined) { updates.notes = notes ? String(notes).slice(0, 2000) : null; isContentEdit = true; }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields" });
     return;
   }
   updates.updatedAt = new Date();
+  if (isContentEdit) {
+    updates.updatedById = req.user!.id;
+  }
   const [followUp] = await db.update(followUpsTable).set(updates).where(eq(followUpsTable.id, id)).returning();
   if (!followUp) { res.status(404).json({ error: "Follow-up not found" }); return; }
   const [enriched] = await db
@@ -804,12 +827,13 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
       completedAt: followUpsTable.completedAt,
       notes: followUpsTable.notes,
       createdById: followUpsTable.createdById,
-      createdByName: sql<string | null>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`,
+      createdByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', cu.first_name, cu.last_name), '') FROM users cu WHERE cu.id = ${followUpsTable.createdById})`,
+      updatedById: followUpsTable.updatedById,
+      updatedByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', uu.first_name, uu.last_name), '') FROM users uu WHERE uu.id = ${followUpsTable.updatedById})`,
       createdAt: followUpsTable.createdAt,
       updatedAt: followUpsTable.updatedAt,
     })
     .from(followUpsTable)
-    .leftJoin(usersTable, eq(followUpsTable.createdById, usersTable.id))
     .where(eq(followUpsTable.id, id));
   res.json(enriched || followUp);
 });

@@ -144,7 +144,7 @@ function humanizeChanges(changes: string | null, userNames: Map<number, string>)
 
 router.get("/audit", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
-  const { search, page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { search, resource, resourceId, page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
@@ -152,7 +152,16 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
   const conditions = [];
 
   const isManager = (MANAGER_ROLES as readonly string[]).includes(user.role);
-  if (!isManager) {
+  if (resource && resourceId) {
+    if (!isManager) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const ridNum = parseInt(resourceId, 10);
+    if (isNaN(ridNum)) { res.status(400).json({ error: "Invalid resourceId" }); return; }
+    conditions.push(eq(auditLogsTable.resource, resource));
+    conditions.push(eq(auditLogsTable.resourceId, ridNum));
+  } else if (!isManager) {
     conditions.push(eq(auditLogsTable.userId, user.id));
   }
 

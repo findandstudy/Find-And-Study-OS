@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
+import { AuditLogSection } from "@/components/AuditLogSection";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { StudentDocChecklist, normalizeLevel } from "@/components/StudentDocChecklist";
@@ -438,6 +439,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
             )}
           </div>
         </div>
+        {app && <AuditLogSection resource="application" resourceId={app.id} />}
       </div>
 
       {app && (

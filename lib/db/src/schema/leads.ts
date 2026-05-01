@@ -54,6 +54,7 @@ export const followUpsTable = pgTable("follow_ups", {
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   notes: text("notes"),
   createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
+  updatedById: integer("updated_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
@@ -61,6 +62,7 @@ export const followUpsTable = pgTable("follow_ups", {
   index("follow_ups_student_id_idx").on(table.studentId),
   index("follow_ups_assigned_to_id_idx").on(table.assignedToId),
   index("follow_ups_created_by_id_idx").on(table.createdById),
+  index("follow_ups_updated_by_id_idx").on(table.updatedById),
 ]);
 
 export const insertLeadSchema = createInsertSchema(leadsTable).omit({ id: true, createdAt: true, updatedAt: true });

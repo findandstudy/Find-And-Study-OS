@@ -16,12 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
+import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -126,6 +127,32 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     enabled: !!isAdmin,
     staleTime: 5 * 60_000,
   });
+
+  // T1: Look up the lead's interested program to derive Estimated Budget from tuition
+  const interestedProgramName = (lead as any)?.interestedProgram?.trim();
+  const { data: programMatchData } = useQuery<any>({
+    queryKey: ["lead-program-lookup", interestedProgramName],
+    queryFn: () => customFetch(`/api/programs?search=${encodeURIComponent(interestedProgramName)}&limit=1`),
+    enabled: !!interestedProgramName,
+    staleTime: 5 * 60_000,
+  });
+  const matchedProgram = (() => {
+    const list = Array.isArray(programMatchData) ? programMatchData : programMatchData?.data || [];
+    return list[0] as { tuitionFee?: string | number; discountedFee?: string | number; currency?: string } | undefined;
+  })();
+  const estimatedBudgetDisplay = (() => {
+    if (!matchedProgram) return undefined;
+    const fee = matchedProgram.discountedFee && Number(matchedProgram.discountedFee) > 0
+      ? Number(matchedProgram.discountedFee)
+      : matchedProgram.tuitionFee && Number(matchedProgram.tuitionFee) > 0
+      ? Number(matchedProgram.tuitionFee)
+      : null;
+    if (!fee) return undefined;
+    const currency = matchedProgram.currency || "USD";
+    const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : `${currency} `;
+    const tag = matchedProgram.discountedFee && Number(matchedProgram.discountedFee) > 0 ? " (discounted)" : "";
+    return `${symbol}${fee.toLocaleString()}${tag}`;
+  })();
 
   function getAssignedUserName(assignedToId: number | null | undefined): string | null {
     if (!assignedToId) return null;
@@ -355,24 +382,32 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                <Select
-                  value={lead?.status}
-                  onValueChange={handleStatusChange}
-                  disabled={updateLead.isPending || isLoading}
-                >
-                  <SelectTrigger className="w-36 rounded-full border-border">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        <span className={`capitalize px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[s]}`}>
-                          {s}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isAdmin ? (
+                  <Select
+                    value={lead?.status}
+                    onValueChange={handleStatusChange}
+                    disabled={updateLead.isPending || isLoading}
+                  >
+                    <SelectTrigger className="w-36 rounded-full border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_OPTIONS.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          <span className={`capitalize px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[s]}`}>
+                            {s}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  lead?.status && (
+                    <Badge className={`capitalize px-3 py-1 rounded-full text-xs font-medium border-0 ${STATUS_COLORS[lead.status]}`}>
+                      {lead.status}
+                    </Badge>
+                  )
+                )}
               </div>
 
               {isLoading ? (
@@ -385,12 +420,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={lead?.email} />
                   <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={lead?.phone} />
-                  <InfoRow icon={<Globe className="w-4 h-4" />} label="Nationality" value={lead?.nationality} />
-                  <InfoRow icon={<MapPin className="w-4 h-4" />} label="Country" value={lead?.country} />
                   <InfoRow icon={<BookOpen className="w-4 h-4" />} label="Interested Program" value={lead?.interestedProgram} />
                   <InfoRow icon={<Globe className="w-4 h-4" />} label="Interested Country" value={lead?.interestedCountry} />
                   <InfoRow icon={<User className="w-4 h-4" />} label="Source" value={lead?.source} />
-                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Estimated Budget" value={lead?.estimatedValue ? `$${Number(lead.estimatedValue).toLocaleString()}` : undefined} />
+                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Estimated Budget" value={estimatedBudgetDisplay} />
                 </div>
               )}
 
@@ -529,7 +562,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                           )}
                           {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
                             <span className="text-xs text-amber-500/70">
-                              (edited {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
                               {" "}
                               {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
                             </span>
@@ -614,6 +647,37 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   {lead?.status}
                 </Badge>
               )}
+              {/* T8: Admin can change lead status (incl. lost = inactive) */}
+              {isAdmin && lead && (
+                <Select
+                  value={lead.status || "new"}
+                  onValueChange={(val) => {
+                    updateLead.mutate({ id: lead.id, data: { status: val } } as any, {
+                      onSuccess: (updated: any) => {
+                        queryClient.setQueryData([`/api/leads/${id}`], updated);
+                        queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+                        toast({ title: "Status updated" });
+                      },
+                      onError: (err: any) => {
+                        toast({ title: "Failed to update status", description: err?.message, variant: "destructive" });
+                      },
+                    });
+                  }}
+                >
+                  <SelectTrigger className="w-full h-8 text-sm" data-testid="lead-status-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="contacted">Contacted</SelectItem>
+                    <SelectItem value="interested">Interested</SelectItem>
+                    <SelectItem value="qualified">Qualified</SelectItem>
+                    <SelectItem value="converted">Converted</SelectItem>
+                    <SelectItem value="lost">Lost (Inactive)</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
                 <p>Created: {lead ? new Date(lead.createdAt).toLocaleDateString() : "—"}</p>
                 <p>Updated: {lead ? new Date(lead.updatedAt).toLocaleDateString() : "—"}</p>
@@ -696,7 +760,17 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                             originType: val,
                             originDisplayName: val === "direct" ? "Find And Study" : null,
                           },
-                        } as any);
+                        } as any, {
+                          onSuccess: (updated: any) => {
+                            queryClient.setQueryData([`/api/leads/${id}`], updated);
+                            queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
+                            queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+                            toast({ title: "Origin updated" });
+                          },
+                          onError: (err: any) => {
+                            toast({ title: "Failed to update origin", description: err?.message, variant: "destructive" });
+                          },
+                        });
                       }}
                     >
                       <SelectTrigger className="w-full h-8 text-sm">
@@ -744,6 +818,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           </h2>
           <AllMessagingHistory type="lead" id={Number(id)} />
         </div>
+        {lead && <AuditLogSection resource="lead" resourceId={lead.id} />}
       </div>
       {lead && (
         <EditLeadDetailDialog

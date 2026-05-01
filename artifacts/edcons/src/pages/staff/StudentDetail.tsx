@@ -24,6 +24,7 @@ import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { OriginBadge } from "@/components/OriginBadge";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
+import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -605,6 +606,32 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               >
                 {student.status}
               </Badge>
+              {/* T8: Admin can toggle student active/inactive */}
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full h-7 px-3"
+                  data-testid="student-active-toggle"
+                  onClick={() => {
+                    const next = (student.status === "inactive") ? "active" : "inactive";
+                    customFetch(`/api/students/${student.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ status: next }),
+                    }).then(() => {
+                      qc.invalidateQueries({ queryKey: ["getStudent"] });
+                      qc.invalidateQueries({ queryKey: [`/api/students/${student.id}`] });
+                      qc.invalidateQueries({ queryKey: ["/api/students"] });
+                      toast({ title: next === "active" ? "Marked as Active" : "Marked as Inactive" });
+                    }).catch((err: any) => {
+                      toast({ title: "Failed to update status", description: err?.message, variant: "destructive" });
+                    });
+                  }}
+                >
+                  {student.status === "inactive" ? "Mark Active" : "Mark Inactive"}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1047,7 +1074,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                           {fu.notes && <p className="text-xs text-muted-foreground mt-1">{fu.notes}</p>}
                           <div className="flex items-center gap-3 mt-1 flex-wrap">
                             {fu.createdByName && (
-                              <span className="text-xs text-muted-foreground/60">by {fu.createdByName}</span>
+                              <span className="text-xs text-muted-foreground/60" data-testid="fu-created-by">by {fu.createdByName}</span>
                             )}
                             {fu.createdAt && (
                               <span className="text-xs text-muted-foreground/50">
@@ -1057,8 +1084,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
-                              <span className="text-xs text-amber-500/70">
-                                (edited {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              <span className="text-xs text-amber-500/70" data-testid="fu-edited-by">
+                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
                                 {" "}
                                 {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
                               </span>
@@ -1077,6 +1104,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <AllMessagingHistory type="student" id={Number(id)} />
           </TabsContent>
         </Tabs>
+        {student && <div className="mt-4"><AuditLogSection resource="student" resourceId={student.id} /></div>}
       </div>
 
       <Dialog open={uploadOpen} onOpenChange={o => { if (!uploading) setUploadOpen(o); }}>
