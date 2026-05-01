@@ -344,7 +344,18 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   }
   const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
-  await logAudit(user.id, "update_lead", "lead", id, updates, req.ip);
+  const diff: Record<string, any> = {};
+  for (const k of Object.keys(normUpdates)) {
+    if (k === "phoneE164") continue;
+    const oldVal = (existing as any)[k];
+    const newVal = (normUpdates as any)[k];
+    const oldNorm = oldVal instanceof Date ? oldVal.toISOString() : oldVal;
+    const newNorm = newVal instanceof Date ? newVal.toISOString() : newVal;
+    if (oldNorm !== newNorm) {
+      diff[k] = { from: oldVal ?? null, to: newVal ?? null };
+    }
+  }
+  await logAudit(user.id, "update_lead", "lead", id, Object.keys(diff).length ? diff : updates, req.ip);
 
   // T4: Cross-sync contact info to converted student (best-effort, ignore unique conflicts)
   if (lead.convertedStudentId) {
@@ -807,18 +818,28 @@ router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), a
     createdById: req.user!.id,
     assignedToId: req.user!.id,
   }).returning();
+  await logAudit(req.user!.id, "create_follow_up", "lead", id, {
+    followUpId: followUp.id,
+    title: followUp.title,
+    scheduledAt: followUp.scheduledAt instanceof Date ? followUp.scheduledAt.toISOString() : followUp.scheduledAt,
+    notes: followUp.notes ? String(followUp.notes).slice(0, 200) : null,
+  }, req.ip);
   res.status(201).json(followUp);
 });
 
 router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existingFu] = await db.select().from(followUpsTable).where(eq(followUpsTable.id, id));
+  if (!existingFu) { res.status(404).json({ error: "Follow-up not found" }); return; }
   const { completed, title, scheduledAt, notes } = req.body;
   const updates: Record<string, unknown> = {};
   let isContentEdit = false;
+  let isCompletionToggle = false;
   if (completed !== undefined) {
     updates.completed = completed;
     updates.completedAt = completed ? new Date() : null;
+    isCompletionToggle = true;
   }
   if (title !== undefined) { updates.title = String(title).slice(0, 500); isContentEdit = true; }
   if (scheduledAt !== undefined) {
@@ -845,6 +866,35 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
   }
   const [followUp] = await db.update(followUpsTable).set(updates).where(eq(followUpsTable.id, id)).returning();
   if (!followUp) { res.status(404).json({ error: "Follow-up not found" }); return; }
+
+  const auditResource = existingFu.leadId ? "lead" : existingFu.studentId ? "student" : "follow_up";
+  const auditResourceId = existingFu.leadId ?? existingFu.studentId ?? null;
+  if (isContentEdit) {
+    const fuDiff: Record<string, any> = { followUpId: id, title: followUp.title };
+    if (title !== undefined && existingFu.title !== followUp.title) {
+      fuDiff.titleChange = { from: existingFu.title, to: followUp.title };
+    }
+    if (scheduledAt !== undefined) {
+      const oldIso = existingFu.scheduledAt instanceof Date ? existingFu.scheduledAt.toISOString() : existingFu.scheduledAt;
+      const newIso = followUp.scheduledAt instanceof Date ? followUp.scheduledAt.toISOString() : followUp.scheduledAt;
+      if (oldIso !== newIso) {
+        fuDiff.scheduledAtChange = { from: oldIso, to: newIso };
+      }
+    }
+    if (notes !== undefined && existingFu.notes !== followUp.notes) {
+      fuDiff.notesChange = {
+        from: existingFu.notes ? String(existingFu.notes).slice(0, 200) : null,
+        to: followUp.notes ? String(followUp.notes).slice(0, 200) : null,
+      };
+    }
+    await logAudit(req.user!.id, "update_follow_up", auditResource, auditResourceId, fuDiff, req.ip);
+  }
+  if (isCompletionToggle && completed !== existingFu.completed) {
+    await logAudit(req.user!.id, completed ? "complete_follow_up" : "reopen_follow_up", auditResource, auditResourceId, {
+      followUpId: id,
+      title: followUp.title,
+    }, req.ip);
+  }
   const [enriched] = await db
     .select({
       id: followUpsTable.id,

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, auditLogsTable, usersTable, studentsTable, leadsTable, applicationsTable, documentsTable, programsTable } from "@workspace/db";
+import { db, auditLogsTable, usersTable, studentsTable, leadsTable, applicationsTable, documentsTable, programsTable, agentsTable } from "@workspace/db";
 import { sql, desc, ilike, or, eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
@@ -91,20 +91,30 @@ async function resolveResourceNames(logs: any[]): Promise<Map<string, Map<number
     nameMap.set("application", m);
   }
 
-  const detailIds: Set<number> = new Set();
+  const detailUserIds: Set<number> = new Set();
+  const detailAgentIds: Set<number> = new Set();
+  const USER_ID_KEYS = new Set(["assignedToId", "userId", "targetUserId", "authorId", "createdById", "updatedById"]);
+  const AGENT_ID_KEYS = new Set(["agentId"]);
   for (const log of logs) {
     if (!log.changes) continue;
     try {
       const changes = typeof log.changes === "string" ? JSON.parse(log.changes) : log.changes;
       for (const [key, val] of Object.entries(changes)) {
-        if ((key === "assignedToId" || key === "userId" || key === "targetUserId") && typeof val === "number") {
-          detailIds.add(val);
+        const target = USER_ID_KEYS.has(key) ? detailUserIds : AGENT_ID_KEYS.has(key) ? detailAgentIds : null;
+        if (!target) continue;
+        if (typeof val === "number") {
+          target.add(val);
+        } else if (val && typeof val === "object" && !Array.isArray(val)) {
+          const v: any = val;
+          for (const side of ["from", "to", "old", "new"]) {
+            if (typeof v[side] === "number") target.add(v[side]);
+          }
         }
       }
     } catch {}
   }
-  if (detailIds.size > 0) {
-    const ids = [...detailIds];
+  if (detailUserIds.size > 0) {
+    const ids = [...detailUserIds];
     const existing = nameMap.get("user") || new Map<number, string>();
     const missingIds = ids.filter(id => !existing.has(id));
     if (missingIds.length > 0) {
@@ -116,30 +126,67 @@ async function resolveResourceNames(logs: any[]): Promise<Map<string, Map<number
     }
     nameMap.set("user", existing);
   }
+  if (detailAgentIds.size > 0) {
+    const ids = [...detailAgentIds];
+    const rows = await db.select({ id: agentsTable.id, firstName: agentsTable.firstName, lastName: agentsTable.lastName, companyName: agentsTable.companyName }).from(agentsTable).where(inArray(agentsTable.id, ids));
+    const m = new Map<number, string>();
+    for (const r of rows) {
+      const personName = [r.firstName, r.lastName].filter(Boolean).join(" ");
+      const name = r.companyName || personName || `Agent #${r.id}`;
+      m.set(r.id, name);
+    }
+    nameMap.set("agent", m);
+  }
 
   return nameMap;
 }
 
-function humanizeChanges(changes: string | null, userNames: Map<number, string>): string | null {
+const USER_ID_KEYS_SET = new Set([
+  "assignedToId", "userId", "targetUserId", "authorId", "createdById", "updatedById",
+]);
+const AGENT_ID_KEYS_SET = new Set(["agentId"]);
+
+function nameKeyFor(idKey: string): string {
+  return idKey === "assignedToId" ? "assignedToName" :
+         idKey === "targetUserId" ? "targetUserName" :
+         idKey === "userId" ? "userName" :
+         idKey === "authorId" ? "authorName" :
+         idKey === "agentId" ? "agentName" :
+         idKey === "createdById" ? "createdByName" :
+         "updatedByName";
+}
+
+function enrichChanges(changes: string | null | Record<string, any>, userNames: Map<number, string>, agentNames: Map<number, string>): Record<string, any> | null {
   if (!changes) return null;
+  let obj: any;
   try {
-    const obj = typeof changes === "string" ? JSON.parse(changes) : changes;
-    const parts: string[] = [];
-    for (const [key, val] of Object.entries(obj)) {
-      if ((key === "assignedToId" || key === "userId" || key === "targetUserId") && typeof val === "number") {
-        const name = userNames.get(val);
-        if (name) {
-          const label = key === "assignedToId" ? "assignedTo" : key === "targetUserId" ? "targetUser" : "user";
-          parts.push(`${label}: "${name}"`);
-          continue;
+    obj = typeof changes === "string" ? JSON.parse(changes) : changes;
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+  const out: Record<string, any> = { ...obj };
+  for (const [key, val] of Object.entries(obj)) {
+    const isUser = USER_ID_KEYS_SET.has(key);
+    const isAgent = AGENT_ID_KEYS_SET.has(key);
+    if (!isUser && !isAgent) continue;
+    const lookup = isUser ? userNames : agentNames;
+    if (typeof val === "number") {
+      const name = lookup.get(val);
+      if (name) out[nameKeyFor(key)] = name;
+    } else if (val && typeof val === "object" && !Array.isArray(val)) {
+      const v: any = val;
+      const enrichedDiff: Record<string, any> = { ...v };
+      for (const side of ["from", "to", "old", "new"]) {
+        if (typeof v[side] === "number") {
+          const name = lookup.get(v[side]);
+          if (name) enrichedDiff[`${side}Name`] = name;
         }
       }
-      parts.push(`${key}: ${JSON.stringify(val)}`);
+      out[key] = enrichedDiff;
     }
-    return parts.join(", ");
-  } catch {
-    return changes;
   }
+  return out;
 }
 
 router.get("/audit", requireAuth, async (req, res): Promise<void> => {
@@ -202,16 +249,17 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
 
   const nameMap = await resolveResourceNames(data);
   const userNames = nameMap.get("user") || new Map<number, string>();
+  const agentNames = nameMap.get("agent") || new Map<number, string>();
 
   const enriched = data.map((log) => {
     const rKey = (log.resource || "").toLowerCase();
     const resMap = nameMap.get(rKey);
     const resourceDisplayName = log.resourceId && resMap ? resMap.get(log.resourceId) || null : null;
-    const humanChanges = humanizeChanges(log.changes, userNames);
+    const enrichedChanges = enrichChanges(log.changes, userNames, agentNames);
     return {
       ...log,
       resourceDisplayName,
-      changes: humanChanges,
+      changes: enrichedChanges,
     };
   });
 

@@ -477,7 +477,18 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   }
   const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
-  await logAudit(req.user!.id, "update_student", "student", id, updates, req.ip);
+  const studentDiff: Record<string, any> = {};
+  for (const k of Object.keys(normUpdates)) {
+    if (k === "phoneE164") continue;
+    const oldVal = (existing as any)[k];
+    const newVal = (normUpdates as any)[k];
+    const oldNorm = oldVal instanceof Date ? oldVal.toISOString() : oldVal;
+    const newNorm = newVal instanceof Date ? newVal.toISOString() : newVal;
+    if (oldNorm !== newNorm) {
+      studentDiff[k] = { from: oldVal ?? null, to: newVal ?? null };
+    }
+  }
+  await logAudit(req.user!.id, "update_student", "student", id, Object.keys(studentDiff).length ? studentDiff : updates, req.ip);
 
   // T4: Cross-sync contact info back to source lead(s) (best-effort)
   const studentSyncFields: Record<string, unknown> = {};
@@ -870,6 +881,12 @@ router.post("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES)
     createdById: req.user!.id,
     assignedToId: req.user!.id,
   }).returning();
+  await logAudit(req.user!.id, "create_follow_up", "student", id, {
+    followUpId: followUp.id,
+    title: followUp.title,
+    scheduledAt: followUp.scheduledAt instanceof Date ? followUp.scheduledAt.toISOString() : followUp.scheduledAt,
+    notes: followUp.notes ? String(followUp.notes).slice(0, 200) : null,
+  }, req.ip);
   res.status(201).json(followUp);
 });
 

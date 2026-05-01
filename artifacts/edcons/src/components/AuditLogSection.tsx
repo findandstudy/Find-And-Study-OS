@@ -15,6 +15,9 @@ import {
   Archive,
   Globe,
   Users,
+  Calendar,
+  CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -58,6 +61,11 @@ const ACTION_META: Record<string, ActionMeta> = {
   set_password: { label: "Password set", icon: KeyRound, tone: "warning" },
 
   delete_note: { label: "Note deleted", icon: Trash2, tone: "danger" },
+
+  create_follow_up: { label: "Follow-up added", icon: Calendar, tone: "positive" },
+  update_follow_up: { label: "Follow-up edited", icon: Pencil, tone: "info" },
+  complete_follow_up: { label: "Follow-up completed", icon: CheckCircle2, tone: "positive" },
+  reopen_follow_up: { label: "Follow-up reopened", icon: RotateCcw, tone: "warning" },
 };
 
 const TONE_BADGE: Record<ActionMeta["tone"], string> = {
@@ -86,32 +94,72 @@ const FIELD_LABELS: Record<string, string> = {
   source: "Source",
   notes: "Notes",
   assignedTo: "Assigned to",
+  assignedToName: "Assigned to",
   assignedToId: "Assigned to",
-  agentId: "Agent",
+  agentName: "Agent",
   season: "Season",
   estimatedValue: "Estimated value",
   interestedProgram: "Interested program",
   interestedCountry: "Interested country",
   studentId: "Student",
-  userId: "User",
+  userName: "User",
+  targetUserName: "Target user",
+  authorName: "Author",
   ids: "Items",
   count: "Count",
   contentPreview: "Content",
   isInternal: "Visibility",
-  authorId: "Author",
-  noteId: "Note",
   linkedExisting: "Linked to existing user",
   createdUser: "Created new user",
   merged: "Merged with existing student",
   old: "Before",
   new: "After",
   originType: "Type",
-  originEntityType: "Entity type",
-  originEntityId: "Entity",
   originDisplayName: "Name",
+  title: "Title",
+  scheduledAt: "Scheduled at",
+  completed: "Completed",
+  titleChange: "Title",
+  scheduledAtChange: "Scheduled at",
+  notesChange: "Notes",
+  dateOfBirth: "Date of birth",
+  passportNumber: "Passport #",
+  passportIssueDate: "Passport issue date",
+  passportExpiry: "Passport expiry",
+  motherName: "Mother's name",
+  fatherName: "Father's name",
+  address: "Address",
+  highSchool: "High school",
+  universityBachelor: "Bachelor",
+  universityMaster: "Master",
+  graduationYear: "Graduation year",
+  gpa: "GPA",
+  languageScore: "Language score",
+  photoUrl: "Photo",
 };
 
-const HIDDEN_FIELDS = new Set(["noteId", "authorId", "userId", "agentId", "originEntityId", "originEntityType"]);
+const HIDDEN_FIELDS = new Set([
+  "noteId",
+  "authorId",
+  "userId",
+  "agentId",
+  "createdById",
+  "updatedById",
+  "targetUserId",
+  "originEntityId",
+  "originEntityType",
+  "originLocked",
+  "followUpId",
+]);
+
+const DATE_FIELDS = new Set([
+  "scheduledAt",
+  "scheduledAtChange",
+  "dateOfBirth",
+  "passportIssueDate",
+  "passportExpiry",
+  "completedAt",
+]);
 
 function parseChanges(raw: any): Record<string, any> | null {
   if (!raw) return null;
@@ -123,14 +171,61 @@ function parseChanges(raw: any): Record<string, any> | null {
   return parsed;
 }
 
+function fmtDate(v: any): string {
+  if (v === null || v === undefined || v === "") return "—";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  return `${d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })} ${d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function isDiff(v: any): v is { from?: any; to?: any; fromName?: string; toName?: string } {
+  return v && typeof v === "object" && !Array.isArray(v) && ("from" in v || "to" in v);
+}
+
+function isOldNew(v: any): v is { old?: any; new?: any; oldName?: string; newName?: string } {
+  return v && typeof v === "object" && !Array.isArray(v) && ("old" in v || "new" in v);
+}
+
+function quote(s: string): string {
+  return s.length > 60 ? `"${s.slice(0, 60)}…"` : `"${s}"`;
+}
+
 function humanizeValue(key: string, v: any): string {
   if (v === null || v === undefined || v === "") return "—";
   if (key === "isInternal") return v === true ? "Private" : "General";
   if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (DATE_FIELDS.has(key) && (typeof v === "string" || v instanceof Date)) return fmtDate(v);
   if (Array.isArray(v)) {
     if (v.length === 0) return "—";
     if (v.length <= 5) return v.join(", ");
     return `${v.slice(0, 5).join(", ")} +${v.length - 5} more`;
+  }
+  if (isDiff(v)) {
+    const fmt = (side: "from" | "to") => {
+      const sideName = (v as any)[`${side}Name`];
+      const sideVal = (v as any)[side];
+      if (sideName) return sideName;
+      if (sideVal === null || sideVal === undefined || sideVal === "") return "(empty)";
+      if (DATE_FIELDS.has(key)) return fmtDate(sideVal);
+      if (typeof sideVal === "boolean") return sideVal ? "Yes" : "No";
+      if (typeof sideVal === "string") return sideVal;
+      return String(sideVal);
+    };
+    return `${fmt("from")} → ${fmt("to")}`;
+  }
+  if (isOldNew(v)) {
+    const fmt = (side: "old" | "new") => {
+      const sideName = (v as any)[`${side}Name`];
+      const sideVal = (v as any)[side];
+      if (sideName) return sideName;
+      if (sideVal && typeof sideVal === "object") {
+        const display = (sideVal as any).originDisplayName || (sideVal as any).originType;
+        if (display) return String(display);
+      }
+      if (sideVal === null || sideVal === undefined || sideVal === "") return "(empty)";
+      return String(sideVal);
+    };
+    return `${fmt("old")} → ${fmt("new")}`;
   }
   if (typeof v === "object") {
     const entries = Object.entries(v).filter(([, vv]) => vv !== null && vv !== "" && vv !== undefined);
@@ -146,7 +241,7 @@ function buildSummary(action: string, changes: Record<string, any> | null): stri
     case "delete_note": {
       const visibility = changes.isInternal ? "private" : "general";
       const preview = typeof changes.contentPreview === "string" ? changes.contentPreview.replace(/\s+/g, " ").trim() : "";
-      const snippet = preview ? ` — "${preview.length > 80 ? preview.slice(0, 80) + "…" : preview}"` : "";
+      const snippet = preview ? ` — ${quote(preview)}` : "";
       return `Removed a ${visibility} note${snippet}`;
     }
     case "convert_lead": {
@@ -167,22 +262,22 @@ function buildSummary(action: string, changes: Record<string, any> | null): stri
     case "bulk_move_leads":
     case "bulk_move_students": {
       const count = Array.isArray(changes.ids) ? changes.ids.length : null;
-      const status = changes.status ? ` to status "${changes.status}"` : "";
+      const status = changes.status ? ` to status ${quote(changes.status)}` : "";
       return count !== null ? `Moved ${count} record${count === 1 ? "" : "s"}${status}` : null;
     }
     case "bulk_create_students": {
       return changes.count ? `Imported ${changes.count} student${changes.count === 1 ? "" : "s"}` : null;
     }
     case "override_origin": {
-      const newName = changes.new && typeof changes.new === "object" ? (changes.new.originDisplayName || changes.new.originType) : null;
-      const oldName = changes.old && typeof changes.old === "object" ? (changes.old.originDisplayName || changes.old.originType) : null;
-      if (newName && oldName) return `Changed from "${oldName}" to "${newName}"`;
-      if (newName) return `Set to "${newName}"`;
+      const newSide = changes.new && typeof changes.new === "object" ? (changes.new.originDisplayName || changes.new.originType) : null;
+      const oldSide = changes.old && typeof changes.old === "object" ? (changes.old.originDisplayName || changes.old.originType) : null;
+      if (newSide && oldSide) return `Changed from ${quote(String(oldSide))} to ${quote(String(newSide))}`;
+      if (newSide) return `Set to ${quote(String(newSide))}`;
       return null;
     }
     case "update_lead":
     case "update_student": {
-      const fields = Object.keys(changes).filter(k => !HIDDEN_FIELDS.has(k));
+      const fields = Object.keys(changes).filter(k => !HIDDEN_FIELDS.has(k) && !k.endsWith("Name"));
       if (fields.length === 0) return null;
       if (fields.length === 1) {
         const k = fields[0];
@@ -195,6 +290,28 @@ function buildSummary(action: string, changes: Record<string, any> | null): stri
       const name = [changes.firstName, changes.lastName].filter(Boolean).join(" ");
       return name || null;
     }
+    case "create_follow_up": {
+      const t = changes.title ? quote(String(changes.title)) : "";
+      const when = changes.scheduledAt ? ` for ${fmtDate(changes.scheduledAt)}` : "";
+      return `Added follow-up${t ? ` ${t}` : ""}${when}`;
+    }
+    case "update_follow_up": {
+      const t = changes.title ? quote(String(changes.title)) : "";
+      const parts: string[] = [];
+      if (changes.titleChange) parts.push("title");
+      if (changes.scheduledAtChange) parts.push("date");
+      if (changes.notesChange) parts.push("notes");
+      if (parts.length === 0) return t ? `Edited follow-up ${t}` : "Edited follow-up";
+      return `Edited follow-up${t ? ` ${t}` : ""} — changed ${parts.join(", ")}`;
+    }
+    case "complete_follow_up": {
+      const t = changes.title ? quote(String(changes.title)) : "";
+      return `Marked follow-up${t ? ` ${t}` : ""} as completed`;
+    }
+    case "reopen_follow_up": {
+      const t = changes.title ? quote(String(changes.title)) : "";
+      return `Reopened follow-up${t ? ` ${t}` : ""}`;
+    }
     default:
       return null;
   }
@@ -206,22 +323,51 @@ function buildDetails(action: string, changes: Record<string, any> | null): { la
   if (action === "convert_lead") return [];
   if (action === "set_password") return [];
   if (action === "override_origin") return [];
+  if (action === "create_follow_up") return [];
+  if (action === "complete_follow_up" || action === "reopen_follow_up") return [];
 
   const isUpdate = action === "update_lead" || action === "update_student";
   const isCreate = action === "create_lead" || action === "create_student";
   const isBulk = action.startsWith("bulk_");
+  const isFollowUpEdit = action === "update_follow_up";
+
+  const ID_TO_NAME: Record<string, string> = {
+    assignedToId: "assignedToName",
+    createdById: "createdByName",
+    updatedById: "updatedByName",
+    authorId: "authorName",
+    userId: "userName",
+    targetUserId: "targetUserName",
+    agentId: "agentName",
+  };
+  const visibleKeys = Object.keys(changes).filter(k => {
+    if (HIDDEN_FIELDS.has(k)) return false;
+    if (k === "title" && isFollowUpEdit) return false;
+    const nameSibling = ID_TO_NAME[k];
+    if (nameSibling && typeof changes[k] !== "object" && changes[nameSibling]) return false;
+    return true;
+  });
+  const onlyOneField = isUpdate && visibleKeys.filter(k => !k.endsWith("Name") || !Object.values(ID_TO_NAME).includes(k)).length === 1;
 
   const entries = Object.entries(changes).filter(([k, v]) => {
     if (HIDDEN_FIELDS.has(k)) return false;
     if (v === null || v === undefined || v === "") return false;
     if (isBulk && (k === "ids" || k === "status" || k === "assignedToId" || k === "count")) return false;
     if (isCreate && (k === "firstName" || k === "lastName")) return false;
-    if (isUpdate && Object.keys(changes).filter(kk => !HIDDEN_FIELDS.has(kk)).length === 1) return false;
+    if (isUpdate && onlyOneField) return false;
+    if (isFollowUpEdit && k === "title") return false;
+    const nameSibling = ID_TO_NAME[k];
+    if (nameSibling && typeof v !== "object" && (changes as any)[nameSibling]) return false;
+    const isNameOfId = Object.entries(ID_TO_NAME).find(([, nameKey]) => nameKey === k);
+    if (isNameOfId) {
+      const idKey = isNameOfId[0];
+      if (changes[idKey] && typeof changes[idKey] === "object") return false;
+    }
     return true;
   });
 
   return entries.map(([k, v]) => ({
-    label: FIELD_LABELS[k] ?? k.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()),
+    label: FIELD_LABELS[k] ?? k.replace(/Change$/, "").replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()),
     value: humanizeValue(k, v),
   }));
 }
