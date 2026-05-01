@@ -30,13 +30,27 @@ export const EMBED_TEST_UNIVERSITY = "E2E Embed Test University";
 export const EMBED_TEST_PROGRAM = "E2E Embed Test Program";
 
 /**
- * A second widget seeded with a populated `allowedDomains` allowlist so
- * we can test that the loader / public API rejects requests from
- * disallowed origins. Keep this slug + domain in sync with the
- * `embed widget — allowed-domains` describe block in
+ * Two extra widgets seeded with a populated `allowedDomains` allowlist so
+ * we can test allowlist behavior end-to-end through the loader/iframe
+ * and at the public API layer. Keep these slugs + domains in sync with
+ * the `embed widget — allowed-domains` describe block in
  * `artifacts/edcons/tests/e2e/embed-widget.spec.ts`.
+ *
+ *   - PERMISSIVE: allowedDomains includes "localhost"/"127.0.0.1" so the
+ *     iframe (loaded from the dev server at http://localhost:25197) makes
+ *     same-origin /config + /programs calls whose Referer hostname IS in
+ *     the allowlist. Used for the "renders normally on allowed origin"
+ *     loader test.
+ *
+ *   - STRICT: allowedDomains is exactly ["allowed.e2e.example.com"] — a
+ *     domain that is never actually serving the test page. The iframe
+ *     loaded from localhost will be rejected (Referer hostname=localhost
+ *     is not in the list), so the widget shows its "Unable to load
+ *     widget" error state. Also used for API-level allow/deny tests
+ *     where we send an explicit Origin/Referer header.
  */
-export const EMBED_TEST_ALLOWLIST_SLUG = "e2e-embed-test-allowlist";
+export const EMBED_TEST_ALLOWLIST_PERMISSIVE_SLUG = "e2e-embed-test-allowlist-permissive";
+export const EMBED_TEST_ALLOWLIST_STRICT_SLUG = "e2e-embed-test-allowlist-strict";
 export const EMBED_TEST_ALLOWED_DOMAIN = "allowed.e2e.example.com";
 
 const stateFile = path.resolve(
@@ -48,11 +62,13 @@ interface EmbedFixtureState {
   createdUniversityId: number | null;
   createdProgramId: number | null;
   createdWidgetId: number | null;
-  createdAllowlistWidgetId: number | null;
+  createdAllowlistPermissiveWidgetId: number | null;
+  createdAllowlistStrictWidgetId: number | null;
   priorProgramIsActive: boolean | null;
   priorProgramId: number | null;
   priorWidgetSnapshot: Record<string, unknown> | null;
-  priorAllowlistWidgetSnapshot: Record<string, unknown> | null;
+  priorAllowlistPermissiveWidgetSnapshot: Record<string, unknown> | null;
+  priorAllowlistStrictWidgetSnapshot: Record<string, unknown> | null;
 }
 
 async function main() {
@@ -60,11 +76,13 @@ async function main() {
     createdUniversityId: null,
     createdProgramId: null,
     createdWidgetId: null,
-    createdAllowlistWidgetId: null,
+    createdAllowlistPermissiveWidgetId: null,
+    createdAllowlistStrictWidgetId: null,
     priorProgramIsActive: null,
     priorProgramId: null,
     priorWidgetSnapshot: null,
-    priorAllowlistWidgetSnapshot: null,
+    priorAllowlistPermissiveWidgetSnapshot: null,
+    priorAllowlistStrictWidgetSnapshot: null,
   };
 
   const [existingUni] = await db
@@ -186,23 +204,67 @@ async function main() {
     console.log(`[e2e-embed-setup] Created widget id=${widgetId}`);
   }
 
-  // ---- Second widget: populated allowedDomains -------------------------
-  const [existingAllowlistWidget] = await db
+  // ---- Permissive allowlist widget (loader-renders test) --------------
+  await ensureAllowlistWidget({
+    slug: EMBED_TEST_ALLOWLIST_PERMISSIVE_SLUG,
+    name: "E2E Embed Test Widget (Allowlist Permissive)",
+    allowedDomains: ["localhost", "127.0.0.1"],
+    onCreate: (id) => {
+      state.createdAllowlistPermissiveWidgetId = id;
+    },
+    onReuse: (snap) => {
+      state.priorAllowlistPermissiveWidgetSnapshot = snap;
+    },
+  });
+
+  // ---- Strict allowlist widget (loader-rejects + API tests) -----------
+  await ensureAllowlistWidget({
+    slug: EMBED_TEST_ALLOWLIST_STRICT_SLUG,
+    name: "E2E Embed Test Widget (Allowlist Strict)",
+    allowedDomains: [EMBED_TEST_ALLOWED_DOMAIN],
+    onCreate: (id) => {
+      state.createdAllowlistStrictWidgetId = id;
+    },
+    onReuse: (snap) => {
+      state.priorAllowlistStrictWidgetSnapshot = snap;
+    },
+  });
+
+  fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
+  process.exit(0);
+}
+
+interface EnsureWidgetArgs {
+  slug: string;
+  name: string;
+  allowedDomains: string[];
+  onCreate: (id: number) => void;
+  onReuse: (snapshot: Record<string, unknown>) => void;
+}
+
+async function ensureAllowlistWidget({
+  slug,
+  name,
+  allowedDomains,
+  onCreate,
+  onReuse,
+}: EnsureWidgetArgs): Promise<void> {
+  const [existing] = await db
     .select()
     .from(embedWidgetsTable)
-    .where(eq(embedWidgetsTable.slug, EMBED_TEST_ALLOWLIST_SLUG));
+    .where(eq(embedWidgetsTable.slug, slug));
 
-  if (existingAllowlistWidget) {
-    state.priorAllowlistWidgetSnapshot = {
-      isActive: existingAllowlistWidget.isActive,
-      mode: existingAllowlistWidget.mode,
-      presetFilters: existingAllowlistWidget.presetFilters,
-      lockedFilters: existingAllowlistWidget.lockedFilters,
-      hiddenFilters: existingAllowlistWidget.hiddenFilters,
-      visibleFilters: existingAllowlistWidget.visibleFilters,
-      theme: existingAllowlistWidget.theme,
-      allowedDomains: existingAllowlistWidget.allowedDomains,
-    };
+  if (existing) {
+    onReuse({
+      isActive: existing.isActive,
+      mode: existing.mode,
+      presetFilters: existing.presetFilters,
+      lockedFilters: existing.lockedFilters,
+      hiddenFilters: existing.hiddenFilters,
+      visibleFilters: existing.visibleFilters,
+      theme: existing.theme,
+      allowedDomains: existing.allowedDomains,
+    });
     await db
       .update(embedWidgetsTable)
       .set({
@@ -213,36 +275,33 @@ async function main() {
         hiddenFilters: [],
         visibleFilters: [],
         theme: {},
-        allowedDomains: [EMBED_TEST_ALLOWED_DOMAIN],
+        allowedDomains,
       })
-      .where(eq(embedWidgetsTable.id, existingAllowlistWidget.id));
+      .where(eq(embedWidgetsTable.id, existing.id));
     console.log(
-      `[e2e-embed-setup] Reused allowlist widget id=${existingAllowlistWidget.id} (snapshot saved, allowedDomains=[${EMBED_TEST_ALLOWED_DOMAIN}])`,
+      `[e2e-embed-setup] Reused allowlist widget slug=${slug} id=${existing.id} (snapshot saved, allowedDomains=[${allowedDomains.join(",")}])`,
     );
   } else {
     const [created] = await db
       .insert(embedWidgetsTable)
       .values({
-        name: "E2E Embed Test Widget (Allowlist)",
-        slug: EMBED_TEST_ALLOWLIST_SLUG,
+        name,
+        slug,
         mode: "combined",
         presetFilters: {},
         lockedFilters: [],
         hiddenFilters: [],
         visibleFilters: [],
         theme: {},
-        allowedDomains: [EMBED_TEST_ALLOWED_DOMAIN],
+        allowedDomains,
         isActive: true,
       })
       .returning();
-    state.createdAllowlistWidgetId = created.id;
+    onCreate(created.id);
     console.log(
-      `[e2e-embed-setup] Created allowlist widget id=${created.id} (allowedDomains=[${EMBED_TEST_ALLOWED_DOMAIN}])`,
+      `[e2e-embed-setup] Created allowlist widget slug=${slug} id=${created.id} (allowedDomains=[${allowedDomains.join(",")}])`,
     );
   }
-
-  fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
-  process.exit(0);
 }
 
 main().catch((err) => {

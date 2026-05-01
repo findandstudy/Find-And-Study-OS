@@ -28,14 +28,17 @@ interface EmbedFixtureState {
   createdUniversityId: number | null;
   createdProgramId: number | null;
   createdWidgetId: number | null;
-  createdAllowlistWidgetId: number | null;
+  createdAllowlistPermissiveWidgetId: number | null;
+  createdAllowlistStrictWidgetId: number | null;
   priorProgramIsActive: boolean | null;
   priorProgramId: number | null;
   priorWidgetSnapshot: Record<string, unknown> | null;
-  priorAllowlistWidgetSnapshot: Record<string, unknown> | null;
+  priorAllowlistPermissiveWidgetSnapshot: Record<string, unknown> | null;
+  priorAllowlistStrictWidgetSnapshot: Record<string, unknown> | null;
 }
 
-const ALLOWLIST_SLUG = "e2e-embed-test-allowlist";
+const ALLOWLIST_PERMISSIVE_SLUG = "e2e-embed-test-allowlist-permissive";
+const ALLOWLIST_STRICT_SLUG = "e2e-embed-test-allowlist-strict";
 
 async function main() {
   if (!fs.existsSync(stateFile)) {
@@ -101,29 +104,18 @@ async function main() {
     console.log("[e2e-embed-teardown] Restored prior widget config for slug=e2e-embed-test");
   }
 
-  // Allowlist widget: same pattern — delete if we created it, otherwise
-  // restore the snapshot we saved at setup time.
-  if (state.createdAllowlistWidgetId != null) {
-    try {
-      await db
-        .delete(embedSubmissionsTable)
-        .where(eq(embedSubmissionsTable.widgetId, state.createdAllowlistWidgetId));
-    } catch {}
-    await db
-      .delete(embedWidgetsTable)
-      .where(eq(embedWidgetsTable.id, state.createdAllowlistWidgetId));
-    console.log(
-      `[e2e-embed-teardown] Deleted allowlist widget id=${state.createdAllowlistWidgetId}`,
-    );
-  } else if (state.priorAllowlistWidgetSnapshot != null) {
-    await db
-      .update(embedWidgetsTable)
-      .set(state.priorAllowlistWidgetSnapshot as Partial<typeof embedWidgetsTable.$inferInsert>)
-      .where(eq(embedWidgetsTable.slug, ALLOWLIST_SLUG));
-    console.log(
-      `[e2e-embed-teardown] Restored prior widget config for slug=${ALLOWLIST_SLUG}`,
-    );
-  }
+  // Allowlist widgets (permissive + strict): same pattern — delete if
+  // we created them, otherwise restore the snapshot we saved at setup.
+  await teardownAllowlistWidget({
+    slug: ALLOWLIST_PERMISSIVE_SLUG,
+    createdId: state.createdAllowlistPermissiveWidgetId,
+    snapshot: state.priorAllowlistPermissiveWidgetSnapshot,
+  });
+  await teardownAllowlistWidget({
+    slug: ALLOWLIST_STRICT_SLUG,
+    createdId: state.createdAllowlistStrictWidgetId,
+    snapshot: state.priorAllowlistStrictWidgetSnapshot,
+  });
 
   if (state.createdProgramId != null) {
     await db.delete(programsTable).where(eq(programsTable.id, state.createdProgramId));
@@ -145,6 +137,33 @@ async function main() {
   }
 
   process.exit(0);
+}
+
+async function teardownAllowlistWidget(opts: {
+  slug: string;
+  createdId: number | null;
+  snapshot: Record<string, unknown> | null;
+}): Promise<void> {
+  const { slug, createdId, snapshot } = opts;
+  if (createdId != null) {
+    try {
+      await db
+        .delete(embedSubmissionsTable)
+        .where(eq(embedSubmissionsTable.widgetId, createdId));
+    } catch {}
+    await db.delete(embedWidgetsTable).where(eq(embedWidgetsTable.id, createdId));
+    console.log(
+      `[e2e-embed-teardown] Deleted allowlist widget slug=${slug} id=${createdId}`,
+    );
+  } else if (snapshot != null) {
+    await db
+      .update(embedWidgetsTable)
+      .set(snapshot as Partial<typeof embedWidgetsTable.$inferInsert>)
+      .where(eq(embedWidgetsTable.slug, slug));
+    console.log(
+      `[e2e-embed-teardown] Restored prior widget config for slug=${slug}`,
+    );
+  }
 }
 
 main().catch((err) => {

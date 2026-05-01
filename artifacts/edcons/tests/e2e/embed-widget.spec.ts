@@ -33,12 +33,24 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const EMBED_SLUG = "e2e-embed-test";
 
 /**
- * The allowlist-widget fixture (seeded by
- * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`) has
- * `allowedDomains: ["allowed.e2e.example.com"]`. Keep these constants
- * in sync with the fixture script.
+ * Allowlist-widget fixtures (seeded by
+ * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`). Keep these
+ * constants in sync with the fixture script.
+ *
+ *   - PERMISSIVE: allowedDomains=["localhost","127.0.0.1"]. The Playwright
+ *     dev server is at http://localhost:25197, so the iframe's same-origin
+ *     /config + /programs fetches have Referer hostname=localhost — i.e.
+ *     IN the allowlist. Used to assert the loader renders normally.
+ *
+ *   - STRICT: allowedDomains=["allowed.e2e.example.com"]. The iframe loaded
+ *     from localhost is NOT in the allowlist, so /config returns 403 and
+ *     the widget JS catches the error + renders its `.ew-empty`
+ *     "Unable to load widget" state. Used to assert the loader refuses to
+ *     render. Also used by the API-level allow/deny tests via explicit
+ *     Origin/Referer headers.
  */
-const EMBED_ALLOWLIST_SLUG = "e2e-embed-test-allowlist";
+const EMBED_ALLOWLIST_PERMISSIVE_SLUG = "e2e-embed-test-allowlist-permissive";
+const EMBED_ALLOWLIST_STRICT_SLUG = "e2e-embed-test-allowlist-strict";
 const ALLOWED_ORIGIN = "https://allowed.e2e.example.com";
 const ALLOWED_REFERER = "https://allowed.e2e.example.com/programs";
 const DISALLOWED_ORIGIN = "https://attacker.e2e.example.com";
@@ -50,7 +62,7 @@ const DISALLOWED_REFERER = "https://attacker.e2e.example.com/embed-page";
  * We use a small dummy file under public/ that just loads the loader and
  * provides a tall scrollable area above the widget.
  */
-function buildHostHtml(): string {
+function buildHostHtml(slug: string = EMBED_SLUG): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -66,16 +78,16 @@ function buildHostHtml(): string {
 </head>
 <body>
 <div id="spacer-top">Top spacer (forces scroll above the widget).</div>
-<div id="widget-host"><div data-edcons-widget="${EMBED_SLUG}"></div></div>
+<div id="widget-host"><div data-edcons-widget="${slug}"></div></div>
 <div id="spacer-bottom">Bottom spacer.</div>
 <script src="${BASE_URL}/api/public/embed/embed.js"></script>
 </body>
 </html>`;
 }
 
-async function loadHost(page: Page) {
+async function loadHost(page: Page, slug: string = EMBED_SLUG) {
   await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
-  await page.setContent(buildHostHtml(), { waitUntil: "load" });
+  await page.setContent(buildHostHtml(slug), { waitUntil: "load" });
   // Force the lazy-loaded iframe to start loading immediately, then reset
   // host scroll so individual tests start from a known position.
   const iframeLocator = page.locator("#widget-host iframe");
@@ -84,10 +96,16 @@ async function loadHost(page: Page) {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-async function getWidgetIframe(page: Page): Promise<FrameLocator> {
+async function getWidgetIframe(
+  page: Page,
+  slug: string = EMBED_SLUG,
+): Promise<FrameLocator> {
   const iframeEl = page.locator("#widget-host iframe");
   await expect(iframeEl).toHaveCount(1, { timeout: 10_000 });
-  await expect(iframeEl).toHaveAttribute("src", new RegExp(`/api/public/embed/${EMBED_SLUG}/widget`));
+  await expect(iframeEl).toHaveAttribute(
+    "src",
+    new RegExp(`/api/public/embed/${slug}/widget`),
+  );
   return page.frameLocator("#widget-host iframe");
 }
 
@@ -248,25 +266,74 @@ test.describe("embed widget — mobile", { tag: "@mobile" }, () => {
  *
  * Production widgets are typically created with a non-empty
  * `allowedDomains` list so a partner can't have someone else embed
- * their widget on a hostile site. The seeded `EMBED_ALLOWLIST_SLUG`
- * widget has `allowedDomains: [ALLOWED_DOMAIN]` and the public API
- * routes (`/config`, `/programs`, `/apply`) gate on the request's
- * `Origin` / `Referer` headers via `validateDomain` in
+ * their widget on a hostile site. The public API routes (`/config`,
+ * `/programs`, `/apply`) gate on the request's `Origin` / `Referer`
+ * headers via `validateDomain` in
  * `artifacts/api-server/src/routes/embed.ts`.
  *
- * These tests directly exercise that gate by making API requests with
- * an explicit Origin+Referer pair (the way a real browser would behave
- * when a partner page calls the widget's public endpoints) and assert:
+ * Two angles of coverage:
  *
- *   - allowed origin  -> 200, returns the widget config / programs
- *   - disallowed      -> 403 with the "Domain not allowed" error
- *   - missing both    -> 403 (no headers means no way to verify)
+ *   1) Loader/iframe end-to-end (the user-facing flow): embed the
+ *      widget on the test host page (served from localhost) and assert
+ *      what the user actually sees.
+ *        - PERMISSIVE widget (allowedDomains includes "localhost") ->
+ *          program cards render.
+ *        - STRICT widget (allowedDomains excludes localhost) -> the
+ *          widget catches the 403 and shows the "Unable to load widget"
+ *          empty state; no cards appear.
  *
- * Tagged @desktop so it only runs on the chromium-desktop project,
- * not on every mobile-viewport project (the restriction is independent
- * of viewport).
+ *   2) Public-API direct (covers cases the loader-flow can't fake,
+ *      because browsers control the Origin/Referer headers): drive the
+ *      gate with explicit headers a real partner-side request would
+ *      send.
+ *        - allowed Origin/Referer -> 200, real config/programs payload
+ *        - disallowed Origin/Referer -> 403 + "Domain not allowed"
+ *        - missing both headers -> 403 (server-side cURL can't bypass)
+ *
+ * Tagged @desktop so it only runs on the chromium-desktop project, not
+ * on every mobile-viewport project (the restriction is independent of
+ * viewport).
  */
 test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
+  test("loader iframe renders program cards when embedded on an allowed origin", async ({
+    page,
+  }) => {
+    // PERMISSIVE widget: allowedDomains=["localhost","127.0.0.1"]. The
+    // dev server runs at http://localhost:25197 so the iframe's
+    // same-origin /config + /programs fetches have Referer hostname=
+    // localhost — IN the allowlist — and the widget should render
+    // normally. This is the "renders normally on allowed origin"
+    // acceptance criterion expressed end-to-end.
+    await loadHost(page, EMBED_ALLOWLIST_PERMISSIVE_SLUG);
+    const widget = await getWidgetIframe(page, EMBED_ALLOWLIST_PERMISSIVE_SLUG);
+
+    // The seeded program (fixtures.ts -> EMBED_TEST_PROGRAM) is the
+    // only active record for the seeded university so at least one
+    // .ew-card is expected once /config + /programs both succeed.
+    await expect(widget.locator(".ew-card").first()).toBeVisible({ timeout: 15_000 });
+    await expect(widget.locator(".ew-empty")).toHaveCount(0);
+  });
+
+  test("loader iframe shows the empty/error state when embedded on a disallowed origin", async ({
+    page,
+  }) => {
+    // STRICT widget: allowedDomains=["allowed.e2e.example.com"]. The
+    // iframe is loaded from localhost so its same-origin /config call
+    // has Referer hostname=localhost — NOT in the allowlist — and the
+    // server returns 403. The widget JS in `generateWidgetHTML`
+    // catches the failed fetch and renders
+    // `<div class="ew-empty"><p>Unable to load widget</p></div>`.
+    // This is the "refuses to render on disallowed origin" criterion.
+    await loadHost(page, EMBED_ALLOWLIST_STRICT_SLUG);
+    const widget = await getWidgetIframe(page, EMBED_ALLOWLIST_STRICT_SLUG);
+
+    await expect(widget.locator(".ew-empty")).toBeVisible({ timeout: 15_000 });
+    await expect(widget.locator(".ew-empty p")).toContainText(/unable to load widget/i);
+    // No program cards must leak through — even momentarily — because
+    // /config failed before /programs was ever called.
+    await expect(widget.locator(".ew-card")).toHaveCount(0);
+  });
+
   test("public /config returns 200 when called from an allowed origin", async () => {
     const ctx = await pwRequest.newContext({
       extraHTTPHeaders: {
@@ -276,11 +343,11 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     });
     try {
       const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/config`,
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`,
       );
       expect(res.status()).toBe(200);
       const body = await res.json();
-      expect(body.slug).toBe(EMBED_ALLOWLIST_SLUG);
+      expect(body.slug).toBe(EMBED_ALLOWLIST_STRICT_SLUG);
       expect(body.mode).toBe("combined");
     } finally {
       await ctx.dispose();
@@ -296,7 +363,7 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     });
     try {
       const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/programs`,
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/programs`,
       );
       expect(res.status()).toBe(200);
       const body = await res.json();
@@ -316,7 +383,7 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     });
     try {
       const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/config`,
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`,
       );
       expect(res.status()).toBe(403);
       const body = await res.json();
@@ -335,7 +402,7 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     });
     try {
       const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/programs`,
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/programs`,
       );
       expect(res.status()).toBe(403);
       const body = await res.json();
@@ -358,7 +425,7 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     });
     try {
       const res = await ctx.post(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/apply`,
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/apply`,
         {
           data: {
             firstName: "Disallowed",
@@ -382,7 +449,7 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     const ctx = await pwRequest.newContext();
     try {
       const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/config`,
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`,
         { headers: { Referer: "" } },
       );
       expect(res.status()).toBe(403);
