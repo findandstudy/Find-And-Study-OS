@@ -327,7 +327,13 @@
     "appDocLabel_visa_approved": "Visa OK",
     "appDocLabel_visa_reject": "Visa Reject",
     "languageScore": "Language Score",
-    "languageScorePlaceholder": "e.g. 6.5 (IELTS)"
+    "languageScorePlaceholder": "e.g. 6.5 (IELTS)",
+    "alreadyOnFile": "On file",
+    "replace": "Replace",
+    "replaceDoc": "Replace document",
+    "continueToReview": "Continue to Review",
+    "welcomeBack": "Welcome back, {name}! Your information is pre-filled and your previously uploaded documents will be reused for this application.",
+    "docsAlreadyUploaded": "{count} document(s) from your library are ready for this application — no need to re-upload."
   },
   "dashboard": {
     "portal": "Portal",

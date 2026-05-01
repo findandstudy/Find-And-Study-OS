@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import {
@@ -298,10 +299,31 @@ function StepIndicator({ current, steps }: { current: number; steps: string[] })
   );
 }
 
+function splitPhoneNumber(full: string | null | undefined, fallbackCode: string): { code: string; number: string } {
+  if (!full) return { code: fallbackCode, number: "" };
+  const trimmed = String(full).trim();
+  if (!trimmed) return { code: fallbackCode, number: "" };
+  const sortedCodes = Array.from(new Set(PHONE_CODES.map(p => p.code))).sort((a, b) => b.length - a.length);
+  for (const c of sortedCodes) {
+    if (trimmed.startsWith(c)) return { code: c, number: trimmed.slice(c.length).trim() };
+  }
+  return { code: fallbackCode, number: trimmed };
+}
+
+interface ExistingDocInfo {
+  id: number;
+  name: string;
+  status: string;
+  mimeType: string | null;
+  createdAt: string;
+}
+
 function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
   const { t, localePath } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth(false);
+  const isLoggedInStudent = !!user && user.role === "student";
   const [step, setStep] = useState<ApplyStep>("personal");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -312,6 +334,9 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const [creatingLead, setCreatingLead] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [allCountries, setAllCountries] = useState<Array<{ id: number; name: string; code?: string; flagEmoji?: string | null }>>([]);
+  const [existingDocs, setExistingDocs] = useState<Record<string, ExistingDocInfo>>({});
+  const [replacedTypes, setReplacedTypes] = useState<Set<string>>(new Set());
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   useEffect(() => {
     if (open && allCountries.length === 0) {
@@ -321,11 +346,82 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !isLoggedInStudent) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [profile, docsResp] = await Promise.all([
+          customFetch<any>("/api/students/me", { method: "GET" }).catch(() => null),
+          customFetch<any[]>("/api/documents", { method: "GET" }).catch(() => []),
+        ]);
+        if (cancelled) return;
+        if (profile && typeof profile === "object") {
+          const phoneStr = (profile as any).phone || user?.phone || "";
+          const { code, number } = splitPhoneNumber(phoneStr, "+90");
+          setForm(f => ({
+            ...f,
+            firstName: (profile as any).firstName || user?.firstName || f.firstName,
+            lastName: (profile as any).lastName || user?.lastName || f.lastName,
+            email: user?.email || (profile as any).email || f.email,
+            phone: number || f.phone,
+            phoneCode: code || f.phoneCode,
+            nationality: (profile as any).nationality || f.nationality,
+            dateOfBirth: (profile as any).dateOfBirth || f.dateOfBirth,
+            motherName: (profile as any).motherName || f.motherName,
+            fatherName: (profile as any).fatherName || f.fatherName,
+            passportNumber: (profile as any).passportNumber || f.passportNumber,
+            passportIssueDate: (profile as any).passportIssueDate || f.passportIssueDate,
+            passportExpiry: (profile as any).passportExpiry || f.passportExpiry,
+            address: (profile as any).address || f.address,
+            highSchool: (profile as any).highSchool || f.highSchool,
+            graduationYear: (profile as any).graduationYear ? String((profile as any).graduationYear) : f.graduationYear,
+            gpa: (profile as any).gpa || f.gpa,
+            languageScore: (profile as any).languageScore || f.languageScore,
+          }));
+        }
+        const list = Array.isArray(docsResp) ? docsResp : [];
+        const map: Record<string, ExistingDocInfo> = {};
+        for (const d of list) {
+          if (!d?.type || d.deletedAt || d.status === "rejected") continue;
+          const dCreated = d.createdAt ? new Date(d.createdAt).getTime() : 0;
+          const existing = map[d.type];
+          const eCreated = existing?.createdAt ? new Date(existing.createdAt).getTime() : 0;
+          if (!existing || dCreated > eCreated) {
+            map[d.type] = {
+              id: d.id,
+              name: d.name || d.type,
+              status: d.status || "pending",
+              mimeType: d.mimeType ?? null,
+              createdAt: d.createdAt || new Date(0).toISOString(),
+            };
+          }
+        }
+        setExistingDocs(map);
+        setReplacedTypes(new Set());
+        setProfileLoaded(true);
+      } catch (e) {
+        console.error("[ApplyDialog] Failed to load student profile/docs:", e);
+        setProfileLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, isLoggedInStudent, user?.id]);
+
   const docTypes = getDocTypesForDegree(program?.degree);
   const requiredDocs = docTypes.filter(d => d.required);
-  const uploadedCount = Object.keys(docs).length;
+  const reusableForProgram: Record<string, ExistingDocInfo> = {};
+  for (const dt of docTypes) {
+    const ex = existingDocs[dt.key];
+    if (ex && !replacedTypes.has(dt.key) && !docs[dt.key]) {
+      reusableForProgram[dt.key] = ex;
+    }
+  }
+  const newUploadsCount = Object.keys(docs).length;
+  const reusedCount = Object.keys(reusableForProgram).length;
+  const uploadedCount = newUploadsCount + reusedCount;
   const totalCount = docTypes.length;
-  const missingRequired = requiredDocs.filter(d => !docs[d.key]);
+  const missingRequired = requiredDocs.filter(d => !docs[d.key] && !reusableForProgram[d.key]);
 
   const stepIndex = step === "personal" ? 0 : step === "documents" || step === "analyzing" ? 1 : step === "review" ? 2 : 2;
 
@@ -339,12 +435,20 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     setLeadId(null);
     setCreatingLead(false);
     setEmailError(null);
+    setExistingDocs({});
+    setReplacedTypes(new Set());
+    setProfileLoaded(false);
     onClose();
   }
 
   async function handleNextPersonal() {
     if (!form.firstName || !form.lastName || !form.email || !form.phone) {
       toast({ title: t("apply.fillAllFields"), variant: "destructive" });
+      return;
+    }
+
+    if (isLoggedInStudent) {
+      setStep("documents");
       return;
     }
 
@@ -508,6 +612,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         mediaType: d.mediaType,
         sizeBytes: d.file.size,
       }));
+      const reuseDocumentIds = Object.values(reusableForProgram).map(r => r.id);
       const resp = await fetch(`${BASE_URL}/api/public/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -518,6 +623,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           universityName: program?.universityName,
           programDegree: program?.degree || null,
           documents: docPayload,
+          reuseDocumentIds,
           leadId,
         }),
       });
@@ -571,6 +677,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
         {step === "personal" && (
           <div className="space-y-5">
+            {isLoggedInStudent && profileLoaded && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                  {t("apply.welcomeBack", { name: user?.firstName || form.firstName || "" })}
+                </p>
+              </div>
+            )}
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
               <div className="flex items-center gap-2 mb-1">
                 <Users className="w-4 h-4 text-primary" />
@@ -602,8 +716,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               <Label className="text-sm font-semibold">
                 {t("apply.email")} <span className="text-destructive ml-0.5">*</span>
               </Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder={t("apply.emailPlaceholder")} className="rounded-xl" />
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => { if (!isLoggedInStudent) setForm(f => ({ ...f, email: e.target.value })); }}
+                readOnly={isLoggedInStudent}
+                placeholder={t("apply.emailPlaceholder")}
+                className={`rounded-xl ${isLoggedInStudent ? "bg-muted cursor-not-allowed" : ""}`}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -651,16 +771,52 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             </div>
 
             <p className="text-[11px] text-muted-foreground">{FILE_UPLOAD_HELP_TEXT}</p>
+            {isLoggedInStudent && reusedCount > 0 && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                <span>{t("apply.docsAlreadyUploaded", { count: reusedCount })}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {docTypes.map((dt) => (
-                <DropZone
-                  key={dt.key}
-                  docType={dt}
-                  uploaded={docs[dt.key]}
-                  onUpload={(d) => setDocs((prev) => ({ ...prev, [dt.key]: d }))}
-                  onRemove={() => setDocs((prev) => { const n = { ...prev }; delete n[dt.key]; return n; })}
-                />
-              ))}
+              {docTypes.map((dt) => {
+                const reused = reusableForProgram[dt.key];
+                if (reused) {
+                  return (
+                    <div key={dt.key} className="relative flex flex-col items-center gap-1.5 p-3 border-2 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl text-center min-h-[110px] justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setReplacedTypes(prev => { const n = new Set(prev); n.add(dt.key); return n; })}
+                        className="absolute top-1.5 right-1.5 text-[10px] text-emerald-700 dark:text-emerald-300 hover:underline font-medium"
+                        title={t("apply.replaceDoc")}
+                      >
+                        {t("apply.replace")}
+                      </button>
+                      <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                      <p className="text-xs font-semibold text-foreground truncate max-w-[100px]">{t(dt.labelKey)}</p>
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={reused.name}>{reused.name}</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-semibold">{t("apply.alreadyOnFile")}</span>
+                    </div>
+                  );
+                }
+                return (
+                  <DropZone
+                    key={dt.key}
+                    docType={dt}
+                    uploaded={docs[dt.key]}
+                    onUpload={(d) => {
+                      setDocs((prev) => ({ ...prev, [dt.key]: d }));
+                      setReplacedTypes(prev => { const n = new Set(prev); n.add(dt.key); return n; });
+                    }}
+                    onRemove={() => {
+                      setDocs((prev) => { const n = { ...prev }; delete n[dt.key]; return n; });
+                      if (existingDocs[dt.key]) {
+                        setReplacedTypes(prev => { const n = new Set(prev); n.delete(dt.key); return n; });
+                      }
+                    }}
+                  />
+                );
+              })}
             </div>
 
             {missingRequired.length > 0 && uploadedCount > 0 && (
@@ -670,11 +826,18 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             )}
 
             <div className="flex gap-3">
-              <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0}>
-                <Sparkles className="w-4 h-4" /> {t("apply.analyzeWithAi")}
-              </Button>
-              <Button variant="ghost" onClick={handleSkipToReview} className="rounded-xl">
-                {t("apply.skipFillManually")}
+              {newUploadsCount > 0 && (
+                <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0}>
+                  <Sparkles className="w-4 h-4" /> {t("apply.analyzeWithAi")}
+                </Button>
+              )}
+              <Button
+                variant={newUploadsCount > 0 ? "ghost" : "default"}
+                onClick={handleSkipToReview}
+                className={newUploadsCount > 0 ? "rounded-xl" : "flex-1 rounded-xl gap-2"}
+                disabled={missingRequired.length > 0}
+              >
+                {newUploadsCount > 0 ? t("apply.skipFillManually") : (<>{t("apply.continueToReview")} <ChevronRight className="w-4 h-4" /></>)}
               </Button>
             </div>
           </div>
@@ -780,8 +943,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 {t("apply.email")} <span className="text-destructive ml-0.5">*</span>
                 {extracted.has("email") && <AiBadge />}
               </Label>
-              <Input type="email" value={form.email} onChange={(e) => { setForm(f => ({ ...f, email: e.target.value })); setEmailError(null); }}
-                placeholder={t("apply.emailPlaceholder")} className={`rounded-xl ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => { if (isLoggedInStudent) return; setForm(f => ({ ...f, email: e.target.value })); setEmailError(null); }}
+                readOnly={isLoggedInStudent}
+                placeholder={t("apply.emailPlaceholder")}
+                className={`rounded-xl ${isLoggedInStudent ? "bg-muted cursor-not-allowed" : ""} ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`}
+              />
               {emailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
 

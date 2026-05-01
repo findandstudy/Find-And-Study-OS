@@ -327,7 +327,13 @@
     "appDocLabel_visa_approved": "Vize Onay",
     "appDocLabel_visa_reject": "Vize Red",
     "languageScore": "Dil Puanı",
-    "languageScorePlaceholder": "ör. 6.5 (IELTS)"
+    "languageScorePlaceholder": "ör. 6.5 (IELTS)",
+    "alreadyOnFile": "Kayıtlı",
+    "replace": "Değiştir",
+    "replaceDoc": "Belgeyi değiştir",
+    "continueToReview": "İncelemeye Devam Et",
+    "welcomeBack": "Tekrar hoş geldiniz, {name}! Bilgileriniz önceden dolduruldu ve daha önce yüklediğiniz belgeler bu başvuru için kullanılacak.",
+    "docsAlreadyUploaded": "Belge kütüphanenizdeki {count} belge bu başvuru için hazır — yeniden yüklemenize gerek yok."
   },
   "dashboard": {
     "portal": "Portal",

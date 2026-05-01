@@ -224,7 +224,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, address, highSchool, graduationYear, gpa, languageScore, leadId, documents } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, address, highSchool, graduationYear, gpa, languageScore, leadId, documents, reuseDocumentIds } = req.body;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality) {
     res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, and nationality are required" });
@@ -464,6 +464,67 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         }
       } catch (docErr) {
         console.error("[PUBLIC-APPLY] Failed to save documents:", docErr);
+      }
+    }
+
+    if (Array.isArray(reuseDocumentIds) && reuseDocumentIds.length > 0 && resultStudentId && resultAppId) {
+      try {
+        const reuseIds = reuseDocumentIds
+          .map((id: any) => parseInt(String(id), 10))
+          .filter((n: number) => Number.isFinite(n) && n > 0)
+          .slice(0, 20);
+        if (reuseIds.length > 0) {
+          const sourceDocs = await db.select().from(documentsTable).where(and(
+            inArray(documentsTable.id, reuseIds),
+            eq(documentsTable.studentId, resultStudentId),
+            isNull(documentsTable.deletedAt),
+          ));
+          const alreadyHaveTypes = new Set<string>();
+          if (Array.isArray(documents)) {
+            for (const d of documents) {
+              const t = String(d?.key || d?.label || "").trim();
+              if (t) alreadyHaveTypes.add(t);
+            }
+          }
+          let copied = 0;
+          let photoSet = false;
+          const seenTypes = new Set<string>();
+          for (const src of sourceDocs) {
+            const srcType = String(src.type || "").trim();
+            if (!srcType) continue;
+            if (alreadyHaveTypes.has(srcType)) continue;
+            if (seenTypes.has(srcType)) continue;
+            seenTypes.add(srcType);
+            await db.insert(documentsTable).values({
+              studentId: resultStudentId,
+              applicationId: resultAppId,
+              name: src.name,
+              type: srcType,
+              status: src.status === "rejected" ? "pending" : (src.status || "pending"),
+              fileData: src.fileData ?? null,
+              fileUrl: src.fileUrl ?? null,
+              fileKey: src.fileKey ?? null,
+              mimeType: src.mimeType ?? null,
+              sizeBytes: src.sizeBytes ?? null,
+              notes: src.notes ?? null,
+            });
+            copied++;
+            if (!photoSet && (srcType === "photo" || srcType === "photograph") && src.fileData && src.mimeType) {
+              try {
+                const photoUrl = `data:${src.mimeType};base64,${src.fileData}`;
+                await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, resultStudentId));
+                photoSet = true;
+              } catch (e) {
+                console.error("[PUBLIC-APPLY] Failed to set student photo from reused doc:", e);
+              }
+            }
+          }
+          if (copied > 0) {
+            console.log(`[PUBLIC-APPLY] Reused ${copied} existing document(s) for student #${resultStudentId}, app #${resultAppId}`);
+          }
+        }
+      } catch (reuseErr) {
+        console.error("[PUBLIC-APPLY] Failed to reuse existing documents:", reuseErr);
       }
     }
 

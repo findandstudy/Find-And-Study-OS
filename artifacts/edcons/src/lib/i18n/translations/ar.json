@@ -318,7 +318,13 @@
     "docSub_ifRequired": "إن لزم",
     "docSub_recognition": "الاعتراف",
     "languageScore": "درجة اللغة",
-    "languageScorePlaceholder": "مثال 6.5 (IELTS)"
+    "languageScorePlaceholder": "مثال 6.5 (IELTS)",
+    "alreadyOnFile": "On file",
+    "replace": "Replace",
+    "replaceDoc": "Replace document",
+    "continueToReview": "Continue to Review",
+    "welcomeBack": "Welcome back, {name}! Your information is pre-filled and your previously uploaded documents will be reused for this application.",
+    "docsAlreadyUploaded": "{count} document(s) from your library are ready for this application — no need to re-upload."
   },
   "dashboard": {
     "portal": "البوابة",
