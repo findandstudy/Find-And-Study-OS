@@ -27,10 +27,22 @@
  * `e2e-embed-test`) are seeded by playwright globalSetup via
  * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`.
  */
-import { test, expect, type Page, type FrameLocator } from "@playwright/test";
+import { test, expect, request as pwRequest, type Page, type FrameLocator } from "@playwright/test";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const EMBED_SLUG = "e2e-embed-test";
+
+/**
+ * The allowlist-widget fixture (seeded by
+ * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`) has
+ * `allowedDomains: ["allowed.e2e.example.com"]`. Keep these constants
+ * in sync with the fixture script.
+ */
+const EMBED_ALLOWLIST_SLUG = "e2e-embed-test-allowlist";
+const ALLOWED_ORIGIN = "https://allowed.e2e.example.com";
+const ALLOWED_REFERER = "https://allowed.e2e.example.com/programs";
+const DISALLOWED_ORIGIN = "https://attacker.e2e.example.com";
+const DISALLOWED_REFERER = "https://attacker.e2e.example.com/embed-page";
 
 /**
  * The host page lives at /e2e-embed-host.html on the dev server domain so
@@ -228,5 +240,156 @@ test.describe("embed widget — mobile", { tag: "@mobile" }, () => {
         timeout: 3_000,
       })
       .toBe("fixed");
+  });
+});
+
+/**
+ * Allowed-domains restriction.
+ *
+ * Production widgets are typically created with a non-empty
+ * `allowedDomains` list so a partner can't have someone else embed
+ * their widget on a hostile site. The seeded `EMBED_ALLOWLIST_SLUG`
+ * widget has `allowedDomains: [ALLOWED_DOMAIN]` and the public API
+ * routes (`/config`, `/programs`, `/apply`) gate on the request's
+ * `Origin` / `Referer` headers via `validateDomain` in
+ * `artifacts/api-server/src/routes/embed.ts`.
+ *
+ * These tests directly exercise that gate by making API requests with
+ * an explicit Origin+Referer pair (the way a real browser would behave
+ * when a partner page calls the widget's public endpoints) and assert:
+ *
+ *   - allowed origin  -> 200, returns the widget config / programs
+ *   - disallowed      -> 403 with the "Domain not allowed" error
+ *   - missing both    -> 403 (no headers means no way to verify)
+ *
+ * Tagged @desktop so it only runs on the chromium-desktop project,
+ * not on every mobile-viewport project (the restriction is independent
+ * of viewport).
+ */
+test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
+  test("public /config returns 200 when called from an allowed origin", async () => {
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: ALLOWED_ORIGIN,
+        Referer: ALLOWED_REFERER,
+      },
+    });
+    try {
+      const res = await ctx.get(
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/config`,
+      );
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expect(body.slug).toBe(EMBED_ALLOWLIST_SLUG);
+      expect(body.mode).toBe("combined");
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /programs returns 200 when called from an allowed origin", async () => {
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: ALLOWED_ORIGIN,
+        Referer: ALLOWED_REFERER,
+      },
+    });
+    try {
+      const res = await ctx.get(
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/programs`,
+      );
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body.data)).toBe(true);
+      expect(body.meta).toBeDefined();
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /config is rejected with 403 from a disallowed origin", async () => {
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: DISALLOWED_ORIGIN,
+        Referer: DISALLOWED_REFERER,
+      },
+    });
+    try {
+      const res = await ctx.get(
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/config`,
+      );
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/domain not allowed/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /programs is rejected with 403 from a disallowed origin", async () => {
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: DISALLOWED_ORIGIN,
+        Referer: DISALLOWED_REFERER,
+      },
+    });
+    try {
+      const res = await ctx.get(
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/programs`,
+      );
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/domain not allowed/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /apply is rejected with 403 from a disallowed origin", async () => {
+    // Belt-and-suspenders: even a POST that would otherwise succeed
+    // (valid payload) must be blocked when the request comes from a
+    // host that isn't on the allowlist. The submission endpoint is the
+    // most important one to lock down because it writes leads.
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: DISALLOWED_ORIGIN,
+        Referer: DISALLOWED_REFERER,
+      },
+    });
+    try {
+      const res = await ctx.post(
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/apply`,
+        {
+          data: {
+            firstName: "Disallowed",
+            lastName: "Origin",
+            email: "disallowed-origin@e2e.test",
+          },
+        },
+      );
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/domain not allowed/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /config is rejected with 403 when no Origin/Referer is sent", async () => {
+    // Sanity check on `validateDomain`'s "no headers => block" branch:
+    // a populated allowedDomains list must not be bypassable by simply
+    // omitting both headers (e.g. a server-side cURL).
+    const ctx = await pwRequest.newContext();
+    try {
+      const res = await ctx.get(
+        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_SLUG}/config`,
+        { headers: { Referer: "" } },
+      );
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/domain not allowed/i);
+    } finally {
+      await ctx.dispose();
+    }
   });
 });
