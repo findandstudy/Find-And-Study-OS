@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -270,6 +270,36 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`, noteTab] });
       }
     } catch {}
+  }
+
+  const deleteNote = useMutation({
+    mutationFn: async (noteId: number) => {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1]
+        ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1])
+        : "";
+      const resp = await fetch(`${BASE}/api/leads/${id}/notes/${noteId}`, {
+        method: "DELETE",
+        headers: { "x-csrf-token": csrfToken },
+        credentials: "include",
+      });
+      if (!resp.ok && resp.status !== 204) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to delete note");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`, "general"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/notes`, "internal"] });
+      toast({ title: "Note deleted" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function handleDeleteNote(noteId: number) {
+    if (!window.confirm("Delete this note? This action will be recorded in the audit log.")) return;
+    deleteNote.mutate(noteId);
   }
 
   const editFollowUp = useMutation({
@@ -604,11 +634,27 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <p className="text-sm text-muted-foreground">No notes yet.</p>
                 ) : (
                   activeNotes.map((note: any) => (
-                    <div key={note.id} className={`rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
-                      <p className="text-sm text-foreground">{note.content}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
-                      </p>
+                    <div key={note.id} className={`group relative rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground whitespace-pre-wrap break-words">{note.content}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        {isStaffUser && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNote(note.id)}
+                            disabled={deleteNote.isPending}
+                            className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50"
+                            aria-label="Delete note"
+                            title="Delete note"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}

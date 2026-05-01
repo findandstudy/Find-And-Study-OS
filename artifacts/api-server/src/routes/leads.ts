@@ -720,6 +720,35 @@ router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
   res.status(201).json({ ...note, authorName: `${req.user!.firstName || ""} ${req.user!.lastName || ""}`.trim() });
 });
 
+router.delete("/leads/:id/notes/:noteId", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const noteId = parseInt(req.params.noteId, 10);
+  if (isNaN(id) || isNaN(noteId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [note] = await db.select({
+    id: notesTable.id,
+    content: notesTable.content,
+    authorId: notesTable.authorId,
+    isInternal: notesTable.isInternal,
+  }).from(notesTable).where(and(
+    eq(notesTable.id, noteId),
+    eq(notesTable.resourceId, id),
+    eq(notesTable.resourceType, "lead"),
+  ));
+  if (!note) { res.status(404).json({ error: "Note not found" }); return; }
+
+  await db.delete(notesTable).where(eq(notesTable.id, noteId));
+
+  await logAudit(req.user!.id, "delete_note", "lead", id, {
+    noteId,
+    isInternal: note.isInternal,
+    authorId: note.authorId,
+    contentPreview: (note.content || "").slice(0, 200),
+  }, req.ip);
+
+  res.status(204).end();
+});
+
 router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
