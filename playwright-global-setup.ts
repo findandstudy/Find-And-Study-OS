@@ -15,4 +15,9 @@ export default async function globalSetup() {
     "pnpm --filter @workspace/api-server exec tsx ./scripts/e2e-db-setup.ts",
     { stdio: "inherit" },
   );
+
+  execSync(
+    "pnpm --filter @workspace/api-server exec tsx ./scripts/e2e-embed-fixtures.ts",
+    { stdio: "inherit" },
+  );
 }

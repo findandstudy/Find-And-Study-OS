@@ -9,4 +9,13 @@ export default async function globalTeardown() {
   } catch (err) {
     console.warn("[playwright teardown] restore failed (non-fatal):", err);
   }
+
+  try {
+    execSync(
+      "pnpm --filter @workspace/api-server exec tsx ./scripts/e2e-embed-fixtures-teardown.ts",
+      { stdio: "inherit" },
+    );
+  } catch (err) {
+    console.warn("[playwright teardown] embed fixtures teardown failed (non-fatal):", err);
+  }
 }

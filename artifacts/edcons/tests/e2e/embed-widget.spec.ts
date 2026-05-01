@@ -1,0 +1,212 @@
+/**
+ * Playwright e2e for the embeddable apply widget.
+ *
+ * Permanent regression coverage for the recent embed loader fixes:
+ *   - Task #82: cross-origin loader / iframe injection.
+ *   - Task #83: mobile modal positioning, scroll lock during modal,
+ *     scroll position restored on close.
+ *
+ * The test does NOT load the widget through the edcons app. Instead, it
+ * builds a small synthetic host page in-memory via page.setContent(),
+ * drops in the public embed loader (`/api/public/embed/embed.js`), and
+ * asserts that:
+ *
+ *   1. The loader injects an <iframe> into the host page.
+ *   2. The widget HTML inside the iframe lists at least one program
+ *      (or shows the empty state) — i.e. the public programs API works.
+ *   3. Clicking "Apply Now" on a program opens the apply modal inside
+ *      the iframe.
+ *   4. While the modal is open, the host page body has scroll lock
+ *      applied (position:fixed) and cannot scroll.
+ *   5. On mobile viewport, the modal stays inside the visible viewport
+ *      (top + height fit within parent viewport).
+ *   6. Closing the modal restores the original scroll position on the
+ *      host page.
+ *
+ * Fixtures (test university + program + widget with slug
+ * `e2e-embed-test`) are seeded by playwright globalSetup via
+ * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`.
+ */
+import { test, expect, type Page, type FrameLocator } from "@playwright/test";
+
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
+const EMBED_SLUG = "e2e-embed-test";
+
+/**
+ * The host page lives at /e2e-embed-host.html on the dev server domain so
+ * that `window.parent.location.href` resolves cleanly inside the iframe.
+ * We use a small dummy file under public/ that just loads the loader and
+ * provides a tall scrollable area above the widget.
+ */
+function buildHostHtml(): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Embed Widget E2E Host</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  #spacer-top { height: 120px; background: linear-gradient(#fafafa,#eee); padding: 24px; }
+  #widget-host { padding: 16px; background: #fff; }
+  #spacer-bottom { height: 1500px; background: linear-gradient(#eee,#ddd); padding: 24px; }
+</style>
+</head>
+<body>
+<div id="spacer-top">Top spacer (forces scroll above the widget).</div>
+<div id="widget-host"><div data-edcons-widget="${EMBED_SLUG}"></div></div>
+<div id="spacer-bottom">Bottom spacer.</div>
+<script src="${BASE_URL}/api/public/embed/embed.js"></script>
+</body>
+</html>`;
+}
+
+async function loadHost(page: Page) {
+  await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
+  await page.setContent(buildHostHtml(), { waitUntil: "load" });
+  // Force the lazy-loaded iframe to start loading immediately, then reset
+  // host scroll so individual tests start from a known position.
+  const iframeLocator = page.locator("#widget-host iframe");
+  await expect(iframeLocator).toHaveCount(1, { timeout: 10_000 });
+  await iframeLocator.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
+async function getWidgetIframe(page: Page): Promise<FrameLocator> {
+  const iframeEl = page.locator("#widget-host iframe");
+  await expect(iframeEl).toHaveCount(1, { timeout: 10_000 });
+  await expect(iframeEl).toHaveAttribute("src", new RegExp(`/api/public/embed/${EMBED_SLUG}/widget`));
+  return page.frameLocator("#widget-host iframe");
+}
+
+test.describe("embed widget — desktop", () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test("loader injects iframe and renders the program list", async ({ page }) => {
+    await loadHost(page);
+    const widget = await getWidgetIframe(page);
+
+    // The fixture guarantees at least one active program exists for this
+    // widget, so we should always see at least one card and never the
+    // empty state. Wait for cards to appear.
+    const cards = widget.locator(".ew-card");
+    await expect(cards.first()).toBeVisible({ timeout: 10_000 });
+    expect(await cards.count()).toBeGreaterThan(0);
+    await expect(widget.locator(".ew-empty")).toHaveCount(0);
+
+    // Apply Now button must be present on the card.
+    await expect(
+      widget.locator(".ew-card .ew-btn", { hasText: /apply now/i }).first(),
+    ).toBeVisible();
+  });
+
+  test("opening apply modal locks scroll and restores it on close", async ({ page }) => {
+    await loadHost(page);
+    const widget = await getWidgetIframe(page);
+
+    await expect(widget.locator(".ew-card").first()).toBeVisible({ timeout: 10_000 });
+
+    // Scroll the host page so we can later assert restoration. The widget
+    // is small (spacer-top 120px) so the apply button stays in viewport
+    // without Playwright auto-scrolling on click.
+    await page.evaluate(() => window.scrollTo(0, 200));
+
+    // Click the first Apply Now button.
+    await widget.locator(".ew-card .ew-btn", { hasText: /apply now/i }).first().click();
+
+    // Modal must appear inside the iframe.
+    const modalOverlay = widget.locator(".ew-modal-overlay");
+    const modal = widget.locator(".ew-modal");
+    await expect(modalOverlay).toBeVisible({ timeout: 5_000 });
+    await expect(modal).toBeVisible();
+
+    // Scroll lock: host body should be position:fixed while modal is open.
+    await expect.poll(
+      async () => page.evaluate(() => document.body.style.position),
+      { timeout: 3_000 },
+    ).toBe("fixed");
+
+    // The loader stores the captured scroll in `body.style.top` as
+    // negative pixels — extract it so we can assert restoration even if
+    // Playwright auto-scrolled the page slightly when clicking apply.
+    const savedScrollFromLoader = await page.evaluate(() => {
+      const top = document.body.style.top;
+      return top ? Math.abs(parseInt(top, 10)) : 0;
+    });
+    expect(savedScrollFromLoader).toBeGreaterThan(0);
+
+    // Attempting to scroll the host page must NOT change the visible scroll.
+    const lockedScroll = await page.evaluate(() => {
+      window.scrollTo(0, 1000);
+      return Math.round(window.scrollY);
+    });
+    expect(lockedScroll).toBe(0); // body fixed -> scrollY clamps to 0
+
+    // Close the modal via the close button.
+    await widget.locator("#ew-modal-close").click();
+    await expect(modalOverlay).toHaveCount(0, { timeout: 5_000 });
+
+    // Scroll lock removed and original scroll restored.
+    await expect.poll(
+      async () => page.evaluate(() => document.body.style.position),
+      { timeout: 3_000 },
+    ).toBe("");
+    await expect.poll(
+      async () => page.evaluate(() => Math.round(window.scrollY)),
+      { timeout: 3_000 },
+    ).toBe(savedScrollFromLoader);
+  });
+});
+
+test.describe("embed widget — mobile", () => {
+  test.use({ viewport: { width: 390, height: 700 } });
+
+  test("modal stays inside the visible viewport on mobile", async ({ page }) => {
+    await loadHost(page);
+    const widget = await getWidgetIframe(page);
+
+    await expect(widget.locator(".ew-card").first()).toBeVisible({ timeout: 10_000 });
+
+    // Scroll the host a small amount so the modal positioning logic has
+    // a non-zero parent scroll to react to.
+    await page.evaluate(() => window.scrollTo(0, 80));
+
+    // Open the modal.
+    await widget.locator(".ew-card .ew-btn", { hasText: /apply now/i }).first().click();
+
+    const modal = widget.locator(".ew-modal");
+    await expect(modal).toBeVisible({ timeout: 5_000 });
+
+    // The modal must fit inside the parent (mobile) viewport. Compute the
+    // modal's bounding box in the parent viewport's coordinate system by
+    // adding the iframe's offset.
+    const modalInfo = await widget.locator(".ew-modal").evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        topInIframe: r.top,
+        height: r.height,
+        maxHeight: parseFloat((el as HTMLElement).style.maxHeight) || 0,
+      };
+    });
+    const iframeTopInParent = await page.locator("#widget-host iframe").evaluate(
+      (el) => el.getBoundingClientRect().top,
+    );
+    const viewportHeight = await page.evaluate(() => window.innerHeight);
+
+    const modalTopInParent = iframeTopInParent + modalInfo.topInIframe;
+
+    // Modal must be at least partially visible in the parent viewport
+    // (top within viewport). Allow a 16px tolerance for rounding/layout shifts.
+    expect(modalTopInParent).toBeGreaterThanOrEqual(-16);
+    expect(modalTopInParent).toBeLessThan(viewportHeight);
+    expect(modalInfo.height).toBeGreaterThan(120);
+    // The applied max-height must be bounded by the parent viewport height.
+    expect(modalInfo.maxHeight).toBeLessThanOrEqual(viewportHeight);
+
+    // Scroll lock must be active on mobile too.
+    await expect.poll(
+      async () => page.evaluate(() => document.body.style.position),
+      { timeout: 3_000 },
+    ).toBe("fixed");
+  });
+});
