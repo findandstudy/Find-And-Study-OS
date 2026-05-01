@@ -1,8 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, documentRequirementsTable } from "@workspace/db";
 import { eq, and, isNotNull, inArray, isNull, sql } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
+import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
@@ -467,61 +468,163 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }
     }
 
-    if (Array.isArray(reuseDocumentIds) && reuseDocumentIds.length > 0 && resultStudentId && resultAppId) {
+    // Reuse existing student documents on the new application.
+    //
+    // We use the doc-type equivalence map so that, for example, a passport
+    // that the student previously uploaded under canonical type "passport"
+    // satisfies the apply form's "passport" key, and a high-school diploma
+    // uploaded under "class_12th_hsc_certificate" satisfies the apply form's
+    // "hs_diploma" key — and vice versa.
+    //
+    // Even when the client did not send any reuseDocumentIds (e.g. the
+    // student is logged in and the docs step was skipped because everything
+    // was already on file), we auto-link the student's existing valid docs
+    // to the new application as long as they cover types the new program
+    // could need.
+    if (resultStudentId && resultAppId) {
       try {
-        const reuseIds = reuseDocumentIds
-          .map((id: any) => parseInt(String(id), 10))
-          .filter((n: number) => Number.isFinite(n) && n > 0)
-          .slice(0, 20);
-        if (reuseIds.length > 0) {
-          const sourceDocs = await db.select().from(documentsTable).where(and(
-            inArray(documentsTable.id, reuseIds),
-            eq(documentsTable.studentId, resultStudentId),
-            isNull(documentsTable.deletedAt),
-          ));
-          const alreadyHaveTypes = new Set<string>();
-          if (Array.isArray(documents)) {
-            for (const d of documents) {
-              const t = String(d?.key || d?.label || "").trim();
-              if (t) alreadyHaveTypes.add(t);
+        const requestedReuseIds = Array.isArray(reuseDocumentIds)
+          ? reuseDocumentIds
+              .map((id: any) => parseInt(String(id), 10))
+              .filter((n: number) => Number.isFinite(n) && n > 0)
+              .slice(0, 50)
+          : [];
+
+        // Compute the equivalence groups already covered by docs the
+        // client uploaded fresh in this submission.
+        const alreadyHaveGroups = new Set<DocEquivalenceGroupId>();
+        if (Array.isArray(documents)) {
+          for (const d of documents) {
+            const t = String(d?.key || d?.label || "").trim();
+            const g = getDocEquivalenceGroup(t);
+            if (g) alreadyHaveGroups.add(g);
+          }
+        }
+
+        // Look up the program's required document types so we can pick the
+        // existing student docs that are actually relevant for this new
+        // application's level. We combine the apply-form's per-level
+        // expectations (passport/photo/hs/bachelor/master docs etc.) with
+        // any extra enabled canonical types from
+        // documentRequirementsTable so any custom requirement an admin
+        // added is also honored.
+        let allowedGroups: Set<DocEquivalenceGroupId> | null = null;
+        try {
+          const [appRow] = await db.select({ level: applicationsTable.level })
+            .from(applicationsTable)
+            .where(eq(applicationsTable.id, resultAppId));
+          // Inline copy of normalizeStudyLevel from applications.ts to avoid
+          // a circular import. Keep these in sync.
+          const normalizeLevel = (level: string | null | undefined): string | null => {
+            if (!level) return null;
+            const l = level.toLowerCase().replace(/[\s.-]/g, "_");
+            if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
+            if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
+            if (["pre_master"].some(k => l.includes(k))) return "pre_masters";
+            if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
+            if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
+            if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
+            return null;
+          };
+          const normalizedLevel = normalizeLevel(appRow?.level);
+          let extraTypes: string[] = [];
+          if (normalizedLevel) {
+            const reqs = await db.select({ documentType: documentRequirementsTable.documentType })
+              .from(documentRequirementsTable)
+              .where(and(
+                eq(documentRequirementsTable.level, normalizedLevel),
+                eq(documentRequirementsTable.enabled, true),
+              ));
+            extraTypes = reqs.map(r => r.documentType);
+          }
+          allowedGroups = getRelevantGroupsForLevel(normalizedLevel, extraTypes);
+        } catch (lvlErr) {
+          console.error("[PUBLIC-APPLY] Failed to load level requirements for reuse:", lvlErr);
+        }
+
+        // Candidate source docs: explicitly-requested reuseIds first, then
+        // (always) the rest of the student's library so we cover the
+        // "auto-link when reuseDocumentIds is empty" case as well.
+        const reuseIdSet = new Set(requestedReuseIds);
+        const allStudentDocs = await db.select().from(documentsTable).where(and(
+          eq(documentsTable.studentId, resultStudentId),
+          isNull(documentsTable.deletedAt),
+        ));
+        const sourceDocs = allStudentDocs
+          .filter(d => d.id != null && d.applicationId !== resultAppId && d.status !== "rejected")
+          .sort((a, b) => {
+            // Explicitly-requested reuse IDs win, then most recent.
+            const aReq = reuseIdSet.has(a.id) ? 1 : 0;
+            const bReq = reuseIdSet.has(b.id) ? 1 : 0;
+            if (aReq !== bReq) return bReq - aReq;
+            const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bt - at;
+          });
+
+        let copied = 0;
+        let photoSet = false;
+        const seenGroups = new Set<DocEquivalenceGroupId>();
+        const seenRawTypes = new Set<string>();
+        for (const src of sourceDocs) {
+          const srcType = String(src.type || "").trim();
+          if (!srcType) continue;
+          const srcGroup = getDocEquivalenceGroup(srcType);
+
+          // Skip if a fresh upload in this submission already covers this
+          // logical document, or if we already linked an equivalent one
+          // for this application.
+          if (srcGroup) {
+            if (alreadyHaveGroups.has(srcGroup)) continue;
+            if (seenGroups.has(srcGroup)) continue;
+          } else {
+            // Doc type not in the equivalence map — fall back to raw-type
+            // dedup so we never link two copies of the same canonical type.
+            const k = srcType.toLowerCase();
+            if (seenRawTypes.has(k)) continue;
+          }
+
+          // When we know the program's level, restrict auto-linked docs to
+          // groups that level's apply form / staff portal could need. If
+          // the level is unknown (allowedGroups === null), fall back to
+          // permissive linking so partial setups still benefit.
+          //
+          // Docs explicitly named in reuseDocumentIds are always honored —
+          // the client opted into them.
+          const isExplicitlyRequested = reuseIdSet.has(src.id);
+          if (!isExplicitlyRequested && srcGroup && allowedGroups && !allowedGroups.has(srcGroup)) {
+            continue;
+          }
+
+          if (srcGroup) seenGroups.add(srcGroup);
+          else seenRawTypes.add(srcType.toLowerCase());
+
+          await db.insert(documentsTable).values({
+            studentId: resultStudentId,
+            applicationId: resultAppId,
+            name: src.name,
+            type: srcType,
+            status: src.status === "rejected" ? "pending" : (src.status || "pending"),
+            fileData: src.fileData ?? null,
+            fileUrl: src.fileUrl ?? null,
+            fileKey: src.fileKey ?? null,
+            mimeType: src.mimeType ?? null,
+            sizeBytes: src.sizeBytes ?? null,
+            notes: src.notes ?? null,
+          });
+          copied++;
+          if (!photoSet && srcGroup === "photo" && src.fileData && src.mimeType) {
+            try {
+              const photoUrl = `data:${src.mimeType};base64,${src.fileData}`;
+              await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, resultStudentId));
+              photoSet = true;
+            } catch (e) {
+              console.error("[PUBLIC-APPLY] Failed to set student photo from reused doc:", e);
             }
           }
-          let copied = 0;
-          let photoSet = false;
-          const seenTypes = new Set<string>();
-          for (const src of sourceDocs) {
-            const srcType = String(src.type || "").trim();
-            if (!srcType) continue;
-            if (alreadyHaveTypes.has(srcType)) continue;
-            if (seenTypes.has(srcType)) continue;
-            seenTypes.add(srcType);
-            await db.insert(documentsTable).values({
-              studentId: resultStudentId,
-              applicationId: resultAppId,
-              name: src.name,
-              type: srcType,
-              status: src.status === "rejected" ? "pending" : (src.status || "pending"),
-              fileData: src.fileData ?? null,
-              fileUrl: src.fileUrl ?? null,
-              fileKey: src.fileKey ?? null,
-              mimeType: src.mimeType ?? null,
-              sizeBytes: src.sizeBytes ?? null,
-              notes: src.notes ?? null,
-            });
-            copied++;
-            if (!photoSet && (srcType === "photo" || srcType === "photograph") && src.fileData && src.mimeType) {
-              try {
-                const photoUrl = `data:${src.mimeType};base64,${src.fileData}`;
-                await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, resultStudentId));
-                photoSet = true;
-              } catch (e) {
-                console.error("[PUBLIC-APPLY] Failed to set student photo from reused doc:", e);
-              }
-            }
-          }
-          if (copied > 0) {
-            console.log(`[PUBLIC-APPLY] Reused ${copied} existing document(s) for student #${resultStudentId}, app #${resultAppId}`);
-          }
+        }
+        if (copied > 0) {
+          console.log(`[PUBLIC-APPLY] Reused ${copied} existing document(s) for student #${resultStudentId}, app #${resultAppId} (requested=${requestedReuseIds.length})`);
         }
       } catch (reuseErr) {
         console.error("[PUBLIC-APPLY] Failed to reuse existing documents:", reuseErr);

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
+import { findEquivalentDoc, getDocEquivalenceGroup } from "@workspace/doc-equivalence";
 import { useAuth } from "@/hooks/use-auth";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
@@ -316,6 +317,7 @@ interface ExistingDocInfo {
   status: string;
   mimeType: string | null;
   createdAt: string;
+  type: string;
 }
 
 function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onClose: () => void; program: Program | null; countries: string[] }) {
@@ -334,7 +336,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const [creatingLead, setCreatingLead] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [allCountries, setAllCountries] = useState<Array<{ id: number; name: string; code?: string; flagEmoji?: string | null }>>([]);
-  const [existingDocs, setExistingDocs] = useState<Record<string, ExistingDocInfo>>({});
+  const [existingDocs, setExistingDocs] = useState<ExistingDocInfo[]>([]);
   const [replacedTypes, setReplacedTypes] = useState<Set<string>>(new Set());
   const [profileLoaded, setProfileLoaded] = useState(false);
 
@@ -381,23 +383,19 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           }));
         }
         const list = Array.isArray(docsResp) ? docsResp : [];
-        const map: Record<string, ExistingDocInfo> = {};
+        const all: ExistingDocInfo[] = [];
         for (const d of list) {
           if (!d?.type || d.deletedAt || d.status === "rejected") continue;
-          const dCreated = d.createdAt ? new Date(d.createdAt).getTime() : 0;
-          const existing = map[d.type];
-          const eCreated = existing?.createdAt ? new Date(existing.createdAt).getTime() : 0;
-          if (!existing || dCreated > eCreated) {
-            map[d.type] = {
-              id: d.id,
-              name: d.name || d.type,
-              status: d.status || "pending",
-              mimeType: d.mimeType ?? null,
-              createdAt: d.createdAt || new Date(0).toISOString(),
-            };
-          }
+          all.push({
+            id: d.id,
+            name: d.name || d.type,
+            status: d.status || "pending",
+            mimeType: d.mimeType ?? null,
+            createdAt: d.createdAt || new Date(0).toISOString(),
+            type: String(d.type),
+          });
         }
-        setExistingDocs(map);
+        setExistingDocs(all);
         setReplacedTypes(new Set());
         setProfileLoaded(true);
       } catch (e) {
@@ -412,16 +410,24 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const requiredDocs = docTypes.filter(d => d.required);
   const reusableForProgram: Record<string, ExistingDocInfo> = {};
   for (const dt of docTypes) {
-    const ex = existingDocs[dt.key];
-    if (ex && !replacedTypes.has(dt.key) && !docs[dt.key]) {
-      reusableForProgram[dt.key] = ex;
-    }
+    if (replacedTypes.has(dt.key) || docs[dt.key]) continue;
+    const ex = findEquivalentDoc(dt.key, existingDocs, (a, b) =>
+      new Date(a.createdAt).getTime() >= new Date(b.createdAt).getTime() ? a : b,
+    );
+    if (ex) reusableForProgram[dt.key] = ex;
   }
   const newUploadsCount = Object.keys(docs).length;
   const reusedCount = Object.keys(reusableForProgram).length;
   const uploadedCount = newUploadsCount + reusedCount;
   const totalCount = docTypes.length;
   const missingRequired = requiredDocs.filter(d => !docs[d.key] && !reusableForProgram[d.key]);
+  const allRequiredOnFile =
+    isLoggedInStudent &&
+    profileLoaded &&
+    requiredDocs.length > 0 &&
+    missingRequired.length === 0 &&
+    newUploadsCount === 0 &&
+    requiredDocs.every(d => reusableForProgram[d.key]);
 
   const stepIndex = step === "personal" ? 0 : step === "documents" || step === "analyzing" ? 1 : step === "review" ? 2 : 2;
 
@@ -435,7 +441,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     setLeadId(null);
     setCreatingLead(false);
     setEmailError(null);
-    setExistingDocs({});
+    setExistingDocs([]);
     setReplacedTypes(new Set());
     setProfileLoaded(false);
     onClose();
@@ -448,6 +454,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     }
 
     if (isLoggedInStudent) {
+      // If every required doc is already on file (via equivalence), skip
+      // the documents step entirely and jump straight to review. The
+      // existing reusableForProgram → reuseDocumentIds flow on submit
+      // handles linking the existing docs to the new application.
+      if (allRequiredOnFile) {
+        setStep("review");
+        return;
+      }
       setStep("documents");
       return;
     }
@@ -680,9 +694,16 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             {isLoggedInStudent && profileLoaded && (
               <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
-                <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                  {t("apply.welcomeBack", { name: user?.firstName || form.firstName || "" })}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                    {t("apply.welcomeBack", { name: user?.firstName || form.firstName || "" })}
+                  </p>
+                  {allRequiredOnFile && (
+                    <p className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
+                      {t("apply.docsAllOnFile")}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
@@ -810,7 +831,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                     }}
                     onRemove={() => {
                       setDocs((prev) => { const n = { ...prev }; delete n[dt.key]; return n; });
-                      if (existingDocs[dt.key]) {
+                      if (findEquivalentDoc(dt.key, existingDocs)) {
                         setReplacedTypes(prev => { const n = new Set(prev); n.delete(dt.key); return n; });
                       }
                     }}

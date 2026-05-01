@@ -7,9 +7,10 @@
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run test:inbox-suite && pnpm run test:webhook-dedup",
+    "test": "pnpm run test:inbox-suite && pnpm run test:webhook-dedup && pnpm run test:doc-equivalence",
     "test:webhook-dedup": "tsx ./scripts/test-webhook-dedup.ts",
-    "test:inbox-suite": "tsx ./scripts/test-inbox-suite.ts"
+    "test:inbox-suite": "tsx ./scripts/test-inbox-suite.ts",
+    "test:doc-equivalence": "tsx ./scripts/test-doc-equivalence.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -17,6 +18,7 @@
     "@types/archiver": "^7.0.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/doc-equivalence": "workspace:*",
     "@workspace/file-upload-validation": "workspace:*",
     "@workspace/integrations-anthropic-ai": "workspace:*",
     "archiver": "^7.0.1",

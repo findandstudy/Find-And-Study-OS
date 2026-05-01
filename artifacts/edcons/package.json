@@ -45,6 +45,7 @@
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-query": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/doc-equivalence": "workspace:*",
     "@workspace/file-upload-validation": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",

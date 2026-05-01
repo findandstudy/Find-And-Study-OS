@@ -333,7 +333,8 @@
     "replaceDoc": "Belgeyi değiştir",
     "continueToReview": "İncelemeye Devam Et",
     "welcomeBack": "Tekrar hoş geldiniz, {name}! Bilgileriniz önceden dolduruldu ve daha önce yüklediğiniz belgeler bu başvuru için kullanılacak.",
-    "docsAlreadyUploaded": "Belge kütüphanenizdeki {count} belge bu başvuru için hazır — yeniden yüklemenize gerek yok."
+    "docsAlreadyUploaded": "Belge kütüphanenizdeki {count} belge bu başvuru için hazır — yeniden yüklemenize gerek yok.",
+    "docsAllOnFile": "Bu başvuru için gereken tüm belgeler zaten dosyanızda. Mevcut belgeleriniz kullanılacak — tekrar yüklemenize gerek yok."
   },
   "dashboard": {
     "portal": "Portal",

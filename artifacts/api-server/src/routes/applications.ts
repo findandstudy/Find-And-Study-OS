@@ -9,6 +9,7 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
 import { findActiveCampaign, applyCampaignToFees } from "../lib/campaigns";
+import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 
 const router: IRouter = Router();
 
@@ -646,14 +647,21 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
           .where(eq(documentsTable.studentId, currentApp.studentId)),
       ]);
 
-      const uploadedTypes = new Set(studentDocs.map(d => (d.type || "").toLowerCase()));
-      const missingDocs = mandatoryReqs.filter(r => !uploadedTypes.has(r.documentType));
+      const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
+      // Use the doc-type equivalence map so a document uploaded under any
+      // equivalent name (e.g. "hs_diploma" apply key OR
+      // "class_12th_hsc_certificate" canonical type) satisfies the
+      // mandatory canonical requirement.
+      const missingDocTypes = findMissingMandatoryTypes(
+        mandatoryReqs.map(r => r.documentType),
+        uploadedTypes,
+      );
 
-      if (missingDocs.length > 0) {
+      if (missingDocTypes.length > 0) {
         res.status(422).json({
           error: "Mandatory student documents are missing for this application level",
           code: "STUDENT_DOCS_REQUIRED",
-          missingDocTypes: missingDocs.map(d => d.documentType),
+          missingDocTypes,
         });
         return;
       }

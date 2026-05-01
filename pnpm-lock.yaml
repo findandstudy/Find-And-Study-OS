@@ -184,6 +184,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/doc-equivalence':
+        specifier: workspace:*
+        version: link:../../lib/doc-equivalence
       '@workspace/file-upload-validation':
         specifier: workspace:*
         version: link:../../lib/file-upload-validation
@@ -371,6 +374,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/doc-equivalence':
+        specifier: workspace:*
+        version: link:../../lib/doc-equivalence
       '@workspace/file-upload-validation':
         specifier: workspace:*
         version: link:../../lib/file-upload-validation
@@ -710,6 +716,8 @@ importers:
       drizzle-kit:
         specifier: ^0.31.9
         version: 0.31.9
+
+  lib/doc-equivalence: {}
 
   lib/file-upload-validation: {}
 
