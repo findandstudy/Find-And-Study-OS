@@ -15,6 +15,13 @@
       "when": 1777244796677,
       "tag": "0001_silly_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777664800000,
+      "tag": "0002_add_follow_ups_updated_by",
+      "breakpoints": true
     }
   ]
 }
