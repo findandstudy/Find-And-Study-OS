@@ -166,7 +166,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(desc(leadsTable.createdAt));
+    .orderBy(desc(leadsTable.updatedAt), desc(leadsTable.createdAt));
 
   const leadIds = rows.map(r => r.lead.id);
   let nextFollowupMap = new Map<number, string>();

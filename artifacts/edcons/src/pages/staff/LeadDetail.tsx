@@ -451,7 +451,6 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={lead?.email} />
                   <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={lead?.phone} />
                   <InfoRow icon={<BookOpen className="w-4 h-4" />} label="Interested Program" value={lead?.interestedProgram} />
-                  <InfoRow icon={<Globe className="w-4 h-4" />} label="Interested Country" value={lead?.interestedCountry} />
                   <InfoRow icon={<User className="w-4 h-4" />} label="Source" value={lead?.source} />
                   <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Estimated Budget" value={estimatedBudgetDisplay} />
                 </div>

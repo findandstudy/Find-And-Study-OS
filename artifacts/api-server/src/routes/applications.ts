@@ -155,7 +155,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(desc(applicationsTable.createdAt));
+    .orderBy(desc(applicationsTable.updatedAt), desc(applicationsTable.createdAt));
 
   const isAgentUser = req.user && isAgentRole(req.user.role);
   const mappedRows = rows.map(r => {

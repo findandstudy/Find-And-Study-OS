@@ -199,8 +199,11 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
   const conditions = [];
 
   const isManager = (MANAGER_ROLES as readonly string[]).includes(user.role);
+  // T6: resource-scoped audit log access is admin-only (super_admin / admin),
+  // managers and below cannot read another resource's audit trail.
+  const isStrictAdmin = user.role === "super_admin" || user.role === "admin";
   if (resource && resourceId) {
-    if (!isManager) {
+    if (!isStrictAdmin) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }

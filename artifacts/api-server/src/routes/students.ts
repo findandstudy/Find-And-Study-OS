@@ -159,7 +159,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(desc(studentsTable.createdAt));
+    .orderBy(desc(studentsTable.updatedAt), desc(studentsTable.createdAt));
 
   const flatRows = rows.map(r => ({ ...r.student, agentName: r.agentName || null }));
   const studentIds = flatRows.map(r => r.id);
