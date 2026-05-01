@@ -2,9 +2,11 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
-import { db, usersTable, emailVerificationCodesTable, studentsTable } from "@workspace/db";
+import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable } from "@workspace/db";
 import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
+import { directOrigin } from "../lib/originHelper";
+import { toE164 } from "../lib/inbox/phone";
 import {
   clearSession,
   getSession,
@@ -312,6 +314,34 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
+  }
+
+  // Create a CRM Lead so the staff can see this newly-confirmed registration
+  // in the leads list. Skip if the user already has a non-deleted lead with
+  // the same email (e.g. they came in through a different funnel first).
+  if (user.role === "student" && user.email) {
+    try {
+      const [existingLead] = await db
+        .select({ id: leadsTable.id })
+        .from(leadsTable)
+        .where(and(eq(leadsTable.email, user.email), isNull(leadsTable.deletedAt)))
+        .limit(1);
+      if (!existingLead) {
+        const phone = user.phone ? String(user.phone).slice(0, 30) : null;
+        await db.insert(leadsTable).values({
+          firstName: (user.firstName || "").trim().toUpperCase().slice(0, 100) || "STUDENT",
+          lastName: (user.lastName || "").trim().toUpperCase().slice(0, 100) || "REGISTRATION",
+          email: user.email.slice(0, 255),
+          phone,
+          phoneE164: toE164(phone),
+          source: "student_registration",
+          status: "new",
+          ...directOrigin(),
+        });
+      }
+    } catch (err) {
+      console.error("[AUTH VERIFY-EMAIL] Failed to create lead for verified registration:", err);
+    }
   }
 
   const sessionUser = buildSessionUser(user);

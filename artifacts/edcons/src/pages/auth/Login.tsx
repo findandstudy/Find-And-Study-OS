@@ -165,7 +165,16 @@ export default function Login() {
         setError(data.error || t("login.connectionError"));
         return;
       }
-      setTab("login");
+      // The backend creates a session and returns the user payload on
+      // successful verification — feed it into the auth cache so the
+      // existing redirect-on-user-detect effect at the top of this
+      // component logs the student straight into their portal.
+      if (data.user) {
+        setStickyUser(data.user as any);
+        queryClient.setQueryData(["/api/auth/me"], data.user);
+      } else {
+        setTab("login");
+      }
     } catch {
       setError(t("login.connectionError"));
     } finally {
