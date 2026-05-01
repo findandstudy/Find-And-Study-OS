@@ -79,9 +79,7 @@ async function getWidgetIframe(page: Page): Promise<FrameLocator> {
   return page.frameLocator("#widget-host iframe");
 }
 
-test.describe("embed widget — desktop", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
-
+test.describe("embed widget — desktop", { tag: "@desktop" }, () => {
   test("loader injects iframe and renders the program list", async ({ page }) => {
     await loadHost(page);
     const widget = await getWidgetIframe(page);
@@ -158,21 +156,35 @@ test.describe("embed widget — desktop", () => {
   });
 });
 
-test.describe("embed widget — mobile", () => {
-  test.use({ viewport: { width: 390, height: 700 } });
-
-  test("modal stays inside the visible viewport on mobile", async ({ page }) => {
+/**
+ * Mobile modal coverage.
+ *
+ * Tagged @mobile so playwright.config.ts can route this to multiple
+ * mobile-viewport projects (small Android, large iPhone, tablet
+ * portrait) and — when RUN_WEBKIT_E2E=1 — to a WebKit iOS Safari
+ * project. The viewport itself is set by the project, NOT here, so
+ * the same test exercises every form factor without copy-paste.
+ */
+test.describe("embed widget — mobile", { tag: "@mobile" }, () => {
+  test("modal stays inside the visible viewport on mobile", async ({ page }, testInfo) => {
     await loadHost(page);
     const widget = await getWidgetIframe(page);
 
     await expect(widget.locator(".ew-card").first()).toBeVisible({ timeout: 10_000 });
 
     // Scroll the host a small amount so the modal positioning logic has
-    // a non-zero parent scroll to react to.
-    await page.evaluate(() => window.scrollTo(0, 80));
+    // a non-zero parent scroll to react to. Use a small fraction of the
+    // current viewport so the apply button stays in view across all
+    // mobile viewports (360x740 .. 768x1024).
+    const viewportH = page.viewportSize()?.height ?? 700;
+    const initialScroll = Math.min(80, Math.floor(viewportH * 0.1));
+    await page.evaluate((y) => window.scrollTo(0, y), initialScroll);
 
     // Open the modal.
-    await widget.locator(".ew-card .ew-btn", { hasText: /apply now/i }).first().click();
+    await widget
+      .locator(".ew-card .ew-btn", { hasText: /apply now/i })
+      .first()
+      .click();
 
     const modal = widget.locator(".ew-modal");
     await expect(modal).toBeVisible({ timeout: 5_000 });
@@ -195,6 +207,13 @@ test.describe("embed widget — mobile", () => {
 
     const modalTopInParent = iframeTopInParent + modalInfo.topInIframe;
 
+    // Helpful diagnostics so a viewport-specific failure tells us which
+    // form factor blew up without grepping junit XML.
+    testInfo.annotations.push({
+      type: "viewport",
+      description: `${page.viewportSize()?.width}x${page.viewportSize()?.height}`,
+    });
+
     // Modal must be at least partially visible in the parent viewport
     // (top within viewport). Allow a 16px tolerance for rounding/layout shifts.
     expect(modalTopInParent).toBeGreaterThanOrEqual(-16);
@@ -204,9 +223,10 @@ test.describe("embed widget — mobile", () => {
     expect(modalInfo.maxHeight).toBeLessThanOrEqual(viewportHeight);
 
     // Scroll lock must be active on mobile too.
-    await expect.poll(
-      async () => page.evaluate(() => document.body.style.position),
-      { timeout: 3_000 },
-    ).toBe("fixed");
+    await expect
+      .poll(async () => page.evaluate(() => document.body.style.position), {
+        timeout: 3_000,
+      })
+      .toBe("fixed");
   });
 });
