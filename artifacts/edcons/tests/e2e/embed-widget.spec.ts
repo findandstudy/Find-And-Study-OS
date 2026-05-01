@@ -28,6 +28,8 @@
  * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`.
  */
 import { test, expect, request as pwRequest, type Page, type FrameLocator } from "@playwright/test";
+import { execSync } from "node:child_process";
+import path from "node:path";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const EMBED_SLUG = "e2e-embed-test";
@@ -458,5 +460,206 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     } finally {
       await ctx.dispose();
     }
+  });
+});
+
+/**
+ * Full apply submission flow (Task #87).
+ *
+ * The other desktop tests cover the modal *opening*, but none of them
+ * fill out and submit the form. A regression in the submission endpoint,
+ * server-side validation, transaction logic, or the success-state UI
+ * would slip through. This describe block walks the user through the
+ * complete happy path:
+ *
+ *   1. Load the host page with the seeded `e2e-embed-test` widget
+ *      (no allowedDomains => loadable from localhost).
+ *   2. Click "Apply Now" on the first program card.
+ *   3. The modal opens at the upload step. Click "Skip, fill manually"
+ *      to bypass document upload + AI analysis (which would require a
+ *      real LLM call) and jump straight to the form step.
+ *   4. Fill the three required fields (firstName, lastName, email).
+ *      Use a unique e2e-namespaced email so the verification query has
+ *      a stable handle even if the suite is re-run rapidly.
+ *   5. Click "Submit Application".
+ *   6. Assert the success UI (`<div class="ew-success">` with the
+ *      "Application Submitted!" heading) replaces the form.
+ *   7. Out-of-band, run the verify-submission script to confirm an
+ *      `embed_submissions` row was actually written for this widget +
+ *      email, with the matching first/last name and a populated lead_id
+ *      (route inserts both lead + submission in a single transaction).
+ *
+ * Cleanup: the existing teardown in
+ * `artifacts/api-server/scripts/e2e-embed-fixtures-teardown.ts` already
+ * handles this — when the e2e setup created the widget, dropping the
+ * widget cascade-deletes its `embed_submissions` rows (FK is
+ * `onDelete: "cascade"`); when the widget was reused, the teardown
+ * explicitly deletes its submissions; in both branches it also deletes
+ * the linked lead rows (source LIKE 'embed:%') and any documents.
+ *
+ * Tagged @desktop so this only runs on chromium-desktop, not on every
+ * mobile viewport (the submission flow is viewport-independent and
+ * already covered for layout by the @mobile modal test).
+ */
+test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
+  test("fills the apply form, submits, shows success, and writes embed_submissions row", async ({
+    page,
+  }) => {
+    await loadHost(page);
+    const widget = await getWidgetIframe(page);
+
+    // Wait for the program list to render so the Apply Now button exists.
+    await expect(widget.locator(".ew-card").first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Open the modal.
+    await widget
+      .locator(".ew-card .ew-btn", { hasText: /apply now/i })
+      .first()
+      .click();
+    await expect(widget.locator(".ew-modal")).toBeVisible({ timeout: 5_000 });
+
+    // The modal opens at the upload step ("Apply — <program>" with a
+    // grid of 4 document slots). Skip straight to the form step — the
+    // upload+AI path needs a real LLM round-trip, which is out of scope
+    // for the submission-flow regression test.
+    //
+    // We use `dispatchEvent("click")` (rather than `click()`) for the
+    // in-modal interactions: the modal is `position:absolute` inside
+    // the widget iframe and can extend past the iframe's CSS box (the
+    // iframe doesn't auto-grow with absolutely positioned children).
+    // Playwright's viewport-bounds heuristic then refuses both the
+    // normal click and `click({force:true})` because the click point
+    // sits below the iframe's parent-page-visible region.
+    // `dispatchEvent` skips that bounds check while still firing the
+    // real click handler the widget JS bound at line 1187 of
+    // routes/embed.ts. The button being live in the DOM is still
+    // verified by `toBeVisible()` immediately above.
+    const skipBtn = widget.locator("#ew-skip-btn");
+    await expect(skipBtn).toBeVisible({ timeout: 5_000 });
+    await skipBtn.dispatchEvent("click");
+    const form = widget.locator("#ew-form");
+    await expect(form).toBeVisible({ timeout: 5_000 });
+
+    // Unique per-run email so we can deterministically find this row
+    // even if the suite is re-run quickly (the teardown deletes by
+    // widgetId so leftover rows from a crashed prior run don't shadow
+    // this one — but the unique email is cheap insurance).
+    const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const submittedEmail = `e2e-apply-${runId}@e2e.test`;
+    const firstName = "E2EApply";
+    const lastName = `Run${runId}`;
+
+    // Same iframe-quirk reason as the skip button: Playwright's `fill`
+    // also runs the viewport check. Set the values directly and then
+    // dispatch `input`/`change` so any JS listeners fire — the widget's
+    // `handleFormSubmit` (routes/embed.ts L1242) reads via `new
+    // FormData(form)`, which only needs the value to be set.
+    async function setFieldValue(name: string, value: string) {
+      await form.locator(`input[name="${name}"]`).evaluate((el, v) => {
+        const input = el as HTMLInputElement;
+        input.value = v;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value);
+    }
+    await setFieldValue("firstName", firstName);
+    await setFieldValue("lastName", lastName);
+    await setFieldValue("email", submittedEmail);
+
+    // Submit. Calling `requestSubmit()` on the form fires the same
+    // `submit` event that `handleFormSubmit` is bound to (line 1170 of
+    // routes/embed.ts), and goes through the form's native validation
+    // (so a missing required field would still block). The button is
+    // the only `button[type="submit"]` in the modal — assert it
+    // exists/is visible first so a regression that removes it still
+    // surfaces here.
+    const submitBtn = form.locator('button[type="submit"]', {
+      hasText: /submit application/i,
+    });
+    await expect(submitBtn).toBeVisible({ timeout: 5_000 });
+    // `toBeEnabled` guards against a UX regression where the submit
+    // button gets disabled (e.g. spinner state stuck on, missing
+    // required field). `requestSubmit()` ignores button state, so this
+    // explicit check is what surfaces such a regression.
+    await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
+    await form.evaluate((el) => (el as HTMLFormElement).requestSubmit());
+
+    // Success UI: renderSuccess() replaces the form contents with a
+    // `<div class="ew-success">` containing an `<h3>Application
+    // Submitted!</h3>`. The form itself disappears.
+    const success = widget.locator(".ew-success");
+    await expect(success).toBeVisible({ timeout: 10_000 });
+    await expect(success.locator("h3")).toHaveText(/application submitted/i);
+    await expect(form).toHaveCount(0);
+
+    // Verify the row landed in `embed_submissions` for this widget.
+    // Done out-of-band via a tiny tsx script so we don't have to plumb
+    // admin auth or a dev-only HTTP endpoint into the test runner.
+    //
+    // `tsx` is a dependency of `@workspace/api-server`, not the
+    // workspace root, so we must scope the exec via `pnpm --filter`.
+    // The script path is relative to that package's directory.
+    const verifyScript = path.join(
+      "scripts",
+      "e2e-embed-verify-submission.ts",
+    );
+    let raw: string;
+    try {
+      raw = execSync(
+        `pnpm --filter @workspace/api-server exec tsx ${verifyScript} --slug ${EMBED_SLUG} --email ${submittedEmail}`,
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      );
+    } catch (err) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; status?: number };
+      throw new Error(
+        `verify-submission script failed (exit=${e.status ?? "?"})\n` +
+          `stdout: ${e.stdout?.toString() ?? ""}\n` +
+          `stderr: ${e.stderr?.toString() ?? ""}`,
+      );
+    }
+
+    const row = JSON.parse(raw) as {
+      id: number;
+      widgetId: number;
+      email: string;
+      firstName: string;
+      lastName: string;
+      leadId: number | null;
+      status: string;
+      lead: {
+        id: number;
+        firstName: string;
+        lastName: string;
+        email: string | null;
+        source: string | null;
+        status: string;
+      } | null;
+    };
+
+    expect(row.id).toBeGreaterThan(0);
+    expect(row.widgetId).toBeGreaterThan(0);
+    expect(row.email.toLowerCase()).toBe(submittedEmail.toLowerCase());
+    expect(row.firstName).toBe(firstName);
+    expect(row.lastName).toBe(lastName);
+    // The route inserts the lead first, then the submission with that
+    // lead's id, in a single transaction. A null leadId would mean the
+    // transaction broke and only the submission half landed.
+    expect(row.leadId).not.toBeNull();
+    expect(row.leadId).toBeGreaterThan(0);
+    expect(row.status).toBe("new");
+
+    // The route also writes a `leads` row tagged `embed:<slug>` and
+    // wires it back as the FK target. Asserting the lead payload here
+    // catches a regression that lands the submission but skips/breaks
+    // the lead insert (or mis-tags `source`).
+    expect(row.lead).not.toBeNull();
+    expect(row.lead!.id).toBe(row.leadId);
+    expect(row.lead!.firstName).toBe(firstName);
+    expect(row.lead!.lastName).toBe(lastName);
+    expect(row.lead!.email?.toLowerCase()).toBe(submittedEmail.toLowerCase());
+    expect(row.lead!.source).toBe(`embed:${EMBED_SLUG}`);
+    expect(row.lead!.status).toBe("new");
   });
 });
