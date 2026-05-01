@@ -66,12 +66,22 @@ export default function StaffDashboard() {
 
   const { data: growthData = [] } = useQuery<any[]>({
     queryKey: ["/api/stats/growth"],
-    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/stats/growth`, { credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      return Array.isArray(j) ? j : [];
+    },
   });
 
   const { data: upcomingFollowUps = [] } = useQuery<any[]>({
     queryKey: ["/api/follow-ups/upcoming"],
-    queryFn: () => fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      return Array.isArray(j) ? j : [];
+    },
   });
 
   const { data: latestStudentsData } = useQuery<any>({
@@ -100,7 +110,12 @@ export default function StaffDashboard() {
 
   const { data: contractAgents = [] } = useQuery<any[]>({
     queryKey: ["/api/agents/contract-alerts"],
-    queryFn: () => fetch(`${BASE}/api/agents/contract-alerts`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/agents/contract-alerts`, { credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      return Array.isArray(j) ? j : [];
+    },
   });
 
   if (isLoading) {
