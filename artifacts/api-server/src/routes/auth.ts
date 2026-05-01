@@ -134,14 +134,6 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const ip = req.ip || "unknown";
-  try {
-    await rateLimiter.consume(`login:${ip}`);
-    await rateLimiter.consume(`login:${normalizedEmail}`);
-  } catch {
-    res.status(429).json({ error: "Too many login attempts. Please try again later." });
-    return;
-  }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
   if (!user || !user.passwordHash) {
