@@ -99,8 +99,11 @@ export async function authMiddleware(
     return;
   }
 
-  // c) Unverified email
-  if (dbUser.emailVerified === false) {
+  // c) Unverified email — only enforced for students. Staff, admin, agent and
+  // other internal roles are onboarded by an administrator and are allowed in
+  // even without confirming their email address (matches the behaviour of the
+  // frontend EmailVerificationGuard, which also only blocks the student role).
+  if (dbUser.emailVerified === false && dbUser.role === "student") {
     await clearSession(res, sid);
     res.status(403).json({ error: "Email not verified" });
     return;
