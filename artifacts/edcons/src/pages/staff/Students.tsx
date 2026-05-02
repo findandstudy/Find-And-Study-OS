@@ -2366,12 +2366,10 @@ export default function StudentsPage() {
                     <ColumnHeader
                       label="Name"
                       sort={{ sortKey: "name", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.name, onChange: v => setColFilters(f => ({ ...f, name: v })), placeholder: "Filter by name…", label: "Name contains" }}
                     />
                     <ColumnHeader
                       label="Email"
                       sort={{ sortKey: "email", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.email, onChange: v => setColFilters(f => ({ ...f, email: v })), placeholder: "Filter by email…", label: "Email contains" }}
                     />
                     <ColumnHeader
                       label="Nationality"
@@ -2381,7 +2379,6 @@ export default function StudentsPage() {
                     <ColumnHeader
                       label="Passport"
                       sort={{ sortKey: "passport", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.passport, onChange: v => setColFilters(f => ({ ...f, passport: v })), placeholder: "Filter by passport…", label: "Passport contains" }}
                     />
                     <ColumnHeader
                       label="Status"

@@ -1411,12 +1411,10 @@ export default function LeadsPage() {
                     <ColumnHeader
                       label="Name"
                       sort={{ sortKey: "name", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.name, onChange: v => setColFilters(f => ({ ...f, name: v })), placeholder: "Filter by name…", label: "Name contains" }}
                     />
                     <ColumnHeader
                       label="Email"
                       sort={{ sortKey: "email", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.email, onChange: v => setColFilters(f => ({ ...f, email: v })), placeholder: "Filter by email…", label: "Email contains" }}
                     />
                     <ColumnHeader
                       label="Status"
