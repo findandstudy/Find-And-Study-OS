@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColumnHeader } from "@/components/ui/column-header";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2060,6 +2061,7 @@ export default function StudentsPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
   const [filters, setFilters] = useState<StuFilters>({ ...DEFAULT_STU_FILTERS });
+  const [colFilters, setColFilters] = useState({ name: "", email: "", passport: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
   const [editStudent, setEditStudent] = useState<any>(null);
@@ -2116,6 +2118,12 @@ export default function StudentsPage() {
   const allStudents: any[] = data?.data ?? [];
 
   const filteredStudents = allStudents.filter((s: any) => {
+    if (colFilters.name) {
+      const fullName = `${s.firstName || ""} ${s.lastName || ""}`.toLowerCase();
+      if (!fullName.includes(colFilters.name.toLowerCase())) return false;
+    }
+    if (colFilters.email && !(s.email || "").toLowerCase().includes(colFilters.email.toLowerCase())) return false;
+    if (colFilters.passport && !(s.passportNumber || s.passport || "").toLowerCase().includes(colFilters.passport.toLowerCase())) return false;
     if (filters.status !== "all" && s.status !== filters.status) return false;
     if (filters.appSource === "agent" && !s.agentId) return false;
     if (filters.appSource === "staff" && s.agentId) return false;
@@ -2159,7 +2167,7 @@ export default function StudentsPage() {
 
   const { paged: pagedStudents, total: totalStudentsCount } = pg.paginate(sortedStudents);
 
-  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 
   const pagedIds = useMemo(() => new Set(pagedStudents.map((s: any) => s.id)), [pagedStudents]);
   const allPageSelected = pagedStudents.length > 0 && pagedStudents.every((s: any) => selectedIds.has(s.id));
@@ -2349,13 +2357,62 @@ export default function StudentsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
-                    <StuSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Nationality" sortKey="nationality" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Passport" sortKey="passport" currentSort={sort} onSort={handleSort} />
-                    <StuSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
-                    <TableHead>Assigned</TableHead>
-                    <StuSortHeader label="Joined" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <ColumnHeader
+                      label="Name"
+                      sort={{ sortKey: "name", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.name, onChange: v => setColFilters(f => ({ ...f, name: v })), placeholder: "Filter by name…", label: "Name contains" }}
+                    />
+                    <ColumnHeader
+                      label="Email"
+                      sort={{ sortKey: "email", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.email, onChange: v => setColFilters(f => ({ ...f, email: v })), placeholder: "Filter by email…", label: "Email contains" }}
+                    />
+                    <ColumnHeader
+                      label="Nationality"
+                      sort={{ sortKey: "nationality", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.nationality, onChange: v => setFilters(f => ({ ...f, nationality: v })), options: uniqueNationalities.map(n => ({ value: n, label: n })), label: "Nationality" }}
+                    />
+                    <ColumnHeader
+                      label="Passport"
+                      sort={{ sortKey: "passport", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.passport, onChange: v => setColFilters(f => ({ ...f, passport: v })), placeholder: "Filter by passport…", label: "Passport contains" }}
+                    />
+                    <ColumnHeader
+                      label="Status"
+                      sort={{ sortKey: "status", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.status, onChange: v => setFilters(f => ({ ...f, status: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: "Status" }}
+                    />
+                    <ColumnHeader
+                      label="Assigned"
+                      filter={{
+                        type: "select",
+                        value: filters.assignment,
+                        onChange: v => setFilters(f => ({ ...f, assignment: v })),
+                        options: [
+                          { value: "mine", label: "Me" },
+                          { value: "unassigned", label: "Unassigned" },
+                          ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
+                        ],
+                        label: "Assigned to",
+                      }}
+                    />
+                    <ColumnHeader
+                      label="Joined"
+                      sort={{ sortKey: "date", current: sort, onSort: handleSort }}
+                      filter={{
+                        type: "select",
+                        value: filters.dateRange,
+                        onChange: v => setFilters(f => ({ ...f, dateRange: v })),
+                        options: [
+                          { value: "today", label: "Today" },
+                          { value: "yesterday", label: "Yesterday" },
+                          { value: "last7", label: "Last 7 Days" },
+                          { value: "thisMonth", label: "This Month" },
+                          { value: "thisYear", label: "This Year" },
+                        ],
+                        label: "Joined date",
+                      }}
+                    />
                     <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>

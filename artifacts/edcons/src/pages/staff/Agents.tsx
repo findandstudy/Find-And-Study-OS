@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
+import { ColumnHeader } from "@/components/ui/column-header";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -556,15 +557,51 @@ export default function AgentsPage() {
   function AgentTable({ data, showParent }: { data: Agent[]; showParent?: boolean }) {
     const selected = showParent ? subSelectedIds : selectedIds;
     const setSelected = showParent ? setSubSelectedIds : setSelectedIds;
-    const allChecked = data.length > 0 && data.every(a => selected.has(a.id));
-    const someChecked = data.some(a => selected.has(a.id));
     const [agentSort, setAgentSort] = useState<{ key: AgentSortKey; dir: AgentSortDir }>({ key: "agent", dir: "asc" });
+    const [agentColFilters, setAgentColFilters] = useState({ agent: "", contact: "", country: "all", category: "all", contactPerson: "all", status: "all" });
 
     function handleAgentSort(key: AgentSortKey) {
       setAgentSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
     }
 
-    const sortedData = [...data].sort((a, b) => {
+    const uniqueAgentCountries = useMemo(() => {
+      const set = new Set<string>();
+      data.forEach(a => { if (a.country) set.add(a.country); });
+      return Array.from(set).sort();
+    }, [data]);
+    const uniqueAgentCategories = useMemo(() => {
+      const set = new Set<string>();
+      data.forEach(a => { if (a.category) set.add(a.category); });
+      return Array.from(set).sort();
+    }, [data]);
+    const uniqueContactPersons = useMemo(() => {
+      const m = new Map<string, string>();
+      data.forEach(a => { if (a.assignedStaffName) m.set(a.assignedStaffName, a.assignedStaffName); });
+      return Array.from(m.values()).sort();
+    }, [data]);
+    const uniqueAgentStatuses = useMemo(() => {
+      const set = new Set<string>();
+      data.forEach(a => { if (a.status) set.add(a.status); });
+      return Array.from(set).sort();
+    }, [data]);
+
+    const filteredData = data.filter(a => {
+      if (agentColFilters.agent) {
+        const fn = `${a.firstName || ""} ${a.lastName || ""} ${a.businessName || ""}`.toLowerCase();
+        if (!fn.includes(agentColFilters.agent.toLowerCase())) return false;
+      }
+      if (agentColFilters.contact && !`${a.email || ""} ${a.phone || ""}`.toLowerCase().includes(agentColFilters.contact.toLowerCase())) return false;
+      if (agentColFilters.country !== "all" && (a.country || "") !== agentColFilters.country) return false;
+      if (agentColFilters.category !== "all" && (a.category || "") !== agentColFilters.category) return false;
+      if (agentColFilters.contactPerson !== "all" && (a.assignedStaffName || "") !== agentColFilters.contactPerson) return false;
+      if (agentColFilters.status !== "all" && (a.status || "") !== agentColFilters.status) return false;
+      return true;
+    });
+
+    const allChecked = filteredData.length > 0 && filteredData.every(a => selected.has(a.id));
+    const someChecked = filteredData.some(a => selected.has(a.id));
+
+    const sortedData = [...filteredData].sort((a, b) => {
       const dir = agentSort.dir === "asc" ? 1 : -1;
       switch (agentSort.key) {
         case "agent": { const nameA = `${a.firstName} ${a.lastName}`; const nameB = `${b.firstName} ${b.lastName}`; return dir * nameA.localeCompare(nameB); }
@@ -611,17 +648,57 @@ export default function AgentsPage() {
             <tr className="border-b border-border/50 text-left">
               {isManager && (
                 <th className="py-3 px-3 w-10">
-                  <Checkbox checked={allChecked} onCheckedChange={() => toggleSelectAll(data, selected, setSelected)} />
+                  <Checkbox checked={allChecked} onCheckedChange={() => toggleSelectAll(filteredData, selected, setSelected)} />
                 </th>
               )}
-              <AgentSortHeader label="Agent" sortKey="agent" currentSort={agentSort} onSort={handleAgentSort} />
-              <AgentSortHeader label="Contact" sortKey="contact" currentSort={agentSort} onSort={handleAgentSort} />
-              {showParent && <AgentSortHeader label="Parent Agent" sortKey="parent" currentSort={agentSort} onSort={handleAgentSort} />}
-              <AgentSortHeader label="Country" sortKey="country" currentSort={agentSort} onSort={handleAgentSort} />
-              <AgentSortHeader label="Category" sortKey="category" currentSort={agentSort} onSort={handleAgentSort} />
-              <AgentSortHeader label="Commission %" sortKey="commission" currentSort={agentSort} onSort={handleAgentSort} />
-              <AgentSortHeader label="Contact Person" sortKey="contactPerson" currentSort={agentSort} onSort={handleAgentSort} />
-              <AgentSortHeader label="Status" sortKey="status" currentSort={agentSort} onSort={handleAgentSort} />
+              <ColumnHeader
+                asTh
+                label="Agent"
+                sort={{ sortKey: "agent", current: agentSort, onSort: handleAgentSort }}
+                filter={{ type: "text", value: agentColFilters.agent, onChange: v => setAgentColFilters(f => ({ ...f, agent: v })), placeholder: "Filter by name…", label: "Agent contains" }}
+              />
+              <ColumnHeader
+                asTh
+                label="Contact"
+                sort={{ sortKey: "contact", current: agentSort, onSort: handleAgentSort }}
+                filter={{ type: "text", value: agentColFilters.contact, onChange: v => setAgentColFilters(f => ({ ...f, contact: v })), placeholder: "Filter by email/phone…", label: "Contact contains" }}
+              />
+              {showParent && (
+                <ColumnHeader
+                  asTh
+                  label="Parent Agent"
+                  sort={{ sortKey: "parent", current: agentSort, onSort: handleAgentSort }}
+                />
+              )}
+              <ColumnHeader
+                asTh
+                label="Country"
+                sort={{ sortKey: "country", current: agentSort, onSort: handleAgentSort }}
+                filter={{ type: "select", value: agentColFilters.country, onChange: v => setAgentColFilters(f => ({ ...f, country: v })), options: uniqueAgentCountries.map(c => ({ value: c, label: c })), label: "Country" }}
+              />
+              <ColumnHeader
+                asTh
+                label="Category"
+                sort={{ sortKey: "category", current: agentSort, onSort: handleAgentSort }}
+                filter={{ type: "select", value: agentColFilters.category, onChange: v => setAgentColFilters(f => ({ ...f, category: v })), options: uniqueAgentCategories.map(c => ({ value: c, label: c })), label: "Category" }}
+              />
+              <ColumnHeader
+                asTh
+                label="Commission %"
+                sort={{ sortKey: "commission", current: agentSort, onSort: handleAgentSort }}
+              />
+              <ColumnHeader
+                asTh
+                label="Contact Person"
+                sort={{ sortKey: "contactPerson", current: agentSort, onSort: handleAgentSort }}
+                filter={{ type: "select", value: agentColFilters.contactPerson, onChange: v => setAgentColFilters(f => ({ ...f, contactPerson: v })), options: uniqueContactPersons.map(c => ({ value: c, label: c })), label: "Contact person" }}
+              />
+              <ColumnHeader
+                asTh
+                label="Status"
+                sort={{ sortKey: "status", current: agentSort, onSort: handleAgentSort }}
+                filter={{ type: "select", value: agentColFilters.status, onChange: v => setAgentColFilters(f => ({ ...f, status: v })), options: uniqueAgentStatuses.map(s => ({ value: s, label: s })), label: "Status" }}
+              />
               <th className="py-3 px-3 font-semibold text-muted-foreground">Contract</th>
               {isManager && <th className="py-3 px-3 font-semibold text-muted-foreground text-right">Actions</th>}
             </tr>

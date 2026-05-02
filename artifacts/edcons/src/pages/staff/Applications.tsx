@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { CountryFlag } from "@/components/CountryFlag";
 import { OriginBadge } from "@/components/OriginBadge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColumnHeader } from "@/components/ui/column-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -1250,6 +1251,7 @@ export default function ApplicationsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
   const [filters, setFilters] = useState<AppFilters>({ ...DEFAULT_FILTERS });
+  const [colFilters, setColFilters] = useState({ student: "", program: "", level: "all", intake: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
   const [editApp, setEditApp] = useState<any>(null);
@@ -1275,6 +1277,18 @@ export default function ApplicationsPage() {
     queryFn: () => apiFetch(`${BASE_URL}/api/applications?season=${encodeURIComponent(season)}&limit=500${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   });
   const allApps: any[] = applicationsResp?.data || [];
+
+  const uniqueAppCountries = useMemo(() => {
+    const set = new Set<string>();
+    allApps.forEach((a: any) => { if (a.country) set.add(a.country); });
+    return Array.from(set).sort();
+  }, [allApps]);
+
+  const uniqueAppUniversities = useMemo(() => {
+    const m = new Map<number, string>();
+    allApps.forEach((a: any) => { if (a.universityId) m.set(a.universityId, a.universityName || ""); });
+    return Array.from(m.entries()).sort((a, b) => (a[1] || "").localeCompare(b[1] || ""));
+  }, [allApps]);
 
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
 
@@ -1312,6 +1326,13 @@ export default function ApplicationsPage() {
   }
 
   const filteredApps = allApps.filter((a: any) => {
+    if (colFilters.student) {
+      const sn = `${a.studentFirstName || ""} ${a.studentLastName || ""}`.toLowerCase();
+      if (!sn.includes(colFilters.student.toLowerCase())) return false;
+    }
+    if (colFilters.program && !(a.programName || "").toLowerCase().includes(colFilters.program.toLowerCase())) return false;
+    if (colFilters.level !== "all" && (a.level || "") !== colFilters.level) return false;
+    if (colFilters.intake && !(a.intake || "").toLowerCase().includes(colFilters.intake.toLowerCase())) return false;
     if (filters.stage !== "all" && a.stage !== filters.stage) return false;
     if (filters.country !== "all" && a.country !== filters.country) return false;
     if (filters.source === "agent" && !a.agentId) return false;
@@ -1364,7 +1385,7 @@ export default function ApplicationsPage() {
 
   const { paged: pagedApps, total: totalAppsCount } = pg.paginate(sortedApps);
 
-  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 
   const pagedIds = useMemo(() => new Set(pagedApps.map((a: any) => a.id)), [pagedApps]);
   const allPageSelected = pagedApps.length > 0 && pagedApps.every((a: any) => selectedIds.has(a.id));
@@ -1558,16 +1579,75 @@ export default function ApplicationsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
-                    <SortHeader label="Student" sortKey="student" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Stage" sortKey="stage" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="University" sortKey="university" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Level" sortKey="level" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Intake" sortKey="intake" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Commission" sortKey="fee" currentSort={sort} onSort={handleSort} />
-                    <TableHead>Assigned</TableHead>
-                    <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <ColumnHeader
+                      label="Student"
+                      sort={{ sortKey: "student", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.student, onChange: v => setColFilters(f => ({ ...f, student: v })), placeholder: "Filter by student…", label: "Student contains" }}
+                    />
+                    <ColumnHeader
+                      label="Stage"
+                      sort={{ sortKey: "stage", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.stage, onChange: v => setFilters(f => ({ ...f, stage: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: "Stage" }}
+                    />
+                    <ColumnHeader
+                      label="Country"
+                      sort={{ sortKey: "country", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.country, onChange: v => setFilters(f => ({ ...f, country: v })), options: uniqueAppCountries.map(c => ({ value: c, label: c })), label: "Country" }}
+                    />
+                    <ColumnHeader
+                      label="University"
+                      sort={{ sortKey: "university", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.university, onChange: v => setFilters(f => ({ ...f, university: v })), options: uniqueAppUniversities.map(([id, name]) => ({ value: String(id), label: name || `#${id}` })), label: "University" }}
+                    />
+                    <ColumnHeader
+                      label="Program"
+                      sort={{ sortKey: "program", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: "Filter by program…", label: "Program contains" }}
+                    />
+                    <ColumnHeader
+                      label="Level"
+                      sort={{ sortKey: "level", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: colFilters.level, onChange: v => setColFilters(f => ({ ...f, level: v })), options: STUDY_LEVELS.map(l => ({ value: l.value, label: l.label })), label: "Level" }}
+                    />
+                    <ColumnHeader
+                      label="Intake"
+                      sort={{ sortKey: "intake", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.intake, onChange: v => setColFilters(f => ({ ...f, intake: v })), placeholder: "Filter by intake…", label: "Intake contains" }}
+                    />
+                    <ColumnHeader
+                      label="Commission"
+                      sort={{ sortKey: "fee", current: sort, onSort: handleSort }}
+                    />
+                    <ColumnHeader
+                      label="Assigned"
+                      filter={{
+                        type: "select",
+                        value: filters.assignedTo,
+                        onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
+                        options: [
+                          { value: "unassigned", label: "Unassigned" },
+                          ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
+                        ],
+                        label: "Assigned to",
+                      }}
+                    />
+                    <ColumnHeader
+                      label="Created"
+                      sort={{ sortKey: "date", current: sort, onSort: handleSort }}
+                      filter={{
+                        type: "select",
+                        value: filters.dateRange,
+                        onChange: v => setFilters(f => ({ ...f, dateRange: v })),
+                        options: [
+                          { value: "today", label: "Today" },
+                          { value: "yesterday", label: "Yesterday" },
+                          { value: "last7", label: "Last 7 Days" },
+                          { value: "thisMonth", label: "This Month" },
+                          { value: "thisYear", label: "This Year" },
+                        ],
+                        label: "Created date",
+                      }}
+                    />
                     <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>

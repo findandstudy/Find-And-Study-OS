@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { CountryFlag } from "@/components/CountryFlag";
 import { OriginBadge } from "@/components/OriginBadge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColumnHeader } from "@/components/ui/column-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -954,6 +955,7 @@ export default function LeadsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [filters, setFilters] = useState<LeadFilters>({ ...DEFAULT_LEAD_FILTERS });
+  const [colFilters, setColFilters] = useState({ name: "", email: "", program: "", country: "", value: "" });
   const { stages: pipelineStages } = usePipelineStages("lead");
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => {
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline";
@@ -1032,6 +1034,17 @@ export default function LeadsPage() {
   const leadStageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const filteredLeads = allLeads.filter((l: any) => {
+    if (colFilters.name) {
+      const fullName = `${l.firstName || ""} ${l.lastName || ""}`.toLowerCase();
+      if (!fullName.includes(colFilters.name.toLowerCase())) return false;
+    }
+    if (colFilters.email && !(l.email || "").toLowerCase().includes(colFilters.email.toLowerCase())) return false;
+    if (colFilters.program && !(l.interestedProgram || "").toLowerCase().includes(colFilters.program.toLowerCase())) return false;
+    if (colFilters.country && !(l.interestedCountry || "").toLowerCase().includes(colFilters.country.toLowerCase())) return false;
+    if (colFilters.value) {
+      const minVal = parseFloat(colFilters.value);
+      if (!isNaN(minVal) && (parseFloat(l.estimatedValue) || 0) < minVal) return false;
+    }
     if (filters.source !== "all" && l.source !== filters.source) return false;
     if (filters.status !== "all" && l.status !== filters.status) return false;
     if (filters.appSource === "agent" && !l.agentId) return false;
@@ -1078,7 +1091,7 @@ export default function LeadsPage() {
 
   const { paged: pagedLeads, total: totalLeadsCount } = pg.paginate(sortedLeads);
 
-  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, sort]);
+  useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 
   const activeCard = activeId ? allLeads.find((l: any) => l.id === activeId) : null;
 
@@ -1395,17 +1408,74 @@ export default function LeadsPage() {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <SortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Source" sortKey="source" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Program" sortKey="program" currentSort={sort} onSort={handleSort} />
-                    <SortHeader label="Country" sortKey="country" currentSort={sort} onSort={handleSort} />
+                    <ColumnHeader
+                      label="Name"
+                      sort={{ sortKey: "name", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.name, onChange: v => setColFilters(f => ({ ...f, name: v })), placeholder: "Filter by name…", label: "Name contains" }}
+                    />
+                    <ColumnHeader
+                      label="Email"
+                      sort={{ sortKey: "email", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.email, onChange: v => setColFilters(f => ({ ...f, email: v })), placeholder: "Filter by email…", label: "Email contains" }}
+                    />
+                    <ColumnHeader
+                      label="Status"
+                      sort={{ sortKey: "status", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.status, onChange: v => setFilters(f => ({ ...f, status: v })), options: columns.map(c => ({ value: c.id, label: c.title })), label: "Status" }}
+                    />
+                    <ColumnHeader
+                      label="Source"
+                      sort={{ sortKey: "source", current: sort, onSort: handleSort }}
+                      filter={{ type: "select", value: filters.source, onChange: v => setFilters(f => ({ ...f, source: v })), options: SOURCES.map(s => ({ value: s, label: s.replace(/_/g, " ") })), label: "Source" }}
+                    />
+                    <ColumnHeader
+                      label="Program"
+                      sort={{ sortKey: "program", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: "Filter by program…", label: "Program contains" }}
+                    />
+                    <ColumnHeader
+                      label="Country"
+                      sort={{ sortKey: "country", current: sort, onSort: handleSort }}
+                      filter={{ type: "text", value: colFilters.country, onChange: v => setColFilters(f => ({ ...f, country: v })), placeholder: "Filter by country…", label: "Country contains" }}
+                    />
                     {canSeeRevenue && (
-                      <SortHeader label="Value" sortKey="value" currentSort={sort} onSort={handleSort} />
+                      <ColumnHeader
+                        label="Value"
+                        sort={{ sortKey: "value", current: sort, onSort: handleSort }}
+                        filter={{ type: "text", value: colFilters.value, onChange: v => setColFilters(f => ({ ...f, value: v })), placeholder: "Min value…", label: "Minimum value" }}
+                      />
                     )}
-                    <TableHead>Assigned</TableHead>
-                    <SortHeader label="Created" sortKey="date" currentSort={sort} onSort={handleSort} />
+                    <ColumnHeader
+                      label="Assigned"
+                      filter={{
+                        type: "select",
+                        value: filters.assignment,
+                        onChange: v => setFilters(f => ({ ...f, assignment: v })),
+                        options: [
+                          { value: "mine", label: "Me" },
+                          { value: "unassigned", label: "Unassigned" },
+                          ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
+                        ],
+                        label: "Assigned to",
+                      }}
+                    />
+                    <ColumnHeader
+                      label="Created"
+                      sort={{ sortKey: "date", current: sort, onSort: handleSort }}
+                      filter={{
+                        type: "select",
+                        value: filters.dateRange,
+                        onChange: v => setFilters(f => ({ ...f, dateRange: v })),
+                        options: [
+                          { value: "today", label: "Today" },
+                          { value: "yesterday", label: "Yesterday" },
+                          { value: "last7", label: "Last 7 Days" },
+                          { value: "thisMonth", label: "This Month" },
+                          { value: "thisYear", label: "This Year" },
+                        ],
+                        label: "Created date",
+                      }}
+                    />
                     <TableHead className="w-20 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>

@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ColumnHeader } from "@/components/ui/column-header";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DollarSign, TrendingUp, Building2, Users, Plus, Trash2, Pencil,
@@ -1214,18 +1215,35 @@ export default function FinancePage() {
                         { key: "collection", label: "Collection", align: "text-center" },
                         { key: "status", label: "Status", align: "text-center" },
                       ] as const).map(col => {
-                        const active = commSort.key === col.key;
+                        const alignProp = col.align === "text-right" ? "right" : col.align === "text-center" ? "center" : "left";
+                        if (col.key === "status") {
+                          return (
+                            <ColumnHeader
+                              asTh
+                              key={col.key}
+                              label={col.label}
+                              align={alignProp}
+                              className={`${col.align} px-4 py-3 text-slate-600 hover:bg-slate-100`}
+                              sort={{ sortKey: col.key, current: commSort, onSort: handleCommSort as any }}
+                              filter={{
+                                type: "select",
+                                value: commStatus,
+                                onChange: setCommStatus,
+                                options: Object.entries(COMM_STATUS).map(([v, m]) => ({ value: v, label: m.label })),
+                                label: "Status",
+                              }}
+                            />
+                          );
+                        }
                         return (
-                          <th
+                          <ColumnHeader
+                            asTh
                             key={col.key}
-                            className={`${col.align} px-4 py-3 font-semibold text-slate-600 cursor-pointer select-none hover:bg-slate-100 transition-colors`}
-                            onClick={() => handleCommSort(col.key)}
-                          >
-                            <div className={`flex items-center gap-1 ${col.align === "text-right" ? "justify-end" : col.align === "text-center" ? "justify-center" : ""}`}>
-                              {col.label}
-                              {active ? (commSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-slate-300" />}
-                            </div>
-                          </th>
+                            label={col.label}
+                            align={alignProp}
+                            className={`${col.align} px-4 py-3 text-slate-600 hover:bg-slate-100`}
+                            sort={{ sortKey: col.key, current: commSort, onSort: handleCommSort as any }}
+                          />
                         );
                       })}
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
