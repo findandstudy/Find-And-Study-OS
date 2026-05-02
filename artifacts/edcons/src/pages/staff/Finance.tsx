@@ -21,7 +21,9 @@ import {
   CheckCircle, Clock, AlertCircle, Loader2, RefreshCw, ArrowUpRight,
   Upload, FileText, Download, BarChart3, AlertTriangle, Calendar,
   Landmark, CreditCard, PiggyBank, Eye, ArrowUpDown, ArrowUp, ArrowDown,
+  Filter as FilterIcon, X,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 
