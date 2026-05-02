@@ -10,6 +10,7 @@ import {
   SESSION_TTL,
   type SessionUser,
 } from "../lib/replitAuth";
+import { getSessionCookieOptions } from "../lib/cookieOptions";
 
 declare global {
   namespace Express {
@@ -73,28 +74,28 @@ export async function authMiddleware(
 
   const session = await getSession(sid);
   if (!session?.user?.id) {
-    await clearSession(res, sid);
+    await clearSession(res, sid, req);
     next();
     return;
   }
 
   const dbUser = await fetchDbUser(session.user.id);
   if (!dbUser) {
-    await clearSession(res, sid);
+    await clearSession(res, sid, req);
     next();
     return;
   }
 
   // a) Soft-deleted account
   if (dbUser.deletedAt !== null) {
-    await clearSession(res, sid);
+    await clearSession(res, sid, req);
     res.status(401).json({ error: "Account not found" });
     return;
   }
 
   // b) Deactivated account
   if (dbUser.isActive === false) {
-    await clearSession(res, sid);
+    await clearSession(res, sid, req);
     res.status(403).json({ error: "Account deactivated" });
     return;
   }
@@ -104,7 +105,7 @@ export async function authMiddleware(
   // even without confirming their email address (matches the behaviour of the
   // frontend EmailVerificationGuard, which also only blocks the student role).
   if (dbUser.emailVerified === false && dbUser.role === "student") {
-    await clearSession(res, sid);
+    await clearSession(res, sid, req);
     res.status(403).json({ error: "Email not verified" });
     return;
   }
@@ -120,13 +121,7 @@ export async function authMiddleware(
   // Without this, the cookie's maxAge is fixed at login time (30 min) and
   // disappears even though the user is actively using the app — leading to
   // unexpected 401 "Authentication required" errors on the next mutation.
-  res.cookie(SESSION_COOKIE, sid, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
 
   next();
 }

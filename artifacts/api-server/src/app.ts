@@ -4,10 +4,12 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { authMiddleware } from "./middlewares/authMiddleware";
+import { getCsrfCookieOptions } from "./lib/cookieOptions";
 import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
 
 const app: Express = express();
+app.set("trust proxy", 1);
 
 function getAllowedOrigins(): string[] {
   const origins: string[] = [];
@@ -114,13 +116,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   if (!req.cookies[CSRF_COOKIE]) {
     const token = crypto.randomBytes(32).toString("hex");
-    res.cookie(CSRF_COOKIE, token, {
-      httpOnly: false,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(CSRF_COOKIE, token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
   }
 
   if (!CSRF_SAFE_METHODS.has(req.method)) {

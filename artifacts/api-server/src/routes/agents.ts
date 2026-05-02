@@ -6,6 +6,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERM
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
+import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { toE164 } from "../lib/inbox/phone";
 
@@ -404,13 +405,7 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
   } as any;
 
   const sid = await createSession(sessionData);
-  res.cookie("sid", sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
+  res.cookie("sid", sid, getSessionCookieOptions(req, SESSION_TTL));
   res.json({ success: true, redirectTo: "/agent" });
 });
 
@@ -429,13 +424,7 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
 
   await deleteSession(currentSid);
 
-  res.cookie("sid", originalSid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
+  res.cookie("sid", originalSid, getSessionCookieOptions(req, SESSION_TTL));
   res.json({ success: true, redirectTo: "/" });
 });
 
@@ -964,13 +953,7 @@ router.post("/agents/:id/impersonate", requireAuth, requireRole(...MANAGER_ROLES
   };
 
   const sid = await createSession(sessionData);
-  res.cookie("sid", sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
+  res.cookie("sid", sid, getSessionCookieOptions(req, SESSION_TTL));
   res.json({ success: true, redirectTo: "/agent" });
 });
 

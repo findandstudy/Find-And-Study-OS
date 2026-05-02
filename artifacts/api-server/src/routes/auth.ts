@@ -17,6 +17,7 @@ import {
   type SessionData,
   type SessionUser,
 } from "../lib/replitAuth";
+import { getSessionCookieOptions } from "../lib/cookieOptions";
 
 const PasswordSchema = z
   .string()
@@ -37,14 +38,8 @@ const rateLimiter = new RateLimiterPostgres({
   duration: 900,
 });
 
-function setSessionCookie(res: Response, sid: string) {
-  res.cookie(SESSION_COOKIE, sid, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
+function setSessionCookie(req: Request, res: Response, sid: string) {
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
 }
 
 function buildSessionUser(user: Record<string, unknown>): SessionUser {
@@ -164,7 +159,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   };
 
   const sid = await createSession(sessionData, user.id);
-  setSessionCookie(res, sid);
+  setSessionCookie(req, res, sid);
   res.json({ user: sessionUser });
 });
 
@@ -351,7 +346,7 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
   };
 
   const sid = await createSession(sessionData, user.id);
-  setSessionCookie(res, sid);
+  setSessionCookie(req, res, sid);
   res.json({ user: sessionUser, verified: true });
 });
 
@@ -593,7 +588,7 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
 
 async function handleLogout(req: Request, res: Response) {
   const sid = getSessionId(req);
-  await clearSession(res, sid);
+  await clearSession(res, sid, req);
   res.redirect("/login");
 }
 

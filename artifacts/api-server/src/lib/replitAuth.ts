@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
 import { eq, asc, and, sql } from "drizzle-orm";
+import { getClearCookieOptions } from "./cookieOptions";
 
 export const SESSION_COOKIE = "sid";
 
@@ -134,9 +135,16 @@ export async function deleteSession(sid: string): Promise<void> {
 export async function clearSession(
   res: Response,
   sid?: string,
+  req?: Request,
 ): Promise<void> {
   if (sid) await deleteSession(sid);
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  // When req is unavailable (e.g. background callers), fall back to a
+  // synthesized request shape so we still match what was likely set.
+  const reqLike = req ?? ({
+    secure: process.env.NODE_ENV === "production",
+    headers: {},
+  } as Request);
+  res.clearCookie(SESSION_COOKIE, getClearCookieOptions(reqLike));
 }
 
 export function getSessionId(req: Request): string | undefined {

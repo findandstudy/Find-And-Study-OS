@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { createSession, SESSION_TTL, type SessionData } from "../lib/replitAuth";
+import { getSessionCookieOptions } from "../lib/cookieOptions";
 
 const router: IRouter = Router();
 
@@ -241,13 +242,7 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
   };
 
   const sid = await createSession(sessionData);
-  res.cookie("sid", sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
+  res.cookie("sid", sid, getSessionCookieOptions(req, SESSION_TTL));
   await logAudit(req.user!.id, "impersonate_user", "user", id, { targetRole: targetUser.role }, req.ip);
   let redirectTo = "/staff";
   if (ADMIN_ROLES.includes(targetUser.role as any)) redirectTo = "/admin";
