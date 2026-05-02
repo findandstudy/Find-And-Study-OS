@@ -1215,35 +1215,60 @@ export default function FinancePage() {
                         { key: "collection", label: "Collection", align: "text-center" },
                         { key: "status", label: "Status", align: "text-center" },
                       ] as const).map(col => {
-                        const alignProp = col.align === "text-right" ? "right" : col.align === "text-center" ? "center" : "left";
-                        if (col.key === "status") {
-                          return (
-                            <ColumnHeader
-                              asTh
-                              key={col.key}
-                              label={col.label}
-                              align={alignProp}
-                              className={`${col.align} px-4 py-3 text-slate-600 hover:bg-slate-100`}
-                              sort={{ sortKey: col.key, current: commSort, onSort: handleCommSort as any }}
-                              filter={{
-                                type: "select",
-                                value: commStatus,
-                                onChange: setCommStatus,
-                                options: Object.entries(COMM_STATUS).map(([v, m]) => ({ value: v, label: m.label })),
-                                label: "Status",
-                              }}
-                            />
-                          );
-                        }
+                        const active = commSort.key === col.key;
+                        const isStatus = col.key === "status";
+                        const statusFilterActive = commStatus !== "all";
                         return (
-                          <ColumnHeader
-                            asTh
+                          <th
                             key={col.key}
-                            label={col.label}
-                            align={alignProp}
-                            className={`${col.align} px-4 py-3 text-slate-600 hover:bg-slate-100`}
-                            sort={{ sortKey: col.key, current: commSort, onSort: handleCommSort as any }}
-                          />
+                            className={`${col.align} px-4 py-3 font-semibold text-slate-600 select-none hover:bg-slate-100 transition-colors`}
+                          >
+                            <div className={`flex items-center gap-1 ${col.align === "text-right" ? "justify-end" : col.align === "text-center" ? "justify-center" : ""}`}>
+                              <span className="cursor-pointer" onClick={() => handleCommSort(col.key)}>
+                                {col.label}
+                              </span>
+                              <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => handleCommSort(col.key)}>
+                                {active ? (commSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3" />}
+                              </button>
+                              {isStatus && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={statusFilterActive ? "Filter active — click to edit" : "Filter"}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${statusFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${statusFilterActive ? "fill-primary/20" : ""}`} />
+                                      {statusFilterActive && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
+                                      )}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="end" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">Status</Label>
+                                        {statusFilterActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setCommStatus("all")}>
+                                            <X className="w-3 h-3 mr-1" /> Clear
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Select value={commStatus} onValueChange={setCommStatus}>
+                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">All</SelectItem>
+                                          {Object.entries(COMM_STATUS).map(([v, m]) => (
+                                            <SelectItem key={v} value={v}>{m.label}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                            </div>
+                          </th>
                         );
                       })}
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>

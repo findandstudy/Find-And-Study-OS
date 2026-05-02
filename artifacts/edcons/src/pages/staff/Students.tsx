@@ -2117,6 +2117,12 @@ export default function StudentsPage() {
   const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
   const allStudents: any[] = data?.data ?? [];
 
+  const uniqueNationalities = useMemo(() => {
+    const set = new Set<string>();
+    allStudents.forEach((s: any) => { if (s.nationality) set.add(s.nationality); });
+    return Array.from(set).sort();
+  }, [allStudents]);
+
   const filteredStudents = allStudents.filter((s: any) => {
     if (colFilters.name) {
       const fullName = `${s.firstName || ""} ${s.lastName || ""}`.toLowerCase();
