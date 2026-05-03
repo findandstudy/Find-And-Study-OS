@@ -8,10 +8,35 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 
 const router: IRouter = Router();
 
+/**
+ * Escape PostgreSQL LIKE/ILIKE pattern metacharacters so user-supplied
+ * search input is matched literally. Without this, characters like `%`
+ * and `_` are interpreted as wildcards (e.g. searching `50%` would match
+ * everything starting with "50").
+ */
+function escapeLikePattern(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/**
+ * Parse a query-string number safely. Returns null for NaN, Infinity, or
+ * negative values so the caller can skip the filter instead of injecting
+ * `NaN` into the SQL (which Postgres rejects with a 500).
+ */
+function parseNonNegativeInt(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 router.get("/course-finder", async (req, res): Promise<void> => {
   const { country, city, universityType, universityId, programId, level, language, search, intake, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(1000, Math.max(1, parseInt(limit, 10)));
+  // Cap at 500 (was 1000). Lowering further requires StudentDetail.tsx:319
+  // to be paginated — currently it requests `limit=500` for a single
+  // university's program list.
+  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [eq(programsTable.isActive, true)];
@@ -55,12 +80,15 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
     else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.field, v)))!);
   }
-  if (intake) conditions.push(ilike(programsTable.intakes, `%${intake}%`));
-  if (feeMin) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${parseInt(feeMin, 10)}`);
-  if (feeMax) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${parseInt(feeMax, 10)}`);
+  if (intake) conditions.push(ilike(programsTable.intakes, `%${escapeLikePattern(intake)}%`));
+  const feeMinNum = parseNonNegativeInt(feeMin);
+  if (feeMinNum !== null) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${feeMinNum}`);
+  const feeMaxNum = parseNonNegativeInt(feeMax);
+  if (feeMaxNum !== null) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${feeMaxNum}`);
   if (search) {
+    const escaped = escapeLikePattern(search);
     conditions.push(
-      sql`(${ilike(programsTable.name, `%${search}%`)} OR ${ilike(universitiesTable.name, `%${search}%`)})`
+      sql`(${ilike(programsTable.name, `%${escaped}%`)} OR ${ilike(universitiesTable.name, `%${escaped}%`)})`
     );
   }
 
@@ -210,7 +238,7 @@ router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("
 
   const conditions = [];
   if (search && search.trim()) {
-    const s = `%${search.trim()}%`;
+    const s = `%${escapeLikePattern(search.trim())}%`;
     conditions.push(
       or(
         ilike(studentsTable.firstName, s),
