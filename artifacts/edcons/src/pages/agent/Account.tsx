@@ -27,6 +27,11 @@ const LANGUAGES = [
   { code: "ar", label: "العربية",   country: "SA" },
   { code: "fr", label: "Français",  country: "FR" },
   { code: "ru", label: "Русский",   country: "RU" },
+  { code: "fa", label: "فارسی",     country: "IR" },
+  { code: "zh", label: "中文",       country: "CN" },
+  { code: "hi", label: "हिन्दी",       country: "IN" },
+  { code: "es", label: "Español",   country: "ES" },
+  { code: "id", label: "Bahasa",    country: "ID" },
 ];
 
 const PHONE_CODES = [
