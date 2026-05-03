@@ -681,12 +681,17 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   if (updates.stage !== undefined) {
     const newStage = updates.stage as string;
-    const commStatus = await getCommissionFinanceStatus(newStage);
-    const sfStatus = await getServiceFeeFinanceStatus(newStage);
+    const [commStatus, sfStatus] = await Promise.all([
+      getCommissionFinanceStatus(newStage),
+      getServiceFeeFinanceStatus(newStage),
+    ]);
 
     const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
 
-    const existingComms = await db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, id));
+    const [existingComms, existingSFs] = await Promise.all([
+      db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, id)),
+      db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, id)),
+    ]);
     if (existingComms.length === 0 && commStatus !== "excluded") {
       const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
       const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
@@ -729,7 +734,6 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
     }
 
-    const existingSFs = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, id));
     if (existingSFs.length === 0 && sfStatus !== "excluded") {
       const [studentRec] = existingComms.length > 0 ? [null] : await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
       const sName2 = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : (existingComms[0]?.studentName || null);
@@ -855,10 +859,15 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
     const apps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     for (const app of apps) {
       await db.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
-      const commStatus = await getCommissionFinanceStatus(stage);
-      const sfStatus = await getServiceFeeFinanceStatus(stage);
+      const [commStatus, sfStatus] = await Promise.all([
+        getCommissionFinanceStatus(stage),
+        getServiceFeeFinanceStatus(stage),
+      ]);
       const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
-      const existingComms = await db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
+      const [existingComms, existingSFs] = await Promise.all([
+        db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, app.id)),
+        db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id)),
+      ]);
       if (existingComms.length === 0 && commStatus !== "excluded") {
         const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
         const sName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
@@ -899,7 +908,6 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
           }
         }
       }
-      const existingSFs = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
       if (existingSFs.length === 0 && sfStatus !== "excluded") {
         const [studentRec2] = existingComms.length > 0 ? [null] : await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
         const sName2 = studentRec2 ? `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim() : (existingComms[0]?.studentName || null);

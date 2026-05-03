@@ -158,63 +158,73 @@ async function createApplicationForStudent(studentId: number, programId: number 
       ? snapshotDiscountedFee
       : snapshotTuitionFee;
 
-    const commFinStatus = await getCommissionFinanceStatus(stage);
-    if (commFinStatus !== "excluded") {
-      const uCommAmount = commissionBaseFee && snapshotCommissionRate
-        ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
-      const agentComm = await resolveAgentCommission(null, uCommAmount);
-      await db.insert(commissionsTable).values({
-        applicationId: app.id,
-        studentId,
-        agentId: null,
-        studentName: studentFullName,
-        universityName: snapshotUniversityName,
-        programName: snapshotProgramName,
-        isStateUniversity,
-        season: currentYear,
-        currency: snapshotCurrency,
-        status: commFinStatus,
-        programFee: commissionBaseFee ? String(commissionBaseFee) : null,
-        universityCommissionRate: snapshotCommissionRate ? String(snapshotCommissionRate) : null,
-        universityCommissionAmount: uCommAmount > 0 ? String(uCommAmount) : null,
-        agentCommissionRate: agentComm.agentCommissionRate,
-        agentCommissionAmount: agentComm.agentCommissionAmount,
-        subAgentId: agentComm.subAgentId,
-        subAgentCommissionRate: agentComm.subAgentCommissionRate,
-        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
-      });
-    }
+    // Commission, service fee, and student status are independent — run in parallel.
+    await Promise.all([
+      // Chain 1: commission record
+      (async () => {
+        const commFinStatus = await getCommissionFinanceStatus(stage);
+        if (commFinStatus === "excluded") return;
+        const uCommAmount = commissionBaseFee && snapshotCommissionRate
+          ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
+        const agentComm = await resolveAgentCommission(null, uCommAmount);
+        await db.insert(commissionsTable).values({
+          applicationId: app.id,
+          studentId,
+          agentId: null,
+          studentName: studentFullName,
+          universityName: snapshotUniversityName,
+          programName: snapshotProgramName,
+          isStateUniversity,
+          season: currentYear,
+          currency: snapshotCurrency,
+          status: commFinStatus,
+          programFee: commissionBaseFee ? String(commissionBaseFee) : null,
+          universityCommissionRate: snapshotCommissionRate ? String(snapshotCommissionRate) : null,
+          universityCommissionAmount: uCommAmount > 0 ? String(uCommAmount) : null,
+          agentCommissionRate: agentComm.agentCommissionRate,
+          agentCommissionAmount: agentComm.agentCommissionAmount,
+          subAgentId: agentComm.subAgentId,
+          subAgentCommissionRate: agentComm.subAgentCommissionRate,
+          subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
+        });
+      })(),
 
-    const sfFinStatus = await getServiceFeeFinanceStatus(stage);
-    if (sfFinStatus !== "excluded") {
-      const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
-      const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;
-      await db.insert(serviceFeesTable).values({
-        applicationId: app.id,
-        studentId,
-        agentId: null,
-        studentName: studentFullName,
-        universityName: snapshotUniversityName,
-        isStateUniversity,
-        season: currentYear,
-        currency: snapshotCurrency,
-        totalAmount: sfTotal,
-        firstInstallmentAmount: sfHalf,
-        secondInstallmentAmount: sfHalf,
-        financeStatus: sfFinStatus,
-        status: "pending",
-      });
-    }
+      // Chain 2: service fee record
+      (async () => {
+        const sfFinStatus = await getServiceFeeFinanceStatus(stage);
+        if (sfFinStatus === "excluded") return;
+        const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
+        const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;
+        await db.insert(serviceFeesTable).values({
+          applicationId: app.id,
+          studentId,
+          agentId: null,
+          studentName: studentFullName,
+          universityName: snapshotUniversityName,
+          isStateUniversity,
+          season: currentYear,
+          currency: snapshotCurrency,
+          totalAmount: sfTotal,
+          firstInstallmentAmount: sfHalf,
+          secondInstallmentAmount: sfHalf,
+          financeStatus: sfFinStatus,
+          status: "pending",
+        });
+      })(),
 
-    try {
-      const appMadeStages = await db.select({ key: pipelineStagesTable.key, label: pipelineStagesTable.label })
-        .from(pipelineStagesTable)
-        .where(eq(pipelineStagesTable.entityType, "student"));
-      const appMadeStage = appMadeStages.find(s => s.key === "done") || appMadeStages.find(s => s.label?.toLowerCase().includes("application made"));
-      if (appMadeStage) {
-        await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, studentId));
-      }
-    } catch {}
+      // Chain 3: student status update (best-effort — never throws)
+      (async () => {
+        try {
+          const appMadeStages = await db.select({ key: pipelineStagesTable.key, label: pipelineStagesTable.label })
+            .from(pipelineStagesTable)
+            .where(eq(pipelineStagesTable.entityType, "student"));
+          const appMadeStage = appMadeStages.find(s => s.key === "done") || appMadeStages.find(s => s.label?.toLowerCase().includes("application made"));
+          if (appMadeStage) {
+            await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, studentId));
+          }
+        } catch {}
+      })(),
+    ]);
 
     console.log(`[AUTO-APPLICATION] Created application #${app.id} for student #${studentId}, program: ${snapshotProgramName}`);
     return { appId: app.id };
