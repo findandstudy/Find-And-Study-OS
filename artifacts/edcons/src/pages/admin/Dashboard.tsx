@@ -391,7 +391,7 @@ export default function AdminDashboard() {
                 <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
               ) : (
                 (upcomingFollowUps as any[]).slice(0, 5).map((fu: any) => (
-                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : "#"}>
+                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
                     <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
                       isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
                     }`}>
