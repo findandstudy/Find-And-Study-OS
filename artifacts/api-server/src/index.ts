@@ -338,7 +338,7 @@ async function seedDocumentRequirements() {
   try {
     const existing = await db.select({ id: documentRequirementsTable.id }).from(documentRequirementsTable).limit(1);
     if (existing.length > 0) return;
-    const LEVELS = ["pre_bachelors", "bachelors", "masters", "phd", "others"];
+    const LEVELS = ["Bachelor", "Master", "Ph.D", "Associate", "Foundation", "Language Course", "Pathway Programs"];
     const TYPES = [
       "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
       "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
@@ -350,6 +350,7 @@ async function seedDocumentRequirements() {
       "passport", "cv", "lor", "sop", "essay", "experience_letters",
       "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
     ];
+    const isPreBachelor = (l: string) => l === "Associate" || l === "Foundation" || l === "Language Course" || l === "Pathway Programs";
     const rows: any[] = [];
     for (let i = 0; i < TYPES.length; i++) {
       const dt = TYPES[i];
@@ -357,13 +358,13 @@ async function seedDocumentRequirements() {
         let enabled = false, mandatory = false;
         if (dt === "passport") { enabled = true; mandatory = true; }
         else if (dt === "diploma_certificate" || dt === "diploma_transcript") {
-          if (level === "pre_bachelors" || level === "others") { enabled = true; mandatory = true; }
+          if (isPreBachelor(level)) { enabled = true; mandatory = true; }
         } else if (dt === "bachelors_certificate" || dt === "bachelors_transcript") {
-          if (level === "masters") { enabled = true; mandatory = true; }
+          if (level === "Master") { enabled = true; mandatory = true; }
         } else if (dt === "bachelors_transcript_all_semesters") {
-          if (level === "masters") { enabled = true; }
+          if (level === "Master") { enabled = true; }
         } else if (dt === "masters_certificate" || dt === "masters_transcript") {
-          if (level === "phd") { enabled = true; mandatory = true; }
+          if (level === "Ph.D") { enabled = true; mandatory = true; }
         } else if (dt === "other_certificates_documents" || dt === "ielts_pte_gre_gmat_toefl_duolingo") {
           enabled = true;
         } else if (dt === "sop") { enabled = true; }

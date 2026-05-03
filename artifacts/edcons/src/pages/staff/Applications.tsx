@@ -26,6 +26,7 @@ import { TablePagination, useTablePagination } from "@/components/TablePaginatio
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 import {
   Search, Plus, LayoutGrid, List, ArrowUpDown, ArrowUp, ArrowDown,
   Trash2, Pencil, ChevronLeft, ChevronRight, TrendingUp, Filter,
@@ -96,21 +97,6 @@ function getStageColor(stage: PipelineStage, index: number): string {
   return STAGE_COLORS[index % STAGE_COLORS.length];
 }
 
-const STUDY_LEVELS = [
-  { value: "pre_bachelors", label: "Associate" },
-  { value: "Associate", label: "Associate" },
-  { value: "Bachelor", label: "Bachelor" },
-  { value: "bachelors", label: "Bachelor" },
-  { value: "Master", label: "Master" },
-  { value: "masters", label: "Master" },
-  { value: "Ph.D", label: "Ph.D" },
-  { value: "phd", label: "Ph.D" },
-  { value: "Language Course", label: "Language Course" },
-  { value: "language", label: "Language Course" },
-  { value: "Foundation", label: "Foundation" },
-  { value: "foundation", label: "Foundation" },
-  { value: "Pathway Programs", label: "Pathway Programs" },
-];
 
 const INSTRUCTION_LANGUAGES = [
   "English", "Turkish", "French", "German", "Arabic", "Russian",
@@ -644,6 +630,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
   const [docUploadDialog, setDocUploadDialog] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { levels: studyLevels } = useStudyLevels();
 
   const { data: allCountries = [] } = useCountries();
   const activeDestinations = useMemo(() => allCountries.filter(c => c.isActive), [allCountries]);
@@ -802,7 +789,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             <Label>Level</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent>{STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+              <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -1073,6 +1060,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
 function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
   const { toast } = useToast();
   const { season } = useSeason();
+  const { levels: studyLevels } = useStudyLevels();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" });
 
@@ -1183,7 +1171,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold">Level <span className="text-destructive">*</span></Label>
               <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>{STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
@@ -1240,6 +1228,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
 /* ── ApplicationsPage ────────────────────────────────────── */
 export default function ApplicationsPage() {
+  const { levels: studyLevels, labelOf: studyLabelOf } = useStudyLevels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1606,7 +1595,7 @@ export default function ApplicationsPage() {
                     <ColumnHeader
                       label="Level"
                       sort={{ sortKey: "level", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: colFilters.level, onChange: v => setColFilters(f => ({ ...f, level: v })), options: STUDY_LEVELS.map(l => ({ value: l.value, label: l.label })), label: "Level" }}
+                      filter={{ type: "select", value: colFilters.level, onChange: v => setColFilters(f => ({ ...f, level: v })), options: studyLevels.map(l => ({ value: l.key, label: l.label })), label: "Level" }}
                     />
                     <ColumnHeader
                       label="Intake"
@@ -1659,7 +1648,7 @@ export default function ApplicationsPage() {
                     const sm = stageMap[app.stage];
                     const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
                     const stageLabel = sm?.label || app.stage;
-                    const levelLabel = STUDY_LEVELS.find(l => l.value === app.level)?.label || app.level || "-";
+                    const levelLabel = studyLabelOf(app.level) || app.level || "-";
                     return (
                       <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/staff/applications/${app.id}`)}>
                         <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>

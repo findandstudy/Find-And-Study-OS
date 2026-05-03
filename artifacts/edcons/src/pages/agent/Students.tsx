@@ -104,10 +104,10 @@ type LevelDoc = { key: string; label: string; icon: string; accept: string; requ
 type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 
 const LEVELS: { key: AppLevel; label: string; badge: string; color: string; dbLevel: string }[] = [
-  { key: "pathway",       label: "Language / Prep",     badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",      dbLevel: "pre_bachelors" },
-  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",      dbLevel: "bachelors" },
-  { key: "graduate",      label: "Master's Degree",     badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "masters" },
-  { key: "doctorate",     label: "Doctorate (PhD)",     badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",    dbLevel: "phd" },
+  { key: "pathway",       label: "Language / Prep",     badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",      dbLevel: "Associate" },
+  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",      dbLevel: "Bachelor" },
+  { key: "graduate",      label: "Master's Degree",     badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "Master" },
+  { key: "doctorate",     label: "Doctorate (PhD)",     badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",    dbLevel: "Ph.D" },
 ];
 
 const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: string }> = {

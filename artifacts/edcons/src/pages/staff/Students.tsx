@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
@@ -92,10 +93,10 @@ type LevelDoc = { key: string; label: string; icon: string; accept: string; requ
 type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 
 const LEVELS: { key: AppLevel; label: string; badge: string; color: string; dbLevel: string }[] = [
-  { key: "pathway",      label: "Language / Prep",    badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",   dbLevel: "pre_bachelors" },
-  { key: "undergraduate",label: "Bachelor / Associate",badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",   dbLevel: "bachelors" },
-  { key: "graduate",     label: "Master's Degree",    badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "masters" },
-  { key: "doctorate",    label: "Doctorate (PhD)",    badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",  dbLevel: "phd" },
+  { key: "pathway",      label: "Language / Prep",    badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",   dbLevel: "Associate" },
+  { key: "undergraduate",label: "Bachelor / Associate",badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",   dbLevel: "Bachelor" },
+  { key: "graduate",     label: "Master's Degree",    badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "Master" },
+  { key: "doctorate",    label: "Doctorate (PhD)",    badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",  dbLevel: "Ph.D" },
 ];
 
 const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: string }> = {
@@ -480,6 +481,7 @@ function AddStudentModal({
   const { toast } = useToast();
   const createStudent = useCreateStudent();
   const { season } = useSeason();
+  const { levels: studyLevels } = useStudyLevels();
 
   const { data: countriesResp } = useQuery({
     queryKey: ["all-countries-nationality"],
@@ -501,7 +503,7 @@ function AddStudentModal({
   });
 
   const currentDocs = useMemo<LevelDoc[]>(() => {
-    const dbLevel = LEVELS.find(l => l.key === applicationLevel)?.dbLevel ?? "bachelors";
+    const dbLevel = LEVELS.find(l => l.key === applicationLevel)?.dbLevel ?? "Bachelor";
     const reqs = (docRequirements ?? []).filter((r: any) => r.level === dbLevel && r.enabled);
     if (reqs.length === 0) return [];
     return reqs.map((r: any) => {
@@ -1014,11 +1016,7 @@ function AddStudentModal({
                         <SelectValue placeholder="Select level..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pre_bachelors">Associate</SelectItem>
-                        <SelectItem value="bachelors">Bachelors</SelectItem>
-                        <SelectItem value="masters">Masters</SelectItem>
-                        <SelectItem value="phd">Ph.D</SelectItem>
-                        <SelectItem value="others">Others</SelectItem>
+                        {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1606,6 +1604,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
 }
 
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
+  const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
     nationality: "", status: "active", dateOfBirth: "",
@@ -1793,11 +1792,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                     <SelectValue placeholder="Select level..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pre_bachelors">Associate</SelectItem>
-                    <SelectItem value="bachelors">Bachelors</SelectItem>
-                    <SelectItem value="masters">Masters</SelectItem>
-                    <SelectItem value="phd">Ph.D</SelectItem>
-                    <SelectItem value="others">Others</SelectItem>
+                    {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

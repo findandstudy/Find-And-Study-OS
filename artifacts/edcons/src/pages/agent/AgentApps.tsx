@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
 import {
@@ -78,21 +79,6 @@ function getStageColor(stage: PipelineStage, index: number): string {
   return STAGE_COLORS[index % STAGE_COLORS.length];
 }
 
-const STUDY_LEVELS = [
-  { value: "pre_bachelors", label: "Associate" },
-  { value: "Associate", label: "Associate" },
-  { value: "Bachelor", label: "Bachelor" },
-  { value: "bachelors", label: "Bachelor" },
-  { value: "Master", label: "Master" },
-  { value: "masters", label: "Master" },
-  { value: "Ph.D", label: "Ph.D" },
-  { value: "phd", label: "Ph.D" },
-  { value: "Language Course", label: "Language Course" },
-  { value: "language", label: "Language Course" },
-  { value: "Foundation", label: "Foundation" },
-  { value: "foundation", label: "Foundation" },
-  { value: "Pathway Programs", label: "Pathway Programs" },
-];
 
 const INSTRUCTION_LANGUAGES = [
   "English", "Turkish", "French", "German", "Arabic", "Russian",
@@ -356,6 +342,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 
 /* ── EditApplicationDialog ───────────────────────────────── */
 function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
+  const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     stage: "", level: "", country: "", universityId: "", universityName: "",
     programId: "", programName: "", intake: "", instructionLanguage: "",
@@ -497,7 +484,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             <Label>Level</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent>{STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+              <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -654,6 +641,7 @@ function FilterPopover({ filters, onChange, stages }: {
 function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
   const { toast } = useToast();
   const { season } = useSeason();
+  const { levels: studyLevels } = useStudyLevels();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState({ country: "", universityId: "", universityName: "", programId: "", programName: "", level: "", instructionLanguage: "", intake: "", tuitionFee: "", notes: "" });
 
@@ -753,7 +741,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold">Level <span className="text-destructive">*</span></Label>
               <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>{STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
@@ -815,6 +803,7 @@ export default function AgentAppsPage() {
   const queryClient = useQueryClient();
   const { season } = useSeason();
   const { user } = useAuth(true, ["agent", "sub_agent"]);
+  const { labelOf: studyLabelOf } = useStudyLevels();
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -1030,7 +1019,7 @@ export default function AgentAppsPage() {
                     const sm = stageMap[app.stage];
                     const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
                     const stageLabel = sm?.label || app.stage;
-                    const levelLabel = STUDY_LEVELS.find(l => l.value === app.level)?.label || app.level || "-";
+                    const levelLabel = studyLabelOf(app.level) || app.level || "-";
                     return (
                       <TableRow key={app.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setLocation(`/agent/applications/${app.id}`)}>
                         <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>

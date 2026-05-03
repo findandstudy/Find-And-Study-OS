@@ -27,6 +27,7 @@ import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1356,6 +1357,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
 function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   open: boolean; onClose: () => void; student: any; studentId: number;
 }) {
+  const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
     nationality: "", dateOfBirth: "",
@@ -1520,11 +1522,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                     <SelectValue placeholder="Select level..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pre_bachelors">Associate</SelectItem>
-                    <SelectItem value="bachelors">Bachelors</SelectItem>
-                    <SelectItem value="masters">Masters</SelectItem>
-                    <SelectItem value="phd">Ph.D</SelectItem>
-                    <SelectItem value="others">Others</SelectItem>
+                    {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

@@ -28,24 +28,8 @@ import { AuditLogSection } from "@/components/AuditLogSection";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { StudentDocChecklist, normalizeLevel } from "@/components/StudentDocChecklist";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 
-const STUDY_LEVELS = [
-  { value: "pre_bachelors", label: "Associate" },
-  { value: "associate", label: "Associate" },
-  { value: "Associate", label: "Associate" },
-  { value: "bachelors", label: "Bachelor's" },
-  { value: "Bachelor", label: "Bachelor's" },
-  { value: "masters", label: "Master's" },
-  { value: "Master", label: "Master's" },
-  { value: "doctorate", label: "Doctorate" },
-  { value: "Ph.D", label: "Doctorate" },
-  { value: "phd", label: "Doctorate" },
-  { value: "language", label: "Language" },
-  { value: "Language Course", label: "Language" },
-  { value: "foundation", label: "Foundation" },
-  { value: "Foundation", label: "Foundation" },
-  { value: "Pathway Programs", label: "Pathway" },
-];
 
 function formatCurrency(v: number | string | null | undefined) {
   if (!v) return "—";
@@ -74,6 +58,7 @@ interface Props {
 }
 
 export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
+  const { labelOf: studyLabelOf } = useStudyLevels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -164,7 +149,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   });
 
   const stageLabel = pipelineStages.find(s => s.key === app?.stage)?.label || app?.stage?.replace(/_/g, " ") || "—";
-  const levelLabel = STUDY_LEVELS.find(l => l.value === app?.level)?.label || app?.level || "—";
+  const levelLabel = studyLabelOf(app?.level) || app?.level || "—";
 
   return (
     <>
@@ -541,6 +526,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
   open: boolean; onClose: () => void; app: any; stages: any[]; onSaved: () => void;
 }) {
+  const { levels: studyLevels } = useStudyLevels();
   const updateApp = useUpdateApplication();
   const [form, setForm] = useState({
     stage: app?.stage || "",
@@ -622,7 +608,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
-                {STUDY_LEVELS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

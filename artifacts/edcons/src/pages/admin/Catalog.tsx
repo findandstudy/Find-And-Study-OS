@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, Save } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -1528,12 +1530,179 @@ const OPTION_CATEGORIES = [
   { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
 ];
 
+const DEGREE_DOC_TYPE_LABELS: Record<string, string> = {
+  high_school_diploma_translation: "High School Diploma (Translation)",
+  class_10th_ssc_marks_sheet: "Class 10th/SSC Marks Sheet",
+  class_12th_hsc_certificate: "Class 12th/+2/HSC Certificate",
+  class_12th_hsc_marks_sheet: "Class 12th/+2/HSC Marks Sheet",
+  diploma_certificate: "Diploma Certificate",
+  diploma_transcript: "Diploma Transcript",
+  bachelors_certificate: "Bachelors Certificate",
+  bachelors_transcript: "Bachelors Transcript",
+  bachelors_provisional_certificate: "Bachelors Provisional Certificate",
+  bachelors_transcript_all_semesters: "Bachelors Transcript (All Semesters)",
+  masters_certificate: "Masters Certificate",
+  masters_transcript: "Masters Transcript",
+  masters_provisional_certificate: "Masters Provisional Certificate",
+  masters_transcript_all_semesters: "Masters Transcript (All Semesters)",
+  passport: "Passport",
+  cv: "CV",
+  lor: "LOR",
+  sop: "SOP",
+  essay: "Essay",
+  experience_letters: "Experience Letters",
+  other_certificates_documents: "Other Certificates/Documents",
+  ielts_pte_gre_gmat_toefl_duolingo: "IELTS/PTE/GRE/GMAT/TOEFL/Duolingo",
+  photo: "Photo",
+  diploma_recognition: "Diploma Recognition",
+};
+const DEGREE_DOC_TYPES = Object.keys(DEGREE_DOC_TYPE_LABELS);
+
+function DegreeDocumentsDialog({ open, onClose, degree }: { open: boolean; onClose: () => void; degree: CatalogOption | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const levelKey = degree?.value || "";
+  const [reqs, setReqs] = useState<Record<string, { enabled: boolean; mandatory: boolean }>>({});
+  const [saving, setSaving] = useState(false);
+  const initRef = useRef<string>("");
+
+  const { data, isLoading } = useQuery<any[]>({
+    queryKey: ["document-requirements"],
+    queryFn: () => api("/api/document-requirements"),
+    staleTime: 30_000,
+    enabled: open,
+  });
+  const requirements = data;
+
+  // Reset init flag whenever the dialog opens for a different degree
+  useEffect(() => {
+    if (!open) initRef.current = "";
+  }, [open]);
+
+  // Seed local edit state once per (open × degree × first server load)
+  useEffect(() => {
+    if (!open || !levelKey || !requirements) return;
+    if (initRef.current === levelKey) return;
+    const map: Record<string, { enabled: boolean; mandatory: boolean }> = {};
+    for (const dt of DEGREE_DOC_TYPES) map[dt] = { enabled: false, mandatory: false };
+    for (const r of requirements) {
+      if (r.level === levelKey && map[r.documentType]) {
+        map[r.documentType] = { enabled: !!r.enabled, mandatory: !!r.mandatory };
+      }
+    }
+    setReqs(map);
+    initRef.current = levelKey;
+  }, [open, levelKey, requirements]);
+
+  async function handleSave() {
+    if (!levelKey) return;
+    setSaving(true);
+    try {
+      const payload = DEGREE_DOC_TYPES.map((dt, idx) => ({
+        documentType: dt,
+        level: levelKey,
+        enabled: !!reqs[dt]?.enabled,
+        mandatory: !!reqs[dt]?.mandatory,
+        sortOrder: idx,
+      }));
+      await api("/api/document-requirements", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requirements: payload }),
+      });
+      qc.invalidateQueries({ queryKey: ["document-requirements"] });
+      toast({ title: "Saved", description: `Required documents updated for ${levelKey}.` });
+      onClose();
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err?.message || "Try again.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const enabledCount = Object.values(reqs).filter(r => r.enabled).length;
+  const mandatoryCount = Object.values(reqs).filter(r => r.mandatory).length;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            Required Documents — {levelKey}
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Select which documents students must upload when applying to a <b>{levelKey}</b> program. Mandatory documents block submission until uploaded.
+          </p>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-12 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <div className="flex-1 overflow-y-auto border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium">Document</th>
+                  <th className="text-center px-3 py-2 font-medium w-24">Required</th>
+                  <th className="text-center px-3 py-2 font-medium w-24">Mandatory</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {DEGREE_DOC_TYPES.map(dt => {
+                  const r = reqs[dt] || { enabled: false, mandatory: false };
+                  return (
+                    <tr key={dt} className="hover:bg-muted/20">
+                      <td className="px-3 py-2">{DEGREE_DOC_TYPE_LABELS[dt]}</td>
+                      <td className="text-center px-3 py-2">
+                        <Checkbox
+                          checked={r.enabled}
+                          onCheckedChange={(v) => setReqs(prev => ({
+                            ...prev,
+                            [dt]: { enabled: !!v, mandatory: !!v ? prev[dt]?.mandatory ?? false : false }
+                          }))}
+                        />
+                      </td>
+                      <td className="text-center px-3 py-2">
+                        <Checkbox
+                          checked={r.mandatory}
+                          disabled={!r.enabled}
+                          onCheckedChange={(v) => setReqs(prev => ({
+                            ...prev,
+                            [dt]: { enabled: prev[dt]?.enabled ?? false, mandatory: !!v }
+                          }))}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            {enabledCount} required · {mandatoryCount} mandatory
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+              Save
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function OptionsTab() {
   const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
   const [editItem, setEditItem] = useState<CatalogOption | null>(null);
   const [newValue, setNewValue] = useState("");
   const [addMode, setAddMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [docsForDegree, setDocsForDegree] = useState<CatalogOption | null>(null);
   const qc = useQueryClient();
 
   const { data: optionsResp, isLoading } = useQuery({
@@ -1549,7 +1718,7 @@ function OptionsTab() {
     if (!newValue.trim()) return;
     setSaving(true);
     try {
-      await api("/api/catalog-options", {
+      const created: any = await api("/api/catalog-options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: activeCategory, value: newValue.trim(), sortOrder: items.length + 1 }),
@@ -1557,6 +1726,12 @@ function OptionsTab() {
       setNewValue("");
       setAddMode(false);
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
+      qc.invalidateQueries({ queryKey: ["catalog-options", "degree"] });
+      // After adding a degree, immediately open the document-requirements editor
+      if (activeCategory === "degree") {
+        const newRow = (created?.option || created) as CatalogOption | undefined;
+        if (newRow && newRow.value) setDocsForDegree(newRow);
+      }
     } catch { }
     setSaving(false);
   }
@@ -1655,6 +1830,17 @@ function OptionsTab() {
                   </>
                 ) : (
                   <>
+                    {activeCategory === "degree" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 gap-1 opacity-100"
+                        onClick={() => setDocsForDegree(item)}
+                        title={`Configure required documents for ${item.value}`}
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Documents
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditItem({ ...item })}><Pencil className="w-3.5 h-3.5" /></Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(item, { isActive: !item.isActive })}>
                       {item.isActive ? <Lock className="w-3.5 h-3.5 text-orange-500" /> : <Check className="w-3.5 h-3.5 text-green-600" />}
@@ -1668,6 +1854,7 @@ function OptionsTab() {
         </div>
       </div>
     </div>
+    <DegreeDocumentsDialog open={!!docsForDegree} degree={docsForDegree} onClose={() => setDocsForDegree(null)} />
     </>
   );
 }

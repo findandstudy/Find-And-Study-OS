@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Circle, AlertTriangle, GraduationCap } from "lucide-react";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -33,15 +34,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   diploma_recognition: "Diploma Recognition",
 };
 
-const LEVEL_LABELS: Record<string, string> = {
-  pre_bachelors: "Associate / Pre-Bachelor's",
-  bachelors: "Bachelor's",
-  masters: "Master's",
-  phd: "PhD / Doctorate",
-  others: "Other",
-};
-
-export function normalizeLevel(level: string | null | undefined): string | null {
+function _legacyNormalizeLevel(level: string | null | undefined): string | null {
   if (!level) return null;
   const l = level.toLowerCase().replace(/[\s.-]/g, "_");
   if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
@@ -58,8 +51,15 @@ interface StudentDocChecklistProps {
   compact?: boolean;
 }
 
+export function normalizeLevel(level: string | null | undefined): string | null {
+  if (!level) return null;
+  const trimmed = String(level).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function StudentDocChecklist({ level, documents, compact = false }: StudentDocChecklistProps) {
   const normalized = normalizeLevel(level);
+  const { labelOf } = useStudyLevels();
 
   const { data: docRequirements = [] } = useQuery<any[]>({
     queryKey: ["document-requirements"],
@@ -117,7 +117,7 @@ export function StudentDocChecklist({ level, documents, compact = false }: Stude
         <div className="flex items-center gap-2">
           <GraduationCap className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">
-            {LEVEL_LABELS[normalized] || normalized} — Belge Gereksinimleri
+            {labelOf(normalized) || normalized} — Belge Gereksinimleri
           </span>
         </div>
         <div className="flex items-center gap-2">
