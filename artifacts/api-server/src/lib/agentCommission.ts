@@ -28,10 +28,25 @@ export async function resolveAgentCommission(
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) return empty;
 
-  if (agent.parentAgentId) {
-    const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agent.parentAgentId));
-    if (!parentAgent) return empty;
+  // Resolve parent agent if any. Two defensive guards apply:
+  //   1. Self-reference guard: if parentAgentId === agent.id, treat as standalone.
+  //      The schema does not enforce parent_agent_id ≠ id at the DB level, and
+  //      a self-referencing row would otherwise loop in any future recursive
+  //      walker. Current code is single-hop so this is purely defensive.
+  //   2. Orphan parent guard: parent_agent_id has no FK reference and is not
+  //      cleared when the parent agent is deleted. If the referenced parent
+  //      no longer exists, treat the current agent as standalone (use its own
+  //      commissionRate) instead of zeroing out commission entirely — the
+  //      latter is a financial regression for legitimate agents whose parent
+  //      was removed.
+  let parentAgent: typeof agent | null = null;
+  if (agent.parentAgentId && agent.parentAgentId !== agent.id) {
+    const [p] = await db.select().from(agentsTable).where(eq(agentsTable.id, agent.parentAgentId));
+    if (p) parentAgent = p;
+    // If !p (orphan), parentAgent stays null and we fall through to standalone.
+  }
 
+  if (parentAgent) {
     const parentRate = parentAgent.commissionRate ?? 0;
     const parentAmount = parentRate > 0 ? (universityCommissionAmount * parentRate) / 100 : 0;
 

@@ -7,10 +7,11 @@
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run test:inbox-suite && pnpm run test:webhook-dedup && pnpm run test:doc-equivalence",
+    "test": "pnpm run test:inbox-suite && pnpm run test:webhook-dedup && pnpm run test:doc-equivalence && pnpm run test:agent-commission",
     "test:webhook-dedup": "tsx ./scripts/test-webhook-dedup.ts",
     "test:inbox-suite": "tsx ./scripts/test-inbox-suite.ts",
-    "test:doc-equivalence": "tsx ./scripts/test-doc-equivalence.ts"
+    "test:doc-equivalence": "tsx ./scripts/test-doc-equivalence.ts",
+    "test:agent-commission": "tsx ./scripts/test-agent-commission.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
