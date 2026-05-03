@@ -159,12 +159,20 @@ export function useActivityTracker(isAuthenticated: boolean) {
         markIdle();
       } else {
         post("/activity/event", { sessionId: sessionIdRef.current, eventType: "app_visible", route: currentRouteRef.current });
+        // Tab woke up — fire an immediate heartbeat so the server slides
+        // session expiry forward BEFORE the user clicks anything (otherwise
+        // the next mutation can race and hit a stale-session 401).
+        sendHeartbeat();
         resetIdleTimer();
       }
     };
 
     const handleFocus = () => {
       post("/activity/event", { sessionId: sessionIdRef.current, eventType: "window_focus", route: currentRouteRef.current });
+      // Slide the session forward immediately on focus regain — same reason
+      // as visibilitychange above. Cheap (one tiny POST) and prevents the
+      // long-tail "Authentication required" toast on file uploads.
+      sendHeartbeat();
       resetIdleTimer();
     };
 

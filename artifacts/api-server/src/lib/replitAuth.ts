@@ -6,8 +6,17 @@ import { getClearCookieOptions } from "./cookieOptions";
 
 export const SESSION_COOKIE = "sid";
 
-/** Idle timeout: session expires 30 min after last activity. */
-export const IDLE_TIMEOUT = 30 * 60 * 1000;
+/**
+ * Idle timeout: session expires 8 hours after the last authenticated request.
+ *
+ * The previous 30-minute window caused frequent "Authentication required"
+ * 401s when a tab sat in the background long enough for the browser to
+ * throttle the activity-tracker heartbeat (or when the laptop slept).
+ * 8 hours covers a normal staff workday while still bounding stolen-cookie
+ * exposure; the session is also slid forward on every authenticated
+ * request via authMiddleware, so active users never get logged out.
+ */
+export const IDLE_TIMEOUT = 8 * 60 * 60 * 1000;
 
 /** Backward-compatible alias — do not remove (imported by routes). */
 export const SESSION_TTL = IDLE_TIMEOUT;

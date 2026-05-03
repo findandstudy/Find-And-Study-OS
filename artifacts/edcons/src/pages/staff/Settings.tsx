@@ -279,7 +279,14 @@ export default function SettingsPage() {
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile photo updated" });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      // On 401, customFetch already dispatches `api:unauthorized` and the host
+      // app redirects to /login. Show a friendly Turkish message instead of
+      // the raw "HTTP 401 Unauthorized: Authentication required" string.
+      if (err?.status === 401) {
+        toast({ title: "Oturum süreniz doldu", description: "Lütfen tekrar giriş yapın.", variant: "destructive" });
+      } else {
+        toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      }
     } finally { setAvatarUploading(false); }
   }
 
