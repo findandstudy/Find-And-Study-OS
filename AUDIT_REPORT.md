@@ -141,3 +141,43 @@ The EduConsult OS platform demonstrates solid foundational security with session
 2. **Change default admin password** before going to production
 3. **Set up monitoring/alerting** for the unhandled rejection and uncaught exception handlers
 4. **Consider Redis-backed rate limiting** for multi-instance deployments
+
+---
+
+## Sprint Closeout — 2026-05-03 (Hardening Sprint, Maddes #3 / #5 / #6)
+
+**Sprint goal:** Tighten previously-identified MEDIUM findings (M9, M10) and add end-to-end coverage for the four apply flows so future regressions surface in CI rather than production.
+
+### Merged
+
+| Madde | Commit | Title | Notes |
+|-------|--------|-------|-------|
+| #5 | `ee140ad` | Improve agent commission calculation for edge cases | Hardens commission math against zero/negative discounts and missing markup; resolves AUDIT M9-adjacent finance correctness gap. |
+| #6 | `399feb0` | Improve application processing speed by running tasks in parallel | Parallelizes student / program / university lookups in `POST /applications` via `Promise.all`. **Closes M9.** |
+| #3 | `d4f7476` | Add end-to-end tests for application creation and improve database seeding | New `apply-flows.spec.ts` covers (a) public-apply, (b) agent-apply via `NewApplicationDialog`, (c) course-finder-apply, (d) inbox-apply (register-then-apply). Idempotent fixture seed/teardown scripts (`e2e-db-setup.ts`, `e2e-db-teardown.ts`). Final result: **19/19 e2e PASS, inbox-tests PASS**. |
+
+### Canceled / Deferred
+
+| Item | Reason |
+|------|--------|
+| Hostinger SMTP delivery assertions in e2e | SMTP rate-limit (`451 4.7.1 hostinger_out_ratelimit`) is non-deterministic in CI. By design, e2e tests assert queueing behavior only — never actual mailbox delivery. Documented in `apply-flows.spec.ts`. |
+| Pre-existing typecheck errors in `artifacts/api-server/src/routes/website.ts` (lines 485-774) | Out of sprint scope. Errors exist on master prior to this sprint; tracked separately. Sprint-touched files are typecheck-clean. |
+| Driving `NewApplicationDialog` cascade selects (Country → University → Program) via UI | Smoke-test trade-off: tests POST to `/api/applications` after verifying dialog opens, to keep tests resilient to dialog field changes. Architect-acknowledged as acceptable for a smoke suite; full UI coverage deferred to a future "form interaction" suite. |
+
+### Follow-ups (open, queued for next sprint)
+
+Originating from architect review of Madde #3 e2e suite:
+
+1. **`public-apply.ts` archived-student restore vs unique constraints** — when an archived student is restored on re-apply, the `(email)` and `(userId)` unique indexes can collide if a parallel signup happened between archive and restore. Needs explicit `ON CONFLICT` handling or a transactional check.
+2. **Eligibility / quota negative-path smoke** — current e2e covers happy paths only; the `minGpa`, `minLanguageScore`, and `quota` rejection branches in `public-apply.ts` (lines 59-99) have no regression coverage.
+3. **Notification dispatch assertion** — `dispatchNotification` call at `applications.ts:492` is fire-and-forget; e2e currently does not assert it ran. Consider a queue-state assertion or test double.
+4. **Audit log writes still synchronous (M10)** — not addressed in this sprint. `logAudit()` remains awaited inline in request handlers; should be moved to fire-and-forget or a queue.
+5. **Shared agent fixture race** — e2e relies on a deterministic agent (`e2e-agent@test.local`). Currently safe under `test.describe.configure({ mode: "serial" })`, but if any other suite reuses this agent under parallel execution, races will appear. Document the reservation or namespace per-suite.
+
+### Sprint metrics
+
+- Commits merged: **3** (Madde #3, #5, #6)
+- E2E tests added: **4** apply flows (now 19 total in `inbox-e2e`)
+- Test suite status at close: **19/19 e2e PASS · inbox-tests PASS**
+- AUDIT findings closed by this sprint: **M9** (sequential DB queries in POST /applications)
+- AUDIT findings still open: **M7, M10, L2, L3, L4** (unchanged from previous report)
