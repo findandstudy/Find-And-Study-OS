@@ -1016,7 +1016,6 @@ function AddStudentModal({
                       <SelectContent>
                         <SelectItem value="pre_bachelors">Associate</SelectItem>
                         <SelectItem value="bachelors">Bachelors</SelectItem>
-                        <SelectItem value="pre_masters">Pre-Masters</SelectItem>
                         <SelectItem value="masters">Masters</SelectItem>
                         <SelectItem value="phd">Ph.D</SelectItem>
                         <SelectItem value="others">Others</SelectItem>
@@ -1796,7 +1795,6 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   <SelectContent>
                     <SelectItem value="pre_bachelors">Associate</SelectItem>
                     <SelectItem value="bachelors">Bachelors</SelectItem>
-                    <SelectItem value="pre_masters">Pre-Masters</SelectItem>
                     <SelectItem value="masters">Masters</SelectItem>
                     <SelectItem value="phd">Ph.D</SelectItem>
                     <SelectItem value="others">Others</SelectItem>

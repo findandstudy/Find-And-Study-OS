@@ -35,7 +35,6 @@ const STUDY_LEVELS = [
   { value: "Associate", label: "Associate" },
   { value: "bachelors", label: "Bachelor's" },
   { value: "Bachelor", label: "Bachelor's" },
-  { value: "pre_masters", label: "Pre-Masters" },
   { value: "masters", label: "Master's" },
   { value: "Master", label: "Master's" },
   { value: "doctorate", label: "Doctorate" },

@@ -344,7 +344,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     function toCanonicalLevel(raw: string): string | null {
       const s = raw.toLowerCase().replace(/['''`\s._-]/g, "");
       if (s.includes("prebachelor")) return "pre_bachelors";
-      if (s.includes("premaster")) return "pre_masters";
       if (s.includes("associate")) return "associate";
       if (s.includes("bachelor") || s === "undergraduate") return "bachelors";
       if (s.includes("master") || s === "postgraduate") return "masters";
@@ -1523,7 +1522,6 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   <SelectContent>
                     <SelectItem value="pre_bachelors">Associate</SelectItem>
                     <SelectItem value="bachelors">Bachelors</SelectItem>
-                    <SelectItem value="pre_masters">Pre-Masters</SelectItem>
                     <SelectItem value="masters">Masters</SelectItem>
                     <SelectItem value="phd">Ph.D</SelectItem>
                     <SelectItem value="others">Others</SelectItem>

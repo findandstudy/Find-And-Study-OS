@@ -2003,7 +2003,6 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 const STUDENT_DOC_LEVELS = [
   { key: "pre_bachelors", label: "Associate" },
   { key: "bachelors", label: "Bachelors" },
-  { key: "pre_masters", label: "Pre-Masters" },
   { key: "masters", label: "Masters" },
   { key: "phd", label: "Ph.D" },
   { key: "others", label: "Others" },

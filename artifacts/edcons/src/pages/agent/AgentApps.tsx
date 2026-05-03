@@ -87,7 +87,6 @@ const STUDY_LEVELS = [
   { value: "masters", label: "Master" },
   { value: "Ph.D", label: "Ph.D" },
   { value: "phd", label: "Ph.D" },
-  { value: "pre_masters", label: "Pre-Masters" },
   { value: "Language Course", label: "Language Course" },
   { value: "language", label: "Language Course" },
   { value: "Foundation", label: "Foundation" },

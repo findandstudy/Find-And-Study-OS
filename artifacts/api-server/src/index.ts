@@ -338,7 +338,7 @@ async function seedDocumentRequirements() {
   try {
     const existing = await db.select({ id: documentRequirementsTable.id }).from(documentRequirementsTable).limit(1);
     if (existing.length > 0) return;
-    const LEVELS = ["pre_bachelors", "bachelors", "pre_masters", "masters", "phd", "others"];
+    const LEVELS = ["pre_bachelors", "bachelors", "masters", "phd", "others"];
     const TYPES = [
       "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
       "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
@@ -359,7 +359,7 @@ async function seedDocumentRequirements() {
         else if (dt === "diploma_certificate" || dt === "diploma_transcript") {
           if (level === "pre_bachelors" || level === "others") { enabled = true; mandatory = true; }
         } else if (dt === "bachelors_certificate" || dt === "bachelors_transcript") {
-          if (level === "pre_masters" || level === "masters") { enabled = true; mandatory = true; }
+          if (level === "masters") { enabled = true; mandatory = true; }
         } else if (dt === "bachelors_transcript_all_semesters") {
           if (level === "masters") { enabled = true; }
         } else if (dt === "masters_certificate" || dt === "masters_transcript") {

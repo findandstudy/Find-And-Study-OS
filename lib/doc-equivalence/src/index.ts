@@ -212,7 +212,7 @@ export function findEquivalentDoc<T extends ExistingDocLike>(
  *
  * Keys here are normalized study-level ids (the same values
  * `normalizeStudyLevel` in `applications.ts` returns):
- *   "pre_bachelors", "bachelors", "pre_masters", "masters", "phd", "others"
+ *   "pre_bachelors", "bachelors", "masters", "phd", "others"
  *
  * Keep this in sync with `DEGREE_DOC_MAP` in
  * `artifacts/edcons/src/pages/public/Programs.tsx`.
@@ -220,10 +220,6 @@ export function findEquivalentDoc<T extends ExistingDocLike>(
 export const APPLY_FORM_GROUPS_BY_LEVEL: Record<string, DocEquivalenceGroupId[]> = {
   pre_bachelors: ["passport", "photo", "hs_certificate", "hs_transcript", "language_proof"],
   bachelors: ["passport", "photo", "hs_certificate", "hs_transcript", "language_proof"],
-  pre_masters: [
-    "passport", "photo", "bachelors_certificate", "bachelors_transcript",
-    "equivalency_letter", "cv", "sop", "language_proof",
-  ],
   masters: [
     "passport", "photo", "bachelors_certificate", "bachelors_transcript",
     "equivalency_letter", "cv", "sop", "language_proof",

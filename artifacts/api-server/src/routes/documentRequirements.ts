@@ -6,7 +6,7 @@ import { ADMIN_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
-const LEVELS = ["pre_bachelors", "bachelors", "pre_masters", "masters", "phd", "others"];
+const LEVELS = ["pre_bachelors", "bachelors", "masters", "phd", "others"];
 
 const DEFAULT_DOCUMENT_TYPES = [
   "high_school_diploma_translation",
@@ -99,7 +99,7 @@ router.post("/document-requirements/seed-defaults", requireAuth, requireRole(...
       } else if (dt === "diploma_certificate" || dt === "diploma_transcript") {
         if (level === "pre_bachelors" || level === "others") { enabled = true; mandatory = true; }
       } else if (dt === "bachelors_certificate" || dt === "bachelors_transcript") {
-        if (level === "pre_masters" || level === "masters") { enabled = true; mandatory = true; }
+        if (level === "masters") { enabled = true; mandatory = true; }
       } else if (dt === "bachelors_transcript_all_semesters") {
         if (level === "masters") { enabled = true; }
       } else if (dt === "masters_certificate" || dt === "masters_transcript") {
