@@ -19,7 +19,7 @@ type Tab = "login" | "register" | "verify" | "set-password" | "forgot-password";
 export default function Login() {
   const { user, isLoading } = useAuth(false);
   const { settings, resolvedTheme } = useTheme();
-  const { t } = useI18n();
+  const { t, localePath } = useI18n();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
@@ -273,7 +273,12 @@ export default function Login() {
           <div className="absolute bottom-20 right-20 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
         </div>
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
+          <button
+            type="button"
+            onClick={() => setLocation(localePath("/"))}
+            aria-label={t("common.goHome") || "Go to home"}
+            className="flex items-center gap-3 mb-16 cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 transition-opacity hover:opacity-90"
+          >
             {logoSrc ? (
               <img src={logoSrc} alt={companyName} className="h-12 max-w-[220px] object-contain brightness-0 invert" />
             ) : (
@@ -284,7 +289,7 @@ export default function Login() {
                 <span className="font-display font-bold text-3xl text-white">{companyName}</span>
               </>
             )}
-          </div>
+          </button>
           <h1 className="text-4xl font-display font-bold text-white mb-6 leading-tight whitespace-pre-line">
             {t("login.loginHeroTitle")}
           </h1>
@@ -311,7 +316,12 @@ export default function Login() {
 
       <div className="flex-1 flex items-center justify-center bg-background p-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-2 justify-center mb-10">
+          <button
+            type="button"
+            onClick={() => setLocation(localePath("/"))}
+            aria-label={t("common.goHome") || "Go to home"}
+            className="lg:hidden flex items-center gap-2 justify-center mb-10 mx-auto cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-opacity hover:opacity-90"
+          >
             {logoSrc ? (
               <img src={logoSrc} alt={companyName} className="h-10 max-w-[180px] object-contain" />
             ) : (
@@ -322,7 +332,7 @@ export default function Login() {
                 <span className="font-display font-bold text-2xl">{companyName}</span>
               </>
             )}
-          </div>
+          </button>
 
           {successMessage && tab === "login" && (
             <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-sm mb-4 flex items-center gap-2">
