@@ -39,33 +39,6 @@ const DOC_TYPES = [
   { key: "other", label: "Other" },
 ];
 
-const DEGREE_REQUIRED_DOCS: Record<string, string[]> = {
-  associate: ["hs_diploma", "hs_transcript", "passport", "photo"],
-  bachelors: ["hs_diploma", "hs_transcript", "passport", "photo"],
-  masters: ["bachelor_diploma", "bachelor_transcript", "passport", "photo"],
-  doctorate: ["bachelor_diploma", "bachelor_transcript", "master_diploma", "master_transcript", "passport", "photo"],
-  language: ["passport"],
-  foundation: ["passport"],
-};
-
-function getRequiredDocsForDegree(degree: string | null | undefined): { keys: string[]; labels: Record<string, string> } {
-  const labelMap: Record<string, string> = {
-    passport: "Passport", photo: "Photo", photograph: "Photo",
-    hs_diploma: "HS Diploma", hs_transcript: "HS Transcript",
-    bachelor_diploma: "Bachelor Diploma", bachelor_transcript: "Bachelor Transcript",
-    master_diploma: "Master Diploma", master_transcript: "Master Transcript",
-  };
-  if (!degree) return { keys: ["passport"], labels: labelMap };
-  const normalized = degree.toLowerCase().replace(/['''`\s.]/g, "");
-  if (normalized.includes("associate")) return { keys: DEGREE_REQUIRED_DOCS.associate, labels: labelMap };
-  if (normalized.includes("bachelor")) return { keys: DEGREE_REQUIRED_DOCS.bachelors, labels: labelMap };
-  if (normalized.includes("master")) return { keys: DEGREE_REQUIRED_DOCS.masters, labels: labelMap };
-  if (normalized.includes("doctor") || normalized.includes("phd") || normalized.includes("doctorate")) return { keys: DEGREE_REQUIRED_DOCS.doctorate, labels: labelMap };
-  if (normalized.includes("language")) return { keys: DEGREE_REQUIRED_DOCS.language, labels: labelMap };
-  if (normalized.includes("foundation")) return { keys: DEGREE_REQUIRED_DOCS.foundation, labels: labelMap };
-  return { keys: ["passport"], labels: labelMap };
-}
-
 interface Props {
   id: number;
   basePath?: string;
@@ -362,23 +335,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       return appLevel === selectedLevel;
     });
   }, [appProgramId, filteredPrograms, applications]);
-
-  const missingDocs = useMemo(() => {
-    if (!appProgramId) return [];
-    if (hasExistingAppAtSameLevel) return [];
-    const prog = filteredPrograms.find((p: any) => String(p.id) === appProgramId);
-    const { keys, labels } = getRequiredDocsForDegree(prog?.degree);
-    const rawTypes = documents.map((d: any) => (d.type || "").toLowerCase());
-    const studentDocTypes = new Set(rawTypes);
-    rawTypes.forEach(t => {
-      if (t === "photograph") studentDocTypes.add("photo");
-      if (t === "diploma") { studentDocTypes.add("hs_diploma"); studentDocTypes.add("bachelor_diploma"); studentDocTypes.add("master_diploma"); }
-      if (t === "transcript") { studentDocTypes.add("hs_transcript"); studentDocTypes.add("bachelor_transcript"); studentDocTypes.add("master_transcript"); }
-    });
-    return keys
-      .filter(k => !studentDocTypes.has(k))
-      .map(k => labels[k] || k);
-  }, [appProgramId, filteredPrograms, documents, hasExistingAppAtSameLevel]);
 
   useEffect(() => { setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }, [appCountry]);
   useEffect(() => { setAppProgramId(""); setAppIntake(""); }, [appUniversityId]);
@@ -930,18 +886,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     <p className="text-sm font-medium text-blue-700">Documents already on file from a previous application at the same level.</p>
                   </div>
                 )}
-                {missingDocs.length > 0 && appProgramId && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm font-medium text-red-700 mb-1">Missing required documents:</p>
-                    <p className="text-xs text-red-600">{missingDocs.join(", ")}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Please upload these documents in the Documents tab before creating an application.</p>
-                  </div>
-                )}
                 <div className="flex justify-end gap-2 mt-3">
                   <Button variant="outline" size="sm" onClick={() => { setShowNewApp(false); setAppCountry(""); setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }}>
                     Cancel
                   </Button>
-                  <Button size="sm" disabled={!appProgramId || appSubmitting || missingDocs.length > 0} onClick={handleQuickApply}>
+                  <Button size="sm" disabled={!appProgramId || appSubmitting} onClick={handleQuickApply}>
                     {appSubmitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
                     Create Application
                   </Button>
@@ -1697,29 +1646,9 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
   const [mergingPdf, setMergingPdf] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<number[]>([]);
 
-  const { data: docRequirements } = useQuery({
-    queryKey: ["document-requirements"],
-    queryFn: async () => {
-      const res: any = await customFetch(`/api/document-requirements`);
-      return res as any[];
-    },
-  });
-
-  const level = student?.interestedLevel;
-  const requiredDocs = useMemo(() => {
-    if (!docRequirements || !level) return [];
-    return docRequirements
-      .filter((r: any) => r.level === level && r.enabled)
-      .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
-  }, [docRequirements, level]);
-
-  const mandatoryMissing = useMemo(() => {
-    if (!requiredDocs.length) return [];
-    const uploadedTypes = new Set(documents.map((d: any) => (d.type || "").toLowerCase()));
-    return requiredDocs
-      .filter((r: any) => r.mandatory && !uploadedTypes.has(r.documentType))
-      .map((r: any) => DETAIL_DOC_TYPE_LABELS[r.documentType] || r.documentType);
-  }, [requiredDocs, documents]);
+  // Degree-level required-document indicator has been retired — the
+  // authoritative list now lives on the program editor and is shown
+  // on each application's detail page.
 
   const handleZipDownload = async () => {
     setDownloadingZip(true);
@@ -1810,46 +1739,6 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
           </Button>
         </div>
       </div>
-
-      {level && requiredDocs.length > 0 && (
-        <div className="mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <GraduationCap className="w-4 h-4 text-blue-600" />
-            <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-              Required Documents for {level.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {requiredDocs.map((r: any) => {
-              const uploaded = documents.some((d: any) => (d.type || "").toLowerCase() === r.documentType);
-              return (
-                <Badge
-                  key={r.id}
-                  variant={uploaded ? "default" : "outline"}
-                  className={`text-xs ${uploaded ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : r.mandatory ? "border-red-300 text-red-600 dark:border-red-700 dark:text-red-400" : "border-gray-300 text-gray-500"}`}
-                >
-                  {uploaded && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                  {DETAIL_DOC_TYPE_LABELS[r.documentType] || r.documentType}
-                  {r.mandatory && !uploaded && " *"}
-                </Badge>
-              );
-            })}
-          </div>
-          {mandatoryMissing.length > 0 && (
-            <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-              Missing mandatory: {mandatoryMissing.join(", ")}
-            </p>
-          )}
-        </div>
-      )}
-
-      {!level && (
-        <div className="mb-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            Set the student's "Interested Level" in the Edit form to see level-specific required documents.
-          </p>
-        </div>
-      )}
 
       <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
         {documents.length === 0 ? (

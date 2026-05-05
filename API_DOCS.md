@@ -1201,26 +1201,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 21. Document Requirements
-
-### `GET /api/document-requirements`
-- **Auth:** auth
-- **Response:** `DocumentRequirement[]` — required doc types per stage
-
-### `PUT /api/document-requirements`
-- **Auth:** admin
-- **Body:** `{ requirements: [{ stage, documentTypes: string[], notes? }] }`
-- Full replace of document requirements config.
-- **Response:** Updated `DocumentRequirement[]`
-
-### `POST /api/document-requirements/seed-defaults`
-- **Auth:** admin
-- Seeds default document requirement templates.
-- **Response:** `{ success: true }`
-
----
-
-## 22. Settings & Branding
+## 21. Settings & Branding
 
 ### `GET /api/settings/branding`
 - **Auth:** public
@@ -1246,7 +1227,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 23. Integrations (Admin)
+## 22. Integrations (Admin)
 
 ### `GET /api/integrations`
 - **Auth:** admin
@@ -1273,7 +1254,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 24. Roles (Admin)
+## 23. Roles (Admin)
 
 ### `GET /api/roles`
 - **Auth:** admin
@@ -1303,7 +1284,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 25. Quick Links
+## 24. Quick Links
 
 ### `GET /api/quick-links`
 - **Auth:** auth
@@ -1329,7 +1310,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 26. Storage (Object Storage)
+## 25. Storage (Object Storage)
 
 ### `POST /api/storage/uploads/request-url`
 - **Auth:** auth
@@ -1349,7 +1330,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 27. AI / Document Extraction
+## 26. AI / Document Extraction
 
 ### `POST /api/ai/extract-document`
 - **Auth:** auth
@@ -1368,7 +1349,7 @@ Base prefix: `/api/applications/:id`
 
 ---
 
-## 28. Public Endpoints
+## 27. Public Endpoints
 
 ### `GET /api/public/destinations`
 - **Auth:** public

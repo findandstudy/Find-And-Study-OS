@@ -27,7 +27,7 @@ import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/
 import { AuditLogSection } from "@/components/AuditLogSection";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { useAuth } from "@/hooks/use-auth";
-import { StudentDocChecklist, normalizeLevel } from "@/components/StudentDocChecklist";
+import { StudentDocChecklist } from "@/components/StudentDocChecklist";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 
 
@@ -241,7 +241,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
               )}
             </div>
 
-            {app && (normalizeLevel(app.level) || app.programId) && (
+            {app && app.programId && (
               <div className="bg-card rounded-2xl border shadow-sm p-4">
                 <StudentDocChecklist
                   level={app.level}

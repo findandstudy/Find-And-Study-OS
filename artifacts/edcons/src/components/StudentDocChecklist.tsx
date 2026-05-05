@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Circle, AlertTriangle, GraduationCap } from "lucide-react";
-import { useStudyLevels } from "@/hooks/useStudyLevels";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -34,37 +33,22 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   diploma_recognition: "Diploma Recognition",
 };
 
-function _legacyNormalizeLevel(level: string | null | undefined): string | null {
-  if (!level) return null;
-  const l = level.toLowerCase().replace(/[\s.-]/g, "_");
-  if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
-  if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
-  if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
-  if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
-  if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
-  return null;
-}
-
 interface StudentDocChecklistProps {
-  level: string | null | undefined;
+  /**
+   * Display-only label fallback (e.g. "Bachelor"). The legacy
+   * degree-level requirement system has been retired — the checklist
+   * now reads exclusively from the program. The `level` prop is kept
+   * only to render a friendlier heading when no program is attached.
+   */
+  level?: string | null | undefined;
   documents: any[];
   compact?: boolean;
   programId?: number | null;
   programRequirements?: { documentType: string; mandatory: boolean; sortOrder?: number }[] | null;
 }
 
-export function normalizeLevel(level: string | null | undefined): string | null {
-  if (!level) return null;
-  const trimmed = String(level).trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-export function StudentDocChecklist({ level, documents, compact = false, programId, programRequirements }: StudentDocChecklistProps) {
-  const normalized = normalizeLevel(level);
-  const { labelOf } = useStudyLevels();
-
+export function StudentDocChecklist({ documents, compact = false, programId, programRequirements }: StudentDocChecklistProps) {
   type ProgramDocReq = { documentType: string; mandatory: boolean; sortOrder?: number };
-  const hasProgramContext = !!programId || Array.isArray(programRequirements);
 
   const { data: fetchedProgramReqs, isFetched: programReqsFetched } = useQuery<ProgramDocReq[]>({
     queryKey: ["program-document-requirements", programId],
@@ -99,35 +83,17 @@ export function StudentDocChecklist({ level, documents, compact = false, program
     return null;
   }, [programRequirements, fetchedProgramReqs, programId]);
 
-  const useDegreeFallback = !hasProgramContext;
-
-  const { data: docRequirements = [] } = useQuery<any[]>({
-    queryKey: ["document-requirements"],
-    queryFn: async () => {
-      const res: any = await customFetch(`${BASE_URL}/api/document-requirements`);
-      return res as any[];
-    },
-    enabled: useDegreeFallback,
-    staleTime: 60_000,
-  });
-
   const requiredDocs = useMemo(() => {
-    if (hasProgramContext) {
-      if (!effectiveProgramReqs) return [];
-      return [...effectiveProgramReqs]
-        .map((r, idx) => ({
-          id: `prog-${r.documentType}`,
-          documentType: r.documentType,
-          mandatory: !!r.mandatory,
-          sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : idx,
-        }))
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-    }
-    if (!docRequirements.length || !normalized) return [];
-    return docRequirements
-      .filter((r: any) => r.level === normalized && r.enabled)
-      .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
-  }, [hasProgramContext, effectiveProgramReqs, docRequirements, normalized]);
+    if (!effectiveProgramReqs) return [];
+    return [...effectiveProgramReqs]
+      .map((r, idx) => ({
+        id: `prog-${r.documentType}`,
+        documentType: r.documentType,
+        mandatory: !!r.mandatory,
+        sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : idx,
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [effectiveProgramReqs]);
 
   const uploadedTypes = useMemo(() => {
     const set = new Set<string>();
@@ -144,18 +110,20 @@ export function StudentDocChecklist({ level, documents, compact = false, program
   const allEnabled = requiredDocs.length;
   const allUploaded = requiredDocs.filter((r: any) => uploadedTypes.has(r.documentType)).length;
 
-  if (!hasProgramContext && !normalized) {
+  const hasProgramContext = !!programId || Array.isArray(programRequirements);
+
+  if (!hasProgramContext) {
     return (
       <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
         <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-          Eğitim seviyesi belirlenmeden belge kontrol listesi gösterilemez.
+          Bir program seçilmeden belge kontrol listesi gösterilemez.
         </p>
       </div>
     );
   }
 
-  if (hasProgramContext && !programReqsResolved) {
+  if (!programReqsResolved) {
     return (
       <div className="p-3 rounded-xl bg-muted/50 border text-xs text-muted-foreground">
         Program belge gereksinimleri yükleniyor…
@@ -166,9 +134,7 @@ export function StudentDocChecklist({ level, documents, compact = false, program
   if (!requiredDocs.length) {
     return (
       <div className="p-3 rounded-xl bg-muted/50 border text-xs text-muted-foreground">
-        {hasProgramContext
-          ? "Bu program için belge gereksinimi tanımlanmamış."
-          : "Bu seviye için belge gereksinimi tanımlanmamış."}
+        Bu program için belge gereksinimi tanımlanmamış.
       </div>
     );
   }
@@ -179,9 +145,7 @@ export function StudentDocChecklist({ level, documents, compact = false, program
         <div className="flex items-center gap-2">
           <GraduationCap className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">
-            {hasProgramContext
-              ? "Program Belge Gereksinimleri"
-              : `${labelOf(normalized) || normalized} — Belge Gereksinimleri`}
+            Program Belge Gereksinimleri
           </span>
         </div>
         <div className="flex items-center gap-2">

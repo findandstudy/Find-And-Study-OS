@@ -478,27 +478,21 @@ function AddStudentModal({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [applicationLevel, setApplicationLevel] = useState<AppLevel>("undergraduate");
 
-  const { data: docRequirements } = useQuery({
-    queryKey: ["document-requirements"],
-    queryFn: () => customFetch<any[]>("/api/document-requirements"),
-    staleTime: 5 * 60 * 1000,
-  });
-
+  // Degree-level requirements have been retired — at the new-student
+  // intake step a program isn't selected yet, so we show a generic list
+  // of all known doc types for upload (none are marked required here;
+  // mandatory enforcement now lives on the per-application program
+  // requirements). Suppress the lint about the unused level state.
+  void applicationLevel;
   const currentDocs = useMemo<LevelDoc[]>(() => {
-    const dbLevel = LEVELS.find(l => l.key === applicationLevel)?.dbLevel ?? "bachelors";
-    const reqs = (docRequirements ?? []).filter((r: any) => r.level === dbLevel && r.enabled);
-    if (reqs.length === 0) return [];
-    return reqs.map((r: any) => {
-      const meta = DOC_TYPE_META[r.documentType] ?? { label: r.documentType, icon: "📄", accept: ".pdf,.jpg,.jpeg,.png" };
-      return {
-        key: r.documentType,
-        label: meta.label,
-        icon: meta.icon,
-        accept: meta.accept,
-        required: !!r.mandatory,
-      } as LevelDoc;
-    });
-  }, [docRequirements, applicationLevel]);
+    return Object.entries(DOC_TYPE_META).map(([key, meta]) => ({
+      key,
+      label: meta.label,
+      icon: meta.icon,
+      accept: meta.accept,
+      required: false,
+    }));
+  }, []);
 
   function handleClose() {
     setStep("upload");

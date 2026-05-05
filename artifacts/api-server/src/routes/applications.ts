@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentRequirementsTable, documentsTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -627,19 +627,17 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   if (updates.stage === "documents_collected") {
     const [currentApp] = await db.select({
-      level: applicationsTable.level,
+      programId: applicationsTable.programId,
       studentId: applicationsTable.studentId,
     }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
-    const normalizedLevel = normalizeStudyLevel(currentApp?.level);
-    if (normalizedLevel && currentApp?.studentId) {
+    if (currentApp?.programId && currentApp?.studentId) {
       const [mandatoryReqs, studentDocs] = await Promise.all([
-        db.select({ documentType: documentRequirementsTable.documentType })
-          .from(documentRequirementsTable)
+        db.select({ documentType: programDocumentRequirementsTable.documentType })
+          .from(programDocumentRequirementsTable)
           .where(and(
-            eq(documentRequirementsTable.level, normalizedLevel),
-            eq(documentRequirementsTable.enabled, true),
-            eq(documentRequirementsTable.mandatory, true),
+            eq(programDocumentRequirementsTable.programId, currentApp.programId),
+            eq(programDocumentRequirementsTable.mandatory, true),
           )),
         db.select({ type: documentsTable.type })
           .from(documentsTable)
@@ -658,7 +656,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
       if (missingDocTypes.length > 0) {
         res.status(422).json({
-          error: "Mandatory student documents are missing for this application level",
+          error: "Mandatory student documents are missing for this application's program",
           code: "STUDENT_DOCS_REQUIRED",
           missingDocTypes,
         });

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, documentRequirementsTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, and, isNotNull, inArray, isNull, sql } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
@@ -513,18 +513,19 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
 
         // Look up the program's required document types so we can pick the
         // existing student docs that are actually relevant for this new
-        // application's level. We combine the apply-form's per-level
-        // expectations (passport/photo/hs/bachelor/master docs etc.) with
-        // any extra enabled canonical types from
-        // documentRequirementsTable so any custom requirement an admin
-        // added is also honored.
+        // application. We combine the apply-form's per-level expectations
+        // (passport/photo/hs/bachelor/master docs etc.) with any extra
+        // canonical types attached to the program via
+        // programDocumentRequirementsTable so any custom requirement an
+        // admin added on the program editor is also honored.
         let allowedGroups: Set<DocEquivalenceGroupId> | null = null;
         try {
-          const [appRow] = await db.select({ level: applicationsTable.level })
-            .from(applicationsTable)
-            .where(eq(applicationsTable.id, resultAppId));
-          // Inline copy of normalizeStudyLevel from applications.ts to avoid
-          // a circular import. Keep these in sync.
+          const [appRow] = await db.select({
+            programId: applicationsTable.programId,
+            level: applicationsTable.level,
+          }).from(applicationsTable).where(eq(applicationsTable.id, resultAppId));
+          // Coarse level used only to pick the apply-form's per-level
+          // baseline groups (passport / photo / HS / bachelor / master).
           const normalizeLevel = (level: string | null | undefined): string | null => {
             if (!level) return null;
             const l = level.toLowerCase().replace(/[\s.-]/g, "_");
@@ -537,18 +538,27 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           };
           const normalizedLevel = normalizeLevel(appRow?.level);
           let extraTypes: string[] = [];
-          if (normalizedLevel) {
-            const reqs = await db.select({ documentType: documentRequirementsTable.documentType })
-              .from(documentRequirementsTable)
-              .where(and(
-                eq(documentRequirementsTable.level, normalizedLevel),
-                eq(documentRequirementsTable.enabled, true),
-              ));
+          if (appRow?.programId) {
+            const reqs = await db.select({ documentType: programDocumentRequirementsTable.documentType })
+              .from(programDocumentRequirementsTable)
+              .where(eq(programDocumentRequirementsTable.programId, appRow.programId));
             extraTypes = reqs.map(r => r.documentType);
           }
           allowedGroups = getRelevantGroupsForLevel(normalizedLevel, extraTypes);
+          // When the application has no level at all (allowedGroups === null)
+          // but the program does declare its own document requirements, build
+          // the allow-list purely from those program-level requirements so we
+          // do not silently fall back to fully permissive linking.
+          if (allowedGroups === null && extraTypes.length > 0) {
+            const fromProgram = new Set<DocEquivalenceGroupId>();
+            for (const t of extraTypes) {
+              const g = getDocEquivalenceGroup(t);
+              if (g) fromProgram.add(g);
+            }
+            if (fromProgram.size > 0) allowedGroups = fromProgram;
+          }
         } catch (lvlErr) {
-          console.error("[PUBLIC-APPLY] Failed to load level requirements for reuse:", lvlErr);
+          console.error("[PUBLIC-APPLY] Failed to load program requirements for reuse:", lvlErr);
         }
 
         // Candidate source docs: explicitly-requested reuseIds first, then

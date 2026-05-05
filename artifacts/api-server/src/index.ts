@@ -1,6 +1,6 @@
 import express from "express";
 import app from "./app";
-import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable, documentRequirementsTable, programsTable, programDocumentRequirementsTable } from "@workspace/db";
+import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable } from "@workspace/db";
 import { eq, isNull, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
@@ -334,124 +334,6 @@ async function seedClaudeIntegration() {
   }
 }
 
-async function seedDocumentRequirements() {
-  try {
-    const existing = await db.select({ id: documentRequirementsTable.id }).from(documentRequirementsTable).limit(1);
-    if (existing.length > 0) return;
-    const LEVELS = ["Bachelor", "Master", "Ph.D", "Associate", "Foundation", "Language Course", "Pathway Programs"];
-    const TYPES = [
-      "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
-      "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
-      "diploma_certificate", "diploma_transcript",
-      "bachelors_certificate", "bachelors_transcript",
-      "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
-      "masters_certificate", "masters_transcript",
-      "masters_provisional_certificate", "masters_transcript_all_semesters",
-      "passport", "cv", "lor", "sop", "essay", "experience_letters",
-      "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
-    ];
-    const isPreBachelor = (l: string) => l === "Associate" || l === "Foundation" || l === "Language Course" || l === "Pathway Programs";
-    const rows: any[] = [];
-    for (let i = 0; i < TYPES.length; i++) {
-      const dt = TYPES[i];
-      for (const level of LEVELS) {
-        let enabled = false, mandatory = false;
-        if (dt === "passport") { enabled = true; mandatory = true; }
-        else if (dt === "diploma_certificate" || dt === "diploma_transcript") {
-          if (isPreBachelor(level)) { enabled = true; mandatory = true; }
-        } else if (dt === "bachelors_certificate" || dt === "bachelors_transcript") {
-          if (level === "Master") { enabled = true; mandatory = true; }
-        } else if (dt === "bachelors_transcript_all_semesters") {
-          if (level === "Master") { enabled = true; }
-        } else if (dt === "masters_certificate" || dt === "masters_transcript") {
-          if (level === "Ph.D") { enabled = true; mandatory = true; }
-        } else if (dt === "other_certificates_documents" || dt === "ielts_pte_gre_gmat_toefl_duolingo") {
-          enabled = true;
-        } else if (dt === "sop") { enabled = true; }
-        rows.push({ documentType: dt, level, enabled, mandatory, sortOrder: i });
-      }
-    }
-    await db.insert(documentRequirementsTable).values(rows);
-    console.log("[seed] Document requirements seeded:", rows.length, "rows");
-  } catch (err) {
-    console.error("[seed] seedDocumentRequirements error:", err);
-  }
-}
-
-async function backfillProgramDocumentRequirements() {
-  try {
-    const lockKey = "program_doc_requirements_backfill_v1";
-    // Check first; only set the flag AFTER a successful, full pass so partial
-    // failures remain re-runnable on the next process start.
-    const existing = await pool.query(
-      `SELECT 1 FROM system_flags WHERE key = $1`,
-      [lockKey],
-    );
-    if (existing.rows.length > 0) return;
-
-    const allPrograms = await db.select({ id: programsTable.id, degree: programsTable.degree }).from(programsTable);
-    if (allPrograms.length === 0) {
-      console.log("[backfill] program-doc-reqs: no programs to backfill");
-      await pool.query(`INSERT INTO system_flags (key) VALUES ($1) ON CONFLICT DO NOTHING`, [lockKey]);
-      return;
-    }
-
-    const existingReqs = await db.select({ programId: programDocumentRequirementsTable.programId })
-      .from(programDocumentRequirementsTable);
-    const programsWithReqs = new Set(existingReqs.map(e => e.programId));
-
-    const degreeReqs = await db.select().from(documentRequirementsTable);
-    const reqsByLevel = new Map<string, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
-    for (const r of degreeReqs) {
-      if (!r.enabled) continue;
-      const arr = reqsByLevel.get(r.level) || [];
-      arr.push({ documentType: r.documentType, mandatory: r.mandatory, sortOrder: r.sortOrder });
-      reqsByLevel.set(r.level, arr);
-    }
-
-    function levelKeyFor(degree: string | null): string | null {
-      if (!degree) return null;
-      const d = degree.trim();
-      if (!d) return null;
-      const lower = d.toLowerCase();
-      const directMatch = [...reqsByLevel.keys()].find(k => k.toLowerCase() === lower);
-      if (directMatch) return directMatch;
-      if (/(^|[^a-z])phd|ph\.?d|doctor/i.test(d)) return [...reqsByLevel.keys()].find(k => /ph/i.test(k)) || null;
-      if (/master|mba|msc|m\.s\.|m\.a\./i.test(d)) return [...reqsByLevel.keys()].find(k => /master/i.test(k)) || null;
-      if (/bachelor|bsc|b\.s|b\.a/i.test(d)) return [...reqsByLevel.keys()].find(k => /bachelor/i.test(k)) || null;
-      if (/associate/i.test(d)) return [...reqsByLevel.keys()].find(k => /associate/i.test(k)) || null;
-      if (/foundation/i.test(d)) return [...reqsByLevel.keys()].find(k => /foundation/i.test(k)) || null;
-      if (/language/i.test(d)) return [...reqsByLevel.keys()].find(k => /language/i.test(k)) || null;
-      if (/pathway/i.test(d)) return [...reqsByLevel.keys()].find(k => /pathway/i.test(k)) || null;
-      return null;
-    }
-
-    const toInsert: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
-    let touchedPrograms = 0;
-    for (const p of allPrograms) {
-      if (programsWithReqs.has(p.id)) continue;
-      const lk = levelKeyFor(p.degree);
-      if (!lk) continue;
-      const reqs = reqsByLevel.get(lk);
-      if (!reqs || reqs.length === 0) continue;
-      for (const r of reqs) toInsert.push({ programId: p.id, ...r });
-      touchedPrograms++;
-    }
-
-    if (toInsert.length > 0) {
-      const CHUNK = 500;
-      for (let i = 0; i < toInsert.length; i += CHUNK) {
-        await db.insert(programDocumentRequirementsTable).values(toInsert.slice(i, i + CHUNK));
-      }
-    }
-    // Mark complete only after the full pass succeeded.
-    await pool.query(`INSERT INTO system_flags (key) VALUES ($1) ON CONFLICT DO NOTHING`, [lockKey]);
-    console.log("[backfill] program-doc-reqs:", { programsTouched: touchedPrograms, rowsInserted: toInsert.length });
-  } catch (err) {
-    console.error("[backfill] backfillProgramDocumentRequirements error (will retry on next startup):", err);
-  }
-}
-
 (async () => {
   // Step 1: Create system_flags table — runs on all processes, idempotent.
   await pool.query(`
@@ -478,13 +360,10 @@ async function backfillProgramDocumentRequirements() {
       await runSeedSQL();
       await linkAgentUser();
       await seedClaudeIntegration();
-      await seedDocumentRequirements();
       await backfillConversationChannel();
       await backfillMissingCommissions();
       await backfillStudentAppStatus();
     }
-    // Self-locking backfills (run once across all deployments via their own system_flags key).
-    await backfillProgramDocumentRequirements();
 
     console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
     const { startEmailWorker } = await import("./lib/email");

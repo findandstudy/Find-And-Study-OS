@@ -1709,149 +1709,6 @@ const DEGREE_DOC_TYPE_LABELS: Record<string, string> = {
   photo: "Photo",
   diploma_recognition: "Diploma Recognition",
 };
-const DEGREE_DOC_TYPES = Object.keys(DEGREE_DOC_TYPE_LABELS);
-
-function DegreeDocumentsDialog({ open, onClose, degree }: { open: boolean; onClose: () => void; degree: CatalogOption | null }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const levelKey = degree?.value || "";
-  const [reqs, setReqs] = useState<Record<string, { enabled: boolean; mandatory: boolean }>>({});
-  const [saving, setSaving] = useState(false);
-  const initRef = useRef<string>("");
-
-  const { data, isLoading } = useQuery<any[]>({
-    queryKey: ["document-requirements"],
-    queryFn: () => api("/api/document-requirements"),
-    staleTime: 30_000,
-    enabled: open,
-  });
-  const requirements = data;
-
-  // Reset init flag whenever the dialog opens for a different degree
-  useEffect(() => {
-    if (!open) initRef.current = "";
-  }, [open]);
-
-  // Seed local edit state once per (open × degree × first server load)
-  useEffect(() => {
-    if (!open || !levelKey || !requirements) return;
-    if (initRef.current === levelKey) return;
-    const map: Record<string, { enabled: boolean; mandatory: boolean }> = {};
-    for (const dt of DEGREE_DOC_TYPES) map[dt] = { enabled: false, mandatory: false };
-    for (const r of requirements) {
-      if (r.level === levelKey && map[r.documentType]) {
-        map[r.documentType] = { enabled: !!r.enabled, mandatory: !!r.mandatory };
-      }
-    }
-    setReqs(map);
-    initRef.current = levelKey;
-  }, [open, levelKey, requirements]);
-
-  async function handleSave() {
-    if (!levelKey) return;
-    setSaving(true);
-    try {
-      const payload = DEGREE_DOC_TYPES.map((dt, idx) => ({
-        documentType: dt,
-        level: levelKey,
-        enabled: !!reqs[dt]?.enabled,
-        mandatory: !!reqs[dt]?.mandatory,
-        sortOrder: idx,
-      }));
-      await api("/api/document-requirements", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirements: payload }),
-      });
-      qc.invalidateQueries({ queryKey: ["document-requirements"] });
-      toast({ title: "Saved", description: `Required documents updated for ${levelKey}.` });
-      onClose();
-    } catch (err: any) {
-      toast({ title: "Save failed", description: err?.message || "Try again.", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const enabledCount = Object.values(reqs).filter(r => r.enabled).length;
-  const mandatoryCount = Object.values(reqs).filter(r => r.mandatory).length;
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            Required Documents — {levelKey}
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Select which documents students must upload when applying to a <b>{levelKey}</b> program. Mandatory documents block submission until uploaded.
-          </p>
-          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            <b>Heads up:</b> Document requirements are now configured per <b>program</b> (Programs tab → Edit Program). Degree-level settings here remain only as a fallback for programs that don't have program-level requirements yet, and will be retired in an upcoming update.
-          </div>
-        </DialogHeader>
-        {isLoading ? (
-          <div className="py-12 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : (
-          <div className="flex-1 overflow-y-auto border rounded-lg">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 sticky top-0">
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium">Document</th>
-                  <th className="text-center px-3 py-2 font-medium w-24">Required</th>
-                  <th className="text-center px-3 py-2 font-medium w-24">Mandatory</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {DEGREE_DOC_TYPES.map(dt => {
-                  const r = reqs[dt] || { enabled: false, mandatory: false };
-                  return (
-                    <tr key={dt} className="hover:bg-muted/20">
-                      <td className="px-3 py-2">{DEGREE_DOC_TYPE_LABELS[dt]}</td>
-                      <td className="text-center px-3 py-2">
-                        <Checkbox
-                          checked={r.enabled}
-                          onCheckedChange={(v) => setReqs(prev => ({
-                            ...prev,
-                            [dt]: { enabled: !!v, mandatory: !!v ? prev[dt]?.mandatory ?? false : false }
-                          }))}
-                        />
-                      </td>
-                      <td className="text-center px-3 py-2">
-                        <Checkbox
-                          checked={r.mandatory}
-                          disabled={!r.enabled}
-                          onCheckedChange={(v) => setReqs(prev => ({
-                            ...prev,
-                            [dt]: { enabled: prev[dt]?.enabled ?? false, mandatory: !!v }
-                          }))}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            {enabledCount} required · {mandatoryCount} mandatory
-          </p>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
-              Save
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function OptionsTab() {
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
@@ -1859,7 +1716,6 @@ function OptionsTab() {
   const [newValue, setNewValue] = useState("");
   const [addMode, setAddMode] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [docsForDegree, setDocsForDegree] = useState<CatalogOption | null>(null);
   const qc = useQueryClient();
 
   const { data: optionsResp, isLoading } = useQuery({
@@ -1891,11 +1747,6 @@ function OptionsTab() {
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
       qc.invalidateQueries({ queryKey: ["catalog-options", "degree"] });
       toast({ title: "Added", description: `"${trimmed}" added to ${catMeta.label}.` });
-      // After adding a degree, immediately open the document-requirements editor
-      if (activeCategory === "degree") {
-        const newRow = (created?.option || created) as CatalogOption | undefined;
-        if (newRow && newRow.value) setDocsForDegree(newRow);
-      }
     } catch (err: any) {
       toast({ title: "Add failed", description: err?.message || "Try again.", variant: "destructive" });
     }
@@ -2006,17 +1857,6 @@ function OptionsTab() {
                   </>
                 ) : (
                   <>
-                    {activeCategory === "degree" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 gap-1 opacity-100"
-                        onClick={() => setDocsForDegree(item)}
-                        title={`Configure required documents for ${item.value}`}
-                      >
-                        <FileText className="w-3.5 h-3.5" /> Documents
-                      </Button>
-                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditItem({ ...item })}><Pencil className="w-3.5 h-3.5" /></Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(item, { isActive: !item.isActive })}>
                       {item.isActive ? <Lock className="w-3.5 h-3.5 text-orange-500" /> : <Check className="w-3.5 h-3.5 text-green-600" />}
@@ -2030,7 +1870,6 @@ function OptionsTab() {
         </div>
       </div>
     </div>
-    <DegreeDocumentsDialog open={!!docsForDegree} degree={docsForDegree} onClose={() => setDocsForDegree(null)} />
     </>
   );
 }

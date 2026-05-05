@@ -24,7 +24,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 - **Dynamic Pipeline Management:** Database-driven, fully configurable pipeline stages for leads, applications, and students. Supports mandatory notes, file attachments, stage progression/reversion, country-specific visibility, and finance categorization.
 - **UI/UX:** Utilizes TailwindCSS and shadcn/ui for a consistent design system, featuring role-based dashboards, navigation, customizable branding, and dark mode.
 - **Key Features:**
-    - **Public Site:** Informational pages, DB-driven listings, multi-step public application flow with AI document extraction, and degree-level based document requirements.
+    - **Public Site:** Informational pages, DB-driven listings, multi-step public application flow with AI document extraction, and program-level document requirements driven by the selected program.
     - **User, Student, Application, Lead Management:** Comprehensive CRUD operations, AI-powered creation, bulk CSV import, stage-specific document management, and self-service student registration.
     - **Origin/Source Ownership System:** Tracks lead, student, and application origins (Direct, Agent, Sub-Agent).
     - **Finance Management:** Dynamic variant-driven finance automation for commission and service fees, with price snapshots and auto-calculated agent commissions.
@@ -39,7 +39,7 @@ The project is structured as a pnpm monorepo comprising separate packages for th
     - **Omnichannel Inbox:** Integrates WhatsApp and web form messages into a centralized inbox with identity resolution and templated replies.
     - **Tasks (Görev Yönetimi):** Kanban board for task management with customizable columns, priorities, assignees, and chat-style notes. Includes role-based access and soft-delete archiving.
     - **Multi-Language (i18n) System:** Supports multiple languages including RTL, URL routing, and SEO-friendly hreflang tags.
-    - **Document Management System:** Defines document requirements by education level, supports ZIP download, PDF merging, and validates program eligibility (GPA, language scores). Features re-apply without re-uploading logic and document type equivalence.
+    - **Document Management System:** Document requirements are defined per **program** (Catalog → Programs → Edit Program), supports ZIP download, PDF merging, and validates program eligibility (GPA, language scores). Features re-apply without re-uploading logic and document type equivalence. Application stage transitions and the public-apply re-use flow read mandatory documents directly from the application's program.
     - **Website Module:** Full CMS with theme builder, page editor (block-based with 14 block types and global components), draft/publish/version control, SEO overrides, form builder with spam protection, and AI content assistant.
 - **Data Handling:** Consistent data structures, paginated API responses, and extensive use of soft deletes.
 - **Type Safety:** Extensive use of TypeScript across the monorepo.
@@ -54,3 +54,12 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **PostgreSQL:** Primary database.
 -   **Object Storage:** For uploaded files.
 -   **Stripe:** Implied payment processing.
+## Changelog
+
+### 2026-05-05 — Task #97: Degree-bazlı belge gereksinimleri kaldırıldı
+
+- Belge gereksinimleri artık tamamen **program seviyesinde** yönetiliyor (Catalog → Programs → Edit Program). Catalog → Options → Degree sekmesindeki "Documents" düğmesi ve `DegreeDocumentsDialog` kaldırıldı.
+- Frontend: `StudentDocChecklist` yalnızca programdan okuyor; program bağlamı yokken net "program seçin" boş durumu gösteriyor. Eski `_legacyNormalizeLevel` ve degree-bazlı fallback sorgusu silindi. `staff/StudentDetail` sayfasından degree-bazlı "Required Documents" rozet bloğu kaldırıldı; aynı bilgi her başvurunun detay sayfasında program-bazlı gösteriliyor.
+- Backend: `applications.ts` (documents_collected aşama geçişi) ve `public-apply.ts` (yeniden kullanılan belge filtresi) artık `programDocumentRequirementsTable`'dan başvurunun `programId`'siyle okuyor. `routes/documentRequirements.ts`, `seedDocumentRequirements`, `backfillProgramDocumentRequirements` fonksiyonları ve startup'taki çağrıları kaldırıldı; `system_flags.program_doc_requirements_backfill_v1` kilidi temizlendi.
+- DB: `document_requirements` tablosu DROP edildi; Drizzle şemasından `documentRequirements.ts` silindi ve `lib/db/src/schema/index.ts` export'u kaldırıldı.
+- Docs: `API_DOCS.md` "Document Requirements" (eski bölüm 21) bölümü silindi ve sonraki bölümler 22→27 olarak yeniden numaralandırıldı.
