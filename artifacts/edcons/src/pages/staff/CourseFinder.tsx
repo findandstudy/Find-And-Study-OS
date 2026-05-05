@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { ColumnHeader } from "@/components/ui/column-header";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -157,6 +158,10 @@ export default function CourseFinder() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<string>("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Column-header level filters that aren't represented in the server-side
+  // `filters` state (intakes substring + university open/closed status).
+  const [colIntakes, setColIntakes] = useState<string>("");
+  const [colStatus, setColStatus] = useState<string>("all");
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
   const isStudent = user?.role === "student";
@@ -432,6 +437,24 @@ export default function CourseFinder() {
     });
     return sorted;
   }, [programs, sortField, sortDir]);
+
+  // Apply column-header level filters (intakes substring, university status)
+  // on top of the server-filtered + locally sorted list.
+  const displayedPrograms = useMemo(() => {
+    const q = colIntakes.trim().toLowerCase();
+    return sortedPrograms.filter(p => {
+      if (q) {
+        const v = (p.intakes || "").toLowerCase();
+        if (!v.includes(q)) return false;
+      }
+      if (colStatus !== "all") {
+        const s = (p.universityStatus || "").toLowerCase();
+        if (colStatus === "open" && s !== "open") return false;
+        if (colStatus === "closed" && s === "open") return false;
+      }
+      return true;
+    });
+  }, [sortedPrograms, colIntakes, colStatus]);
 
   async function exportToExcel() {
     let exportPrograms = sortedPrograms;
@@ -764,7 +787,7 @@ export default function CourseFinder() {
           </div>
         ) : (
           <ProgramListView
-            programs={sortedPrograms}
+            programs={displayedPrograms}
             wishlistIds={wishlistIds}
             selectedIds={selectedIds}
             showCommission={!!showCommission}
@@ -778,6 +801,14 @@ export default function CourseFinder() {
             onInfo={setSelectedProgram}
             onApply={setApplyProgram}
             onUniversityClick={setSelectedUniversity}
+            filterOptions={filterOptions}
+            filters={filters}
+            setFilters={setFilters}
+            colIntakes={colIntakes}
+            setColIntakes={setColIntakes}
+            colStatus={colStatus}
+            setColStatus={setColStatus}
+            onResetPage={() => { setPage(1); setSelectedIds(new Set()); }}
           />
         )}
 
@@ -848,7 +879,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
   );
 }
 
-function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick }: {
+function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick, filterOptions, filters, setFilters, colIntakes, setColIntakes, colStatus, setColStatus, onResetPage }: {
   programs: Program[];
   wishlistIds: number[];
   selectedIds: Set<number>;
@@ -863,7 +894,23 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
   onInfo: (p: Program) => void;
   onApply: (p: Program) => void;
   onUniversityClick: (p: Program) => void;
+  filterOptions: FilterOptions | undefined;
+  filters: Filters;
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>;
+  colIntakes: string;
+  setColIntakes: (v: string) => void;
+  colStatus: string;
+  setColStatus: (v: string) => void;
+  onResetPage: () => void;
 }) {
+  // Convert ColumnHeader's single-select API to the array-based server filters.
+  const setSingle = (key: keyof Filters, v: string) => {
+    setFilters(prev => ({ ...prev, [key]: v ? [v] : [] } as Filters));
+    onResetPage();
+  };
+  const currentSort = { key: sortField, dir: sortDir };
+  const sortHandler = onSort;
+  const sortFor = (k: string) => ({ sortKey: k, current: currentSort as any, onSort: sortHandler });
   return (
     <>
     <div className="bg-card border rounded-2xl overflow-hidden">
@@ -875,26 +922,104 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
               <th className="p-3 text-left min-w-[250px]">
                 <SortHeader label="Program" field="name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
               </th>
-              <th className="p-3 text-left min-w-[160px]">
-                <SortHeader label="University" field="university" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-              </th>
-              <th className="p-3 text-left">
-                <SortHeader label="Degree" field="degree" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-              </th>
-              <th className="p-3 text-left">
-                <SortHeader label="Country" field="country" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-              </th>
-              <th className="p-3 text-left">
-                <SortHeader label="Language" field="language" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-              </th>
-              <th className="p-3 text-right">
-                <SortHeader label="Tuition" field="tuition" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-              </th>
+              <ColumnHeader
+                asTh
+                label="University"
+                className="text-left min-w-[160px]"
+                sort={sortFor("university")}
+                filter={{
+                  type: "select",
+                  value: filters.universityId[0] ?? "all",
+                  onChange: v => setSingle("universityId", v === "all" ? "" : v),
+                  options: (filterOptions?.universities ?? []).map(u => ({ value: String(u.id), label: u.name })),
+                  label: "University",
+                }}
+              />
+              <ColumnHeader
+                asTh
+                label="Degree"
+                className="text-left"
+                sort={sortFor("degree")}
+                filter={{
+                  type: "select",
+                  value: filters.level[0] ?? "all",
+                  onChange: v => setSingle("level", v === "all" ? "" : v),
+                  options: (filterOptions?.degrees ?? []).map(d => ({ value: d, label: d })),
+                  label: "Degree",
+                }}
+              />
+              <ColumnHeader
+                asTh
+                label="Country"
+                className="text-left"
+                sort={sortFor("country")}
+                filter={{
+                  type: "select",
+                  value: filters.country[0] ?? "all",
+                  onChange: v => setSingle("country", v === "all" ? "" : v),
+                  options: (filterOptions?.countries ?? []).map(c => ({ value: c, label: c })),
+                  label: "Country",
+                }}
+              />
+              <ColumnHeader
+                asTh
+                label="Language"
+                className="text-left"
+                sort={sortFor("language")}
+                filter={{
+                  type: "select",
+                  value: filters.language[0] ?? "all",
+                  onChange: v => setSingle("language", v === "all" ? "" : v),
+                  options: (filterOptions?.languages ?? []).map(l => ({ value: l, label: l })),
+                  label: "Language",
+                }}
+              />
+              <ColumnHeader
+                asTh
+                label="Tuition"
+                align="right"
+                className="text-right"
+                sort={sortFor("tuition")}
+                filter={{
+                  type: "text",
+                  value: filters.feeMax,
+                  onChange: v => { setFilters(prev => ({ ...prev, feeMax: v })); onResetPage(); },
+                  placeholder: "Max amount (e.g. 5000)",
+                  label: "Max tuition fee",
+                }}
+              />
               {showCommission && (
                 <th className="p-3 text-right">Commission</th>
               )}
-              <th className="p-3 text-center">Intakes</th>
-              <th className="p-3 text-center">Status</th>
+              <ColumnHeader
+                asTh
+                label="Intakes"
+                align="center"
+                className="text-center"
+                filter={{
+                  type: "text",
+                  value: colIntakes,
+                  onChange: setColIntakes,
+                  placeholder: "e.g. Sep, January…",
+                  label: "Intake contains",
+                }}
+              />
+              <ColumnHeader
+                asTh
+                label="Status"
+                align="center"
+                className="text-center"
+                filter={{
+                  type: "select",
+                  value: colStatus,
+                  onChange: setColStatus,
+                  options: [
+                    { value: "open", label: "Open" },
+                    { value: "closed", label: "Closed" },
+                  ],
+                  label: "University status",
+                }}
+              />
               <th className="p-3 text-center w-[120px]">Actions</th>
             </tr>
           </thead>
