@@ -21,7 +21,19 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 
 async function api(url: string, opts?: RequestInit) {
   const r = await fetch(url, { credentials: "include", ...opts });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    let detail = "";
+    try {
+      const text = await r.text();
+      try {
+        const parsed = JSON.parse(text);
+        detail = parsed?.error || parsed?.message || text;
+      } catch {
+        detail = text;
+      }
+    } catch { /* ignore */ }
+    throw new Error(detail ? `HTTP ${r.status}: ${detail}` : `HTTP ${r.status}`);
+  }
   if (r.status === 204) return undefined;
   return r.json();
 }
@@ -1697,6 +1709,7 @@ function DegreeDocumentsDialog({ open, onClose, degree }: { open: boolean; onClo
 }
 
 function OptionsTab() {
+  const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
   const [editItem, setEditItem] = useState<CatalogOption | null>(null);
   const [newValue, setNewValue] = useState("");
@@ -1715,41 +1728,60 @@ function OptionsTab() {
   const catMeta = OPTION_CATEGORIES.find(c => c.key === activeCategory)!;
 
   async function handleAdd() {
-    if (!newValue.trim()) return;
+    const trimmed = newValue.trim();
+    if (!trimmed) return;
+    const duplicate = items.some(o => o.value.trim().toLowerCase() === trimmed.toLowerCase());
+    if (duplicate) {
+      toast({ title: "Duplicate value", description: `"${trimmed}" already exists in ${catMeta.label}.`, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const created: any = await api("/api/catalog-options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: activeCategory, value: newValue.trim(), sortOrder: items.length + 1 }),
+        body: JSON.stringify({ category: activeCategory, value: trimmed, sortOrder: items.length + 1 }),
       });
       setNewValue("");
       setAddMode(false);
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
       qc.invalidateQueries({ queryKey: ["catalog-options", "degree"] });
+      toast({ title: "Added", description: `"${trimmed}" added to ${catMeta.label}.` });
       // After adding a degree, immediately open the document-requirements editor
       if (activeCategory === "degree") {
         const newRow = (created?.option || created) as CatalogOption | undefined;
         if (newRow && newRow.value) setDocsForDegree(newRow);
       }
-    } catch { }
+    } catch (err: any) {
+      toast({ title: "Add failed", description: err?.message || "Try again.", variant: "destructive" });
+    }
     setSaving(false);
   }
 
   async function handleUpdate(item: CatalogOption, updates: Partial<CatalogOption>) {
-    await api(`/api/catalog-options/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-    qc.invalidateQueries({ queryKey: ["catalog-options"] });
-    setEditItem(null);
+    try {
+      await api(`/api/catalog-options/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      qc.invalidateQueries({ queryKey: ["catalog-options"] });
+      setEditItem(null);
+      toast({ title: "Saved", description: `${catMeta.label} updated.` });
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err?.message || "Try again.", variant: "destructive" });
+    }
   }
 
   async function handleDelete(id: number) {
     if (!confirm("Are you sure you want to delete this option?")) return;
-    await api(`/api/catalog-options/${id}`, { method: "DELETE" });
-    qc.invalidateQueries({ queryKey: ["catalog-options"] });
+    try {
+      await api(`/api/catalog-options/${id}`, { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["catalog-options"] });
+      toast({ title: "Deleted", description: `Option removed from ${catMeta.label}.` });
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err?.message || "Try again.", variant: "destructive" });
+    }
   }
 
   if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
