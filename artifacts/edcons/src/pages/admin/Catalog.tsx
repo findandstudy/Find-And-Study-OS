@@ -100,9 +100,9 @@ type Program = { id: number; universityId: number; name: string; degree?: string
 
 type BulkImportResult = { inserted: number; skipped: number; updated?: number; invalidDocCells?: number; docsTouched?: number };
 
-function BulkImportModal({ open, onClose, title, templateRows, headers, onImport }: {
+function BulkImportModal({ open, onClose, title, templateRows, onImport }: {
   open: boolean; onClose: () => void; title: string;
-  templateRows: Record<string, any>[]; headers: string; onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
+  templateRows: Record<string, any>[]; onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
 }) {
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [error, setError] = useState("");
@@ -145,10 +145,6 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
       <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>Bulk Import — {title}</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-            <p className="font-medium mb-1">Excel Column Headers:</p>
-            <code className="text-xs text-muted-foreground break-all">{headers}</code>
-          </div>
           <Button variant="outline" size="sm" onClick={() => downloadExcelTemplate(templateRows, title, `${title.toLowerCase().replace(/\s/g, "_")}_template.xlsx`)}>
             <Download className="h-4 w-4 mr-2" /> Download Template (.xlsx)
           </Button>
@@ -301,7 +297,6 @@ function CountriesTab() {
     { name: "Germany", code: "DE", flagEmoji: "🇩🇪" },
     { name: "France", code: "FR", flagEmoji: "🇫🇷" },
   ];
-  const headers = "name, code, flagEmoji (optional)";
 
   return (
     <>
@@ -416,7 +411,7 @@ function CountriesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" templateRows={templateRows} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -512,7 +507,6 @@ function CitiesTab() {
     { name: "London", countryCode: "GB" },
     { name: "Berlin", countryCode: "DE" },
   ];
-  const headers = "name, countryCode (ISO 2-letter country code)";
 
   return (
     <>
@@ -651,7 +645,7 @@ function CitiesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" templateRows={templateRows} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -772,7 +766,6 @@ function UniversitiesTab() {
     { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601, universityType: "State", taxType: "KDV", taxPercent: 18, qsRanking: 336, timesRanking: 401, shanghaiRanking: 501, cwtsLeidenRanking: 0, address: "Üniversiteler Mah. Dumlupınar Blv. No:1, 06800 Çankaya/Ankara", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "Apply through international office", contactPersonName: "Elif Demir", contactPersonPhone: "+90 312 210 2000", contactPersonEmail: "intl@metu.edu.tr", status: "open", isActive: "Yes" },
     { name: "King's College London", country: "United Kingdom", city: "London", website: "https://www.kcl.ac.uk", description: "Russell Group university", ranking: 35, universityType: "Private", taxType: "VAT", taxPercent: 20, qsRanking: 40, timesRanking: 35, shanghaiRanking: 47, cwtsLeidenRanking: 55, address: "Strand, London WC2R 2LS, UK", logoUrl: "", onlinePaymentUrl: "https://pay.kcl.ac.uk", cricosLink: "", documentsLink: "https://docs.kcl.ac.uk", currentFeeListLink: "https://www.kcl.ac.uk/study/fees", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "UCAS application required", contactPersonName: "James Smith", contactPersonPhone: "+44 20 7836 5454", contactPersonEmail: "admissions@kcl.ac.uk", status: "open", isActive: "Yes" },
   ];
-  const headers = "name*, country*, city, website, description, ranking, universityType, taxType, taxPercent, qsRanking, timesRanking, shanghaiRanking, cwtsLeidenRanking, address, logoUrl, onlinePaymentUrl, cricosLink, documentsLink, currentFeeListLink, initialDepositOptions, admissionProcess, contactPersonName, contactPersonPhone, contactPersonEmail, status, isActive";
 
   return (
     <>
@@ -1125,7 +1118,7 @@ function UniversitiesTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" templateRows={templateRows} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -1319,7 +1312,6 @@ function ProgramsTab() {
       sop: "optional", lor: "optional", cv: "optional",
     },
   ];
-  const headers = `Required: universityName (or universityId), name. Optional: degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive. Plus ${PROGRAM_DOC_TYPE_KEYS.length} document-requirement columns (one per supported document type) — each accepts "mandatory", "optional", or blank. Download the template to see the full column list. The first row of the template is an inline example and should be deleted before importing.`;
 
   return (
     <>
@@ -1649,7 +1641,7 @@ function ProgramsTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} headers={headers} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} onImport={handleBulkImport} />
 
       <Dialog open={delAllOpen} onOpenChange={o => !o && setDelAllOpen(false)}>
         <DialogContent className="max-w-sm">
