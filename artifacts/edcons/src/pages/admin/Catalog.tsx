@@ -1216,6 +1216,7 @@ function ProgramsTab() {
   }
 
   const [docReqs, setDocReqs] = useState<Record<string, "mandatory" | "optional" | "none">>({});
+  const [docSearch, setDocSearch] = useState("");
   const docReqsInitRef = useRef<number | "new" | null>(null);
 
   useEffect(() => {
@@ -1571,10 +1572,29 @@ function ProgramsTab() {
                 </p>
               </div>
               <p className="text-[11px] text-muted-foreground">Set per program. Mandatory items block submission. Leave as None to omit.</p>
+              <Input
+                value={docSearch}
+                onChange={e => setDocSearch(e.target.value)}
+                placeholder="Search documents…"
+                className="h-8 text-xs"
+              />
               <div className="max-h-[260px] overflow-y-auto rounded border bg-background">
                 <table className="w-full text-xs">
                   <tbody className="divide-y">
-                    {PROGRAM_DOC_TYPE_KEYS.map(dt => {
+                    {(() => {
+                      const q = docSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? PROGRAM_DOC_TYPE_KEYS.filter(dt =>
+                            dt.toLowerCase().includes(q) ||
+                            (DEGREE_DOC_TYPE_LABELS[dt] ?? "").toLowerCase().includes(q),
+                          )
+                        : PROGRAM_DOC_TYPE_KEYS;
+                      if (filtered.length === 0) {
+                        return (
+                          <tr><td className="px-2 py-3 text-center text-muted-foreground">No documents match "{docSearch}"</td></tr>
+                        );
+                      }
+                      return filtered.map(dt => {
                       const v = docReqs[dt] ?? "none";
                       return (
                         <tr key={dt} className="hover:bg-muted/30">
@@ -1599,7 +1619,8 @@ function ProgramsTab() {
                           </td>
                         </tr>
                       );
-                    })}
+                    });
+                    })()}
                   </tbody>
                 </table>
               </div>
