@@ -432,18 +432,13 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
             {/* Navigation */}
             <div className="px-3 pt-4 pb-4 flex-1 overflow-y-auto space-y-4">
-              {groups.map(group => (
-                <SidebarGroup key={group.label} className="p-0">
-                  <SidebarGroupLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3">
-                    {group.label}
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu className="space-y-0.5">
-                      {group.items.map(item => {
-                        const isActive = item.url === location || 
-                          (item.url !== '/staff' && item.url !== '/admin' && item.url !== '/student' && item.url !== '/agent' && location.startsWith(item.url));
-                        return (
-                          <SidebarMenuItem key={item.title}>
+              {(() => {
+                const renderItem = (item: MenuItem, keyPrefix = "") => {
+                  const isActive = item.url === location ||
+                    (item.url !== '/staff' && item.url !== '/admin' && item.url !== '/student' && item.url !== '/agent' && location.startsWith(item.url));
+                  const isPinned = pinnedSet.has(item.url);
+                  return (
+                          <SidebarMenuItem key={`${keyPrefix}${item.title}`}>
                             <SidebarMenuButton
                               data-active={isActive}
                               className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm"
@@ -513,13 +508,48 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                 </span>
                               )}
                             </SidebarMenuButton>
+                            <SidebarMenuAction
+                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); togglePin(item.url); }}
+                              showOnHover={!isPinned}
+                              title={isPinned ? "Remove from favorites" : "Add to favorites"}
+                              aria-label={isPinned ? "Remove from favorites" : "Add to favorites"}
+                              className={isPinned ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500"}
+                            >
+                              <Star className={`w-3.5 h-3.5 ${isPinned ? "fill-amber-400" : ""}`} />
+                            </SidebarMenuAction>
                           </SidebarMenuItem>
-                        );
-                      })}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              ))}
+                  );
+                };
+
+                return (
+                  <>
+                    {favoriteItems.length > 0 && (
+                      <SidebarGroup className="p-0">
+                        <SidebarGroupLabel className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1 px-3 flex items-center gap-1.5">
+                          <Star className="w-3 h-3 fill-amber-400" /> Favorites
+                        </SidebarGroupLabel>
+                        <SidebarGroupContent>
+                          <SidebarMenu className="space-y-0.5">
+                            {favoriteItems.map(item => renderItem(item, "fav-"))}
+                          </SidebarMenu>
+                        </SidebarGroupContent>
+                      </SidebarGroup>
+                    )}
+                    {groups.map(group => (
+                      <SidebarGroup key={group.label} className="p-0">
+                        <SidebarGroupLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3">
+                          {group.label}
+                        </SidebarGroupLabel>
+                        <SidebarGroupContent>
+                          <SidebarMenu className="space-y-0.5">
+                            {group.items.map(item => renderItem(item))}
+                          </SidebarMenu>
+                        </SidebarGroupContent>
+                      </SidebarGroup>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
 
             {/* User Bottom */}
