@@ -16,11 +16,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { apiFetch } from "@/lib/apiFetch";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
 async function api(url: string, opts?: RequestInit) {
-  const r = await fetch(url, { credentials: "include", ...opts });
+  const r = await apiFetch(url, opts);
   if (!r.ok) {
     let detail = "";
     try {
@@ -39,7 +40,7 @@ async function api(url: string, opts?: RequestInit) {
 }
 
 async function apiDelete(url: string) {
-  await fetch(url, { method: "DELETE", credentials: "include" });
+  await apiFetch(url, { method: "DELETE" });
 }
 
 async function exportToExcel(rows: Record<string, any>[], sheetName: string, filename: string) {
@@ -656,6 +657,7 @@ function CitiesTab() {
 ══════════════════════════════════════════════════════════ */
 function UniversitiesTab() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "super_admin";
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -734,7 +736,12 @@ function UniversitiesTab() {
     mutationFn: async (f: Partial<University>) => f.id
       ? api(`/api/universities/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
       : api("/api/universities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["universities"] }); setForm(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["universities"] });
+      setForm(null);
+      toast({ title: "Saved", description: "University saved successfully." });
+    },
+    onError: (e: any) => toast({ title: "Save failed", description: String(e?.message || e), variant: "destructive" }),
   });
 
   const del = useMutation({
