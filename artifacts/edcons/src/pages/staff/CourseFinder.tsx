@@ -1375,6 +1375,8 @@ function UniversityInfoDialog({ program: p, onClose }: {
   program: Program | null;
   onClose: () => void;
 }) {
+  const { user } = useAuth(true);
+  const canSeeContacts = !!user && ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"].includes(user.role);
   if (!p) return null;
   const websiteUrl = ensureUrl(p.universityWebsite);
 
@@ -1423,36 +1425,6 @@ function UniversityInfoDialog({ program: p, onClose }: {
             <p className="text-sm text-muted-foreground leading-relaxed">{p.universityDescription}</p>
           )}
 
-          {/* Quick facts grid */}
-          {(p.universityCountry || p.universityCity || p.universityAddress || p.universityTaxType) && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              {p.universityCountry && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Country</p>
-                  <p className="font-medium text-foreground mt-0.5">{p.universityCountry}</p>
-                </div>
-              )}
-              {p.universityCity && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">City</p>
-                  <p className="font-medium text-foreground mt-0.5">{p.universityCity}</p>
-                </div>
-              )}
-              {p.universityTaxType && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Tax Type</p>
-                  <p className="font-medium text-foreground capitalize mt-0.5">{p.universityTaxType}</p>
-                </div>
-              )}
-              {p.universityAddress && (
-                <div className="col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Address</p>
-                  <p className="font-medium text-foreground mt-0.5">{p.universityAddress}</p>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Rankings */}
           {(p.universityQsRanking || p.universityTimesRanking || p.universityShanghaiRanking || p.universityCwtsLeidenRanking) && (
             <div>
@@ -1489,7 +1461,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
           )}
 
           {/* Contact */}
-          {(p.universityContactName || p.universityContactEmail || p.universityContactPhone) && (
+          {canSeeContacts && (p.universityContactName || p.universityContactEmail || p.universityContactPhone) && (
             <div>
               <h4 className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
                 <User className="w-3.5 h-3.5" /> Contact Person
