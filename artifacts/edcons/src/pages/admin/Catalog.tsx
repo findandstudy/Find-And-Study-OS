@@ -1419,7 +1419,7 @@ function ProgramsTab() {
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader><DialogTitle>{form?.id ? "Edit Program" : "New Program"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
@@ -1598,8 +1598,8 @@ function ProgramsTab() {
                       const v = docReqs[dt] ?? "none";
                       return (
                         <tr key={dt} className="hover:bg-muted/30">
-                          <td className="px-2 py-1.5">{DEGREE_DOC_TYPE_LABELS[dt]}</td>
-                          <td className="px-2 py-1.5 w-[210px] text-right">
+                          <td className="px-2 py-1.5 break-words">{DEGREE_DOC_TYPE_LABELS[dt]}</td>
+                          <td className="px-2 py-1.5 w-[210px] text-right whitespace-nowrap">
                             <div className="inline-flex rounded-md border overflow-hidden">
                               {(["none", "optional", "mandatory"] as const).map(opt => (
                                 <button
