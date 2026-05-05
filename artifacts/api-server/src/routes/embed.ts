@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable } from "@workspace/db";
-import { eq, ilike, sql, and, desc } from "drizzle-orm";
+import { eq, ilike, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
@@ -266,41 +266,98 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
   res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
+/**
+ * Cascading widget facets. Always applies admin-defined presetFilters.
+ * Additionally applies the visitor's current selections (passed as query
+ * params) to all OTHER facets — selecting Country=Turkey narrows City,
+ * University, etc. but leaves the Country dropdown intact so the user
+ * can switch.
+ */
 router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
-  const { slug } = req.params;
-  const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
-  if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+  try {
+    const { slug } = req.params;
+    const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
+    if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
-  const presetFilters = (widget.presetFilters || {}) as Record<string, any>;
-  const conditions = [eq(programsTable.isActive, true)];
+    const presetFilters = (widget.presetFilters || {}) as Record<string, any>;
+    const userParams = req.query as Record<string, string | undefined>;
+    const join = eq(programsTable.universityId, universitiesTable.id);
 
-  if (presetFilters.country) conditions.push(eq(universitiesTable.country, String(presetFilters.country)));
-  if (presetFilters.city) conditions.push(eq(universitiesTable.city, String(presetFilters.city)));
-  if (presetFilters.universityType) conditions.push(eq(universitiesTable.universityType, String(presetFilters.universityType)));
-  if (presetFilters.universityId) conditions.push(eq(programsTable.universityId, parseInt(String(presetFilters.universityId), 10)));
-  if (presetFilters.level) conditions.push(ilike(programsTable.degree, `%${presetFilters.level}%`));
-  if (presetFilters.language) conditions.push(ilike(programsTable.language, String(presetFilters.language)));
+    type FacetKey = "country" | "city" | "universityType" | "universityId" | "level" | "language" | "fee";
+    function buildWhere(excludeKey?: FacetKey) {
+      const c = [eq(programsTable.isActive, true)];
 
-  const where = and(...conditions);
-  const activeJoin = eq(programsTable.universityId, universitiesTable.id);
+      // Preset filters always apply (even on their own facet) — admin
+      // pinned them and the visitor cannot override.
+      if (presetFilters.country) c.push(eq(universitiesTable.country, String(presetFilters.country)));
+      if (presetFilters.city) c.push(eq(universitiesTable.city, String(presetFilters.city)));
+      if (presetFilters.universityType) c.push(eq(universitiesTable.universityType, String(presetFilters.universityType)));
+      if (presetFilters.universityId) c.push(eq(programsTable.universityId, parseInt(String(presetFilters.universityId), 10)));
+      if (presetFilters.level) c.push(ilike(programsTable.degree, `%${presetFilters.level}%`));
+      if (presetFilters.language) c.push(ilike(programsTable.language, String(presetFilters.language)));
 
-  const countries = await db.selectDistinct({ country: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, activeJoin).where(where).orderBy(universitiesTable.country);
-  const cities = await db.selectDistinct({ city: universitiesTable.city }).from(universitiesTable).innerJoin(programsTable, activeJoin).where(and(where, sql`${universitiesTable.city} IS NOT NULL`)).orderBy(universitiesTable.city);
-  const universityTypes = await db.selectDistinct({ type: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, activeJoin).where(and(where, sql`${universitiesTable.universityType} IS NOT NULL`)).orderBy(universitiesTable.universityType);
-  const universities = await db.selectDistinct({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable).innerJoin(programsTable, activeJoin).where(where).orderBy(universitiesTable.name);
-  const degrees = await db.selectDistinct({ degree: programsTable.degree }).from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id)).where(and(where, sql`${programsTable.degree} IS NOT NULL`)).orderBy(programsTable.degree);
-  const languages = await db.selectDistinct({ language: programsTable.language }).from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id)).where(and(where, sql`${programsTable.language} IS NOT NULL`)).orderBy(programsTable.language);
-  const feeRange = await db.select({ min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`, max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))` }).from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id)).where(and(where, sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`));
+      // Visitor selections — exclude the facet's own key so its dropdown
+      // still shows every choice.
+      if (excludeKey !== "country" && !presetFilters.country && userParams.country) {
+        const vals = userParams.country.split(",").map(s => s.trim()).filter(Boolean);
+        if (vals.length === 1) c.push(eq(universitiesTable.country, vals[0]));
+        else if (vals.length > 1) c.push(inArray(universitiesTable.country, vals));
+      }
+      if (excludeKey !== "city" && !presetFilters.city && userParams.city) {
+        const vals = userParams.city.split(",").map(s => s.trim()).filter(Boolean);
+        if (vals.length === 1) c.push(eq(universitiesTable.city, vals[0]));
+        else if (vals.length > 1) c.push(inArray(universitiesTable.city, vals));
+      }
+      if (excludeKey !== "universityType" && !presetFilters.universityType && userParams.universityType) {
+        const vals = userParams.universityType.split(",").map(s => s.trim()).filter(Boolean);
+        if (vals.length === 1) c.push(eq(universitiesTable.universityType, vals[0]));
+        else if (vals.length > 1) c.push(inArray(universitiesTable.universityType, vals));
+      }
+      if (excludeKey !== "universityId" && !presetFilters.universityId && userParams.universityId) {
+        const vals = userParams.universityId.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        if (vals.length === 1) c.push(eq(programsTable.universityId, vals[0]));
+        else if (vals.length > 1) c.push(inArray(programsTable.universityId, vals));
+      }
+      if (excludeKey !== "level" && !presetFilters.level && userParams.level) {
+        const vals = userParams.level.split(",").map(s => s.trim()).filter(Boolean);
+        if (vals.length === 1) c.push(ilike(programsTable.degree, `%${vals[0]}%`));
+      }
+      if (excludeKey !== "language" && !presetFilters.language && userParams.language) {
+        const vals = userParams.language.split(",").map(s => s.trim()).filter(Boolean);
+        if (vals.length === 1) c.push(ilike(programsTable.language, vals[0]));
+      }
+      if (excludeKey !== "fee") {
+        const feeMin = userParams.feeMin ? parseInt(userParams.feeMin, 10) : NaN;
+        if (Number.isFinite(feeMin) && feeMin >= 0) c.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${feeMin}`);
+        const feeMax = userParams.feeMax ? parseInt(userParams.feeMax, 10) : NaN;
+        if (Number.isFinite(feeMax) && feeMax >= 0) c.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${feeMax}`);
+      }
+      return and(...c);
+    }
 
-  res.json({
-    countries: countries.map(r => r.country).filter(Boolean),
-    cities: cities.map(r => r.city).filter(Boolean),
-    universityTypes: universityTypes.map(r => r.type).filter(Boolean),
-    universities: universities.map(r => ({ id: r.id, name: r.name })),
-    degrees: degrees.map(r => r.degree).filter(Boolean),
-    languages: languages.map(r => r.language).filter(Boolean),
-    feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
-  });
+    const [countries, cities, universityTypes, universities, degrees, languages, feeRange] = await Promise.all([
+      db.selectDistinct({ country: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join).where(and(buildWhere("country"), sql`${universitiesTable.country} IS NOT NULL`)).orderBy(universitiesTable.country),
+      db.selectDistinct({ city: universitiesTable.city }).from(universitiesTable).innerJoin(programsTable, join).where(and(buildWhere("city"), sql`${universitiesTable.city} IS NOT NULL`)).orderBy(universitiesTable.city),
+      db.selectDistinct({ type: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join).where(and(buildWhere("universityType"), sql`${universitiesTable.universityType} IS NOT NULL`)).orderBy(universitiesTable.universityType),
+      db.selectDistinct({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable).innerJoin(programsTable, join).where(buildWhere("universityId")).orderBy(universitiesTable.name),
+      db.selectDistinct({ degree: programsTable.degree }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("level"), sql`${programsTable.degree} IS NOT NULL`)).orderBy(programsTable.degree),
+      db.selectDistinct({ language: programsTable.language }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("language"), sql`${programsTable.language} IS NOT NULL`)).orderBy(programsTable.language),
+      db.select({ min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`, max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))` }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("fee"), sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`)),
+    ]);
+
+    res.json({
+      countries: countries.map(r => r.country).filter(Boolean),
+      cities: cities.map(r => r.city).filter(Boolean),
+      universityTypes: universityTypes.map(r => r.type).filter(Boolean),
+      universities: universities.map(r => ({ id: r.id, name: r.name })),
+      degrees: degrees.map(r => r.degree).filter(Boolean),
+      languages: languages.map(r => r.language).filter(Boolean),
+      feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
+    });
+  } catch (err: any) {
+    console.error("[embed/filters] failed:", err?.message || err);
+    res.status(500).json({ error: err?.message || "Failed to load filters" });
+  }
 });
 
 router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): Promise<void> => {
@@ -814,30 +871,60 @@ function fetchJSON(url){
 }
 
 function init(){
-  Promise.all([fetchJSON(API+'/config'),fetchJSON(API+'/filters')]).then(function(res){
-    config=res[0];filters=res[1];
+  fetchJSON(API+'/config').then(function(c){
+    config=c;
+    // loadPrograms also loads filters in parallel (cascading-aware).
     loadPrograms();
   }).catch(function(e){
     $('#ew-app').innerHTML='<div class="ew-empty"><p>Unable to load widget</p></div>';
   });
 }
 
-function loadPrograms(){
-  var app=$('#ew-app');
+function buildUserFilterParams(){
   var params=new URLSearchParams();
+  var pf=config.presetFilters||{};
+  Object.keys(userFilters).forEach(function(k){
+    if(!pf[k]&&userFilters[k]) params.set(k,userFilters[k]);
+  });
+  return params;
+}
+
+// Cascading: re-fetch facet options each time a selection changes so
+// dropdowns only show choices compatible with the user's other picks.
+function loadFilters(){
+  return fetchJSON(API+'/filters?'+buildUserFilterParams().toString()).then(function(res){
+    filters=res;
+    pruneStaleSelections();
+  }).catch(function(){});
+}
+
+function pruneStaleSelections(){
+  if(!filters)return;
+  var pf=config.presetFilters||{};
+  var checks=[
+    ['country',(filters.countries||[]).reduce(function(s,v){s[v]=1;return s;},{})],
+    ['universityType',(filters.universityTypes||[]).reduce(function(s,v){s[v]=1;return s;},{})],
+    ['universityId',(filters.universities||[]).reduce(function(s,u){s[String(u.id)]=1;return s;},{})],
+    ['level',(filters.degrees||[]).reduce(function(s,v){s[v]=1;return s;},{})],
+    ['language',(filters.languages||[]).reduce(function(s,v){s[v]=1;return s;},{})]
+  ];
+  checks.forEach(function(pair){
+    var k=pair[0],valid=pair[1];
+    if(pf[k])return;
+    if(userFilters[k]&&!valid[String(userFilters[k])]){userFilters[k]='';}
+  });
+}
+
+function loadPrograms(){
+  var params=buildUserFilterParams();
   params.set('page',currentPage);
   params.set('limit','12');
-  var pf=config.presetFilters||{};
-  var locked=config.lockedFilters||[];
-  Object.keys(userFilters).forEach(function(k){
-    if(!pf[k]&&!locked.includes(k)&&userFilters[k]) params.set(k,userFilters[k]);
-  });
 
   render(true);
-  fetchJSON(API+'/programs?'+params.toString()).then(function(res){
-    programs=res.data;meta=res.meta;
-    render(false);
-  }).catch(function(){
+  Promise.all([
+    fetchJSON(API+'/programs?'+params.toString()).then(function(res){programs=res.data;meta=res.meta;}).catch(function(){}),
+    loadFilters()
+  ]).then(function(){
     render(false);
   });
 }

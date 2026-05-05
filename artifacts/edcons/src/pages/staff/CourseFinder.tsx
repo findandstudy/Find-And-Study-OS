@@ -178,16 +178,11 @@ export default function CourseFinder() {
     }
   }, []);
 
-  const { data: filterOptions } = useQuery<FilterOptions>({
-    queryKey: ["course-finder-filters"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/filters`),
-    staleTime: 5 * 60_000,
-  });
-
-  const queryParams = useMemo(() => {
+  // Build a query string of just the active filter selections — used both
+  // for the program list and (now) for the cascading /filters endpoint so
+  // each dropdown narrows itself based on the other selected facets.
+  const filterParams = useMemo(() => {
     const p = new URLSearchParams();
-    p.set("page", String(page));
-    p.set("limit", "24");
     if (filters.country.length) p.set("country", filters.country.join(","));
     if (filters.city.length) p.set("city", filters.city.join(","));
     if (filters.universityType.length) p.set("universityType", filters.universityType.join(","));
@@ -199,7 +194,57 @@ export default function CourseFinder() {
     if (filters.feeMin) p.set("feeMin", filters.feeMin);
     if (filters.feeMax) p.set("feeMax", filters.feeMax);
     return p.toString();
-  }, [filters, page]);
+  }, [filters]);
+
+  const { data: filterOptions } = useQuery<FilterOptions>({
+    queryKey: ["course-finder-filters", filterParams],
+    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`),
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  });
+
+  // Auto-prune selected values that are no longer present in the cascading
+  // option list (e.g. user picked City=Istanbul, then changed Country to
+  // Germany — Istanbul is no longer offered, so drop it instead of leaving
+  // the result list empty with no visible reason).
+  useEffect(() => {
+    if (!filterOptions) return;
+    setFilters(prev => {
+      const validCity = new Set(filterOptions.cities || []);
+      const validType = new Set(filterOptions.universityTypes || []);
+      const validUni = new Set((filterOptions.universities || []).map(u => String(u.id)));
+      const validLevel = new Set((filterOptions.degrees || []).map(d => d.toLowerCase()));
+      const validLang = new Set((filterOptions.languages || []).map(l => l.toLowerCase()));
+      const validField = new Set((filterOptions.fields || []).map(f => f.toLowerCase()));
+      const validCountry = new Set(filterOptions.countries || []);
+      const next = {
+        ...prev,
+        country: prev.country.filter(v => validCountry.has(v)),
+        city: prev.city.filter(v => validCity.has(v)),
+        universityType: prev.universityType.filter(v => validType.has(v)),
+        universityId: prev.universityId.filter(v => validUni.has(v)),
+        level: prev.level.filter(v => validLevel.has(v.toLowerCase())),
+        language: prev.language.filter(v => validLang.has(v.toLowerCase())),
+        field: prev.field.filter(v => validField.has(v.toLowerCase())),
+      };
+      const changed =
+        next.country.length !== prev.country.length ||
+        next.city.length !== prev.city.length ||
+        next.universityType.length !== prev.universityType.length ||
+        next.universityId.length !== prev.universityId.length ||
+        next.level.length !== prev.level.length ||
+        next.language.length !== prev.language.length ||
+        next.field.length !== prev.field.length;
+      return changed ? next : prev;
+    });
+  }, [filterOptions]);
+
+  const queryParams = useMemo(() => {
+    const p = new URLSearchParams(filterParams);
+    p.set("page", String(page));
+    p.set("limit", "24");
+    return p.toString();
+  }, [filterParams, page]);
 
   const { data, isLoading } = useQuery<{ data: Program[]; meta: { total: number; page: number; limit: number; totalPages: number } }>({
     queryKey: ["course-finder", queryParams],

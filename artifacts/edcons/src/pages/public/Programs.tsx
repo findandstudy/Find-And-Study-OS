@@ -1348,18 +1348,56 @@ export default function Programs() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => {
-    customFetch<Filters>("/api/course-finder/filters", { method: "GET" })
-      .then(data => setFilters(data))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setCity([]);
-  }, [country]);
-
   const debouncedFeeMin = useDebounce(feeMin, 500);
   const debouncedFeeMax = useDebounce(feeMax, 500);
+
+  // Cascading facets — re-fetch /filters whenever a selection changes so each
+  // dropdown reflects only options compatible with the user's other choices
+  // (e.g. picking Country=Turkey narrows the City and University lists).
+  const filterParams = useMemo(() => {
+    const p = new URLSearchParams();
+    if (debouncedSearch) p.set("search", debouncedSearch);
+    if (country.length) p.set("country", country.join(","));
+    if (city.length) p.set("city", city.join(","));
+    if (universityType.length) p.set("universityType", universityType.join(","));
+    if (universityId.length) p.set("universityId", universityId.join(","));
+    if (level.length) p.set("level", level.join(","));
+    if (language.length) p.set("language", language.join(","));
+    if (field.length) p.set("field", field.join(","));
+    if (debouncedFeeMin) p.set("feeMin", debouncedFeeMin);
+    if (debouncedFeeMax) p.set("feeMax", debouncedFeeMax);
+    return p.toString();
+  }, [debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax]);
+
+  useEffect(() => {
+    customFetch<Filters>(`/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`, { method: "GET" })
+      .then(data => setFilters(data))
+      .catch(() => {});
+  }, [filterParams]);
+
+  // Auto-prune selections that the new option list no longer contains, so a
+  // stale pick (e.g. City=Istanbul after switching Country to Germany) does
+  // not silently filter all results to zero. We must NOT short-circuit on
+  // empty option arrays — that's exactly when stale selections are most
+  // dangerous. `feeRange` is null only in the pre-fetch initial state, so
+  // we use it as a loaded-flag instead.
+  useEffect(() => {
+    if (filters.feeRange === null) return;
+    const validCity = new Set(filters.cities);
+    const validType = new Set(filters.universityTypes);
+    const validUni = new Set(filters.universities.map(u => String(u.id)));
+    const validLevel = new Set(filters.degrees.map(d => d.toLowerCase()));
+    const validLang = new Set(filters.languages.map(l => l.toLowerCase()));
+    const validField = new Set(filters.fields.map(f => f.toLowerCase()));
+    const validCountry = new Set(filters.countries);
+    setCountry(prev => { const n = prev.filter(v => validCountry.has(v)); return n.length === prev.length ? prev : n; });
+    setCity(prev => { const n = prev.filter(v => validCity.has(v)); return n.length === prev.length ? prev : n; });
+    setUniversityType(prev => { const n = prev.filter(v => validType.has(v)); return n.length === prev.length ? prev : n; });
+    setUniversityId(prev => { const n = prev.filter(v => validUni.has(v)); return n.length === prev.length ? prev : n; });
+    setLevel(prev => { const n = prev.filter(v => validLevel.has(v.toLowerCase())); return n.length === prev.length ? prev : n; });
+    setLanguage(prev => { const n = prev.filter(v => validLang.has(v.toLowerCase())); return n.length === prev.length ? prev : n; });
+    setField(prev => { const n = prev.filter(v => validField.has(v.toLowerCase())); return n.length === prev.length ? prev : n; });
+  }, [filters]);
 
   const fetchPrograms = useCallback(async () => {
     setIsLoading(true);

@@ -165,71 +165,121 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/course-finder/filters", async (_req, res): Promise<void> => {
-  const activeJoin = and(eq(programsTable.universityId, universitiesTable.id), eq(programsTable.isActive, true));
+/**
+ * Build a WHERE-conditions array from URL query params, optionally
+ * skipping a single facet key. Used by the cascading /filters endpoint:
+ * each facet's options are computed with all OTHER selected filters
+ * applied, so e.g. selecting Country=Turkey narrows the City and
+ * University dropdowns but keeps the Country dropdown showing every
+ * country (so the user can still switch).
+ */
+function buildProgramFacetConditions(
+  params: Record<string, string | undefined>,
+  excludeKey?:
+    | "country" | "city" | "universityType" | "universityId"
+    | "level" | "language" | "field" | "fee" | "search",
+) {
+  const conditions = [eq(programsTable.isActive, true)];
+  if (excludeKey !== "country" && params.country) {
+    const vals = params.country.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(eq(universitiesTable.country, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(universitiesTable.country, vals));
+  }
+  if (excludeKey !== "city" && params.city) {
+    const vals = params.city.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(eq(universitiesTable.city, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(universitiesTable.city, vals));
+  }
+  if (excludeKey !== "universityType" && params.universityType) {
+    const vals = params.universityType.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(eq(universitiesTable.universityType, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(universitiesTable.universityType, vals));
+  }
+  if (excludeKey !== "universityId" && params.universityId) {
+    const vals = params.universityId.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    if (vals.length === 1) conditions.push(eq(programsTable.universityId, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(programsTable.universityId, vals));
+  }
+  if (excludeKey !== "level" && params.level) {
+    const vals = params.level.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.degree, `%${vals[0]}%`));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.degree, `%${v}%`)))!);
+  }
+  if (excludeKey !== "language" && params.language) {
+    const vals = params.language.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.language, vals[0]));
+    else if (vals.length > 1) conditions.push(inArray(programsTable.language, vals));
+  }
+  if (excludeKey !== "field" && params.field) {
+    const vals = params.field.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.field, v)))!);
+  }
+  if (excludeKey !== "fee") {
+    const feeMinNum = parseNonNegativeInt(params.feeMin);
+    if (feeMinNum !== null) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${feeMinNum}`);
+    const feeMaxNum = parseNonNegativeInt(params.feeMax);
+    if (feeMaxNum !== null) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${feeMaxNum}`);
+  }
+  if (excludeKey !== "search" && params.search) {
+    const escaped = escapeLikePattern(params.search);
+    conditions.push(
+      sql`(${ilike(programsTable.name, `%${escaped}%`)} OR ${ilike(universitiesTable.name, `%${escaped}%`)})`
+    );
+  }
+  return and(...conditions);
+}
 
-  const countries = await db
-    .selectDistinct({ country: universitiesTable.country })
-    .from(universitiesTable)
-    .innerJoin(programsTable, activeJoin)
-    .orderBy(universitiesTable.country);
+router.get("/course-finder/filters", async (req, res): Promise<void> => {
+  try {
+    const params = req.query as Record<string, string | undefined>;
+    const join = eq(programsTable.universityId, universitiesTable.id);
 
-  const cities = await db
-    .selectDistinct({ city: universitiesTable.city })
-    .from(universitiesTable)
-    .innerJoin(programsTable, activeJoin)
-    .where(sql`${universitiesTable.city} IS NOT NULL`)
-    .orderBy(universitiesTable.city);
+    const wCountry = buildProgramFacetConditions(params, "country");
+    const wCity = buildProgramFacetConditions(params, "city");
+    const wType = buildProgramFacetConditions(params, "universityType");
+    const wUni = buildProgramFacetConditions(params, "universityId");
+    const wLevel = buildProgramFacetConditions(params, "level");
+    const wLang = buildProgramFacetConditions(params, "language");
+    const wField = buildProgramFacetConditions(params, "field");
+    const wFee = buildProgramFacetConditions(params, "fee");
 
-  const universityTypes = await db
-    .selectDistinct({ type: universitiesTable.universityType })
-    .from(universitiesTable)
-    .innerJoin(programsTable, activeJoin)
-    .where(sql`${universitiesTable.universityType} IS NOT NULL`)
-    .orderBy(universitiesTable.universityType);
+    const [countries, cities, universityTypes, universities, degrees, languages, fields, feeRange] = await Promise.all([
+      db.selectDistinct({ country: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join)
+        .where(and(wCountry, sql`${universitiesTable.country} IS NOT NULL`)).orderBy(universitiesTable.country),
+      db.selectDistinct({ city: universitiesTable.city }).from(universitiesTable).innerJoin(programsTable, join)
+        .where(and(wCity, sql`${universitiesTable.city} IS NOT NULL`)).orderBy(universitiesTable.city),
+      db.selectDistinct({ type: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join)
+        .where(and(wType, sql`${universitiesTable.universityType} IS NOT NULL`)).orderBy(universitiesTable.universityType),
+      db.selectDistinct({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable).innerJoin(programsTable, join)
+        .where(wUni).orderBy(universitiesTable.name),
+      db.selectDistinct({ degree: programsTable.degree }).from(programsTable).innerJoin(universitiesTable, join)
+        .where(and(wLevel, sql`${programsTable.degree} IS NOT NULL`)).orderBy(programsTable.degree),
+      db.selectDistinct({ language: programsTable.language }).from(programsTable).innerJoin(universitiesTable, join)
+        .where(and(wLang, sql`${programsTable.language} IS NOT NULL`)).orderBy(programsTable.language),
+      db.selectDistinct({ field: programsTable.field }).from(programsTable).innerJoin(universitiesTable, join)
+        .where(and(wField, sql`${programsTable.field} IS NOT NULL AND ${programsTable.field} != ''`)).orderBy(programsTable.field),
+      db.select({
+        min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
+        max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
+      }).from(programsTable).innerJoin(universitiesTable, join)
+        .where(and(wFee, sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`)),
+    ]);
 
-  const universities = await db
-    .selectDistinct({ id: universitiesTable.id, name: universitiesTable.name })
-    .from(universitiesTable)
-    .innerJoin(programsTable, activeJoin)
-    .orderBy(universitiesTable.name);
-
-  const degrees = await db
-    .selectDistinct({ degree: programsTable.degree })
-    .from(programsTable)
-    .where(and(eq(programsTable.isActive, true), sql`${programsTable.degree} IS NOT NULL`))
-    .orderBy(programsTable.degree);
-
-  const languages = await db
-    .selectDistinct({ language: programsTable.language })
-    .from(programsTable)
-    .where(and(eq(programsTable.isActive, true), sql`${programsTable.language} IS NOT NULL`))
-    .orderBy(programsTable.language);
-
-  const fields = await db
-    .selectDistinct({ field: programsTable.field })
-    .from(programsTable)
-    .where(and(eq(programsTable.isActive, true), sql`${programsTable.field} IS NOT NULL AND ${programsTable.field} != ''`))
-    .orderBy(programsTable.field);
-
-  const feeRange = await db
-    .select({
-      min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
-      max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
-    })
-    .from(programsTable)
-    .where(and(eq(programsTable.isActive, true), sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`));
-
-  res.json({
-    countries: countries.map(r => r.country).filter(Boolean),
-    cities: cities.map(r => r.city).filter(Boolean),
-    universityTypes: universityTypes.map(r => r.type).filter(Boolean),
-    universities: universities.map(r => ({ id: r.id, name: r.name })),
-    degrees: degrees.map(r => r.degree).filter(Boolean),
-    languages: languages.map(r => r.language).filter(Boolean),
-    fields: fields.map(r => r.field).filter(Boolean),
-    feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
-  });
+    res.json({
+      countries: countries.map(r => r.country).filter(Boolean),
+      cities: cities.map(r => r.city).filter(Boolean),
+      universityTypes: universityTypes.map(r => r.type).filter(Boolean),
+      universities: universities.map(r => ({ id: r.id, name: r.name })),
+      degrees: degrees.map(r => r.degree).filter(Boolean),
+      languages: languages.map(r => r.language).filter(Boolean),
+      fields: fields.map(r => r.field).filter(Boolean),
+      feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
+    });
+  } catch (err: any) {
+    console.error("[course-finder/filters] failed:", err?.message || err);
+    res.status(500).json({ error: err?.message || "Failed to load filters" });
+  }
 });
 
 router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("course_finder"), async (req, res): Promise<void> => {

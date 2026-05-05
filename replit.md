@@ -56,6 +56,15 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **Stripe:** Implied payment processing.
 ## Changelog
 
+### 2026-05-05 — Course Finder: cascading (faceted) filter dropdowns
+
+- Sorun: Filtreler birbirinden bağımsız çalışıyordu — kullanıcı `Country=Turkey` seçse bile City/University dropdown'ları tüm dünyadaki şehir/üniversiteleri göstermeye devam ediyordu, ve uyumsuz seçimler sessizce 0 sonuç döndürebiliyordu.
+- Backend: `artifacts/api-server/src/routes/course-finder.ts` — yeni `buildProgramFacetConditions(params, excludeKey?)` helper. `/course-finder/filters` route'u artık sorgu parametrelerini alıyor; her facet (country/city/universityType/universityId/level/language/field/feeRange) için diğer tüm seçili filtreleri uygular ama kendi facet'ini hariç tutar (kullanıcı seçimini değiştirebilsin diye). Promise.all ile 8 paralel sorgu + try/catch ile 500 logging.
+- Backend (widget): `artifacts/api-server/src/routes/embed.ts` `/public/embed/:slug/filters` aynı cascading mantığı + admin'in `presetFilters`'ı her zaman uygulanır (ziyaretçi override edemez, kendi facet'inde bile).
+- Frontend (staff): `artifacts/edcons/src/pages/staff/CourseFinder.tsx` — `filterOptions` useQuery artık queryKey'inde mevcut filter state'ini taşıyor ve `staleTime: 30s` + `placeholderData: keepPrevious`. Yeni useEffect, options değiştiğinde geçersiz kalan seçimleri (ör. Country=Germany seçince stale City=Istanbul) otomatik temizliyor.
+- Frontend (public): `artifacts/edcons/src/pages/public/Programs.tsx` — `useEffect(()=>fetch('/filters'), [])` empty-deps yerine `filterParams` useMemo'ya bağlı; aynı stale-pruning useEffect'i.
+- Widget JS (`generateWidgetHTML`): `loadFilters()` her change'te paralel olarak `loadPrograms()` ile birlikte çağrılır; `pruneStaleSelections()` `userFilters`'tan geçersiz değerleri siler. `init()` artık tek `/config` çağrısı yapıp `loadPrograms`'a delegate ediyor (filters orada zaten yükleniyor).
+
 ### 2026-05-05 — Bulk-import: body limit + Postgres bind-parameter chunking + error logging
 
 - **Body limit (HTTP 413 fix):** `artifacts/api-server/src/app.ts` — `express.json` ve `express.urlencoded` limit 10mb → 50mb. 7000+ programlı Excel (54 kolon, ~16 MB JSON serialize) artık reddedilmiyor. Endpoint'ler zaten requireAuth + MANAGER_ROLES ile korunuyor.
