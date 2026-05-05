@@ -1198,10 +1198,49 @@ function ProgramsTab() {
     setDelAllOpen(false);
   }
 
+  const [docReqs, setDocReqs] = useState<Record<string, "mandatory" | "optional" | "none">>({});
+  const docReqsInitRef = useRef<number | "new" | null>(null);
+
+  useEffect(() => {
+    if (form === null) { docReqsInitRef.current = null; return; }
+    const key = form.id ?? "new";
+    if (docReqsInitRef.current === key) return;
+    const map: Record<string, "mandatory" | "optional" | "none"> = {};
+    for (const dt of DEGREE_DOC_TYPES) map[dt] = "none";
+    const list = (form as any).documentRequirements as { documentType: string; mandatory: boolean }[] | undefined;
+    if (Array.isArray(list)) {
+      for (const r of list) {
+        if (map[r.documentType] !== undefined) map[r.documentType] = r.mandatory ? "mandatory" : "optional";
+      }
+    }
+    setDocReqs(map);
+    docReqsInitRef.current = key;
+  }, [form]);
+
   const save = useMutation({
-    mutationFn: async (f: Partial<Program>) => f.id
-      ? api(`/api/programs/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) })
-      : api("/api/programs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }),
+    mutationFn: async (f: Partial<Program>) => {
+      const { documentRequirements: _drop, ...rest } = (f as any);
+      const saved = f.id
+        ? await api(`/api/programs/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rest) })
+        : await api("/api/programs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rest) });
+      const programId = saved?.id ?? f.id;
+      if (programId) {
+        const requirements = DEGREE_DOC_TYPES
+          .map((dt, idx) => {
+            const v = docReqs[dt];
+            if (v === "mandatory") return { documentType: dt, mandatory: true, sortOrder: idx };
+            if (v === "optional") return { documentType: dt, mandatory: false, sortOrder: idx };
+            return null;
+          })
+          .filter(Boolean);
+        await api(`/api/programs/${programId}/document-requirements`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requirements }),
+        });
+      }
+      return saved;
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["programs"] }); setForm(null); },
   });
 
@@ -1217,10 +1256,10 @@ function ProgramsTab() {
   };
 
   const templateRows = [
-    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5, minLanguageScore: 5.5, quota: 50, isActive: "Yes" },
-    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, quota: 30, isActive: "Yes" },
+    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5, minLanguageScore: 5.5, quota: 50, isActive: "Yes", passport: "mandatory", high_school_diploma_translation: "mandatory", class_12th_hsc_certificate: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "optional", sop: "optional", photo: "optional" },
+    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, quota: 30, isActive: "Yes", passport: "mandatory", bachelors_certificate: "mandatory", bachelors_transcript: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "mandatory", sop: "optional", lor: "optional", cv: "optional" },
   ];
-  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive";
+  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive — Optional per-document columns (use \"mandatory\", \"optional\", or leave blank): passport, high_school_diploma_translation, class_10th_ssc_marks_sheet, class_12th_hsc_certificate, class_12th_hsc_marks_sheet, diploma_certificate, diploma_transcript, bachelors_certificate, bachelors_transcript, bachelors_provisional_certificate, bachelors_transcript_all_semesters, masters_certificate, masters_transcript, masters_provisional_certificate, masters_transcript_all_semesters, cv, lor, sop, essay, experience_letters, other_certificates_documents, ielts_pte_gre_gmat_toefl_duolingo, photo, diploma_recognition";
 
   return (
     <>
@@ -1471,6 +1510,49 @@ function ProgramsTab() {
               </div>
             </div>
             <div><Label>Requirements</Label><Textarea className="mt-1" rows={2} placeholder="IELTS 6.0, GPA 3.0…" value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Required Documents</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {Object.values(docReqs).filter(v => v !== "none").length} required · {Object.values(docReqs).filter(v => v === "mandatory").length} mandatory
+                </p>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Set per program. Mandatory items block submission. Leave as None to omit.</p>
+              <div className="max-h-[260px] overflow-y-auto rounded border bg-background">
+                <table className="w-full text-xs">
+                  <tbody className="divide-y">
+                    {DEGREE_DOC_TYPES.map(dt => {
+                      const v = docReqs[dt] ?? "none";
+                      return (
+                        <tr key={dt} className="hover:bg-muted/30">
+                          <td className="px-2 py-1.5">{DEGREE_DOC_TYPE_LABELS[dt]}</td>
+                          <td className="px-2 py-1.5 w-[210px] text-right">
+                            <div className="inline-flex rounded-md border overflow-hidden">
+                              {(["none", "optional", "mandatory"] as const).map(opt => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => setDocReqs(prev => ({ ...prev, [dt]: opt }))}
+                                  className={`px-2 py-0.5 text-[11px] transition-colors ${
+                                    v === opt
+                                      ? opt === "mandatory" ? "bg-red-600 text-white"
+                                        : opt === "optional" ? "bg-blue-600 text-white"
+                                        : "bg-muted text-foreground"
+                                      : "bg-background hover:bg-muted/50 text-muted-foreground"
+                                  }`}
+                                >{opt === "none" ? "None" : opt === "optional" ? "Optional" : "Mandatory"}</button>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <Label>Active</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
@@ -1646,6 +1728,9 @@ function DegreeDocumentsDialog({ open, onClose, degree }: { open: boolean; onClo
           <p className="text-xs text-muted-foreground mt-1">
             Select which documents students must upload when applying to a <b>{levelKey}</b> program. Mandatory documents block submission until uploaded.
           </p>
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <b>Heads up:</b> Document requirements are now configured per <b>program</b> (Programs tab → Edit Program). Degree-level settings here remain only as a fallback for programs that don't have program-level requirements yet, and will be retired in an upcoming update.
+          </div>
         </DialogHeader>
         {isLoading ? (
           <div className="py-12 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>

@@ -1,6 +1,6 @@
 import express from "express";
 import app from "./app";
-import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable, documentRequirementsTable } from "@workspace/db";
+import { db, pool, usersTable, integrationsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, agentsTable, pipelineStagesTable, documentRequirementsTable, programsTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, isNull, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
@@ -378,6 +378,75 @@ async function seedDocumentRequirements() {
   }
 }
 
+async function backfillProgramDocumentRequirements() {
+  try {
+    const lockKey = "program_doc_requirements_backfill_v1";
+    const lockResult = await pool.query(
+      `INSERT INTO system_flags (key) VALUES ($1) ON CONFLICT DO NOTHING RETURNING key`,
+      [lockKey],
+    );
+    if (lockResult.rows.length === 0) return;
+
+    const allPrograms = await db.select({ id: programsTable.id, degree: programsTable.degree }).from(programsTable);
+    if (allPrograms.length === 0) {
+      console.log("[backfill] program-doc-reqs: no programs to backfill");
+      return;
+    }
+
+    const existing = await db.select({ programId: programDocumentRequirementsTable.programId })
+      .from(programDocumentRequirementsTable);
+    const programsWithReqs = new Set(existing.map(e => e.programId));
+
+    const degreeReqs = await db.select().from(documentRequirementsTable);
+    const reqsByLevel = new Map<string, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
+    for (const r of degreeReqs) {
+      if (!r.enabled) continue;
+      const arr = reqsByLevel.get(r.level) || [];
+      arr.push({ documentType: r.documentType, mandatory: r.mandatory, sortOrder: r.sortOrder });
+      reqsByLevel.set(r.level, arr);
+    }
+
+    function levelKeyFor(degree: string | null): string | null {
+      if (!degree) return null;
+      const d = degree.trim();
+      if (!d) return null;
+      const lower = d.toLowerCase();
+      const directMatch = [...reqsByLevel.keys()].find(k => k.toLowerCase() === lower);
+      if (directMatch) return directMatch;
+      if (/(^|[^a-z])phd|ph\.?d|doctor/i.test(d)) return [...reqsByLevel.keys()].find(k => /ph/i.test(k)) || null;
+      if (/master|mba|msc|m\.s\.|m\.a\./i.test(d)) return [...reqsByLevel.keys()].find(k => /master/i.test(k)) || null;
+      if (/bachelor|bsc|b\.s|b\.a/i.test(d)) return [...reqsByLevel.keys()].find(k => /bachelor/i.test(k)) || null;
+      if (/associate/i.test(d)) return [...reqsByLevel.keys()].find(k => /associate/i.test(k)) || null;
+      if (/foundation/i.test(d)) return [...reqsByLevel.keys()].find(k => /foundation/i.test(k)) || null;
+      if (/language/i.test(d)) return [...reqsByLevel.keys()].find(k => /language/i.test(k)) || null;
+      if (/pathway/i.test(d)) return [...reqsByLevel.keys()].find(k => /pathway/i.test(k)) || null;
+      return null;
+    }
+
+    const toInsert: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
+    let touchedPrograms = 0;
+    for (const p of allPrograms) {
+      if (programsWithReqs.has(p.id)) continue;
+      const lk = levelKeyFor(p.degree);
+      if (!lk) continue;
+      const reqs = reqsByLevel.get(lk);
+      if (!reqs || reqs.length === 0) continue;
+      for (const r of reqs) toInsert.push({ programId: p.id, ...r });
+      touchedPrograms++;
+    }
+
+    if (toInsert.length > 0) {
+      const CHUNK = 500;
+      for (let i = 0; i < toInsert.length; i += CHUNK) {
+        await db.insert(programDocumentRequirementsTable).values(toInsert.slice(i, i + CHUNK));
+      }
+    }
+    console.log("[backfill] program-doc-reqs:", { programsTouched: touchedPrograms, rowsInserted: toInsert.length });
+  } catch (err) {
+    console.error("[backfill] backfillProgramDocumentRequirements error:", err);
+  }
+}
+
 (async () => {
   // Step 1: Create system_flags table — runs on all processes, idempotent.
   await pool.query(`
@@ -409,6 +478,8 @@ async function seedDocumentRequirements() {
       await backfillMissingCommissions();
       await backfillStudentAppStatus();
     }
+    // Self-locking backfills (run once across all deployments via their own system_flags key).
+    await backfillProgramDocumentRequirements();
 
     console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
     const { startEmailWorker } = await import("./lib/email");

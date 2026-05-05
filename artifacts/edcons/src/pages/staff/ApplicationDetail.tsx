@@ -241,11 +241,12 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
               )}
             </div>
 
-            {app && normalizeLevel(app.level) && (
+            {app && (normalizeLevel(app.level) || app.programId) && (
               <div className="bg-card rounded-2xl border shadow-sm p-4">
                 <StudentDocChecklist
                   level={app.level}
                   documents={studentDocs}
+                  programId={app.programId ?? null}
                 />
               </div>
             )}

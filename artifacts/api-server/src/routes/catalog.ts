@@ -1,8 +1,30 @@
 import { Router, type IRouter } from "express";
-import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable } from "@workspace/db";
-import { eq, ilike, sql, and, asc } from "drizzle-orm";
+import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable } from "@workspace/db";
+import { eq, ilike, sql, and, asc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
+
+const PROGRAM_DOC_TYPES = [
+  "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
+  "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
+  "diploma_certificate", "diploma_transcript",
+  "bachelors_certificate", "bachelors_transcript",
+  "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
+  "masters_certificate", "masters_transcript",
+  "masters_provisional_certificate", "masters_transcript_all_semesters",
+  "passport", "cv", "lor", "sop", "essay", "experience_letters",
+  "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
+  "photo", "diploma_recognition",
+];
+
+function parseDocCellValue(v: any): "mandatory" | "optional" | null {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return null;
+  if (["m", "mandatory", "required", "zorunlu", "yes", "y", "true", "1", "x"].includes(s)) return "mandatory";
+  if (["o", "optional", "isteğe bağlı", "istege bagli", "opt"].includes(s)) return "optional";
+  return null;
+}
 
 const router: IRouter = Router();
 
@@ -175,7 +197,7 @@ router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), as
 /* ─── PROGRAMS BULK ──────────────────────────────────────────── */
 
 router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const rows: {
+  const rows: ({
     universityId?: number; universityName?: string; name: string;
     degree?: string; field?: string; language?: string;
     duration?: string; tuitionFee?: number; currency?: string;
@@ -184,15 +206,31 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     depositFee?: number; serviceFeeAmount?: number; discountedFee?: number;
     languageFee?: number; feeType?: string; minGpa?: number; minLanguageScore?: number;
     quota?: number; isActive?: string | boolean;
-  }[] = req.body;
+  } & Record<string, any>)[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
   const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
   const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.toLowerCase(), u.id]));
 
-  const parsed = rows.map(r => {
+  const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
+  const rowIdxByParsedIdx: number[] = [];
+  const parsed = rows.map((r, rowIdx) => {
     const uid = r.universityId ?? (r.universityName ? uniNameMap[r.universityName.toLowerCase()] : undefined);
     if (!uid || !r.name) return null;
+    let docList: { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined;
+    let sawAnyDocCol = false;
+    PROGRAM_DOC_TYPES.forEach((dt, idx) => {
+      if (Object.prototype.hasOwnProperty.call(r, dt)) {
+        sawAnyDocCol = true;
+        const parsedVal = parseDocCellValue((r as any)[dt]);
+        if (parsedVal !== null) {
+          if (!docList) docList = [];
+          docList.push({ documentType: dt, mandatory: parsedVal === "mandatory", sortOrder: idx });
+        }
+      }
+    });
+    if (sawAnyDocCol) docColsByRowIdx.set(rowIdx, docList ?? []);
+    rowIdxByParsedIdx.push(rowIdx);
     return {
       universityId: uid, name: r.name, degree: r.degree ?? null,
       field: r.field ?? null, language: r.language ?? null,
@@ -214,7 +252,7 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
       quota: r.quota ? (isNaN(Number(r.quota)) || Math.round(Number(r.quota)) < 1 ? null : Math.round(Number(r.quota))) : null,
       isActive: r.isActive === false || (typeof r.isActive === "string" && ["no", "false", "0"].includes(r.isActive.toLowerCase().trim())) ? false : true,
     };
-  }).filter(Boolean) as ReturnType<typeof programsTable.$inferInsert>[];
+  }).filter(Boolean) as (typeof programsTable.$inferInsert)[];
 
   if (parsed.length === 0) { res.status(400).json({ error: "No valid rows (universityId or universityName + name required)" }); return; }
 
@@ -228,9 +266,13 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
   let insertedCount = 0;
   let updatedCount = 0;
   const toInsert: typeof parsed = [];
+  const insertRowIdxs: number[] = [];
+  const docsToReplace = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
 
   const seenKeys = new Set<string>();
-  for (const val of parsed) {
+  for (let i = 0; i < parsed.length; i++) {
+    const val = parsed[i];
+    const origRowIdx = rowIdxByParsedIdx[i] ?? i;
     const key = `${val.universityId}|${(val.name || "").toLowerCase()}|${(val.degree || "").toLowerCase()}|${(val.language || "").toLowerCase()}`;
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
@@ -239,18 +281,40 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
       const { universityId: _uid, ...updates } = val;
       await db.update(programsTable).set({ ...updates, updatedAt: new Date() }).where(eq(programsTable.id, existingId));
       updatedCount++;
+      if (docColsByRowIdx.has(origRowIdx)) {
+        docsToReplace.set(existingId, docColsByRowIdx.get(origRowIdx) || []);
+      }
     } else {
       toInsert.push(val);
+      insertRowIdxs.push(origRowIdx);
     }
   }
 
   if (toInsert.length > 0) {
     const inserted = await db.insert(programsTable).values(toInsert).returning();
     insertedCount = inserted.length;
+    inserted.forEach((p, idx) => {
+      const origRowIdx = insertRowIdxs[idx];
+      if (docColsByRowIdx.has(origRowIdx)) {
+        docsToReplace.set(p.id, docColsByRowIdx.get(origRowIdx) || []);
+      }
+    });
   }
 
-  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount }, req.ip);
-  res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length });
+  if (docsToReplace.size > 0) {
+    const ids = [...docsToReplace.keys()];
+    await db.delete(programDocumentRequirementsTable).where(inArray(programDocumentRequirementsTable.programId, ids));
+    const allDocRows: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
+    for (const [pid, docs] of docsToReplace.entries()) {
+      for (const d of docs) allDocRows.push({ programId: pid, ...d });
+    }
+    if (allDocRows.length > 0) {
+      await db.insert(programDocumentRequirementsTable).values(allDocRows);
+    }
+  }
+
+  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size }, req.ip);
+  res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length, docsTouched: docsToReplace.size });
 });
 
 /* ─── CATALOG OPTIONS ──────────────────────────────────────── */

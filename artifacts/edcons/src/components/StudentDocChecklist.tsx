@@ -49,6 +49,8 @@ interface StudentDocChecklistProps {
   level: string | null | undefined;
   documents: any[];
   compact?: boolean;
+  programId?: number | null;
+  programRequirements?: { documentType: string; mandatory: boolean; sortOrder?: number }[] | null;
 }
 
 export function normalizeLevel(level: string | null | undefined): string | null {
@@ -57,9 +59,30 @@ export function normalizeLevel(level: string | null | undefined): string | null 
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function StudentDocChecklist({ level, documents, compact = false }: StudentDocChecklistProps) {
+export function StudentDocChecklist({ level, documents, compact = false, programId, programRequirements }: StudentDocChecklistProps) {
   const normalized = normalizeLevel(level);
   const { labelOf } = useStudyLevels();
+
+  const { data: fetchedProgramReqs } = useQuery<any[] | null>({
+    queryKey: ["program-document-requirements", programId],
+    queryFn: async () => {
+      if (!programId) return null;
+      try {
+        const res: any = await customFetch(`${BASE_URL}/api/programs/${programId}/document-requirements`);
+        return Array.isArray(res) ? res : null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!programId && !programRequirements,
+    staleTime: 60_000,
+  });
+
+  const effectiveProgramReqs: { documentType: string; mandatory: boolean; sortOrder?: number }[] | null = useMemo(() => {
+    if (programRequirements && programRequirements.length > 0) return programRequirements;
+    if (fetchedProgramReqs && fetchedProgramReqs.length > 0) return fetchedProgramReqs as any;
+    return null;
+  }, [programRequirements, fetchedProgramReqs]);
 
   const { data: docRequirements = [] } = useQuery<any[]>({
     queryKey: ["document-requirements"],
@@ -67,15 +90,26 @@ export function StudentDocChecklist({ level, documents, compact = false }: Stude
       const res: any = await customFetch(`${BASE_URL}/api/document-requirements`);
       return res as any[];
     },
+    enabled: !effectiveProgramReqs,
     staleTime: 60_000,
   });
 
   const requiredDocs = useMemo(() => {
+    if (effectiveProgramReqs) {
+      return [...effectiveProgramReqs]
+        .map((r, idx) => ({
+          id: `prog-${r.documentType}`,
+          documentType: r.documentType,
+          mandatory: !!r.mandatory,
+          sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : idx,
+        }))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    }
     if (!docRequirements.length || !normalized) return [];
     return docRequirements
       .filter((r: any) => r.level === normalized && r.enabled)
       .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
-  }, [docRequirements, normalized]);
+  }, [effectiveProgramReqs, docRequirements, normalized]);
 
   const uploadedTypes = useMemo(() => {
     const set = new Set<string>();
@@ -92,7 +126,7 @@ export function StudentDocChecklist({ level, documents, compact = false }: Stude
   const allEnabled = requiredDocs.length;
   const allUploaded = requiredDocs.filter((r: any) => uploadedTypes.has(r.documentType)).length;
 
-  if (!normalized) {
+  if (!normalized && !effectiveProgramReqs) {
     return (
       <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
         <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
@@ -106,7 +140,9 @@ export function StudentDocChecklist({ level, documents, compact = false }: Stude
   if (!requiredDocs.length) {
     return (
       <div className="p-3 rounded-xl bg-muted/50 border text-xs text-muted-foreground">
-        Bu seviye için belge gereksinimi tanımlanmamış.
+        {effectiveProgramReqs
+          ? "Bu program için belge gereksinimi tanımlanmamış."
+          : "Bu seviye için belge gereksinimi tanımlanmamış."}
       </div>
     );
   }
@@ -117,7 +153,9 @@ export function StudentDocChecklist({ level, documents, compact = false }: Stude
         <div className="flex items-center gap-2">
           <GraduationCap className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">
-            {labelOf(normalized) || normalized} — Belge Gereksinimleri
+            {effectiveProgramReqs
+              ? "Program Belge Gereksinimleri"
+              : `${labelOf(normalized) || normalized} — Belge Gereksinimleri`}
           </span>
         </div>
         <div className="flex items-center gap-2">

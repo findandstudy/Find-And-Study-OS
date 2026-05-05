@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, universitiesTable, programsTable, applicationsTable, pipelineStagesTable } from "@workspace/db";
+import { db, universitiesTable, programsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -139,7 +139,22 @@ router.get("/programs", async (req, res): Promise<void> => {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(programsTable).where(where);
-  const data = await db.select().from(programsTable).where(where).limit(limitNum).offset(offset).orderBy(programsTable.name);
+  const rows = await db.select().from(programsTable).where(where).limit(limitNum).offset(offset).orderBy(programsTable.name);
+
+  let data: any[] = rows;
+  if (rows.length > 0) {
+    const ids = rows.map(r => r.id);
+    const reqs = await db.select().from(programDocumentRequirementsTable)
+      .where(inArray(programDocumentRequirementsTable.programId, ids))
+      .orderBy(programDocumentRequirementsTable.sortOrder);
+    const grouped = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
+    for (const r of reqs) {
+      const arr = grouped.get(r.programId) || [];
+      arr.push({ documentType: r.documentType, mandatory: r.mandatory, sortOrder: r.sortOrder });
+      grouped.set(r.programId, arr);
+    }
+    data = rows.map(r => ({ ...r, documentRequirements: grouped.get(r.id) || [] }));
+  }
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
@@ -212,7 +227,10 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, id));
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }
-  res.json(prog);
+  const reqs = await db.select().from(programDocumentRequirementsTable)
+    .where(eq(programDocumentRequirementsTable.programId, id))
+    .orderBy(programDocumentRequirementsTable.sortOrder);
+  res.json({ ...prog, documentRequirements: reqs.map(r => ({ documentType: r.documentType, mandatory: r.mandatory, sortOrder: r.sortOrder })) });
 });
 
 router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
