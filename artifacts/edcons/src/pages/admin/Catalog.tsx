@@ -98,11 +98,13 @@ type Program = { id: number; universityId: number; name: string; degree?: string
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
+type BulkImportResult = { inserted: number; skipped: number; updated?: number; invalidDocCells?: number; docsTouched?: number };
+
 function BulkImportModal({ open, onClose, title, templateRows, headers, onImport }: {
   open: boolean; onClose: () => void; title: string;
-  templateRows: Record<string, any>[]; headers: string; onImport: (rows: Record<string, string>[]) => Promise<{ inserted: number; skipped: number; updated?: number }>;
+  templateRows: Record<string, any>[]; headers: string; onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
 }) {
-  const [result, setResult] = useState<{ inserted: number; skipped: number; updated?: number } | null>(null);
+  const [result, setResult] = useState<BulkImportResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -146,6 +148,14 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
               <p className="font-medium text-green-700">Import completed</p>
               <p className="text-green-600">Added: <strong>{result.inserted}</strong>{result.updated ? <> — Updated: <strong>{result.updated}</strong></> : null} — Skipped: <strong>{result.skipped}</strong></p>
+              {(result.docsTouched !== undefined || result.invalidDocCells !== undefined) && (
+                <p className="text-green-600 text-xs">
+                  {result.docsTouched !== undefined && <>Doc requirements updated for: <strong>{result.docsTouched}</strong> program(s).</>}
+                  {result.invalidDocCells !== undefined && result.invalidDocCells > 0 && (
+                    <span className="ml-2 text-amber-700">Skipped invalid doc cells: <strong>{result.invalidDocCells}</strong> (only "mandatory", "optional", or blank are accepted).</span>
+                  )}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -1255,11 +1265,60 @@ function ProgramsTab() {
     return res;
   };
 
+  const PROGRAM_DOC_TYPE_KEYS = [
+    "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
+    "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
+    "diploma_certificate", "diploma_transcript",
+    "bachelors_certificate", "bachelors_transcript",
+    "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
+    "masters_certificate", "masters_transcript",
+    "masters_provisional_certificate", "masters_transcript_all_semesters",
+    "passport", "cv", "lor", "sop", "essay", "experience_letters",
+    "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
+    "photo", "diploma_recognition",
+  ] as const;
+
+  const docColumnsAll = (val: string) =>
+    Object.fromEntries(PROGRAM_DOC_TYPE_KEYS.map(k => [k, val])) as Record<string, string>;
+
   const templateRows = [
-    { universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc", field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000, currency: "USD", scholarship: 0, intakes: "Fall, Spring", requirements: "High school diploma, English proficiency", commissionRate: 10, applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5, minLanguageScore: 5.5, quota: 50, isActive: "Yes", passport: "mandatory", high_school_diploma_translation: "mandatory", class_12th_hsc_certificate: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "optional", sop: "optional", photo: "optional" },
-    { universityName: "Istanbul University", name: "Business Administration", degree: "MBA", field: "Business", language: "English", duration: "2 years", tuitionFee: 8000, currency: "USD", scholarship: 2000, intakes: "Fall", requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000, languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, quota: 30, isActive: "Yes", passport: "mandatory", bachelors_certificate: "mandatory", bachelors_transcript: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "mandatory", sop: "optional", lor: "optional", cv: "optional" },
+    {
+      universityName: "// Each doc column accepts:", name: "mandatory / optional / (blank)",
+      degree: "(inline guide row — delete before importing)",
+      field: "", language: "", duration: "", tuitionFee: "", currency: "", scholarship: "",
+      intakes: "", requirements: "", commissionRate: "", applicationFee: "", advancedFee: "",
+      depositFee: "", serviceFeeAmount: "", discountedFee: "", languageFee: "", feeType: "",
+      minGpa: "", minLanguageScore: "", quota: "", isActive: "",
+      ...docColumnsAll("mandatory|optional|(blank)"),
+    },
+    {
+      universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc",
+      field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000,
+      currency: "USD", scholarship: 0, intakes: "Fall, Spring",
+      requirements: "High school diploma, English proficiency", commissionRate: 10,
+      applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300,
+      discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5,
+      minLanguageScore: 5.5, quota: 50, isActive: "Yes",
+      ...docColumnsAll(""),
+      passport: "mandatory", high_school_diploma_translation: "mandatory",
+      class_12th_hsc_certificate: "mandatory", class_12th_hsc_marks_sheet: "mandatory",
+      ielts_pte_gre_gmat_toefl_duolingo: "optional", sop: "optional", photo: "optional",
+    },
+    {
+      universityName: "Istanbul University", name: "Business Administration", degree: "MBA",
+      field: "Business", language: "English", duration: "2 years", tuitionFee: 8000,
+      currency: "USD", scholarship: 2000, intakes: "Fall",
+      requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150,
+      advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000,
+      languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, quota: 30,
+      isActive: "Yes",
+      ...docColumnsAll(""),
+      passport: "mandatory", bachelors_certificate: "mandatory",
+      bachelors_transcript: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "mandatory",
+      sop: "optional", lor: "optional", cv: "optional",
+    },
   ];
-  const headers = "universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive — Optional per-document columns (use \"mandatory\", \"optional\", or leave blank): passport, high_school_diploma_translation, class_10th_ssc_marks_sheet, class_12th_hsc_certificate, class_12th_hsc_marks_sheet, diploma_certificate, diploma_transcript, bachelors_certificate, bachelors_transcript, bachelors_provisional_certificate, bachelors_transcript_all_semesters, masters_certificate, masters_transcript, masters_provisional_certificate, masters_transcript_all_semesters, cv, lor, sop, essay, experience_letters, other_certificates_documents, ielts_pte_gre_gmat_toefl_duolingo, photo, diploma_recognition";
+  const headers = `universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive — Plus one column per document type (${PROGRAM_DOC_TYPE_KEYS.length} columns total): ${PROGRAM_DOC_TYPE_KEYS.join(", ")}. Each doc column accepts only "mandatory", "optional", or blank. The first row in the template is an inline guide and should be deleted before importing.`;
 
   return (
     <>

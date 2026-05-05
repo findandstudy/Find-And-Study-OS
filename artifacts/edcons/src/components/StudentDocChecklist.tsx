@@ -63,15 +63,24 @@ export function StudentDocChecklist({ level, documents, compact = false, program
   const normalized = normalizeLevel(level);
   const { labelOf } = useStudyLevels();
 
+  type ProgramDocReq = { documentType: string; mandatory: boolean; sortOrder?: number };
   const hasProgramContext = !!programId || Array.isArray(programRequirements);
 
-  const { data: fetchedProgramReqs, isFetched: programReqsFetched } = useQuery<any[]>({
+  const { data: fetchedProgramReqs, isFetched: programReqsFetched } = useQuery<ProgramDocReq[]>({
     queryKey: ["program-document-requirements", programId],
-    queryFn: async () => {
+    queryFn: async (): Promise<ProgramDocReq[]> => {
       if (!programId) return [];
       try {
-        const res: any = await customFetch(`${BASE_URL}/api/programs/${programId}/document-requirements`);
-        return Array.isArray(res) ? res : [];
+        const res = await customFetch(`${BASE_URL}/api/programs/${programId}/document-requirements`) as unknown;
+        if (!Array.isArray(res)) return [];
+        return res
+          .filter((r): r is { documentType: unknown; mandatory: unknown; sortOrder?: unknown } =>
+            !!r && typeof r === "object" && typeof (r as any).documentType === "string")
+          .map(r => ({
+            documentType: r.documentType as string,
+            mandatory: !!r.mandatory,
+            sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : undefined,
+          }));
       } catch {
         return [];
       }
@@ -84,9 +93,9 @@ export function StudentDocChecklist({ level, documents, compact = false, program
     ? Array.isArray(programRequirements)
     : Array.isArray(programRequirements) || programReqsFetched;
 
-  const effectiveProgramReqs: { documentType: string; mandatory: boolean; sortOrder?: number }[] | null = useMemo(() => {
+  const effectiveProgramReqs: ProgramDocReq[] | null = useMemo(() => {
     if (Array.isArray(programRequirements)) return programRequirements;
-    if (programId && Array.isArray(fetchedProgramReqs)) return fetchedProgramReqs as any;
+    if (programId && Array.isArray(fetchedProgramReqs)) return fetchedProgramReqs;
     return null;
   }, [programRequirements, fetchedProgramReqs, programId]);
 
