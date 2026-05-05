@@ -121,10 +121,18 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
       setResult(res);
     } catch (err) {
       const msg = err instanceof Error && err.message ? err.message : "Unknown error";
-      // Surface the backend's reason (e.g. unknown university names) so the
-      // user knows what to fix instead of seeing a generic "Import failed".
       console.error("[BulkImport] failed:", err);
-      setError(`Import failed: ${msg}`);
+      // Detect auth/CSRF errors and tell the user to sign in again instead of
+      // showing a confusing generic "Import failed" message.
+      if (/HTTP\s*401/i.test(msg) || /Authentication required/i.test(msg)) {
+        setError("Your session has expired. Please sign out and log back in, then try the import again.");
+      } else if (/HTTP\s*403/i.test(msg) || /CSRF/i.test(msg)) {
+        setError("Permission denied or security token expired. Refresh the page and try again.");
+      } else {
+        // Surface the backend's reason (e.g. unknown university names) so the
+        // user knows what to fix instead of seeing a generic "Import failed".
+        setError(`Import failed: ${msg}`);
+      }
     }
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
