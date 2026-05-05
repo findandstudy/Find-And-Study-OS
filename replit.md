@@ -56,10 +56,11 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **Stripe:** Implied payment processing.
 ## Changelog
 
-### 2026-05-05 — Bulk-import body limit 10mb → 50mb
+### 2026-05-05 — Bulk-import: body limit + Postgres bind-parameter chunking + error logging
 
-- Sorun: 7000+ programlı Excel dosyası (54 kolon, ~16 MB JSON serialize) için `/catalog/programs/bulk` HTTP 413 (request entity too large) dönüyordu.
-- `artifacts/api-server/src/app.ts`: `express.json` ve `express.urlencoded` limit 10mb → 50mb. Bulk-import endpoint'leri zaten requireAuth + MANAGER_ROLES ile korunuyor, risk düşük.
+- **Body limit (HTTP 413 fix):** `artifacts/api-server/src/app.ts` — `express.json` ve `express.urlencoded` limit 10mb → 50mb. 7000+ programlı Excel (54 kolon, ~16 MB JSON serialize) artık reddedilmiyor. Endpoint'ler zaten requireAuth + MANAGER_ROLES ile korunuyor.
+- **Chunking (HTTP 500 fix):** `artifacts/api-server/src/routes/catalog.ts` — `/programs/bulk` rotası tek `INSERT...VALUES` ile 7000 satır × ~22 kolon = 154k bind parametre üretiyordu, Postgres 16-bit (32767) limitini patlatıyordu. Hem `programsTable` insert (`INSERT_CHUNK = 500`), hem `programDocumentRequirementsTable` delete (`ID_CHUNK = 5000`) ve insert (`DOC_CHUNK = 1000`) artık chunk halinde yapılıyor.
+- **Error logging:** Aynı route'a try/catch sarıldı; `console.error` ile detaylı log + cevap body'sinde `{error, code, detail, hint}` döndürülüyor (önceden generic 500, sebep görünmezdi).
 
 ### 2026-05-05 — Create Application dialog'ları artık program-spesifik belge gereksinimlerini gösteriyor
 

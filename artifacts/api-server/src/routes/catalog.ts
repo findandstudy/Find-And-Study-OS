@@ -197,6 +197,7 @@ router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), as
 /* ─── PROGRAMS BULK ──────────────────────────────────────────── */
 
 router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  try {
   const rows: ({
     universityId?: number; universityName?: string; name: string;
     degree?: string; field?: string; language?: string;
@@ -317,10 +318,20 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     }
   }
 
+  // Postgres bind-parameter limit is 32767 (16-bit). For 7000+ row imports,
+  // a single INSERT...VALUES blows past this, so we chunk all bulk writes.
+  // ~22 cols × 500 rows = 11000 params, well under the limit.
+  const INSERT_CHUNK = 500;
+
   if (toInsert.length > 0) {
-    const inserted = await db.insert(programsTable).values(toInsert).returning();
-    insertedCount = inserted.length;
-    inserted.forEach((p, idx) => {
+    const allInserted: { id: number }[] = [];
+    for (let off = 0; off < toInsert.length; off += INSERT_CHUNK) {
+      const slice = toInsert.slice(off, off + INSERT_CHUNK);
+      const inserted = await db.insert(programsTable).values(slice).returning({ id: programsTable.id });
+      allInserted.push(...inserted);
+    }
+    insertedCount = allInserted.length;
+    allInserted.forEach((p, idx) => {
       const origRowIdx = insertRowIdxs[idx];
       if (docColsByRowIdx.has(origRowIdx)) {
         docsToReplace.set(p.id, docColsByRowIdx.get(origRowIdx) || []);
@@ -330,18 +341,38 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
 
   if (docsToReplace.size > 0) {
     const ids = [...docsToReplace.keys()];
-    await db.delete(programDocumentRequirementsTable).where(inArray(programDocumentRequirementsTable.programId, ids));
+    // Chunk DELETE too — inArray with 7000 ids = 7000 bind params, still fine,
+    // but be safe for future growth.
+    const ID_CHUNK = 5000;
+    for (let off = 0; off < ids.length; off += ID_CHUNK) {
+      await db.delete(programDocumentRequirementsTable)
+        .where(inArray(programDocumentRequirementsTable.programId, ids.slice(off, off + ID_CHUNK)));
+    }
     const allDocRows: { programId: number; documentType: string; mandatory: boolean; sortOrder: number }[] = [];
     for (const [pid, docs] of docsToReplace.entries()) {
       for (const d of docs) allDocRows.push({ programId: pid, ...d });
     }
     if (allDocRows.length > 0) {
-      await db.insert(programDocumentRequirementsTable).values(allDocRows);
+      // 4 cols × 1000 rows = 4000 params per chunk.
+      const DOC_CHUNK = 1000;
+      for (let off = 0; off < allDocRows.length; off += DOC_CHUNK) {
+        await db.insert(programDocumentRequirementsTable)
+          .values(allDocRows.slice(off, off + DOC_CHUNK));
+      }
     }
   }
 
   await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size, invalidDocCells }, req.ip);
   res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length, docsTouched: docsToReplace.size, invalidDocCells });
+  } catch (err: any) {
+    console.error("[programs/bulk] failed:", err?.message || err, err?.code, err?.detail, err?.stack?.split("\n").slice(0, 4).join(" | "));
+    res.status(500).json({
+      error: err?.message || "Bulk import failed",
+      code: err?.code,
+      detail: err?.detail,
+      hint: err?.hint,
+    });
+  }
 });
 
 /* ─── CATALOG OPTIONS ──────────────────────────────────────── */
