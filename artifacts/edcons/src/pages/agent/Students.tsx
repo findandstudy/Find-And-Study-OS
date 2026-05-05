@@ -482,8 +482,7 @@ function AddStudentModal({
   // intake step a program isn't selected yet, so we show a generic list
   // of all known doc types for upload (none are marked required here;
   // mandatory enforcement now lives on the per-application program
-  // requirements). Suppress the lint about the unused level state.
-  void applicationLevel;
+  // requirements).
   const currentDocs = useMemo<LevelDoc[]>(() => {
     return Object.entries(DOC_TYPE_META).map(([key, meta]) => ({
       key,

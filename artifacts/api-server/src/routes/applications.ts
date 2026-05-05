@@ -13,17 +13,6 @@ import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 
 const router: IRouter = Router();
 
-function normalizeStudyLevel(level: string | null | undefined): string | null {
-  if (!level) return null;
-  const l = level.toLowerCase().replace(/[\s.-]/g, "_");
-  if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
-  if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
-  if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
-  if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
-  if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
-  return null;
-}
-
 const DOC_REQUIRED_STAGES = [
   "app_fee_paid", "offer_received", "acceptance_letter",
   "final_acceptance", "upload_payment", "deposit_paid", "visa_approved",
