@@ -1216,7 +1216,7 @@ function ProgramsTab() {
     const key = form.id ?? "new";
     if (docReqsInitRef.current === key) return;
     const map: Record<string, "mandatory" | "optional" | "none"> = {};
-    for (const dt of DEGREE_DOC_TYPES) map[dt] = "none";
+    for (const dt of PROGRAM_DOC_TYPE_KEYS) map[dt] = "none";
     const list = (form as any).documentRequirements as { documentType: string; mandatory: boolean }[] | undefined;
     if (Array.isArray(list)) {
       for (const r of list) {
@@ -1235,7 +1235,7 @@ function ProgramsTab() {
         : await api("/api/programs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rest) });
       const programId = saved?.id ?? f.id;
       if (programId) {
-        const requirements = DEGREE_DOC_TYPES
+        const requirements = PROGRAM_DOC_TYPE_KEYS
           .map((dt, idx) => {
             const v = docReqs[dt];
             if (v === "mandatory") return { documentType: dt, mandatory: true, sortOrder: idx };
@@ -1264,19 +1264,6 @@ function ProgramsTab() {
     qc.invalidateQueries({ queryKey: ["programs"] });
     return res;
   };
-
-  const PROGRAM_DOC_TYPE_KEYS = [
-    "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
-    "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
-    "diploma_certificate", "diploma_transcript",
-    "bachelors_certificate", "bachelors_transcript",
-    "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
-    "masters_certificate", "masters_transcript",
-    "masters_provisional_certificate", "masters_transcript_all_semesters",
-    "passport", "cv", "lor", "sop", "essay", "experience_letters",
-    "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
-    "photo", "diploma_recognition",
-  ] as const;
 
   const docColumnsAll = (val: string) =>
     Object.fromEntries(PROGRAM_DOC_TYPE_KEYS.map(k => [k, val])) as Record<string, string>;
@@ -1581,7 +1568,7 @@ function ProgramsTab() {
               <div className="max-h-[260px] overflow-y-auto rounded border bg-background">
                 <table className="w-full text-xs">
                   <tbody className="divide-y">
-                    {DEGREE_DOC_TYPES.map(dt => {
+                    {PROGRAM_DOC_TYPE_KEYS.map(dt => {
                       const v = docReqs[dt] ?? "none";
                       return (
                         <tr key={dt} className="hover:bg-muted/30">
@@ -1682,6 +1669,19 @@ const OPTION_CATEGORIES = [
   { key: "field", label: "Field", description: "Academic fields / study areas" },
   { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
 ];
+
+const PROGRAM_DOC_TYPE_KEYS = [
+  "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
+  "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
+  "diploma_certificate", "diploma_transcript",
+  "bachelors_certificate", "bachelors_transcript",
+  "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
+  "masters_certificate", "masters_transcript",
+  "masters_provisional_certificate", "masters_transcript_all_semesters",
+  "passport", "cv", "lor", "sop", "essay", "experience_letters",
+  "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
+  "photo", "diploma_recognition",
+] as const;
 
 const DEGREE_DOC_TYPE_LABELS: Record<string, string> = {
   high_school_diploma_translation: "High School Diploma (Translation)",
