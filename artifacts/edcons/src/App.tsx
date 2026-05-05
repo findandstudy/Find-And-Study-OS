@@ -126,7 +126,19 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 5,
       gcTime: 1000 * 60 * 15,
-      retry: 1,
+      // Retry transient failures a few times with capped exponential backoff so
+      // brief DB blips don't blank lists/logos. Auth / 4xx errors should NOT be
+      // retried — they will not succeed on retry and would delay redirects.
+      retry: (failureCount, error: unknown) => {
+        const status = (error as { status?: number; response?: { status?: number } } | null)
+          ?.status ?? (error as { response?: { status?: number } } | null)?.response?.status;
+        if (typeof status === "number" && status >= 400 && status < 500) return false;
+        return failureCount < 3;
+      },
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+      // Keep showing the previous successful data while a refetch is in flight
+      // or fails — prevents tables and the brand logo from briefly disappearing.
+      placeholderData: (prev: unknown) => prev,
       refetchOnWindowFocus: false,
     },
   },

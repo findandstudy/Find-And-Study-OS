@@ -20,7 +20,7 @@ export const pool: pg.Pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: parsePositiveInt(process.env.DB_POOL_MAX, 10),
   min: 0,
-  idleTimeoutMillis: parsePositiveInt(process.env.DB_IDLE_TIMEOUT_MS, 30_000),
+  idleTimeoutMillis: parsePositiveInt(process.env.DB_IDLE_TIMEOUT_MS, 10_000),
   connectionTimeoutMillis: parsePositiveInt(process.env.DB_CONNECT_TIMEOUT_MS, 10_000),
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
@@ -44,6 +44,104 @@ pool.on("connect", (client) => {
     });
   });
 });
+
+const RETRYABLE_PG_CODES = new Set([
+  "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "ENETRESET", "ENETUNREACH",
+  "57P01", "57P02", "57P03",
+  "08000", "08001", "08003", "08004", "08006", "08007", "08P01",
+]);
+
+const RETRYABLE_MESSAGE_FRAGMENTS = [
+  "connection terminated",
+  "server closed the connection",
+  "terminating connection",
+  "connection timeout",
+  "client has encountered a connection error",
+];
+
+type ErrLike = { code?: string; message?: string; cause?: ErrLike } | null | undefined;
+
+function isRetryablePgError(err: ErrLike): boolean {
+  if (!err) return false;
+  const code = err.code ?? err.cause?.code;
+  if (code && RETRYABLE_PG_CODES.has(code)) return true;
+  const msg = (err.message ?? "").toLowerCase();
+  if (RETRYABLE_MESSAGE_FRAGMENTS.some((f) => msg.includes(f))) return true;
+  return err.cause ? isRetryablePgError(err.cause) : false;
+}
+
+// Only retry statements that are safe to re-execute. Anything that can mutate
+// state (INSERT/UPDATE/DELETE/CALL/etc.) is left to fail so the caller can
+// decide — re-running a write whose response was lost in transit could create
+// duplicate rows or charge fees twice. Strips leading SQL comments first.
+const READ_ONLY_PREFIX_RE =
+  /^(select|with|show|explain|values|table|fetch)\b/i;
+
+function extractSqlText(args: unknown[]): string | null {
+  const first = args[0];
+  if (typeof first === "string") return first;
+  if (first && typeof first === "object" && "text" in first) {
+    const t = (first as { text?: unknown }).text;
+    if (typeof t === "string") return t;
+  }
+  return null;
+}
+
+function isReadOnlySql(sql: string | null): boolean {
+  if (!sql) return false;
+  let s = sql.trimStart();
+  // Strip leading line and block comments so "-- comment\nSELECT ..." still matches.
+  // Loop because comments can repeat.
+  let prev = "";
+  while (s !== prev) {
+    prev = s;
+    if (s.startsWith("--")) {
+      const nl = s.indexOf("\n");
+      s = nl === -1 ? "" : s.slice(nl + 1).trimStart();
+    } else if (s.startsWith("/*")) {
+      const end = s.indexOf("*/");
+      s = end === -1 ? "" : s.slice(end + 2).trimStart();
+    }
+  }
+  return READ_ONLY_PREFIX_RE.test(s);
+}
+
+const MAX_QUERY_ATTEMPTS = parsePositiveInt(process.env.DB_QUERY_RETRIES, 3);
+const RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.DB_RETRY_BASE_MS, 120);
+
+const originalQuery = pool.query.bind(pool) as (...args: unknown[]) => Promise<unknown>;
+
+(pool as unknown as { query: (...args: unknown[]) => Promise<unknown> }).query =
+  async function retryingQuery(...args: unknown[]): Promise<unknown> {
+    const sql = extractSqlText(args);
+    const retryable = isReadOnlySql(sql);
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= MAX_QUERY_ATTEMPTS; attempt++) {
+      try {
+        return await originalQuery(...args);
+      } catch (err) {
+        lastErr = err;
+        if (
+          attempt === MAX_QUERY_ATTEMPTS ||
+          !retryable ||
+          !isRetryablePgError(err as ErrLike)
+        ) {
+          throw err;
+        }
+        const delay = RETRY_BASE_DELAY_MS * attempt;
+        const e = err as ErrLike;
+        console.warn("[db] retrying read query after transient error", {
+          attempt,
+          maxAttempts: MAX_QUERY_ATTEMPTS,
+          code: e?.code ?? e?.cause?.code,
+          message: e?.message,
+          delayMs: delay,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+    throw lastErr;
+  };
 
 export const db = drizzle(pool, { schema });
 
