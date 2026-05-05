@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useTransition } from "react";
+import { ReactNode, useEffect, useRef, useState, useTransition } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
@@ -19,6 +19,7 @@ import {
   SidebarMenu, 
   SidebarMenuItem, 
   SidebarMenuButton,
+  SidebarMenuAction,
   SidebarTrigger
 } from "@/components/ui/sidebar";
 import { 
@@ -57,6 +58,7 @@ import {
   Languages,
   History,
   Bell,
+  Star,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -364,6 +366,28 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
   const { groups } = getMenuForRole(user.role, t, staffPerms);
   const allItems = groups.flatMap(g => g.items);
+
+  // Sidebar favorites — persisted per user so each account keeps its own pins.
+  const pinnedStorageKey = `edcons:sidebarPinned:${user.id ?? user.email ?? "anon"}`;
+  const [pinnedUrls, setPinnedUrls] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(pinnedStorageKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter(v => typeof v === "string") : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(pinnedStorageKey, JSON.stringify(pinnedUrls)); } catch { /* ignore quota errors */ }
+  }, [pinnedStorageKey, pinnedUrls]);
+  const togglePin = (url: string) => {
+    setPinnedUrls(prev => prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]);
+  };
+  const pinnedSet = new Set(pinnedUrls);
+  // Preserve the order in which the user pinned each item (most recent last).
+  const favoriteItems = pinnedUrls
+    .map(u => allItems.find(i => i.url === u))
+    .filter((i): i is MenuItem => !!i);
   const activeItem = allItems.find(i => {
     if (i.url === '/staff' || i.url === '/admin' || i.url === '/student' || i.url === '/agent') {
       return location === i.url;
