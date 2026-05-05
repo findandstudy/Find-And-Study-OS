@@ -15,6 +15,45 @@ const PROGRAM_DOC_TYPES = [
   "passport", "cv", "lor", "sop", "essay", "experience_letters",
   "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
   "photo", "diploma_recognition",
+  // A. Akademik
+  "portfolio", "research_proposal", "publication_list", "writing_sample",
+  "subject_specific_test_score", "transcript_evaluation_report",
+  "medium_of_instruction_letter", "predicted_grades",
+  "gap_year_explanation_letter", "academic_reference_form",
+  // B. Finansal
+  "bank_statement", "financial_evidence_28_days", "financial_documents_3_months",
+  "gic_certificate", "sponsor_letter", "affidavit_of_support",
+  "sponsor_id_proof", "sponsor_relationship_proof", "sponsor_employment_letter",
+  "sponsor_tax_returns", "scholarship_award_letter", "proof_of_tuition_payment",
+  "education_loan_approval_letter", "fixed_deposit_receipt",
+  // C. Sağlık
+  "medical_examination_report", "hiv_test_certificate", "tb_test_certificate",
+  "hepatitis_b_test", "hepatitis_c_test", "vaccination_record",
+  "covid_vaccination_certificate", "panel_physician_medical_exam",
+  "mental_health_clearance", "physical_fitness_certificate",
+  // D. Vize ve Göçmenlik
+  "visa_application_form", "i20_form", "ds160_confirmation", "sevis_fee_receipt",
+  "cas_letter", "atas_certificate", "pal_tal_letter", "letter_of_acceptance_dli",
+  "biometrics_appointment_receipt", "previous_visa_copies", "visa_refusal_history",
+  "travel_history", "residence_permit", "police_clearance_certificate",
+  "good_conduct_certificate",
+  // E. Kimlik
+  "birth_certificate", "national_id_card", "family_book", "marriage_certificate",
+  "name_change_affidavit", "passport_size_photo_specifications",
+  // F. Çalışma ve Ara Yıl
+  "no_objection_certificate", "employer_letter", "work_experience_certificate",
+  "internship_certificates", "professional_license", "business_registration",
+  // G. Ülkeye Özel
+  "military_status_document", "yos_score_report", "sat_score_report",
+  "gaokao_score_report", "abitur_certificate", "a_level_certificate",
+  "ib_diploma", "olympiad_certificates",
+  // H. Konaklama ve Refakatçi
+  "accommodation_proof", "custodian_declaration", "parental_consent",
+  "dependents_documents",
+  // I. Dil ve Beyan
+  "ukvi_approved_english_test", "statement_of_finance", "personal_statement",
+  "diversity_statement", "ai_usage_declaration", "gdpr_consent_form",
+  "fraud_declaration",
 ];
 
 function parseDocCellValue(v: any): { value: "mandatory" | "optional" | null; invalid: boolean } {

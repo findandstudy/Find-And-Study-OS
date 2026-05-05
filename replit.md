@@ -56,6 +56,13 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **Stripe:** Implied payment processing.
 ## Changelog
 
+### 2026-05-05 — Program belge tipleri kataloğu 24 → 104 (80 yeni tip eklendi)
+
+- Mevcut 24 kanonik program belge tipinin yanına, başvuru süreçlerinde gerekebilecek 80 yeni belge tipi eklendi: A. Akademik (10), B. Finansal (14), C. Sağlık (10), D. Vize ve Göçmenlik (15), E. Kimlik (6), F. Çalışma ve Ara Yıl (6), G. Ülkeye Özel (8), H. Konaklama ve Refakatçi (4), I. Dil ve Beyan (7).
+- Hem CRM **Catalog → Programs → Edit Program → Document Requirements** ekranında seçilebiliyor (her birine label + kategori-uygun emoji ikon atandı), hem de **Excel bulk-import** sırasında ilgili snake_case kolon başlığıyla `mandatory`/`optional` değerleri kabul ediliyor.
+- Senkron tutulan dört kaynak: backend whitelist `artifacts/api-server/src/routes/catalog.ts` `PROGRAM_DOC_TYPES`, frontend editor `artifacts/edcons/src/pages/admin/Catalog.tsx` `PROGRAM_DOC_TYPE_KEYS` + `DEGREE_DOC_TYPE_LABELS`, ortak UI meta `artifacts/edcons/src/lib/programDocTypes.ts` `PROGRAM_DOC_META`.
+- Doc-equivalence (`lib/doc-equivalence`) yeni grupla genişletilmedi — tüm yeni tipler standalone kabul edildi (string-eşitlik fallback'i ile zorunlu/opsiyonel kontrolü çalışır). Mevcut başvurular ve önceki davranış etkilenmedi.
+
 ### 2026-05-05 — Course Finder: cascading (faceted) filter dropdowns
 
 - Sorun: Filtreler birbirinden bağımsız çalışıyordu — kullanıcı `Country=Turkey` seçse bile City/University dropdown'ları tüm dünyadaki şehir/üniversiteleri göstermeye devam ediyordu, ve uyumsuz seçimler sessizce 0 sonuç döndürebiliyordu.
