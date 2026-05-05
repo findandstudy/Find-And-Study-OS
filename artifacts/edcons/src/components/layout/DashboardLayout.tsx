@@ -388,7 +388,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
       )}
       <div className="flex min-h-screen w-full bg-secondary/20">
-        <Sidebar className="border-r border-border/60 shadow-sm">
+        <Sidebar collapsible="icon" className="border-r border-border/60 shadow-sm">
           <SidebarContent className="bg-card">
             {/* Logo */}
             <div className="p-5 pb-4 border-b border-border/40">
