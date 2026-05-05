@@ -77,9 +77,10 @@ type Program = {
   universityType?: string | null;
   universityWebsite?: string | null;
   universityDescription?: string | null;
-  universityRanking?: number | null;
   universityQsRanking?: number | null;
   universityTimesRanking?: number | null;
+  universityShanghaiRanking?: number | null;
+  universityCwtsLeidenRanking?: number | null;
   universityAddress?: string | null;
   universityTaxType?: string | null;
   universityContactName?: string | null;
@@ -1453,28 +1454,34 @@ function UniversityInfoDialog({ program: p, onClose }: {
           )}
 
           {/* Rankings */}
-          {(p.universityQsRanking || p.universityTimesRanking || p.universityRanking) && (
+          {(p.universityQsRanking || p.universityTimesRanking || p.universityShanghaiRanking || p.universityCwtsLeidenRanking) && (
             <div>
               <h4 className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
-                <Award className="w-3.5 h-3.5" /> Rankings
+                <Award className="w-3.5 h-3.5" /> World Rankings
               </h4>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {p.universityQsRanking && (
-                  <div className="flex-1 min-w-[100px] bg-muted/40 border rounded-lg px-3 py-2">
+                  <div className="bg-muted/40 border rounded-lg px-3 py-2">
                     <p className="text-base font-bold text-primary leading-none">#{p.universityQsRanking}</p>
                     <p className="text-[10px] text-muted-foreground font-medium mt-1">QS World</p>
                   </div>
                 )}
                 {p.universityTimesRanking && (
-                  <div className="flex-1 min-w-[100px] bg-muted/40 border rounded-lg px-3 py-2">
+                  <div className="bg-muted/40 border rounded-lg px-3 py-2">
                     <p className="text-base font-bold text-primary leading-none">#{p.universityTimesRanking}</p>
                     <p className="text-[10px] text-muted-foreground font-medium mt-1">Times HE</p>
                   </div>
                 )}
-                {p.universityRanking && (
-                  <div className="flex-1 min-w-[100px] bg-muted/40 border rounded-lg px-3 py-2">
-                    <p className="text-base font-bold text-primary leading-none">#{p.universityRanking}</p>
-                    <p className="text-[10px] text-muted-foreground font-medium mt-1">National</p>
+                {p.universityShanghaiRanking && (
+                  <div className="bg-muted/40 border rounded-lg px-3 py-2">
+                    <p className="text-base font-bold text-primary leading-none">#{p.universityShanghaiRanking}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">Shanghai</p>
+                  </div>
+                )}
+                {p.universityCwtsLeidenRanking && (
+                  <div className="bg-muted/40 border rounded-lg px-3 py-2">
+                    <p className="text-base font-bold text-primary leading-none">#{p.universityCwtsLeidenRanking}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">CWTS Leiden</p>
                   </div>
                 )}
               </div>
