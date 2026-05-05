@@ -63,26 +63,34 @@ export function StudentDocChecklist({ level, documents, compact = false, program
   const normalized = normalizeLevel(level);
   const { labelOf } = useStudyLevels();
 
-  const { data: fetchedProgramReqs } = useQuery<any[] | null>({
+  const hasProgramContext = !!programId || Array.isArray(programRequirements);
+
+  const { data: fetchedProgramReqs, isFetched: programReqsFetched } = useQuery<any[]>({
     queryKey: ["program-document-requirements", programId],
     queryFn: async () => {
-      if (!programId) return null;
+      if (!programId) return [];
       try {
         const res: any = await customFetch(`${BASE_URL}/api/programs/${programId}/document-requirements`);
-        return Array.isArray(res) ? res : null;
+        return Array.isArray(res) ? res : [];
       } catch {
-        return null;
+        return [];
       }
     },
-    enabled: !!programId && !programRequirements,
+    enabled: !!programId && !Array.isArray(programRequirements),
     staleTime: 60_000,
   });
 
+  const programReqsResolved = !programId
+    ? Array.isArray(programRequirements)
+    : Array.isArray(programRequirements) || programReqsFetched;
+
   const effectiveProgramReqs: { documentType: string; mandatory: boolean; sortOrder?: number }[] | null = useMemo(() => {
-    if (programRequirements && programRequirements.length > 0) return programRequirements;
-    if (fetchedProgramReqs && fetchedProgramReqs.length > 0) return fetchedProgramReqs as any;
+    if (Array.isArray(programRequirements)) return programRequirements;
+    if (programId && Array.isArray(fetchedProgramReqs)) return fetchedProgramReqs as any;
     return null;
-  }, [programRequirements, fetchedProgramReqs]);
+  }, [programRequirements, fetchedProgramReqs, programId]);
+
+  const useDegreeFallback = !hasProgramContext;
 
   const { data: docRequirements = [] } = useQuery<any[]>({
     queryKey: ["document-requirements"],
@@ -90,12 +98,13 @@ export function StudentDocChecklist({ level, documents, compact = false, program
       const res: any = await customFetch(`${BASE_URL}/api/document-requirements`);
       return res as any[];
     },
-    enabled: !effectiveProgramReqs,
+    enabled: useDegreeFallback,
     staleTime: 60_000,
   });
 
   const requiredDocs = useMemo(() => {
-    if (effectiveProgramReqs) {
+    if (hasProgramContext) {
+      if (!effectiveProgramReqs) return [];
       return [...effectiveProgramReqs]
         .map((r, idx) => ({
           id: `prog-${r.documentType}`,
@@ -109,7 +118,7 @@ export function StudentDocChecklist({ level, documents, compact = false, program
     return docRequirements
       .filter((r: any) => r.level === normalized && r.enabled)
       .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
-  }, [effectiveProgramReqs, docRequirements, normalized]);
+  }, [hasProgramContext, effectiveProgramReqs, docRequirements, normalized]);
 
   const uploadedTypes = useMemo(() => {
     const set = new Set<string>();
@@ -126,7 +135,7 @@ export function StudentDocChecklist({ level, documents, compact = false, program
   const allEnabled = requiredDocs.length;
   const allUploaded = requiredDocs.filter((r: any) => uploadedTypes.has(r.documentType)).length;
 
-  if (!normalized && !effectiveProgramReqs) {
+  if (!hasProgramContext && !normalized) {
     return (
       <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
         <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
@@ -137,10 +146,18 @@ export function StudentDocChecklist({ level, documents, compact = false, program
     );
   }
 
+  if (hasProgramContext && !programReqsResolved) {
+    return (
+      <div className="p-3 rounded-xl bg-muted/50 border text-xs text-muted-foreground">
+        Program belge gereksinimleri yükleniyor…
+      </div>
+    );
+  }
+
   if (!requiredDocs.length) {
     return (
       <div className="p-3 rounded-xl bg-muted/50 border text-xs text-muted-foreground">
-        {effectiveProgramReqs
+        {hasProgramContext
           ? "Bu program için belge gereksinimi tanımlanmamış."
           : "Bu seviye için belge gereksinimi tanımlanmamış."}
       </div>
@@ -153,7 +170,7 @@ export function StudentDocChecklist({ level, documents, compact = false, program
         <div className="flex items-center gap-2">
           <GraduationCap className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">
-            {effectiveProgramReqs
+            {hasProgramContext
               ? "Program Belge Gereksinimleri"
               : `${labelOf(normalized) || normalized} — Belge Gereksinimleri`}
           </span>

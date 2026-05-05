@@ -381,21 +381,24 @@ async function seedDocumentRequirements() {
 async function backfillProgramDocumentRequirements() {
   try {
     const lockKey = "program_doc_requirements_backfill_v1";
-    const lockResult = await pool.query(
-      `INSERT INTO system_flags (key) VALUES ($1) ON CONFLICT DO NOTHING RETURNING key`,
+    // Check first; only set the flag AFTER a successful, full pass so partial
+    // failures remain re-runnable on the next process start.
+    const existing = await pool.query(
+      `SELECT 1 FROM system_flags WHERE key = $1`,
       [lockKey],
     );
-    if (lockResult.rows.length === 0) return;
+    if (existing.rows.length > 0) return;
 
     const allPrograms = await db.select({ id: programsTable.id, degree: programsTable.degree }).from(programsTable);
     if (allPrograms.length === 0) {
       console.log("[backfill] program-doc-reqs: no programs to backfill");
+      await pool.query(`INSERT INTO system_flags (key) VALUES ($1) ON CONFLICT DO NOTHING`, [lockKey]);
       return;
     }
 
-    const existing = await db.select({ programId: programDocumentRequirementsTable.programId })
+    const existingReqs = await db.select({ programId: programDocumentRequirementsTable.programId })
       .from(programDocumentRequirementsTable);
-    const programsWithReqs = new Set(existing.map(e => e.programId));
+    const programsWithReqs = new Set(existingReqs.map(e => e.programId));
 
     const degreeReqs = await db.select().from(documentRequirementsTable);
     const reqsByLevel = new Map<string, { documentType: string; mandatory: boolean; sortOrder: number }[]>();
@@ -441,9 +444,11 @@ async function backfillProgramDocumentRequirements() {
         await db.insert(programDocumentRequirementsTable).values(toInsert.slice(i, i + CHUNK));
       }
     }
+    // Mark complete only after the full pass succeeded.
+    await pool.query(`INSERT INTO system_flags (key) VALUES ($1) ON CONFLICT DO NOTHING`, [lockKey]);
     console.log("[backfill] program-doc-reqs:", { programsTouched: touchedPrograms, rowsInserted: toInsert.length });
   } catch (err) {
-    console.error("[backfill] backfillProgramDocumentRequirements error:", err);
+    console.error("[backfill] backfillProgramDocumentRequirements error (will retry on next startup):", err);
   }
 }
 

@@ -17,13 +17,13 @@ const PROGRAM_DOC_TYPES = [
   "photo", "diploma_recognition",
 ];
 
-function parseDocCellValue(v: any): "mandatory" | "optional" | null {
-  if (v === undefined || v === null) return null;
+function parseDocCellValue(v: any): { value: "mandatory" | "optional" | null; invalid: boolean } {
+  if (v === undefined || v === null) return { value: null, invalid: false };
   const s = String(v).trim().toLowerCase();
-  if (!s) return null;
-  if (["m", "mandatory", "required", "zorunlu", "yes", "y", "true", "1", "x"].includes(s)) return "mandatory";
-  if (["o", "optional", "isteğe bağlı", "istege bagli", "opt"].includes(s)) return "optional";
-  return null;
+  if (!s) return { value: null, invalid: false };
+  if (s === "mandatory") return { value: "mandatory", invalid: false };
+  if (s === "optional") return { value: "optional", invalid: false };
+  return { value: null, invalid: true };
 }
 
 const router: IRouter = Router();
@@ -214,6 +214,7 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
 
   const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
   const rowIdxByParsedIdx: number[] = [];
+  let invalidDocCells = 0;
   const parsed = rows.map((r, rowIdx) => {
     const uid = r.universityId ?? (r.universityName ? uniNameMap[r.universityName.toLowerCase()] : undefined);
     if (!uid || !r.name) return null;
@@ -222,10 +223,11 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     PROGRAM_DOC_TYPES.forEach((dt, idx) => {
       if (Object.prototype.hasOwnProperty.call(r, dt)) {
         sawAnyDocCol = true;
-        const parsedVal = parseDocCellValue((r as any)[dt]);
-        if (parsedVal !== null) {
+        const { value, invalid } = parseDocCellValue((r as any)[dt]);
+        if (invalid) invalidDocCells++;
+        if (value !== null) {
           if (!docList) docList = [];
-          docList.push({ documentType: dt, mandatory: parsedVal === "mandatory", sortOrder: idx });
+          docList.push({ documentType: dt, mandatory: value === "mandatory", sortOrder: idx });
         }
       }
     });
@@ -313,8 +315,8 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     }
   }
 
-  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size }, req.ip);
-  res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length, docsTouched: docsToReplace.size });
+  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size, invalidDocCells }, req.ip);
+  res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length, docsTouched: docsToReplace.size, invalidDocCells });
 });
 
 /* ─── CATALOG OPTIONS ──────────────────────────────────────── */

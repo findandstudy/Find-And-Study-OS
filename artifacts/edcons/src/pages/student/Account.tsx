@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -24,6 +24,8 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { StudentDocChecklist } from "@/components/StudentDocChecklist";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const DOC_TYPES = [
   { key: "passport", label: "Passport" },
@@ -480,6 +482,26 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: applicationsResp } = useQuery<any>({
+    queryKey: ["student-applications-for-checklist"],
+    queryFn: async () => customFetch(`${BASE_URL}/api/applications`),
+    staleTime: 30_000,
+  });
+  const studentApplications: any[] = useMemo(() => {
+    const list = (applicationsResp as any)?.data || applicationsResp || [];
+    return Array.isArray(list) ? list : [];
+  }, [applicationsResp]);
+  const activeApp = useMemo(() => {
+    const withProg = studentApplications.filter(a => a && a.programId);
+    if (withProg.length === 0) return null;
+    const sorted = [...withProg].sort((a, b) => {
+      const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return tb - ta;
+    });
+    return sorted[0];
+  }, [studentApplications]);
+
   const { data: documents = [], isLoading } = useQuery<any[]>({
     queryKey: ["student-documents"],
     enabled: !!user,
@@ -570,9 +592,10 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
       {studentProfile?.id && (
         <div className="mb-5">
           <StudentDocChecklist
-            level={studentProfile.interestedLevel}
+            level={activeApp?.level ?? studentProfile.interestedLevel}
             documents={documents}
             compact={false}
+            programId={activeApp?.programId ?? null}
           />
         </div>
       )}
