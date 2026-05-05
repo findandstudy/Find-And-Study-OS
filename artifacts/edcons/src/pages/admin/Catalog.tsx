@@ -1319,7 +1319,7 @@ function ProgramsTab() {
       sop: "optional", lor: "optional", cv: "optional",
     },
   ];
-  const headers = `universityName* (or universityId*), name*, degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive — Plus one column per document type (${PROGRAM_DOC_TYPE_KEYS.length} columns total): ${PROGRAM_DOC_TYPE_KEYS.join(", ")}. Each doc column accepts only "mandatory", "optional", or blank. The first row in the template is an inline guide and should be deleted before importing.`;
+  const headers = `Required: universityName (or universityId), name. Optional: degree, field, language, duration, tuitionFee, currency, scholarship, intakes, requirements, commissionRate, applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee, feeType, minGpa, minLanguageScore, quota, isActive. Plus ${PROGRAM_DOC_TYPE_KEYS.length} document-requirement columns (one per supported document type) — each accepts "mandatory", "optional", or blank. Download the template to see the full column list. The first row of the template is an inline example and should be deleted before importing.`;
 
   return (
     <>
