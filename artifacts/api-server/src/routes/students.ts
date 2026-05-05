@@ -10,6 +10,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
 import bcrypt from "bcryptjs";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -268,7 +269,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     gpa: gpa || null,
     languageScore: languageScore || null,
     interestedLevel: interestedLevel || null,
-    season: season || String(new Date().getFullYear()),
+    season: season || (await getCurrentSeason()),
     ...origin,
   }).returning();
 

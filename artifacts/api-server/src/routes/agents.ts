@@ -9,6 +9,7 @@ import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, 
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { toE164 } from "../lib/inbox/phone";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -814,7 +815,7 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   const commissionRateChanged = updates.commissionRate !== undefined && updates.commissionRate !== oldAgent.commissionRate;
   if (commissionRateChanged) {
     const newRate = agent.commissionRate ?? 0;
-    const currentSeason = new Date().getFullYear().toString();
+    const currentSeason = await getCurrentSeason();
 
     const agentComms = await db.select().from(commissionsTable)
       .where(and(

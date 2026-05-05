@@ -107,8 +107,8 @@ export const settingsTable = pgTable("settings", {
   pdfSealImageUrl: text("pdf_seal_image_url"),
   pdfPrimaryColor: text("pdf_primary_color"),
 
-  // Season Years
-  availableYears: jsonb("available_years").$type<number[]>(),
+  // Season Years — supports legacy `number[]` and new detailed `{ year, startDate, endDate }[]`
+  availableYears: jsonb("available_years").$type<Array<number | { year: number; startDate: string; endDate: string }>>(),
 
   // Advanced
   sitemapUrl: text("sitemap_url"),

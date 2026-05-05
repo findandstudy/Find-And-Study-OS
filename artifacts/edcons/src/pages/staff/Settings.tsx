@@ -194,7 +194,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "notifications", label: "Notifications", icon: Bell, group: "personal" },
   { id: "security", label: "Security", icon: Shield, group: "personal" },
   { id: "pipeline", label: "Pipeline Stages", icon: Kanban, group: "organization", managerOnly: true },
-  { id: "seasons", label: "Seasons / Intakes", icon: CalendarDays, group: "organization", managerOnly: true },
+  { id: "seasons", label: "Academic Years", icon: CalendarDays, group: "organization", managerOnly: true },
   { id: "branding", label: "Branding & Appearance", icon: Palette, group: "organization", managerOnly: true },
   { id: "company", label: "Company & Contact", icon: Building2, group: "organization", managerOnly: true },
   { id: "seo", label: "SEO & Social", icon: SearchIcon, group: "organization", managerOnly: true },
@@ -666,7 +666,6 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <YearsManagement />
-        <SeasonsTab />
       </div>
     );
   }
@@ -1281,60 +1280,92 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   );
 }
 
+type YearDetail = { year: number; startDate: string; endDate: string };
+
 function YearsManagement() {
   const { toast } = useToast();
-  const [years, setYears] = useState<number[]>([]);
+  const [details, setDetails] = useState<YearDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newYear, setNewYear] = useState("");
+  const [newStart, setNewStart] = useState("");
+  const [newEnd, setNewEnd] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
         const data: any = await customFetch("/api/settings/available-years");
-        setYears(data.years || []);
+        if (Array.isArray(data.details) && data.details.length) {
+          setDetails(data.details);
+        } else if (Array.isArray(data.years)) {
+          setDetails(data.years.map((y: number) => ({ year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31` })));
+        }
       } catch {
-        const currentYear = new Date().getFullYear();
-        setYears(Array.from({ length: 6 }, (_, i) => currentYear - 2 + i));
+        const cy = new Date().getFullYear();
+        setDetails(Array.from({ length: 6 }, (_, i) => {
+          const y = cy - 2 + i;
+          return { year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31` };
+        }));
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  async function saveYears(updated: number[]) {
+  async function persist(updated: YearDetail[]) {
+    const sorted = [...updated].sort((a, b) => a.year - b.year);
     setSaving(true);
     try {
       await customFetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ availableYears: updated.sort((a, b) => a - b) }),
+        body: JSON.stringify({ availableYears: sorted }),
       });
-      setYears(updated.sort((a, b) => a - b));
-      toast({ title: "Years updated" });
+      setDetails(sorted);
+      toast({ title: "Academic years updated" });
     } catch (err: any) {
-      toast({ title: "Failed to update years", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
-  function handleAddYear() {
+  function isoOk(s: string) { return /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+  function handleAdd() {
     const y = parseInt(newYear, 10);
     if (isNaN(y) || y < 2000 || y > 2100) {
-      toast({ title: "Enter a valid year (2000-2100)", variant: "destructive" });
+      toast({ title: "Enter a valid year (2000–2100)", variant: "destructive" });
       return;
     }
-    if (years.includes(y)) {
+    if (details.some(d => d.year === y)) {
       toast({ title: "Year already exists", variant: "destructive" });
       return;
     }
-    setNewYear("");
-    saveYears([...years, y]);
+    const start = newStart && isoOk(newStart) ? newStart : `${y}-01-01`;
+    const end = newEnd && isoOk(newEnd) ? newEnd : `${y}-12-31`;
+    if (start > end) {
+      toast({ title: "Start date must be before end date", variant: "destructive" });
+      return;
+    }
+    setNewYear(""); setNewStart(""); setNewEnd("");
+    persist([...details, { year: y, startDate: start, endDate: end }]);
   }
 
-  function handleRemoveYear(y: number) {
-    saveYears(years.filter(yr => yr !== y));
+  function handleRemove(y: number) {
+    if (details.length <= 1) return;
+    persist(details.filter(d => d.year !== y));
+  }
+
+  function updateDate(y: number, field: "startDate" | "endDate", value: string) {
+    if (!isoOk(value)) return;
+    const next = details.map(d => d.year === y ? { ...d, [field]: value } : d);
+    const target = next.find(d => d.year === y)!;
+    if (target.startDate > target.endDate) {
+      toast({ title: "Start date must be before end date", variant: "destructive" });
+      return;
+    }
+    persist(next);
   }
 
   if (loading) {
@@ -1349,281 +1380,97 @@ function YearsManagement() {
 
   return (
     <Card className="border-none shadow-lg shadow-black/5 p-6">
-      <SectionHeader title="Academic Years" description="Manage the years available in the year selector across the system. Users will see these years in the top navigation dropdown." />
+      <SectionHeader
+        title="Academic Years"
+        description="Define each academic year and its season window (start & end dates). The system uses today's date to decide which year is the active season — so records auto-tag correctly even when the season doesn't start on January 1."
+      />
 
-      <div className="flex items-center gap-3 mb-6">
-        <Input
-          type="number"
-          value={newYear}
-          onChange={e => setNewYear(e.target.value)}
-          placeholder="e.g. 2027"
-          className="rounded-xl w-[140px]"
-          min={2000}
-          max={2100}
-          onKeyDown={e => { if (e.key === "Enter") handleAddYear(); }}
-        />
-        <Button onClick={handleAddYear} disabled={saving || !newYear.trim()} className="rounded-xl gap-2 shrink-0">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          Add Year
-        </Button>
+      <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4 mb-6">
+        <p className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Add a new year</p>
+        <div className="grid grid-cols-1 md:grid-cols-[140px_1fr_1fr_auto] gap-3 items-end">
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">Year</label>
+            <Input
+              type="number"
+              value={newYear}
+              onChange={e => setNewYear(e.target.value)}
+              placeholder="e.g. 2027"
+              className="rounded-xl"
+              min={2000}
+              max={2100}
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">Season starts</label>
+            <Input
+              type="date"
+              value={newStart}
+              onChange={e => setNewStart(e.target.value)}
+              className="rounded-xl"
+              placeholder="YYYY-MM-DD"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground block mb-1">Season ends</label>
+            <Input
+              type="date"
+              value={newEnd}
+              onChange={e => setNewEnd(e.target.value)}
+              className="rounded-xl"
+              placeholder="YYYY-MM-DD"
+            />
+          </div>
+          <Button onClick={handleAdd} disabled={saving || !newYear.trim()} className="rounded-xl gap-2 shrink-0 h-10">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Add
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">If you leave dates empty we default to Jan 1 → Dec 31 of the year you entered.</p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {years.map(y => (
-          <div key={y} className="flex items-center gap-1.5 bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5">
-            <CalendarDays className="w-3.5 h-3.5 text-primary" />
-            <span className="text-sm font-semibold text-foreground">{y}</span>
-            <button
-              onClick={() => handleRemoveYear(y)}
-              disabled={saving || years.length <= 1}
-              className="ml-1 w-5 h-5 rounded-full hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30"
-              title="Remove year"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
+      <div className="space-y-2">
+        {details.map(d => {
+          const today = new Date().toISOString().slice(0, 10);
+          const isActive = d.startDate <= today && today <= d.endDate;
+          return (
+            <div key={d.year} className={`grid grid-cols-1 md:grid-cols-[140px_1fr_1fr_auto] gap-3 items-center p-3 rounded-xl border ${isActive ? "border-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20" : "border-border/50 bg-background"}`}>
+              <div className="flex items-center gap-2">
+                <CalendarDays className={`w-4 h-4 ${isActive ? "text-emerald-600" : "text-primary"}`} />
+                <span className="text-sm font-bold text-foreground">{d.year}</span>
+                {isActive && (
+                  <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-0 px-1.5 py-0">Active</Badge>
+                )}
+              </div>
+              <Input
+                type="date"
+                value={d.startDate}
+                onChange={e => updateDate(d.year, "startDate", e.target.value)}
+                disabled={saving}
+                className="rounded-lg h-9 text-sm"
+              />
+              <Input
+                type="date"
+                value={d.endDate}
+                onChange={e => updateDate(d.year, "endDate", e.target.value)}
+                disabled={saving}
+                className="rounded-lg h-9 text-sm"
+              />
+              <button
+                onClick={() => handleRemove(d.year)}
+                disabled={saving || details.length <= 1}
+                className="w-8 h-8 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30 justify-self-end"
+                title="Remove year"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
 }
 
-function SeasonsTab() {
-  const { toast } = useToast();
-  const [seasons, setSeasons] = useState<Array<{ id: number; value: string; sortOrder: number; isActive: boolean }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<number | null>(null);
-  const [newSeason, setNewSeason] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
-
-  const fetchSeasons = useCallback(async () => {
-    try {
-      const data: any = await customFetch("/api/catalog-options");
-      const intakes = (data.grouped?.intake || []).map((s: any) => ({
-        id: s.id,
-        value: s.value,
-        sortOrder: s.sortOrder,
-        isActive: s.isActive,
-      }));
-      setSeasons(intakes);
-    } catch {
-      toast({ title: "Failed to load seasons", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => { fetchSeasons(); }, [fetchSeasons]);
-
-  async function handleAdd() {
-    const trimmed = newSeason.trim();
-    if (!trimmed) return;
-    if (seasons.some(s => s.value.toLowerCase() === trimmed.toLowerCase())) {
-      toast({ title: "Season already exists", variant: "destructive" });
-      return;
-    }
-    setAdding(true);
-    try {
-      await customFetch("/api/catalog-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: "intake", value: trimmed, sortOrder: seasons.length }),
-      });
-      setNewSeason("");
-      await fetchSeasons();
-      toast({ title: "Season added" });
-    } catch (err: any) {
-      toast({ title: "Failed to add season", description: err.message, variant: "destructive" });
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  async function handleUpdate(id: number) {
-    const trimmed = editValue.trim();
-    if (!trimmed) return;
-    if (seasons.some(s => s.id !== id && s.value.toLowerCase() === trimmed.toLowerCase())) {
-      toast({ title: "Season name already exists", variant: "destructive" });
-      return;
-    }
-    setSaving(id);
-    try {
-      await customFetch(`/api/catalog-options/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: trimmed }),
-      });
-      setEditingId(null);
-      await fetchSeasons();
-      toast({ title: "Season updated" });
-    } catch (err: any) {
-      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(null);
-    }
-  }
-
-  async function handleToggle(id: number, isActive: boolean) {
-    setSaving(id);
-    try {
-      await customFetch(`/api/catalog-options/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !isActive }),
-      });
-      await fetchSeasons();
-      toast({ title: isActive ? "Season deactivated" : "Season activated" });
-    } catch (err: any) {
-      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(null);
-    }
-  }
-
-  async function handleDelete(id: number) {
-    setSaving(id);
-    try {
-      await customFetch(`/api/catalog-options/${id}`, { method: "DELETE" });
-      await fetchSeasons();
-      toast({ title: "Season removed" });
-    } catch (err: any) {
-      toast({ title: "Failed to delete", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(null);
-    }
-  }
-
-  if (loading) {
-    return (
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title="Seasons / Intake Periods" description="Manage the available intake seasons used across the system — for applications, programs, and the embed widget." />
-
-        <div className="flex items-center gap-3 mb-6">
-          <Input
-            value={newSeason}
-            onChange={e => setNewSeason(e.target.value)}
-            placeholder="e.g. September, February, Summer..."
-            className="rounded-xl flex-1"
-            onKeyDown={e => { if (e.key === "Enter") handleAdd(); }}
-          />
-          <Button onClick={handleAdd} disabled={adding || !newSeason.trim()} className="rounded-xl gap-2 shrink-0">
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Add Season
-          </Button>
-        </div>
-
-        {seasons.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground">
-            <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm font-medium">No seasons configured</p>
-            <p className="text-xs mt-1">Add your first intake season above.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {seasons.map(s => (
-              <div key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${s.isActive ? "border-border/50 hover:border-primary/20 bg-background" : "border-border/30 bg-muted/30"}`}>
-                <CalendarDays className={`w-4 h-4 shrink-0 ${s.isActive ? "text-primary" : "text-muted-foreground/50"}`} />
-
-                {editingId === s.id ? (
-                  <div className="flex items-center gap-2 flex-1">
-                    <Input
-                      value={editValue}
-                      onChange={e => setEditValue(e.target.value)}
-                      className="rounded-lg h-8 text-sm flex-1"
-                      onKeyDown={e => {
-                        if (e.key === "Enter") handleUpdate(s.id);
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                      autoFocus
-                    />
-                    <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={() => handleUpdate(s.id)} disabled={saving === s.id}>
-                      {saving === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => setEditingId(null)}>
-                      <X className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <span className={`flex-1 text-sm font-medium ${s.isActive ? "text-foreground" : "text-muted-foreground line-through"}`}>{s.value}</span>
-                    <Badge variant={s.isActive ? "default" : "secondary"} className={`text-[10px] ${s.isActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
-                      {s.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0 rounded-lg"
-                      onClick={() => { setEditingId(s.id); setEditValue(s.value); }}
-                      title="Edit"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0 rounded-lg"
-                      onClick={() => handleToggle(s.id, s.isActive)}
-                      disabled={saving === s.id}
-                      title={s.isActive ? "Deactivate" : "Activate"}
-                    >
-                      {saving === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className={`w-3.5 h-3.5 ${s.isActive ? "text-emerald-600" : "text-muted-foreground"}`} />}
-                    </Button>
-                    {confirmDeleteId === s.id ? (
-                      <div className="flex items-center gap-1 ml-1">
-                        <span className="text-[10px] text-destructive font-medium whitespace-nowrap">Delete?</span>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg text-destructive hover:bg-destructive/10" onClick={() => { handleDelete(s.id); setConfirmDeleteId(null); }} disabled={saving === s.id}>
-                          {saving === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg" onClick={() => setConfirmDeleteId(null)}>
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-destructive"
-                        onClick={() => setConfirmDeleteId(s.id)}
-                        disabled={saving === s.id}
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card className="border-none shadow-lg shadow-black/5 p-5">
-        <div className="flex items-start gap-3">
-          <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground text-sm">How seasons are used</p>
-            <p>Seasons appear as intake period options in applications, the embed widget apply form, course finder filters, and program configuration.</p>
-            <p>Deactivating a season hides it from new selections but preserves existing records that reference it.</p>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
 
 const TARGET_LABELS: Record<string, string> = {
   agent: "Agent",

@@ -10,6 +10,7 @@ import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/s
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -83,7 +84,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
             .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
           const wonKeys = wonStages.map(s => s.key);
           if (wonKeys.length > 0) {
-            const currentYear = String(new Date().getFullYear());
+            const currentYear = await getCurrentSeason();
             const [{ cnt }] = await db.select({ cnt: sql<number>`count(*)` })
               .from(applicationsTable)
               .where(and(
@@ -124,7 +125,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
       }
     }
 
-    const currentYear = String(new Date().getFullYear());
+    const currentYear = await getCurrentSeason();
     const stage = "inquiry";
 
     const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, studentId));

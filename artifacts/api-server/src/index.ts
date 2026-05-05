@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getCurrentSeason } from "./lib/season";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -241,7 +242,7 @@ async function backfillMissingCommissions() {
         studentName: sName,
         universityName: app.universityName || null,
         programName: app.programName || null,
-        season: app.season || String(new Date().getFullYear()),
+        season: app.season || (await getCurrentSeason()),
         currency: app.currency || "USD",
         status: commStatus,
         programFee: baseFee ? String(baseFee) : null,

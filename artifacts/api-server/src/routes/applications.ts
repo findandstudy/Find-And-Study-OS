@@ -10,6 +10,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
 import { findActiveCampaign, applyCampaignToFees } from "../lib/campaigns";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -181,7 +182,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     res.status(400).json({ error: "studentId is required" });
     return;
   }
-  const currentYear = String(new Date().getFullYear());
+  const currentYear = await getCurrentSeason();
   let resolvedAgentId = agentId || null;
   if (isAgentRole(user.role)) {
     const [agentRec, visibleIds] = await Promise.all([
@@ -274,7 +275,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
           .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
         const wonKeys = wonStages.map(s => s.key);
         if (wonKeys.length > 0) {
-          const currentYear = String(new Date().getFullYear());
+          const currentYear = await getCurrentSeason();
           const [{ cnt }] = await db.select({ cnt: sql<number>`count(*)` })
             .from(applicationsTable)
             .where(and(
@@ -689,7 +690,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       await db.insert(commissionsTable).values({
         applicationId: id, studentId: app.studentId, agentId: agentComm.agentId,
         studentName: sName, universityName: app.universityName || null,
-        programName: app.programName || null, season: app.season || String(new Date().getFullYear()),
+        programName: app.programName || null, season: app.season || (await getCurrentSeason()),
         currency: app.currency || "USD", status: commStatus,
         programFee: baseFee ? String(baseFee) : null,
         universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
@@ -729,7 +730,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       await db.insert(serviceFeesTable).values({
         applicationId: id, studentId: app.studentId, agentId: app.agentId,
         studentName: sName2, universityName: app.universityName || null,
-        season: app.season || String(new Date().getFullYear()),
+        season: app.season || (await getCurrentSeason()),
         currency: app.currency || "USD",
         totalAmount: sfAmt,
         firstInstallmentAmount: sfHalf,
@@ -864,7 +865,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
         await db.insert(commissionsTable).values({
           applicationId: app.id, studentId: app.studentId, agentId: agentComm.agentId,
           studentName: sName, universityName: app.universityName || null,
-          programName: app.programName || null, season: app.season || String(new Date().getFullYear()),
+          programName: app.programName || null, season: app.season || (await getCurrentSeason()),
           currency: app.currency || "USD", status: commStatus,
           programFee: baseFee ? String(baseFee) : null,
           universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
@@ -903,7 +904,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
         await db.insert(serviceFeesTable).values({
           applicationId: app.id, studentId: app.studentId, agentId: app.agentId,
           studentName: sName2, universityName: app.universityName || null,
-          season: app.season || String(new Date().getFullYear()),
+          season: app.season || (await getCurrentSeason()),
           currency: app.currency || "USD",
           totalAmount: sfAmt,
           firstInstallmentAmount: sfHalf, secondInstallmentAmount: sfHalf,

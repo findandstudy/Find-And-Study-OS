@@ -3,6 +3,7 @@ import { db, universitiesTable, programsTable, applicationsTable, pipelineStages
 import { eq, ilike, sql, and, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -198,7 +199,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
 });
 
 router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLES), async (_req, res): Promise<void> => {
-  const currentYear = String(new Date().getFullYear());
+  const currentYear = await getCurrentSeason();
   const wonStages = await db.select({ key: pipelineStagesTable.key })
     .from(pipelineStagesTable)
     .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));

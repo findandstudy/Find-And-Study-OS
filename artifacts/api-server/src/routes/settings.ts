@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { normalizeYears, invalidateSeasonCache } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -106,6 +107,11 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
     return;
   }
 
+  if (updates.availableYears !== undefined) {
+    updates.availableYears = normalizeYears(updates.availableYears);
+    invalidateSeasonCache();
+  }
+
   const [existing] = await db.select().from(settingsTable);
   let updated;
   if (!existing) {
@@ -130,10 +136,18 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
 
 router.get("/settings/available-years", async (req, res): Promise<void> => {
   const [settings] = await db.select({ availableYears: settingsTable.availableYears }).from(settingsTable);
-  const currentYear = new Date().getFullYear();
-  const defaultYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
-  const years = (settings?.availableYears as number[] | null) || defaultYears;
-  res.json({ years: years.sort((a, b) => a - b) });
+  let details = normalizeYears(settings?.availableYears ?? null);
+  if (details.length === 0) {
+    const currentYear = new Date().getFullYear();
+    details = Array.from({ length: 6 }, (_, i) => {
+      const y = currentYear - 2 + i;
+      return { year: y, startDate: `${y}-01-01`, endDate: `${y}-12-31` };
+    });
+  }
+  res.json({
+    years: details.map(d => d.year),
+    details,
+  });
 });
 
 const objectStorageService = new ObjectStorageService();

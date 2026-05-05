@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentRecord } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -98,13 +99,14 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
   const {
     applicationId, studentId, agentId, subAgentId,
     studentName, universityName, programName, isStateUniversity,
-    season = String(new Date().getFullYear()),
+    season: bodySeason,
     currency = "USD",
     programFee, universityCommissionRate, agentCommissionRate,
     universityCommissionAmount, agentCommissionAmount,
     subAgentCommissionRate, subAgentCommissionAmount,
     status = "potential", notes,
   } = req.body;
+  const season = bodySeason || (await getCurrentSeason());
 
   const { uAmount, aAmount, saAmount } = calcCommissionAmounts({
     programFee, universityCommissionRate, agentCommissionRate,
@@ -269,10 +271,11 @@ router.post("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (
     applicationId, studentId, agentId,
     studentName, universityName, isStateUniversity,
     payerType = "student",
-    season = String(new Date().getFullYear()),
+    season: bodySeason,
     currency = "USD",
     totalAmount, notes,
   } = req.body;
+  const season = bodySeason || (await getCurrentSeason());
 
   if (!totalAmount) { res.status(400).json({ error: "totalAmount is required" }); return; }
   const total = toNum(totalAmount);

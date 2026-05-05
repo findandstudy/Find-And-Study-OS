@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { usersTable } from "@workspace/db";
 import { resolveAgentCommission } from "../lib/agentCommission";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -378,7 +379,7 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
   if (!program) { res.status(404).json({ error: "Program not found" }); return; }
 
   const effectiveFee = program.discountedFee ?? program.tuitionFee;
-  const currentYear = String(new Date().getFullYear());
+  const currentYear = await getCurrentSeason();
   const studentName = `${student.firstName || ""} ${student.lastName || ""}`.trim();
 
   const [application] = await db.insert(applicationsTable).values({

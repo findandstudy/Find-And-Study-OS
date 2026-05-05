@@ -9,6 +9,7 @@ import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
+import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
@@ -205,7 +206,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     { firstName, lastName }, ["firstName", "lastName"]
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
-  const currentYear = String(new Date().getFullYear());
+  const currentYear = await getCurrentSeason();
   let resolvedAgentId = agentId || null;
   if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
