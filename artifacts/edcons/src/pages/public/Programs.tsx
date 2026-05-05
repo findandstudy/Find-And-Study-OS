@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useProgramDocRequirements, resolveDocMeta } from "@/lib/programDocTypes";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -95,9 +96,9 @@ function fixStorageUrl(url: string | null | undefined): string | null {
   return fixed;
 }
 
-type DocKey = "passport" | "hs_diploma" | "hs_transcript" | "photo" | "language_proof" | "bachelor_diploma" | "bachelor_transcript" | "equivalency_letter" | "cv" | "sop" | "master_diploma" | "master_transcript";
+type DocKey = string;
 
-interface DocType { key: DocKey; labelKey: string; icon: string; accept: string; required: boolean; subtitleKey?: string }
+interface DocType { key: DocKey; labelKey: string; icon: string; accept: string; required: boolean; subtitleKey?: string; label?: string }
 
 const DEGREE_DOC_MAP: Record<string, DocType[]> = {
   associate: [
@@ -224,7 +225,8 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
     }
     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
     const { base64, mediaType, isImage } = await prepareDoc(safeFile);
-    onUpload({ key: docType.key, label: t(docType.labelKey), file: safeFile, base64, mediaType, isImage });
+    const labelText = docType.label ?? t(docType.labelKey);
+    onUpload({ key: docType.key, label: labelText, file: safeFile, base64, mediaType, isImage });
   }
 
   if (uploaded) {
@@ -235,7 +237,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
         </button>
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <p className="text-xs font-semibold text-foreground truncate max-w-[90px]">{uploaded.file.name}</p>
-        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{t(docType.labelKey)}</span>
+        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label ?? t(docType.labelKey)}</span>
       </div>
     );
   }
@@ -253,7 +255,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
       onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
     >
       <span className="text-2xl">{docType.icon}</span>
-      <p className="text-xs font-semibold text-foreground">{t(docType.labelKey)}</p>
+      <p className="text-xs font-semibold text-foreground">{docType.label ?? t(docType.labelKey)}</p>
       {docType.subtitleKey && <span className="text-[10px] text-muted-foreground">{t(docType.subtitleKey)}</span>}
       {docType.required
         ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">{t("apply.required")}</span>
@@ -406,7 +408,29 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     return () => { cancelled = true; };
   }, [open, isLoggedInStudent, user?.id]);
 
-  const docTypes = getDocTypesForDegree(program?.degree);
+  // Pull program-specific document requirements from the catalog. Falls
+  // back to the legacy degree-level list only when the program has no
+  // requirements configured (so unconfigured programs still show
+  // something instead of an empty list).
+  const { data: programReqs = [], isFetched: programReqsFetched } = useProgramDocRequirements(program?.id);
+  const docTypes: DocType[] = useMemo(() => {
+    if (programReqsFetched && programReqs.length > 0) {
+      return [...programReqs]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map(req => {
+          const meta = resolveDocMeta(req.documentType);
+          return {
+            key: meta.key,
+            label: meta.label,
+            labelKey: `apply.docLabel_${meta.key}`,
+            icon: meta.icon,
+            accept: meta.accept,
+            required: !!req.mandatory,
+          } as DocType;
+        });
+    }
+    return getDocTypesForDegree(program?.degree);
+  }, [programReqs, programReqsFetched, program?.degree]);
   const requiredDocs = docTypes.filter(d => d.required);
   const reusableForProgram: Record<string, ExistingDocInfo> = {};
   for (const dt of docTypes) {

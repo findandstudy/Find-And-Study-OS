@@ -56,6 +56,14 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **Stripe:** Implied payment processing.
 ## Changelog
 
+### 2026-05-05 — Create Application dialog'ları artık program-spesifik belge gereksinimlerini gösteriyor
+
+- Sorun: Catalog → Programs → Edit Program ekranında (veya bulk-import ile) belirlenen 23+ zorunlu belge, "Create Application" akışında görünmüyordu — dialog hâlâ degree-bazlı hardcoded 5'li listeyi (HS Diploma/HS Transcript/Passport/Photograph/Language Proof) kullanıyordu.
+- Yeni ortak yardımcı: `artifacts/edcons/src/lib/programDocTypes.ts` — `PROGRAM_DOC_META` (24 kanonik doc-type için label/icon/accept) + `useProgramDocRequirements(programId)` React Query hook + `resolveDocMeta()` fallback'i.
+- `staff/CourseFinder.tsx` Create Application dialog'u: `LEVEL_DOCS[degreeToLevel(...)]` yerine programın gerçek gereksinim listesini fetch ediyor; programa hiç requirement tanımlanmamışsa eski LEVEL_DOCS fallback'i korundu (boş liste UX'inden kaçınmak için).
+- `public/Programs.tsx` ApplyDialog'u: aynı şekilde `getDocTypesForDegree` artık fallback; `DocType.label` opsiyonel alanı eklendi ve DropZone'lar `docType.label ?? t(docType.labelKey)` ile snake_case anahtarlarda i18n eksikliğini telafi ediyor. `DocKey` artık string.
+- BulkImportModal hata mesajı: 401/403/CSRF hataları ayrıştırılıp net mesajlar (`Your session has expired…`) gösteriliyor.
+
 ### 2026-05-05 — Task #97: Degree-bazlı belge gereksinimleri kaldırıldı
 
 - Belge gereksinimleri artık tamamen **program seviyesinde** yönetiliyor (Catalog → Programs → Edit Program). Catalog → Options → Degree sekmesindeki "Documents" düğmesi ve `DegreeDocumentsDialog` kaldırıldı.

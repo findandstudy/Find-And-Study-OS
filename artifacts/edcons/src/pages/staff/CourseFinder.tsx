@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useProgramDocRequirements, resolveDocMeta } from "@/lib/programDocTypes";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1642,7 +1643,28 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
   }, [p]);
 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
-  const currentDocs = LEVEL_DOCS[level];
+  // Pull program-specific document requirements from the catalog. Falls
+  // back to the legacy degree-level LEVEL_DOCS only when the program has
+  // no requirements configured (so unconfigured programs still show
+  // something instead of an empty list).
+  const { data: programReqs = [], isFetched: programReqsFetched } = useProgramDocRequirements(p?.id);
+  const currentDocs: LevelDoc[] = useMemo(() => {
+    if (programReqsFetched && programReqs.length > 0) {
+      return [...programReqs]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map(req => {
+          const meta = resolveDocMeta(req.documentType);
+          return {
+            key: meta.key,
+            label: meta.label,
+            icon: meta.icon,
+            accept: meta.accept,
+            required: !!req.mandatory,
+          };
+        });
+    }
+    return LEVEL_DOCS[level];
+  }, [programReqs, programReqsFetched, level]);
   const uploadedCount = Object.keys(docs).length;
   const requiredDocKeys = currentDocs.filter(d => d.required).map(d => d.key);
   const missingRequiredCount = requiredDocKeys.filter(k => !docs[k]).length;
@@ -1771,7 +1793,12 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
     for (const d of uploadedDocs) {
       try {
         const docName = `${studentFirstName}-${studentLastName}-${d.label}`;
-        let docType = d.label?.toLowerCase().replace(/\s+/g, "_") ?? "other";
+        // Always send the canonical doc-type key (e.g. `bachelors_certificate`,
+        // `high_school_diploma_translation`) so it matches the program's
+        // requirements stored in `program_document_requirements`. Falling back
+        // to the (legacy) label-derived slug only if a key is somehow missing.
+        let docType = d.key
+          || (d.label ? d.label.toLowerCase().replace(/\s+/g, "_") : "other");
         if (docType === "photograph") docType = "photo";
         const res = await fetch(`${BASE_URL}/api/documents`, {
           method: "POST",
