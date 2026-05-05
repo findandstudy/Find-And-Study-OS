@@ -56,6 +56,11 @@ The project is structured as a pnpm monorepo comprising separate packages for th
 -   **Stripe:** Implied payment processing.
 ## Changelog
 
+### 2026-05-05 — Bulk-import body limit 10mb → 50mb
+
+- Sorun: 7000+ programlı Excel dosyası (54 kolon, ~16 MB JSON serialize) için `/catalog/programs/bulk` HTTP 413 (request entity too large) dönüyordu.
+- `artifacts/api-server/src/app.ts`: `express.json` ve `express.urlencoded` limit 10mb → 50mb. Bulk-import endpoint'leri zaten requireAuth + MANAGER_ROLES ile korunuyor, risk düşük.
+
 ### 2026-05-05 — Create Application dialog'ları artık program-spesifik belge gereksinimlerini gösteriyor
 
 - Sorun: Catalog → Programs → Edit Program ekranında (veya bulk-import ile) belirlenen 23+ zorunlu belge, "Create Application" akışında görünmüyordu — dialog hâlâ degree-bazlı hardcoded 5'li listeyi (HS Diploma/HS Transcript/Passport/Photograph/Language Proof) kullanıyordu.

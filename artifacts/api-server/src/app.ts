@@ -96,8 +96,11 @@ app.use(cookieParser());
 // for HMAC signature verification. These endpoints do not require auth or CSRF.
 app.use("/api", webhooksRouter);
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// Bulk-import endpoints (e.g. /catalog/programs/bulk with 7000+ rows × 50+
+// columns) can produce ~15-20 MB JSON payloads, so the limit needs to be
+// generous. These endpoints are already protected by auth + manager roles.
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(authMiddleware);
 
 const CSRF_COOKIE = "csrf_token";
