@@ -415,23 +415,35 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         <Sidebar collapsible="icon" className="border-r border-border/60 shadow-sm">
           <SidebarContent className="bg-card">
             {/* Logo */}
-            <div className="p-5 pb-4 border-b border-border/40">
-               <button type="button" onClick={() => navigate(localePath("/"))} className="flex items-center gap-2.5 group">
-                {sidebarLogo ? (
-                  <img src={sidebarLogo} alt="Logo" className="h-9 max-w-[120px] object-contain group-hover:scale-105 transition-transform" />
-                ) : (
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
-                    <GraduationCap className="w-5 h-5" />
-                  </div>
-                )}
-                <div>
-                  {!sidebarLogo && <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>}
-                </div>
+            <div className="px-5 py-4 border-b border-border/40 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-3 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+              <button
+                type="button"
+                onClick={() => navigate(localePath("/"))}
+                className="flex items-center gap-2.5 group/logo group-data-[collapsible=icon]:justify-center"
+                title="Home"
+              >
+                {/* Expanded: full logo (image or icon+wordmark) */}
+                <span className="flex items-center gap-2.5 group-data-[collapsible=icon]:hidden">
+                  {sidebarLogo ? (
+                    <img src={sidebarLogo} alt="Logo" className="h-9 max-w-[120px] object-contain group-hover/logo:scale-105 transition-transform" />
+                  ) : (
+                    <>
+                      <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
+                        <GraduationCap className="w-5 h-5" />
+                      </span>
+                      <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>
+                    </>
+                  )}
+                </span>
+                {/* Collapsed: compact mark only */}
+                <span className="hidden group-data-[collapsible=icon]:flex w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
+                  <GraduationCap className="w-5 h-5" />
+                </span>
               </button>
             </div>
 
             {/* Navigation */}
-            <div className="px-3 pt-4 pb-4 flex-1 overflow-y-auto space-y-4">
+            <div className="px-3 pt-4 pb-4 flex-1 overflow-y-auto space-y-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:space-y-2 group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:items-center group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex-col">
               {(() => {
                 const renderItem = (item: MenuItem, keyPrefix = "") => {
                   const isActive = item.url === location ||
@@ -441,71 +453,84 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                           <SidebarMenuItem key={`${keyPrefix}${item.title}`}>
                             <SidebarMenuButton
                               data-active={isActive}
-                              className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm"
+                              tooltip={item.title}
+                              className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!rounded-xl group-data-[collapsible=icon]:!gap-0 relative"
                               onClick={() => navigate(item.url)}
                             >
-                              <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
-                              <span className="flex-1">{item.title}</span>
+                              <item.icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-primary' : ''}`} />
+                              <span className="flex-1 group-data-[collapsible=icon]:hidden">{item.title}</span>
                               {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
-                                <TooltipProvider delayDuration={200}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span
-                                        className="ml-auto flex items-center gap-1 shrink-0"
-                                        data-testid="badge-messages-counts"
-                                      >
-                                        {isStaff && staffUnreadMine > 0 && (
-                                          <span
-                                            className="min-w-5 h-5 px-1 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
-                                            data-testid="badge-messages-mine"
-                                          >
-                                            {staffUnreadMine > 99 ? "99+" : staffUnreadMine}
-                                          </span>
-                                        )}
+                                <>
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
                                         <span
-                                          className="min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
-                                          data-testid="badge-messages-total"
+                                          className="ml-auto flex items-center gap-1 shrink-0 group-data-[collapsible=icon]:hidden"
+                                          data-testid="badge-messages-counts"
                                         >
-                                          {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
+                                          {isStaff && staffUnreadMine > 0 && (
+                                            <span
+                                              className="min-w-5 h-5 px-1 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+                                              data-testid="badge-messages-mine"
+                                            >
+                                              {staffUnreadMine > 99 ? "99+" : staffUnreadMine}
+                                            </span>
+                                          )}
+                                          <span
+                                            className="min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+                                            data-testid="badge-messages-total"
+                                          >
+                                            {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
+                                          </span>
                                         </span>
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="text-xs">
-                                      {isStaff && staffUnreadMine > 0 ? (
-                                        <div className="space-y-1">
-                                          <div>
-                                            <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1.5 align-middle" />
-                                            {staffUnreadMine} assigned to you
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right" className="text-xs">
+                                        {isStaff && staffUnreadMine > 0 ? (
+                                          <div className="space-y-1">
+                                            <div>
+                                              <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1.5 align-middle" />
+                                              {staffUnreadMine} assigned to you
+                                            </div>
+                                            <div>
+                                              <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
+                                              {totalUnreadMessages} total unread
+                                            </div>
                                           </div>
+                                        ) : (
                                           <div>
                                             <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
                                             {totalUnreadMessages} total unread
                                           </div>
-                                        </div>
-                                      ) : (
-                                        <div>
-                                          <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
-                                          {totalUnreadMessages} total unread
-                                        </div>
-                                      )}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                  <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
+                                </>
                               )}
                               {item.url.endsWith("/leads") && (sectionCounts?.leads || 0) > 0 && (
-                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                  {(sectionCounts?.leads || 0) > 99 ? "99+" : sectionCounts?.leads}
-                                </span>
+                                <>
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 group-data-[collapsible=icon]:hidden">
+                                    {(sectionCounts?.leads || 0) > 99 ? "99+" : sectionCounts?.leads}
+                                  </span>
+                                  <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
+                                </>
                               )}
                               {item.url.endsWith("/students") && (sectionCounts?.students || 0) > 0 && (
-                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                  {(sectionCounts?.students || 0) > 99 ? "99+" : sectionCounts?.students}
-                                </span>
+                                <>
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 group-data-[collapsible=icon]:hidden">
+                                    {(sectionCounts?.students || 0) > 99 ? "99+" : sectionCounts?.students}
+                                  </span>
+                                  <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
+                                </>
                               )}
                               {item.url.endsWith("/applications") && (sectionCounts?.applications || 0) > 0 && (
-                                <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                                  {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
-                                </span>
+                                <>
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 group-data-[collapsible=icon]:hidden">
+                                    {(sectionCounts?.applications || 0) > 99 ? "99+" : sectionCounts?.applications}
+                                  </span>
+                                  <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
+                                </>
                               )}
                             </SidebarMenuButton>
                             <SidebarMenuAction
@@ -553,22 +578,25 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
 
             {/* User Bottom */}
-            <div className="p-3 border-t border-border/40">
+            <div className="p-3 border-t border-border/40 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer text-left">
+                  <button
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer text-left group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center"
+                    title={`${user.firstName} ${user.lastName}`}
+                  >
                     {user.avatarUrl ? (
-                      <img src={user.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-primary/20" />
+                      <img src={user.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-primary/20 shrink-0" />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-sm text-primary ring-2 ring-primary/20">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-sm text-primary ring-2 ring-primary/20 shrink-0">
                         {initials}
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                       <p className="text-sm font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
                       <p className="text-xs text-muted-foreground truncate">{user.email || `ID #${user.id}`}</p>
                     </div>
-                    <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0 group-data-[collapsible=icon]:hidden" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" className="w-56 mb-1">
