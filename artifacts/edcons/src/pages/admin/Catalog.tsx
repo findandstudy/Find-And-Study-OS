@@ -119,7 +119,13 @@ function BulkImportModal({ open, onClose, title, templateRows, headers, onImport
       setError("");
       const res = await onImport(rows);
       setResult(res);
-    } catch { setError("Import failed. Please check the format and try again."); }
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : "Unknown error";
+      // Surface the backend's reason (e.g. unknown university names) so the
+      // user knows what to fix instead of seeing a generic "Import failed".
+      console.error("[BulkImport] failed:", err);
+      setError(`Import failed: ${msg}`);
+    }
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 

@@ -215,9 +215,26 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
   const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
   const rowIdxByParsedIdx: number[] = [];
   let invalidDocCells = 0;
+  const skipReasons: { row: number; reason: string }[] = [];
   const parsed = rows.map((r, rowIdx) => {
-    const uid = r.universityId ?? (r.universityName ? uniNameMap[r.universityName.toLowerCase()] : undefined);
-    if (!uid || !r.name) return null;
+    // Excel parsed via XLSX often gives "" for empty cells, which `??` does
+    // not treat as missing — coerce blanks to undefined first.
+    const rawId = r.universityId === "" || r.universityId === null ? undefined : r.universityId;
+    const rawName = typeof r.universityName === "string" && r.universityName.trim() ? r.universityName.trim() : undefined;
+    const uid = rawId ?? (rawName ? uniNameMap[rawName.toLowerCase()] : undefined);
+    if (!uid) {
+      skipReasons.push({
+        row: rowIdx + 2,
+        reason: rawName
+          ? `unknown universityName "${rawName}" (not found in database)`
+          : "missing universityId / universityName",
+      });
+      return null;
+    }
+    if (!r.name) {
+      skipReasons.push({ row: rowIdx + 2, reason: "missing program name" });
+      return null;
+    }
     let docList: { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined;
     let sawAnyDocCol = false;
     PROGRAM_DOC_TYPES.forEach((dt, idx) => {
@@ -256,7 +273,15 @@ router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async 
     };
   }).filter(Boolean) as (typeof programsTable.$inferInsert)[];
 
-  if (parsed.length === 0) { res.status(400).json({ error: "No valid rows (universityId or universityName + name required)" }); return; }
+  if (parsed.length === 0) {
+    const sample = skipReasons.slice(0, 5).map(s => `row ${s.row}: ${s.reason}`).join("; ");
+    const more = skipReasons.length > 5 ? ` (+${skipReasons.length - 5} more)` : "";
+    res.status(400).json({
+      error: `No valid rows imported. ${sample}${more}`,
+      skipReasons,
+    });
+    return;
+  }
 
   const existingPrograms = await db.select().from(programsTable);
   const existingMap = new Map<string, number>();
