@@ -1380,31 +1380,47 @@ function UniversityInfoDialog({ program: p, onClose }: {
   return (
     <>
     <Dialog open={!!p} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
-              {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
-              ) : (
-                <Building2 className="w-8 h-8 text-muted-foreground" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <DialogTitle className="text-lg">{p.universityName}</DialogTitle>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {p.universityType && <Badge variant="secondary" className="text-xs">{p.universityType}</Badge>}
-                {p.universityStatus && (
-                  <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
-                    {p.universityStatus === "open" ? "Open" : "Closed"}
-                  </Badge>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-0">
+        <DialogHeader className="space-y-0">
+          {/* Hero banner with gradient and large logo */}
+          <div className="relative h-28 bg-gradient-to-br from-primary/90 via-indigo-500 to-blue-600 rounded-t-lg" />
+          <div className="px-6 pb-4 -mt-14">
+            <div className="flex items-end gap-4">
+              <div className="w-28 h-28 rounded-2xl border-4 border-white bg-white shadow-lg flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-black/5">
+                {p.universityLogoUrl ? (
+                  <img
+                    src={p.universityLogoUrl}
+                    alt={p.universityName}
+                    loading="lazy"
+                    className="w-full h-full object-contain p-2"
+                  />
+                ) : (
+                  <Building2 className="w-12 h-12 text-muted-foreground" />
                 )}
+              </div>
+              <div className="min-w-0 pb-1 flex-1">
+                <DialogTitle className="text-xl leading-tight">{p.universityName}</DialogTitle>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {p.universityType && <Badge variant="secondary" className="text-xs">{p.universityType}</Badge>}
+                  {p.universityStatus && (
+                    <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${p.universityStatus === "open" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                      {p.universityStatus === "open" ? "Open for Applications" : "Closed"}
+                    </Badge>
+                  )}
+                  {(p.universityCountry || p.universityCity) && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {[p.universityCity, p.universityCountry].filter(Boolean).join(", ")}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 mt-3">
+        <div className="space-y-4 px-6 pb-6">
           {p.universityDescription && (
             <p className="text-sm text-muted-foreground leading-relaxed">{p.universityDescription}</p>
           )}
@@ -1500,7 +1516,7 @@ function UniversityInfoDialog({ program: p, onClose }: {
               href={websiteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-3 bg-gradient-to-r from-primary to-indigo-600 text-primary-foreground rounded-xl text-sm font-semibold shadow-md hover:shadow-lg hover:opacity-95 transition-all"
             >
               <ExternalLink className="w-4 h-4" /> Visit University Website
             </a>
