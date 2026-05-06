@@ -35,6 +35,69 @@ const aiExtractLimiter = rateLimit({
   store: new PgRateLimitStore(APPLY_WINDOW_MS),
 });
 
+/**
+ * Read-only validation of a public-apply submission against a program.
+ *
+ * Runs the eligibility (GPA / language score) and quota checks WITHOUT
+ * writing anything. Used at the top of /public/apply so we can reject
+ * unfit submissions before creating the user/student records — otherwise
+ * a failed apply leaves an orphan user behind that then triggers a 409
+ * "your account is already registered" on retry.
+ *
+ * Returns null when the program is fine to apply to (or when there is no
+ * programId / the program does not declare these constraints).
+ */
+async function precheckProgramEligibility(
+  programId: number | null,
+  studentGpa: string | null | undefined,
+  studentLanguageScore: string | null | undefined,
+): Promise<{ eligibilityErrors?: string[]; quotaError?: string } | null> {
+  if (!programId) return null;
+  const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
+  if (!prog) return null;
+
+  const eligibilityErrors: string[] = [];
+  if (prog.minGpa != null && prog.minGpa > 0) {
+    const gpaNum = normalizeGpaTo100(studentGpa);
+    if (isNaN(gpaNum)) {
+      eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa} (out of 100), but no GPA was provided`);
+    } else if (gpaNum < prog.minGpa) {
+      eligibilityErrors.push(`GPA (${gpaNum.toFixed(2)}/100) is below the minimum required (${prog.minGpa}/100)`);
+    }
+  }
+  if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {
+    const langNum = parseFloat(studentLanguageScore || "");
+    if (isNaN(langNum)) {
+      eligibilityErrors.push(`Program requires minimum language score of ${prog.minLanguageScore}, but no language score was provided`);
+    } else if (langNum < prog.minLanguageScore) {
+      eligibilityErrors.push(`Language score (${langNum}) is below the minimum required (${prog.minLanguageScore})`);
+    }
+  }
+  if (eligibilityErrors.length > 0) return { eligibilityErrors };
+
+  if (prog.quota != null) {
+    const wonStages = await db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
+    const wonKeys = wonStages.map(s => s.key);
+    if (wonKeys.length > 0) {
+      const currentYear = await getCurrentSeason();
+      const [{ cnt }] = await db.select({ cnt: sql<number>`count(*)` })
+        .from(applicationsTable)
+        .where(and(
+          eq(applicationsTable.programId, prog.id),
+          eq(applicationsTable.season, currentYear),
+          inArray(applicationsTable.stage, wonKeys),
+          isNull(applicationsTable.deletedAt),
+        ));
+      if (Number(cnt) >= prog.quota) {
+        return { quotaError: `Program quota is full (${prog.quota}/${prog.quota} enrolled)` };
+      }
+    }
+  }
+  return null;
+}
+
 async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {
   try {
     let snapshotTuitionFee: number | null = null;
@@ -269,10 +332,19 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
+    // Staff email conflict — block immediately. We never want a public
+    // submission to silently attach itself to an internal staff account.
+    if (existingUser && existingUser.role !== "student") {
+      res.status(409).json({ error: "This email is already in use by a staff account. Please use a different email.", code: "EMAIL_STAFF_CONFLICT" });
+      return;
+    }
+
     if (trimmedPassport) {
       const [dupPassportStudent] = await db.select({ id: studentsTable.id, userId: studentsTable.userId })
         .from(studentsTable)
         .where(and(eq(studentsTable.passportNumber, trimmedPassport), isNull(studentsTable.deletedAt)));
+      // Passport mismatch with an existing student that belongs to a
+      // different user/email is suspicious — block and direct to login.
       if (dupPassportStudent && (!existingUser || dupPassportStudent.userId !== existingUser.id)) {
         res.status(409).json({
           error: `This passport number has already been used in our system. Please log in to your existing account to continue your application: ${loginUrl}`,
@@ -283,21 +355,68 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       }
     }
 
+    // Validate program eligibility/quota BEFORE creating any user/student
+    // record. If we created the user first and then 422'd here, a retried
+    // submission would hit the email-already-exists path and be blocked
+    // forever ("hesabınız kayıtlıdır" loop).
+    const programIdNum = programId ? parseInt(String(programId), 10) : null;
+    const precheck = await precheckProgramEligibility(programIdNum, gpa || null, languageScore || null);
+    if (precheck?.eligibilityErrors) {
+      res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: precheck.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+      return;
+    }
+    if (precheck?.quotaError) {
+      res.status(422).json({ error: precheck.quotaError, code: "QUOTA_FULL" });
+      return;
+    }
+
     let resultStudentId: number | null = null;
     let resultAppId: number | null = null;
 
     if (existingUser) {
-      if (existingUser.role !== "student") {
-        res.status(409).json({ error: "This email is already in use by a staff account. Please use a different email.", code: "EMAIL_STAFF_CONFLICT" });
-        return;
+      // Existing student account — reuse it. We do not want to block the
+      // applicant with a 409 just because they (or someone with the same
+      // email) previously applied to a different program. Lead-only
+      // entries never reach this branch (leads do not create users).
+      const [existingStudent] = await db.select().from(studentsTable)
+        .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
+      if (!existingStudent) {
+        // Edge case: the user row exists but the matching student row was
+        // hard-deleted. Fall through to the new-account path so we
+        // re-create a clean student record for them below.
+        console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
+      } else {
+        resultStudentId = existingStudent.id;
+        const reuseAppResult = await createApplicationForStudent(existingStudent.id, programIdNum, programName, universityName, existingStudent.gpa || gpa || null, existingStudent.languageScore || languageScore || null);
+        if (reuseAppResult.eligibilityErrors) {
+          res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: reuseAppResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+          return;
+        }
+        if (reuseAppResult.quotaError) {
+          res.status(422).json({ error: reuseAppResult.quotaError, code: "QUOTA_FULL" });
+          return;
+        }
+        resultAppId = reuseAppResult.appId;
+
+        // Notify the existing account holder that a new application was
+        // received and remind them how to log in.
+        try {
+          const existingEmailContent = await buildExistingAccountEmail({
+            firstName: existingUser.firstName || existingStudent.firstName || "Student",
+            loginUrl,
+            programName: programName || undefined,
+            universityName: universityName || undefined,
+          });
+          await sendEmail(normalizedEmail, existingEmailContent);
+        } catch (e) {
+          console.error("[PUBLIC-APPLY] Failed to send existing-account notification:", e);
+        }
+
+        console.log(`[PUBLIC-APPLY] Reused existing student #${existingStudent.id} (${normalizedEmail}) — created application #${resultAppId}`);
       }
-      res.status(409).json({
-        error: `This email address has already been used in our system. Please log in to your existing account to continue your application: ${loginUrl}`,
-        code: "EMAIL_IN_USE",
-        loginUrl,
-      });
-      return;
-    } else {
+    }
+
+    if (!existingUser || resultStudentId === null) {
       const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
 
       const passwordToken = generateSecureToken();
