@@ -125,7 +125,12 @@ export function useProgramDocRequirements(programId: number | null | undefined) 
     queryFn: async () => {
       if (!programId) return [];
       try {
-        const res = await customFetch(`${BASE_URL}/api/programs/${programId}/document-requirements`) as unknown;
+        // Use the public endpoint so this hook also resolves doc
+        // requirements for non-logged-in visitors on the public-apply form.
+        // The authed `/api/programs/:id/document-requirements` returns the
+        // same shape but requires staff auth — visitors hit it as 401 and
+        // silently fell back to the static degree-level list before.
+        const res = await customFetch(`${BASE_URL}/api/public/programs/${programId}/document-requirements`) as unknown;
         if (!Array.isArray(res)) return [];
         return res
           .filter((r): r is { documentType: unknown; mandatory: unknown; sortOrder?: unknown } =>

@@ -850,6 +850,63 @@ var SLUG='${slug}';
 var MODE='${safeMode}';
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
+var programDocs=null;
+// Mirrors the canonical document type keys configured in the staff panel
+// (artifacts/edcons/src/lib/programDocTypes.ts PROGRAM_DOC_META). Keep
+// these labels in sync with the panel so applicants see the same names
+// in the widget and in the public-apply form.
+var DOC_META={
+  passport:{label:'Passport',icon:'\\ud83d\\udec2'},
+  photo:{label:'Photograph',icon:'\\ud83d\\udcf7'},
+  cv:{label:'CV / Resume',icon:'\\ud83d\\udcc4'},
+  sop:{label:'Statement of Purpose',icon:'\\u270d\\ufe0f'},
+  lor:{label:'Recommendation Letter',icon:'\\u270d\\ufe0f'},
+  essay:{label:'Essay',icon:'\\u270d\\ufe0f'},
+  experience_letters:{label:'Experience Letters',icon:'\\ud83d\\udcbc'},
+  other_certificates_documents:{label:'Other Certificates',icon:'\\ud83d\\udcd1'},
+  ielts_pte_gre_gmat_toefl_duolingo:{label:'Language / Test Score',icon:'\\ud83c\\udf10'},
+  diploma_recognition:{label:'Diploma Recognition',icon:'\\ud83d\\udcdc'},
+  high_school_diploma_translation:{label:'HS Diploma (Translation)',icon:'\\ud83c\\udf93'},
+  class_10th_ssc_marks_sheet:{label:'Class 10 / SSC Marks Sheet',icon:'\\ud83d\\udccb'},
+  class_12th_hsc_certificate:{label:'Class 12 / HSC Certificate',icon:'\\ud83c\\udf93'},
+  class_12th_hsc_marks_sheet:{label:'Class 12 / HSC Marks Sheet',icon:'\\ud83d\\udccb'},
+  diploma_certificate:{label:'Diploma Certificate',icon:'\\ud83c\\udf93'},
+  diploma_transcript:{label:'Diploma Transcript',icon:'\\ud83d\\udccb'},
+  bachelors_certificate:{label:"Bachelor's Certificate",icon:'\\ud83c\\udf93'},
+  bachelors_transcript:{label:"Bachelor's Transcript",icon:'\\ud83d\\udccb'},
+  bachelors_provisional_certificate:{label:"Bachelor's Provisional Cert.",icon:'\\ud83c\\udf93'},
+  bachelors_transcript_all_semesters:{label:"Bachelor's Transcript (All Sem.)",icon:'\\ud83d\\udccb'},
+  masters_certificate:{label:"Master's Certificate",icon:'\\ud83c\\udf93'},
+  masters_transcript:{label:"Master's Transcript",icon:'\\ud83d\\udccb'},
+  masters_provisional_certificate:{label:"Master's Provisional Cert.",icon:'\\ud83c\\udf93'},
+  masters_transcript_all_semesters:{label:"Master's Transcript (All Sem.)",icon:'\\ud83d\\udccb'},
+  portfolio:{label:'Portfolio',icon:'\\ud83c\\udfa8'},
+  research_proposal:{label:'Research Proposal',icon:'\\ud83d\\udd2c'},
+  publication_list:{label:'Publication List',icon:'\\ud83d\\udcda'},
+  writing_sample:{label:'Writing Sample',icon:'\\u270d\\ufe0f'},
+  bank_statement:{label:'Bank Statement',icon:'\\ud83c\\udfe6'},
+  sponsor_letter:{label:'Sponsor Letter',icon:'\\ud83d\\udcb0'},
+  scholarship_award_letter:{label:'Scholarship Award Letter',icon:'\\ud83c\\udfc6'}
+};
+function humanizeDocKey(k){
+  return String(k||'').replace(/([A-Z])/g,' $1').replace(/[_-]+/g,' ').replace(/\\s+/g,' ').trim().replace(/^./,function(c){return c.toUpperCase();});
+}
+function loadProgramDocs(pid,cb){
+  programDocs=null;
+  if(!pid){if(cb)cb();return;}
+  var apiBase=API.replace('/public/embed/'+SLUG,'');
+  fetch(apiBase+'/public/programs/'+pid+'/document-requirements').then(function(r){
+    return r.ok?r.json():[];
+  }).then(function(rows){
+    if(Array.isArray(rows)&&rows.length>0){
+      programDocs=rows.slice().sort(function(a,b){return (a.sortOrder||0)-(b.sortOrder||0);}).map(function(r){
+        var key=String(r.documentType||'other');
+        var meta=DOC_META[key]||{label:humanizeDocKey(key),icon:'\\ud83d\\udcce'};
+        return {key:key,label:meta.label,icon:meta.icon,accept:'.pdf,.jpg,.jpeg,.png',required:!!r.mandatory};
+      });
+    }
+  }).catch(function(){}).finally(function(){if(cb)cb();});
+}
 var detailProgram=null, detailOpen=false;
 var formStep='upload';
 var uploadedDocs={};
@@ -1194,7 +1251,7 @@ function renderFormContent(prog){
     h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:1rem">\\u2728</span><strong style="font-size:0.85rem">AI-Powered Document Analysis</strong></div>';
     h+='<p style="font-size:0.78rem;color:#64748b;margin:0">Upload your documents and our AI will automatically extract your information. You can review and edit before submitting.</p>';
     h+='</div>';
-    var docTypes=[
+    var docTypes=(programDocs&&programDocs.length>0)?programDocs:[
       {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
       {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
       {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
@@ -1383,6 +1440,7 @@ function showDetailModal(){
     formProgram=programs.find(function(p){return p.id===pid})||null;
     formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
     showModal();
+    loadProgramDocs(pid,function(){if(formOpen)showModal();});
   });
   if(!modalNotified){modalNotified=true;notifyParentModalOpen();}
   repositionModal();
@@ -1615,6 +1673,7 @@ function bindEvents(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
       formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
+      loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();
     });
   });

@@ -1,6 +1,26 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { requireAuth } from "../lib/auth";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
+import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+
+/**
+ * Convert whatever GPA string the AI extracted from a diploma/transcript
+ * into a 0-100 percentage number. The AI is allowed to return the value
+ * in its native scale (e.g. "3.5/4", "85%", "15/20") and we normalize it
+ * server-side so every consumer (panel form, public-apply form, widget)
+ * sees the same percent value. Returns the original raw string in
+ * `gpaRaw` for traceability and a rounded percent string in `gpa`.
+ */
+function normalizeExtractedGpa(extracted: Record<string, any>): void {
+  if (extracted.gpa == null || extracted.gpa === "") return;
+  const raw = String(extracted.gpa);
+  const pct = normalizeGpaTo100(raw);
+  if (!isNaN(pct)) {
+    extracted.gpaRaw = raw;
+    extracted.gpa = (Math.round(pct * 10) / 10).toString();
+    extracted.gpaScale = 100;
+  }
+}
 
 const router: IRouter = Router();
 
@@ -154,6 +174,8 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       res.status(500).json({ error: "Failed to parse AI response" });
       return;
     }
+
+    normalizeExtractedGpa(extracted);
 
     const warnings: string[] = [];
 

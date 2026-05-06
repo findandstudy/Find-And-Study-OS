@@ -629,14 +629,23 @@ function AddStudentModal({
             }
             newExtracted.add("nationality");
           } else if (fk === "gpa") {
+            // Server-side AI extract already normalizes any source scale
+            // (4.0/5/10/20/raw %) into a 0-100 percent string, so we just
+            // lock the grading system to /100 and use the value as-is.
             const gpaStr = String(val).trim();
-            const gpaMatch = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
-            if (gpaMatch) {
-              newForm.gpa = gpaMatch[1];
-              const matchedSystem = GRADING_SYSTEMS.find(g => g.value === gpaMatch[2]);
-              if (matchedSystem) newForm.gradingSystem = matchedSystem.value;
-            } else {
+            const isPct = (extracted as any).gpaScale === 100 || (extracted as any).gpaScale === "100";
+            if (isPct || /^\d+(\.\d+)?$/.test(gpaStr)) {
               newForm.gpa = gpaStr;
+              newForm.gradingSystem = "100";
+            } else {
+              const gpaMatch = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
+              if (gpaMatch) {
+                newForm.gpa = gpaMatch[1];
+                const matchedSystem = GRADING_SYSTEMS.find(g => g.value === gpaMatch[2]);
+                if (matchedSystem) newForm.gradingSystem = matchedSystem.value;
+              } else {
+                newForm.gpa = gpaStr;
+              }
             }
             newExtracted.add("gpa");
           } else {

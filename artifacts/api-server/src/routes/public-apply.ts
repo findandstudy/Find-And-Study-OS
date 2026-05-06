@@ -882,6 +882,19 @@ router.post("/public/ai/extract-document", aiExtractLimiter, async (req: Request
       return;
     }
 
+    // Normalize AI-extracted GPA to a 0-100 percent so the public form,
+    // widget, and panel all show the same percentage no matter which
+    // grading scale (4.0 / 5.0 / 10 / 20 / 100) the diploma uses.
+    if (extracted.gpa != null && extracted.gpa !== "") {
+      const raw = String(extracted.gpa);
+      const pct = normalizeGpaTo100(raw);
+      if (!isNaN(pct)) {
+        extracted.gpaRaw = raw;
+        extracted.gpa = (Math.round(pct * 10) / 10).toString();
+        extracted.gpaScale = 100;
+      }
+    }
+
     const warnings: string[] = [];
 
     if (extracted.passportExpiry) {

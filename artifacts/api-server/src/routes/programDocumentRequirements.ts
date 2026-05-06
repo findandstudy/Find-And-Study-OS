@@ -15,6 +15,26 @@ router.get("/programs/:id/document-requirements", requireAuth, async (req, res):
   res.json(rows);
 });
 
+// Public mirror of the read endpoint above. Used by the public-apply form
+// (non-logged-in applicants) and the embeddable widget so each program's
+// document checklist matches what staff configured in the panel — no more
+// degree-level static fallbacks for dynamic, program-specific lists.
+router.get("/public/programs/:id/document-requirements", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [prog] = await db.select({ id: programsTable.id, isActive: programsTable.isActive })
+    .from(programsTable).where(eq(programsTable.id, id));
+  if (!prog || !prog.isActive) { res.status(404).json({ error: "Program not found" }); return; }
+  const rows = await db.select({
+    documentType: programDocumentRequirementsTable.documentType,
+    mandatory: programDocumentRequirementsTable.mandatory,
+    sortOrder: programDocumentRequirementsTable.sortOrder,
+  }).from(programDocumentRequirementsTable)
+    .where(eq(programDocumentRequirementsTable.programId, id))
+    .orderBy(programDocumentRequirementsTable.sortOrder);
+  res.json(rows);
+});
+
 router.put("/programs/:id/document-requirements", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
