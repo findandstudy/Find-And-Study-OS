@@ -13,6 +13,7 @@ export const studentsTable = pgTable("students", {
   phone: text("phone"),
   phoneE164: text("phone_e164"),
   dateOfBirth: text("date_of_birth"),
+  gender: text("gender"),
   nationality: text("nationality"),
   passportNumber: text("passport_number"),
   passportIssueDate: text("passport_issue_date"),

@@ -158,7 +158,7 @@ type ExtractedData = {
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
-  nationality: "", dateOfBirth: "",
+  nationality: "", dateOfBirth: "", gender: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
   highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
@@ -718,6 +718,7 @@ function AddStudentModal({
     if (!form.email.trim()) missing.push("Email");
     if (!form.phone.trim()) missing.push("Phone");
     if (!form.dateOfBirth.trim()) missing.push("Date of Birth");
+    if (!form.gender.trim()) missing.push("Gender");
     if (!form.nationality.trim()) missing.push("Nationality");
     if (!form.motherName.trim()) missing.push("Mother's Name");
     if (!form.fatherName.trim()) missing.push("Father's Name");
@@ -746,6 +747,7 @@ function AddStudentModal({
           phone: fullPhone,
           nationality: form.nationality || null,
           dateOfBirth: form.dateOfBirth || null,
+          gender: form.gender || null,
           passportNumber: form.passportNumber || null,
           passportIssueDate: form.passportIssueDate || null,
           passportExpiry: form.passportExpiry || null,
@@ -969,6 +971,18 @@ function AddStudentModal({
                   </div>
                   <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
                   <div>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Gender<span className="text-destructive ml-0.5">*</span></Label>
+                    <select
+                      value={form.gender}
+                      onChange={(e) => field("gender")(e.target.value)}
+                      className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Select…</option>
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                    </select>
+                  </div>
+                  <div>
                     <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
                     <div className="mt-1">
                       <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
@@ -1138,7 +1152,7 @@ function AddStudentModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim()}
+                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.gender.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim()}
                 className="rounded-xl gap-2"
               >
                 {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -1153,9 +1167,9 @@ function AddStudentModal({
   );
 }
 
-const SAMPLE_CSV = `firstName,lastName,email,phone,nationality,dateOfBirth,passportNumber,motherName,fatherName
-John,Doe,john@example.com,+1-555-0001,American,1998-05-15,US12345678,Mary Doe,James Doe
-Jane,Smith,jane@example.com,+44-20-0002,British,2000-09-22,GB87654321,Sarah Smith,Robert Smith`;
+const SAMPLE_CSV = `firstName,lastName,email,phone,nationality,dateOfBirth,gender,passportNumber,motherName,fatherName
+John,Doe,john@example.com,+1-555-0001,American,1998-05-15,male,US12345678,Mary Doe,James Doe
+Jane,Smith,jane@example.com,+44-20-0002,British,2000-09-22,female,GB87654321,Sarah Smith,Robert Smith`;
 
 function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void; }) {
   const { toast } = useToast();

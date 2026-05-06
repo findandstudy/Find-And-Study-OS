@@ -276,7 +276,7 @@ type ApplyStep = "personal" | "documents" | "analyzing" | "review" | "success";
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
-  nationality: "", dateOfBirth: "", notes: "",
+  nationality: "", dateOfBirth: "", gender: "", notes: "",
   motherName: "", fatherName: "", passportNumber: "",
   passportIssueDate: "", passportExpiry: "",
   address: "", highSchool: "", graduationYear: "", gpa: "", languageScore: "",
@@ -373,6 +373,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             phoneCode: code || f.phoneCode,
             nationality: (profile as any).nationality || f.nationality,
             dateOfBirth: (profile as any).dateOfBirth || f.dateOfBirth,
+            gender: (profile as any).gender || f.gender,
             motherName: (profile as any).motherName || f.motherName,
             fatherName: (profile as any).fatherName || f.fatherName,
             passportNumber: (profile as any).passportNumber || f.passportNumber,
@@ -630,7 +631,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   async function handleSubmit() {
     setEmailError(null);
 
-    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName || !form.nationality) {
+    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName || !form.nationality || !form.gender) {
       toast({ title: t("apply.fillRequiredFields"), variant: "destructive" });
       return;
     }
@@ -1043,13 +1044,28 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                   className={`rounded-xl ${extracted.has("dateOfBirth") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.passportNumber")}
-                  {extracted.has("passportNumber") && <AiBadge />}
+                <Label className="text-sm font-semibold">
+                  {t("apply.gender")} <span className="text-destructive ml-0.5">*</span>
                 </Label>
-                <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
-                  placeholder={t("apply.passportPlaceholder")} className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                <select
+                  value={form.gender}
+                  onChange={(e) => setForm(f => ({ ...f, gender: e.target.value }))}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">{t("apply.selectGender")}</option>
+                  <option value="female">{t("apply.genderFemale")}</option>
+                  <option value="male">{t("apply.genderMale")}</option>
+                </select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-semibold flex items-center">
+                {t("apply.passportNumber")}
+                {extracted.has("passportNumber") && <AiBadge />}
+              </Label>
+              <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
+                placeholder={t("apply.passportPlaceholder")} className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

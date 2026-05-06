@@ -17,7 +17,7 @@ const router: IRouter = Router();
 const STUDENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
-  "motherName", "fatherName", "address",
+  "motherName", "fatherName", "address", "gender",
   "status", "agentId", "assignedToId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
   "universityBachelor", "universityMaster",
@@ -58,7 +58,7 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
   const SELF_FIELDS = [
     "firstName", "lastName", "phone", "nationality",
     "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
-    "motherName", "fatherName", "address",
+    "motherName", "fatherName", "address", "gender",
     "highSchool", "universityBachelor", "universityMaster",
     "graduationYear", "gpa", "languageScore",
   ];
@@ -192,7 +192,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   const {
     firstName, lastName, status = "active",
     email, phone, nationality,
-    dateOfBirth, passportNumber, passportIssueDate, passportExpiry,
+    dateOfBirth, gender, passportNumber, passportIssueDate, passportExpiry,
     motherName, fatherName, address,
     agentId, userId, notes,
     highSchool, graduationYear, gpa, languageScore, season,
@@ -255,6 +255,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     phoneE164: toE164(phone || null),
     nationality: nationality || null,
     dateOfBirth: dateOfBirth || null,
+    gender: gender || null,
     passportNumber: passportNumber ? passportNumber.trim() : null,
     passportIssueDate: passportIssueDate || null,
     passportExpiry: passportExpiry || null,
@@ -323,6 +324,7 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
         phone: s.phone || null,
         nationality: s.nationality || null,
         dateOfBirth: s.dateOfBirth || null,
+        gender: s.gender || null,
         passportNumber: s.passportNumber || null,
         passportIssueDate: s.passportIssueDate || null,
         passportExpiry: s.passportExpiry || null,
@@ -408,7 +410,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   const STUDENT_SELF_FIELDS = [
     "firstName", "lastName", "phone", "nationality",
     "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
-    "motherName", "fatherName", "address",
+    "motherName", "fatherName", "address", "gender",
     "highSchool", "universityBachelor", "universityMaster",
     "graduationYear", "gpa", "languageScore", "photoUrl",
   ];

@@ -659,6 +659,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 ) : (
                   <div className="space-y-3 text-sm">
                     <InfoRow icon={<Calendar className="w-4 h-4" />} label="Date of Birth" value={student?.dateOfBirth} />
+                    <InfoRow icon={<User className="w-4 h-4" />} label="Gender" value={student?.gender === "female" ? "Female" : student?.gender === "male" ? "Male" : null} />
                     <InfoRow icon={<Globe className="w-4 h-4" />} label="Nationality" value={student?.nationality} />
                     <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={student?.email} />
                     <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={student?.phone} />
@@ -1309,7 +1310,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
-    nationality: "", dateOfBirth: "",
+    nationality: "", dateOfBirth: "", gender: "",
     passportNumber: "", passportIssueDate: "", passportExpiry: "",
     motherName: "", fatherName: "", address: "",
     highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
@@ -1336,6 +1337,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
         firstName: student.firstName || "", lastName: student.lastName || "",
         email: student.email || "", phone: parsed.phone, phoneCode: parsed.phoneCode,
         nationality: student.nationality || "", dateOfBirth: student.dateOfBirth || "",
+        gender: student.gender || "",
         passportNumber: student.passportNumber || "",
         passportIssueDate: student.passportIssueDate || "",
         passportExpiry: student.passportExpiry || "",
@@ -1371,6 +1373,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           email: form.email, phone,
           nationality: form.nationality,
           dateOfBirth: form.dateOfBirth,
+          gender: form.gender || null,
           passportNumber: form.passportNumber,
           passportIssueDate: form.passportIssueDate,
           passportExpiry: form.passportExpiry,
@@ -1436,6 +1439,18 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                 </div>
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Gender</Label>
+                <select
+                  value={form.gender}
+                  onChange={(e) => field("gender")(e.target.value)}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select…</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                </select>
+              </div>
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Nationality</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} />

@@ -82,7 +82,7 @@ function getStuStageColor(stage: PipelineStage, index: number): string {
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
-  nationality: "", dateOfBirth: "",
+  nationality: "", dateOfBirth: "", gender: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
   highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
@@ -701,6 +701,7 @@ function AddStudentModal({
     if (!form.email.trim()) missing.push("Email");
     if (!form.phone.trim()) missing.push("Phone");
     if (!form.dateOfBirth.trim()) missing.push("Date of Birth");
+    if (!form.gender.trim()) missing.push("Gender");
     if (!form.nationality.trim()) missing.push("Nationality");
     if (!form.motherName.trim()) missing.push("Mother's Name");
     if (!form.fatherName.trim()) missing.push("Father's Name");
@@ -729,6 +730,7 @@ function AddStudentModal({
           phone: fullPhone,
           nationality: form.nationality || null,
           dateOfBirth: form.dateOfBirth || null,
+          gender: form.gender || null,
           passportNumber: form.passportNumber || null,
           passportIssueDate: form.passportIssueDate || null,
           passportExpiry: form.passportExpiry || null,
@@ -948,6 +950,18 @@ function AddStudentModal({
                     </div>
                   </div>
                   <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Gender<span className="text-destructive ml-0.5">*</span></Label>
+                    <select
+                      value={form.gender}
+                      onChange={(e) => field("gender")(e.target.value)}
+                      className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Select…</option>
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                    </select>
+                  </div>
                   <div>
                     <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
                     <div className="mt-1">
@@ -1265,7 +1279,7 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
-    nationality: "", status: "active", dateOfBirth: "",
+    nationality: "", status: "active", dateOfBirth: "", gender: "",
     passportNumber: "", passportIssueDate: "", passportExpiry: "",
     motherName: "", fatherName: "", address: "",
     highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
@@ -1309,6 +1323,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         email: student.email || "", phone: phoneNum, phoneCode,
         nationality: student.nationality || "", status: student.status || "active",
         dateOfBirth: student.dateOfBirth || "",
+        gender: student.gender || "",
         passportNumber: student.passportNumber || "",
         passportIssueDate: student.passportIssueDate || "",
         passportExpiry: student.passportExpiry || "",
@@ -1343,6 +1358,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           email: form.email, phone,
           nationality: form.nationality, status: form.status,
           dateOfBirth: form.dateOfBirth,
+          gender: form.gender || null,
           passportNumber: form.passportNumber,
           passportIssueDate: form.passportIssueDate,
           passportExpiry: form.passportExpiry,
@@ -1406,6 +1422,18 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 </div>
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Gender</Label>
+                <select
+                  value={form.gender}
+                  onChange={(e) => field("gender")(e.target.value)}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select…</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                </select>
+              </div>
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Nationality</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />

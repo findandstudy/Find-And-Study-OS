@@ -237,10 +237,16 @@ async function createApplicationForStudent(studentId: number, programId: number 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, address, highSchool, graduationYear, gpa, languageScore, leadId, documents, reuseDocumentIds } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, leadId, documents, reuseDocumentIds } = req.body;
 
-  if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality) {
-    res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, and nationality are required" });
+  if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality || !gender) {
+    res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, nationality, and gender are required" });
+    return;
+  }
+
+  const normalizedGender = String(gender).toLowerCase();
+  if (normalizedGender !== "female" && normalizedGender !== "male") {
+    res.status(400).json({ error: "gender must be 'female' or 'male'" });
     return;
   }
 
@@ -296,6 +302,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
           nationality: nationality || null,
           dateOfBirth: s(dateOfBirth, 20),
+          gender: normalizedGender,
           motherName: s(motherName, 100),
           fatherName: s(fatherName, 100),
           passportNumber: s(passportNumber, 50),
@@ -312,6 +319,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       const fillableFields: Record<string, any> = {};
       if (!existingStudent.nationality && nationality) fillableFields.nationality = nationality;
       if (!existingStudent.dateOfBirth && dateOfBirth) fillableFields.dateOfBirth = s(dateOfBirth, 20);
+      if (!(existingStudent as any).gender && normalizedGender) fillableFields.gender = normalizedGender;
       if (!existingStudent.motherName && motherName) fillableFields.motherName = s(motherName, 100);
       if (!existingStudent.fatherName && fatherName) fillableFields.fatherName = s(fatherName, 100);
       if (!existingStudent.passportNumber && passportNumber) fillableFields.passportNumber = s(passportNumber, 50);
@@ -384,6 +392,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
           nationality: nationality || null,
           dateOfBirth: s(dateOfBirth, 20),
+          gender: normalizedGender,
           motherName: s(motherName, 100),
           fatherName: s(fatherName, 100),
           passportNumber: s(passportNumber, 50),
