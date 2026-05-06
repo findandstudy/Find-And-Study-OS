@@ -670,24 +670,53 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-filter-group select,.ew-filter-group input{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.875rem;background:#fff;color:#1f2937;outline:none}
 .ew-filter-group select:focus,.ew-filter-group input:focus{border-color:${primaryColor};box-shadow:0 0 0 3px ${primaryColor}22}
 .ew-results-info{font-size:0.875rem;color:#64748b;margin-bottom:12px}
-.ew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:20px}
-.ew-card{border:1px solid #e2e8f0;border-radius:${borderRadius};padding:20px;background:#fff;transition:box-shadow .2s,transform .15s}
-.ew-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
-.ew-card-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.ew-card-logo{width:48px;height:48px;border-radius:8px;object-fit:contain;background:#f1f5f9;padding:4px;flex-shrink:0}
-.ew-card-logo-placeholder{width:48px;height:48px;border-radius:8px;background:${primaryColor}15;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;color:${primaryColor};flex-shrink:0}
-.ew-card-title{font-size:1rem;font-weight:600;color:#1f2937}
-.ew-card-uni{font-size:0.8rem;color:#64748b}
-.ew-card-details{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
-.ew-badge{font-size:0.7rem;padding:3px 8px;border-radius:20px;background:#f1f5f9;color:#475569;font-weight:500;white-space:nowrap}
+.ew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;margin-bottom:20px}
+.ew-card{border:1px solid rgba(226,232,240,.7);border-radius:16px;background:#fff;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .25s,transform .25s,border-color .25s}
+.ew-card:hover{box-shadow:0 12px 28px rgba(37,99,235,.10);transform:translateY(-4px);border-color:rgba(37,99,235,.25)}
+.ew-card-banner{height:72px;display:flex;align-items:center;gap:12px;padding:0 18px;position:relative;overflow:hidden}
+.ew-card-banner::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at top right,rgba(255,255,255,.45),transparent 65%);pointer-events:none}
+.ew-card-banner-g0{background:linear-gradient(to right,rgba(59,130,246,.15),rgba(99,102,241,.10) 60%,rgba(168,85,247,.05))}
+.ew-card-banner-g1{background:linear-gradient(to right,rgba(16,185,129,.15),rgba(20,184,166,.10) 60%,rgba(6,182,212,.05))}
+.ew-card-banner-g2{background:linear-gradient(to right,rgba(249,115,22,.15),rgba(244,63,94,.10) 60%,rgba(236,72,153,.05))}
+.ew-card-banner-g3{background:linear-gradient(to right,rgba(139,92,246,.15),rgba(168,85,247,.10) 60%,rgba(99,102,241,.05))}
+.ew-card-banner-g4{background:linear-gradient(to right,rgba(6,182,212,.15),rgba(14,165,233,.10) 60%,rgba(59,130,246,.05))}
+.ew-card-logo-wrap{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.92);box-shadow:0 4px 10px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;z-index:1;overflow:hidden;border:2px solid rgba(255,255,255,.5)}
+.ew-card-logo-wrap img{width:32px;height:32px;object-fit:contain}
+.ew-card-logo-fallback{width:20px;height:20px;color:${primaryColor}}
+.ew-card-uni-name{font-size:.75rem;font-weight:600;color:rgba(31,41,55,.78);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative;z-index:1}
+.ew-card-pills{display:flex;gap:6px;flex-shrink:0;position:relative;z-index:1}
+.ew-pill-soft{font-size:10px;font-weight:500;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.75);backdrop-filter:blur(4px);color:#475569;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.ew-pill-primary{font-size:10px;font-weight:500;padding:3px 8px;border-radius:6px;background:${primaryColor};color:#fff;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.ew-card-body{padding:18px;flex:1;display:flex;flex-direction:column}
+.ew-card-title{font-size:15px;font-weight:700;color:#1f2937;line-height:1.35;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;transition:color .2s}
+.ew-card:hover .ew-card-title{color:${primaryColor}}
+.ew-card-loc{display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b;margin-bottom:14px}
+.ew-card-loc svg{width:14px;height:14px;color:rgba(37,99,235,.5);flex-shrink:0}
+.ew-card-loc span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ew-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;background:rgba(241,245,249,.6);border-radius:10px;padding:12px;margin-bottom:14px}
+.ew-meta-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;font-weight:500;min-width:0}
+.ew-meta-item svg{width:14px;height:14px;flex-shrink:0}
+.ew-meta-item .ew-meta-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ew-meta-icon-blue{color:#3b82f6}
+.ew-meta-icon-green{color:#22c55e}
+.ew-meta-icon-orange{color:#f97316}
+.ew-meta-icon-emerald{color:#10b981}
+.ew-fee-row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.ew-fee-orig{text-decoration:line-through;color:rgba(148,163,184,.7);font-size:10px;font-weight:400}
+.ew-fee-disc{color:#059669;font-weight:700}
+.ew-fee-pct{font-size:9px;font-weight:700;color:#fff;background:#10b981;border-radius:3px;padding:1px 4px;line-height:1.2}
+.ew-scholarship{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:9999px;border:1px solid rgba(16,185,129,.3);color:#059669;background:rgba(236,253,245,.6);margin-bottom:12px;align-self:flex-start}
+.ew-scholarship svg{width:12px;height:12px}
+.ew-card-actions{margin-top:auto;display:flex;gap:8px}
+.ew-btn-info{width:40px;height:40px;border-radius:10px;border:1px solid rgba(226,232,240,.8);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;flex-shrink:0;transition:all .2s}
+.ew-btn-info:hover{border-color:rgba(37,99,235,.4);background:rgba(239,246,255,.5);color:${primaryColor}}
+.ew-btn-info svg{width:16px;height:16px}
+.ew-badge{font-size:.7rem;padding:3px 8px;border-radius:20px;background:#f1f5f9;color:#475569;font-weight:500;white-space:nowrap}
 .ew-badge-primary{background:${primaryColor}15;color:${primaryColor}}
-.ew-card-fee{font-size:1.1rem;font-weight:700;color:${primaryColor};margin-bottom:14px}
-.ew-card-fee .ew-fee-orig{text-decoration:line-through;color:#9ca3af;font-size:0.85rem;font-weight:400;margin-left:6px}
-.ew-card-fee .ew-fee-type{font-size:0.7rem;color:#9ca3af;font-weight:400}
-.ew-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 20px;background:${buttonColor};color:#fff;border:none;border-radius:6px;font-size:0.875rem;font-weight:600;cursor:pointer;transition:opacity .2s;width:100%;text-align:center}
-.ew-btn:hover{opacity:.9}
-.ew-btn-outline{background:transparent;color:${buttonColor};border:1.5px solid ${buttonColor}}
-.ew-btn-outline:hover{background:${buttonColor}08}
+.ew-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 20px;background:${buttonColor};color:#fff;border:none;border-radius:10px;font-size:.875rem;font-weight:600;cursor:pointer;transition:box-shadow .25s,opacity .2s;flex:1;text-align:center;box-shadow:0 4px 10px rgba(37,99,235,.15)}
+.ew-btn:hover{opacity:.95;box-shadow:0 6px 14px rgba(37,99,235,.25)}
+.ew-btn-outline{background:transparent;color:${buttonColor};border:1.5px solid ${buttonColor};box-shadow:none}
+.ew-btn-outline:hover{background:${buttonColor}08;box-shadow:none}
 .ew-pagination{display:flex;justify-content:center;gap:8px;margin-top:20px}
 .ew-pagination button{padding:8px 14px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:0.875rem;color:#374151}
 .ew-pagination button:disabled{opacity:.4;cursor:default}
@@ -1001,30 +1030,65 @@ function renderFilters(){
   return h;
 }
 
+var ICON_MAPPIN='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 7-8 13-8 13s-8-6-8-13a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+var ICON_LANG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>';
+var ICON_CLOCK='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+var ICON_BOOK='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>';
+var ICON_DOLLAR='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
+var ICON_AWARD='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>';
+var ICON_INFO='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+var ICON_GRAD='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>';
+
+function fmtFee(amount,cur){
+  if(amount==null||isNaN(amount))return '';
+  return (cur||'USD')+' '+Number(amount).toLocaleString();
+}
+
 function renderCard(p){
-  var fee=p.discountedFee||p.tuitionFee;
-  var cur=p.currency||'USD';
-  var logo=p.universityLogoUrl?'<img class="ew-card-logo" src="'+esc(p.universityLogoUrl)+'" alt="">':'<div class="ew-card-logo-placeholder">'+esc((p.universityName||'U').charAt(0))+'</div>';
+  var idx=(typeof p.id==='number'?p.id:0)%5;
+  var loc=[p.universityCity,p.universityCountry].filter(Boolean).map(esc).join(', ');
+  var hasDiscount=p.discountedFee&&p.tuitionFee&&p.discountedFee<p.tuitionFee;
+  var effFee=p.discountedFee||p.tuitionFee;
+  var pct=hasDiscount?Math.round(((p.tuitionFee-p.discountedFee)/p.tuitionFee)*100):0;
+  var logoInner=p.universityLogoUrl?'<img src="'+esc(p.universityLogoUrl)+'" alt="" onerror="this.style.display=\\'none\\';this.nextElementSibling&&(this.nextElementSibling.style.display=\\'block\\')">'+'<span style="display:none" class="ew-card-logo-fallback">'+ICON_GRAD+'</span>':'<span class="ew-card-logo-fallback">'+ICON_GRAD+'</span>';
+
   var h='<div class="ew-card">';
-  h+='<div class="ew-card-header">'+logo+'<div><div class="ew-card-title">'+esc(p.name)+'</div><div class="ew-card-uni">'+esc(p.universityName||'')+'</div></div></div>';
-  h+='<div class="ew-card-details">';
-  if(p.degree)h+='<span class="ew-badge ew-badge-primary">'+esc(p.degree)+'</span>';
-  if(p.language)h+='<span class="ew-badge">'+esc(p.language)+'</span>';
-  if(p.duration)h+='<span class="ew-badge">'+esc(p.duration)+'</span>';
-  if(p.universityCountry)h+='<span class="ew-badge">'+esc(p.universityCountry)+'</span>';
-  if(p.universityType)h+='<span class="ew-badge">'+esc(p.universityType)+'</span>';
-  if(p.intakes)h+='<span class="ew-badge">'+esc(p.intakes)+'</span>';
+  h+='<div class="ew-card-banner ew-card-banner-g'+idx+'">';
+  h+='<div class="ew-card-logo-wrap">'+logoInner+'</div>';
+  h+='<div class="ew-card-uni-name">'+esc(p.universityName||'')+'</div>';
+  h+='<div class="ew-card-pills">';
+  if(p.universityType)h+='<span class="ew-pill-soft">'+esc(p.universityType)+'</span>';
+  if(p.degree)h+='<span class="ew-pill-primary">'+esc(p.degree)+'</span>';
+  h+='</div></div>';
+
+  h+='<div class="ew-card-body">';
+  h+='<div class="ew-card-title">'+esc(p.name)+'</div>';
+  if(loc)h+='<div class="ew-card-loc">'+ICON_MAPPIN+'<span>'+loc+'</span></div>';
+
+  h+='<div class="ew-card-meta">';
+  if(p.language)h+='<div class="ew-meta-item"><span class="ew-meta-icon-blue">'+ICON_LANG+'</span><span class="ew-meta-text">'+esc(p.language)+'</span></div>';
+  if(p.duration)h+='<div class="ew-meta-item"><span class="ew-meta-icon-green">'+ICON_CLOCK+'</span><span class="ew-meta-text">'+esc(p.duration)+'</span></div>';
+  if(p.intakes)h+='<div class="ew-meta-item"><span class="ew-meta-icon-orange">'+ICON_BOOK+'</span><span class="ew-meta-text">'+esc(p.intakes)+'</span></div>';
+  if(effFee){
+    h+='<div class="ew-meta-item"><span class="ew-meta-icon-emerald">'+ICON_DOLLAR+'</span><span class="ew-fee-row">';
+    if(hasDiscount)h+='<span class="ew-fee-orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span>';
+    h+='<span'+(hasDiscount?' class="ew-fee-disc"':'')+'>'+esc(fmtFee(effFee,p.currency))+'</span>';
+    if(hasDiscount)h+='<span class="ew-fee-pct">-'+pct+'%</span>';
+    h+='</span></div>';
+  }
   h+='</div>';
-  if(fee){
-    h+='<div class="ew-card-fee">'+cur+' '+Number(fee).toLocaleString();
-    if(p.discountedFee&&p.tuitionFee&&p.discountedFee<p.tuitionFee)h+='<span class="ew-fee-orig">'+cur+' '+Number(p.tuitionFee).toLocaleString()+'</span>';
-    if(p.feeType)h+=' <span class="ew-fee-type">/ '+esc(p.feeType)+'</span>';
+
+  if(p.scholarship&&p.scholarship>0){
+    h+='<div class="ew-scholarship">'+ICON_AWARD+'<span>Scholarship: '+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
+  }
+
+  if(MODE!=='course_finder'){
+    h+='<div class="ew-card-actions">';
+    h+='<button class="ew-btn" data-apply="'+p.id+'">Apply Now</button>';
     h+='</div>';
   }
-  if(MODE!=='course_finder'){
-    h+='<button class="ew-btn" data-apply="'+p.id+'">Apply Now</button>';
-  }
-  h+='</div>';
+
+  h+='</div></div>';
   return h;
 }
 
