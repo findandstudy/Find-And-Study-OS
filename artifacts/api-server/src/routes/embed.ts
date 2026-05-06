@@ -250,12 +250,22 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
     intakes: programsTable.intakes,
     discountedFee: programsTable.discountedFee,
     feeType: programsTable.feeType,
+    applicationFee: programsTable.applicationFee,
+    depositFee: programsTable.depositFee,
+    advancedFee: programsTable.advancedFee,
+    languageFee: programsTable.languageFee,
+    requirements: programsTable.requirements,
     universityId: programsTable.universityId,
     universityName: universitiesTable.name,
     universityLogoUrl: universitiesTable.logoUrl,
     universityCountry: universitiesTable.country,
     universityCity: universitiesTable.city,
     universityType: universitiesTable.universityType,
+    universityWebsite: universitiesTable.website,
+    universityDescription: universitiesTable.description,
+    universityRanking: universitiesTable.ranking,
+    universityQsRanking: universitiesTable.qsRanking,
+    universityTimesRanking: universitiesTable.timesRanking,
   }).from(programsTable)
     .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
     .where(where)
@@ -787,6 +797,36 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-extracted-item span{color:#64748b}
 .ew-btn-back{background:transparent;color:#64748b;border:1.5px solid #d1d5db;cursor:pointer;padding:10px 20px;border-radius:6px;font-size:0.875rem;font-weight:500;transition:all .2s}
 .ew-btn-back:hover{background:#f8fafc;color:#374151}
+.ew-detail-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.ew-detail-logo{width:48px;height:48px;border-radius:12px;background:${primaryColor}15;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;border:2px solid ${primaryColor}33}
+.ew-detail-logo img{width:36px;height:36px;object-fit:contain}
+.ew-detail-logo svg{width:24px;height:24px;color:${primaryColor}}
+.ew-detail-title{font-size:1.05rem;font-weight:700;color:#1f2937;line-height:1.3}
+.ew-detail-uni{font-size:0.8rem;color:#64748b;margin-top:2px}
+.ew-detail-loc{display:flex;align-items:center;gap:6px;font-size:0.85rem;color:#64748b;margin-bottom:14px}
+.ew-detail-loc svg{width:14px;height:14px;color:${primaryColor}99}
+.ew-detail-feebox{background:linear-gradient(to right,${primaryColor}0d,rgba(16,185,129,.05));border:1px solid ${primaryColor}1a;border-radius:12px;padding:14px;margin-bottom:14px}
+.ew-detail-feeline{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.ew-detail-feeline .big{font-size:1.4rem;font-weight:700;color:#1f2937}
+.ew-detail-feeline .orig{font-size:0.85rem;text-decoration:line-through;color:#9ca3af}
+.ew-detail-feeline .pct{font-size:10px;font-weight:700;color:#fff;background:#10b981;border-radius:4px;padding:2px 6px;line-height:1.3}
+.ew-detail-schol{display:flex;align-items:center;gap:6px;font-size:0.85rem;color:#059669;font-weight:500}
+.ew-detail-schol svg{width:14px;height:14px}
+.ew-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.ew-detail-row{display:flex;align-items:center;gap:10px;background:rgba(241,245,249,.6);border-radius:9px;padding:9px 12px;min-width:0}
+.ew-detail-row svg{width:16px;height:16px;flex-shrink:0}
+.ew-detail-row-text{min-width:0;flex:1}
+.ew-detail-row-label{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;font-weight:600;line-height:1.2}
+.ew-detail-row-value{font-size:13px;font-weight:500;color:#1f2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;margin-top:2px}
+.ew-detail-section{margin-bottom:14px}
+.ew-detail-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;font-weight:600;margin-bottom:6px}
+.ew-detail-section-text{font-size:13px;color:#374151;line-height:1.55;white-space:pre-line}
+.ew-detail-rankings{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.ew-detail-rank-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#475569;border:1px solid #e2e8f0;border-radius:9999px;padding:3px 10px;font-weight:500;background:#fff}
+.ew-detail-rank-pill svg{width:11px;height:11px;color:#f59e0b}
+.ew-detail-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:${primaryColor};font-weight:600;text-decoration:none}
+.ew-detail-link:hover{opacity:.8}
+.ew-detail-link svg{width:13px;height:13px}
 @media(max-width:640px){
   .ew-grid{grid-template-columns:1fr}
   .ew-filters{flex-direction:column}
@@ -808,6 +848,7 @@ var SLUG='${slug}';
 var MODE='${safeMode}';
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
+var detailProgram=null, detailOpen=false;
 var formStep='upload';
 var uploadedDocs={};
 var aiResult=null;
@@ -1082,11 +1123,12 @@ function renderCard(p){
     h+='<div class="ew-scholarship">'+ICON_AWARD+'<span>Scholarship: '+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
   }
 
+  h+='<div class="ew-card-actions">';
+  h+='<button type="button" class="ew-btn-info" aria-label="Details" data-info="'+p.id+'">'+ICON_INFO+'</button>';
   if(MODE!=='course_finder'){
-    h+='<div class="ew-card-actions">';
     h+='<button class="ew-btn" data-apply="'+p.id+'">Apply Now</button>';
-    h+='</div>';
   }
+  h+='</div>';
 
   h+='</div></div>';
   return h;
@@ -1312,6 +1354,112 @@ function showModal(){
   setTimeout(repositionModal,60);
 }
 
+function closeDetailModal(){
+  detailOpen=false;detailProgram=null;
+  if(modalElements){modalElements.overlay.remove();modalElements=null;}
+  if(modalNotified){modalNotified=false;notifyParentModalClose();}
+}
+
+function showDetailModal(){
+  var existing=$('.ew-modal-overlay');
+  if(existing)existing.remove();
+  var overlay=el('div','ew-modal-overlay');
+  var modal=el('div','ew-modal');
+  modal.innerHTML='<button class="ew-close-btn" id="ew-detail-close">&times;</button>'+renderDetailContent(detailProgram);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  modalElements={overlay:overlay,modal:modal};
+  overlay.addEventListener('click',function(e){if(e.target===overlay){closeDetailModal();}});
+  var closeBtn=$('#ew-detail-close',modal);
+  if(closeBtn)closeBtn.addEventListener('click',function(){closeDetailModal();});
+  var applyBtn=$('#ew-detail-apply',modal);
+  if(applyBtn)applyBtn.addEventListener('click',function(){
+    var pid=parseInt(applyBtn.getAttribute('data-apply'));
+    closeDetailModal();
+    formProgram=programs.find(function(p){return p.id===pid})||null;
+    formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
+    showModal();
+  });
+  if(!modalNotified){modalNotified=true;notifyParentModalOpen();}
+  repositionModal();
+  setTimeout(repositionModal,60);
+}
+
+function renderDetailContent(p){
+  if(!p)return '';
+  var hasDiscount=p.discountedFee&&p.tuitionFee&&p.discountedFee<p.tuitionFee;
+  var effFee=p.discountedFee||p.tuitionFee;
+  var pct=hasDiscount?Math.round(((p.tuitionFee-p.discountedFee)/p.tuitionFee)*100):0;
+  var loc=[p.universityCity,p.universityCountry].filter(Boolean).map(esc).join(', ');
+  var logoInner=p.universityLogoUrl?'<img src="'+esc(p.universityLogoUrl)+'" alt="" onerror="this.style.display=\\'none\\';this.nextElementSibling&&(this.nextElementSibling.style.display=\\'block\\')">'+'<span style="display:none">'+ICON_GRAD+'</span>':ICON_GRAD;
+
+  var h='<div class="ew-detail-head">';
+  h+='<div class="ew-detail-logo">'+logoInner+'</div>';
+  h+='<div style="min-width:0;flex:1"><div class="ew-detail-title">'+esc(p.name)+'</div><div class="ew-detail-uni">'+esc(p.universityName||'')+'</div></div>';
+  h+='</div>';
+
+  if(loc)h+='<div class="ew-detail-loc">'+ICON_MAPPIN+'<span>'+loc+'</span></div>';
+
+  if(effFee||p.scholarship){
+    h+='<div class="ew-detail-feebox">';
+    if(effFee){
+      h+='<div class="ew-detail-feeline"><span class="big">'+esc(fmtFee(effFee,p.currency))+'</span>';
+      if(hasDiscount)h+='<span class="orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span><span class="pct">-'+pct+'%</span>';
+      h+='</div>';
+    }
+    if(p.scholarship&&p.scholarship>0){
+      h+='<div class="ew-detail-schol">'+ICON_AWARD+'<span>Scholarship: '+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
+    }
+    h+='</div>';
+  }
+
+  var rows=[];
+  if(p.degree)rows.push({i:ICON_GRAD,c:'#3b82f6',l:'Degree',v:p.degree});
+  if(p.field)rows.push({i:ICON_AWARD,c:'#8b5cf6',l:'Field',v:p.field});
+  if(p.language)rows.push({i:ICON_LANG,c:'#3b82f6',l:'Language',v:p.language});
+  if(p.duration)rows.push({i:ICON_CLOCK,c:'#22c55e',l:'Duration',v:p.duration});
+  if(p.intakes)rows.push({i:ICON_BOOK,c:'#f97316',l:'Intakes',v:p.intakes});
+  if(p.feeType)rows.push({i:ICON_DOLLAR,c:'#10b981',l:'Fee Type',v:p.feeType});
+  if(p.applicationFee)rows.push({i:ICON_DOLLAR,c:'#f59e0b',l:'Application Fee',v:fmtFee(p.applicationFee,p.currency)});
+  if(p.depositFee)rows.push({i:ICON_DOLLAR,c:'#06b6d4',l:'Deposit Fee',v:fmtFee(p.depositFee,p.currency)});
+  if(p.advancedFee)rows.push({i:ICON_DOLLAR,c:'#0ea5e9',l:'Advanced Fee',v:fmtFee(p.advancedFee,p.currency)});
+  if(p.languageFee)rows.push({i:ICON_LANG,c:'#6366f1',l:'Language Fee',v:fmtFee(p.languageFee,p.currency)});
+
+  if(rows.length){
+    h+='<div class="ew-detail-grid">';
+    rows.forEach(function(r){
+      h+='<div class="ew-detail-row"><span style="color:'+r.c+'">'+r.i+'</span><div class="ew-detail-row-text"><div class="ew-detail-row-label">'+esc(r.l)+'</div><div class="ew-detail-row-value">'+esc(String(r.v))+'</div></div></div>';
+    });
+    h+='</div>';
+  }
+
+  if(p.requirements){
+    h+='<div class="ew-detail-section"><div class="ew-detail-section-label">Requirements</div><div class="ew-detail-section-text">'+esc(p.requirements)+'</div></div>';
+  }
+  if(p.universityDescription){
+    h+='<div class="ew-detail-section" style="border-top:1px solid #e2e8f0;padding-top:12px"><div class="ew-detail-section-label">About the University</div><div class="ew-detail-section-text">'+esc(p.universityDescription)+'</div></div>';
+  }
+
+  var hasRank=p.universityRanking||p.universityQsRanking||p.universityTimesRanking;
+  if(hasRank){
+    h+='<div class="ew-detail-rankings">';
+    if(p.universityRanking)h+='<span class="ew-detail-rank-pill">'+ICON_AWARD+'World #'+esc(String(p.universityRanking))+'</span>';
+    if(p.universityQsRanking)h+='<span class="ew-detail-rank-pill">QS #'+esc(String(p.universityQsRanking))+'</span>';
+    if(p.universityTimesRanking)h+='<span class="ew-detail-rank-pill">THE #'+esc(String(p.universityTimesRanking))+'</span>';
+    h+='</div>';
+  }
+
+  if(p.universityWebsite){
+    h+='<a class="ew-detail-link" href="'+esc(p.universityWebsite)+'" target="_blank" rel="noopener noreferrer">'+ICON_INFO+'Visit university website</a>';
+  }
+
+  if(MODE!=='course_finder'){
+    h+='<div style="margin-top:18px;display:flex;gap:8px"><button type="button" class="ew-btn-back" id="ew-detail-close-btn">Close</button><button type="button" class="ew-btn" id="ew-detail-apply" data-apply="'+p.id+'">Apply Now</button></div>';
+  }
+
+  return h;
+}
+
 function bindModalEvents(modal,overlay){
   var closeBtn=$('#ew-modal-close',modal);
   if(closeBtn)closeBtn.addEventListener('click',function(){closeModal();});
@@ -1462,6 +1610,13 @@ function bindEvents(){
       formProgram=programs.find(function(p){return p.id===pid})||null;
       formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
       showModal();
+    });
+  });
+  $$('[data-info]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var pid=parseInt(btn.getAttribute('data-info'));
+      detailProgram=programs.find(function(p){return p.id===pid})||null;
+      if(detailProgram){detailOpen=true;showDetailModal();}
     });
   });
   $$('[data-page]').forEach(function(btn){
