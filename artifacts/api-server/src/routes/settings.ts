@@ -189,4 +189,46 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/settings/admin/wipe-crm", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const { confirm } = req.body || {};
+  if (confirm !== "WIPE-CRM-DATA") {
+    res.status(400).json({ error: "Missing confirmation. Send body: { \"confirm\": \"WIPE-CRM-DATA\" }" });
+    return;
+  }
+  try {
+    const result = await db.transaction(async (tx) => {
+      const counts: Record<string, number> = {};
+      const exec = async (label: string, sql: string) => {
+        const r = await tx.execute(sql as any);
+        counts[label] = (r as any).rowCount ?? 0;
+      };
+      await exec("application_stage_documents", `DELETE FROM application_stage_documents`);
+      await exec("invoices", `DELETE FROM invoices`);
+      await exec("notes_resource", `DELETE FROM notes WHERE resource_type IN ('student','application','lead')`);
+      await exec("follow_ups", `DELETE FROM follow_ups WHERE student_id IS NOT NULL OR lead_id IS NOT NULL`);
+      await exec("documents", `DELETE FROM documents WHERE student_id IS NOT NULL OR application_id IS NOT NULL OR lead_id IS NOT NULL`);
+      await exec("commissions", `DELETE FROM commissions`);
+      await exec("service_fees", `DELETE FROM service_fees`);
+      await exec("financial_transactions", `DELETE FROM financial_transactions`);
+      await exec("embed_submissions", `DELETE FROM embed_submissions`);
+      await exec("applications", `DELETE FROM applications`);
+      await exec("students", `DELETE FROM students`);
+      await exec("leads", `DELETE FROM leads`);
+      await exec("notes_authored", `DELETE FROM notes WHERE author_id IN (SELECT id FROM users WHERE role='student')`);
+      await exec("messages_student", `DELETE FROM messages WHERE sender_id IN (SELECT id FROM users WHERE role='student')`);
+      await exec("conversation_participants_student", `DELETE FROM conversation_participants WHERE user_id IN (SELECT id FROM users WHERE role='student')`);
+      await exec("conversations_student", `DELETE FROM conversations WHERE created_by_id IN (SELECT id FROM users WHERE role='student') OR assigned_to_id IN (SELECT id FROM users WHERE role='student')`);
+      await exec("broadcasts_student", `DELETE FROM broadcasts WHERE sent_by_id IN (SELECT id FROM users WHERE role='student')`);
+      await exec("message_templates_student", `DELETE FROM message_templates WHERE created_by_id IN (SELECT id FROM users WHERE role='student')`);
+      await exec("users_student", `DELETE FROM users WHERE role='student'`);
+      return counts;
+    });
+    console.log("[ADMIN-WIPE] CRM data wiped by user", req.user!.id, result);
+    res.json({ success: true, deleted: result });
+  } catch (err: any) {
+    console.error("[ADMIN-WIPE] Failed:", err);
+    res.status(500).json({ error: err?.message || "Wipe failed" });
+  }
+});
+
 export default router;
