@@ -10,6 +10,7 @@ import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/s
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
@@ -59,11 +60,11 @@ async function createApplicationForStudent(studentId: number, programId: number 
       if (prog) {
         const eligibilityErrors: string[] = [];
         if (prog.minGpa != null && prog.minGpa > 0) {
-          const gpaNum = parseFloat(studentGpa || "");
+          const gpaNum = normalizeGpaTo100(studentGpa);
           if (isNaN(gpaNum)) {
-            eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa}, but no GPA was provided`);
+            eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa} (out of 100), but no GPA was provided`);
           } else if (gpaNum < prog.minGpa) {
-            eligibilityErrors.push(`GPA (${gpaNum}) is below the minimum required (${prog.minGpa})`);
+            eligibilityErrors.push(`GPA (${gpaNum.toFixed(2)}/100) is below the minimum required (${prog.minGpa}/100)`);
           }
         }
         if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {

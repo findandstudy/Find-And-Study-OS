@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
+import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -245,11 +246,11 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     if (prog) {
       const eligibilityErrors: string[] = [];
       if (prog.minGpa != null && prog.minGpa > 0) {
-        const studentGpaNum = parseFloat(studentFull.gpa || "");
+        const studentGpaNum = normalizeGpaTo100(studentFull.gpa);
         if (isNaN(studentGpaNum)) {
-          eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa}, but student has no GPA recorded`);
+          eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa} (out of 100), but student has no GPA recorded`);
         } else if (studentGpaNum < prog.minGpa) {
-          eligibilityErrors.push(`Student GPA (${studentGpaNum}) is below the minimum required (${prog.minGpa})`);
+          eligibilityErrors.push(`Student GPA (${studentGpaNum.toFixed(2)}/100) is below the minimum required (${prog.minGpa}/100)`);
         }
       }
       if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {
@@ -1097,7 +1098,7 @@ router.post("/applications/reject-unqualified", requireAuth, requireRole("super_
 
     let fail = false;
     if (prog.minGpa != null && prog.minGpa > 0) {
-      const gpaNum = parseFloat(stu.gpa || "");
+      const gpaNum = normalizeGpaTo100(stu.gpa);
       if (isNaN(gpaNum) || gpaNum < prog.minGpa) fail = true;
     }
     if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {
