@@ -264,99 +264,39 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
   const baseUrl = getAppBaseUrl();
   const loginUrl = `${baseUrl}/login`;
 
+  const trimmedPassport = passportNumber ? String(passportNumber).trim() : "";
+
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+
+    if (trimmedPassport) {
+      const [dupPassportStudent] = await db.select({ id: studentsTable.id, userId: studentsTable.userId })
+        .from(studentsTable)
+        .where(and(eq(studentsTable.passportNumber, trimmedPassport), isNull(studentsTable.deletedAt)));
+      if (dupPassportStudent && (!existingUser || dupPassportStudent.userId !== existingUser.id)) {
+        res.status(409).json({
+          error: `This passport number has already been used in our system. Please log in to your existing account to continue your application: ${loginUrl}`,
+          code: "PASSPORT_IN_USE",
+          loginUrl,
+        });
+        return;
+      }
+    }
 
     let resultStudentId: number | null = null;
     let resultAppId: number | null = null;
 
     if (existingUser) {
       if (existingUser.role !== "student") {
-        res.status(409).json({ error: "This email is already in use by a staff account. Please use a different email." });
+        res.status(409).json({ error: "This email is already in use by a staff account. Please use a different email.", code: "EMAIL_STAFF_CONFLICT" });
         return;
       }
-
-      let [existingStudent] = await db.select().from(studentsTable).where(eq(studentsTable.userId, existingUser.id));
-
-      if (existingStudent && existingStudent.deletedAt) {
-        await db.update(studentsTable).set({ deletedAt: null }).where(eq(studentsTable.id, existingStudent.id));
-        await db.update(usersTable).set({ isActive: true }).where(eq(usersTable.id, existingUser.id));
-        console.log(`[PUBLIC-APPLY] Restored archived student #${existingStudent.id} for user ${normalizedEmail}`);
-      }
-
-      if (!existingStudent) {
-        const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
-        if (archivedByEmail) {
-          await db.update(studentsTable).set({ deletedAt: null, userId: existingUser.id }).where(eq(studentsTable.id, archivedByEmail.id));
-          existingStudent = { ...archivedByEmail, deletedAt: null, userId: existingUser.id } as any;
-          console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} by email match`);
-        }
-      }
-
-      if (!existingStudent) {
-        [existingStudent] = await db.insert(studentsTable).values({
-          userId: existingUser.id,
-          firstName: existingUser.firstName || firstName,
-          lastName: existingUser.lastName || lastName,
-          email: normalizedEmail,
-          phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
-          nationality: nationality || null,
-          dateOfBirth: s(dateOfBirth, 20),
-          gender: normalizedGender,
-          motherName: s(motherName, 100),
-          fatherName: s(fatherName, 100),
-          passportNumber: s(passportNumber, 50),
-          passportIssueDate: s(passportIssueDate, 20),
-          passportExpiry: s(passportExpiry, 20),
-          address: s(address, 300),
-          highSchool: s(highSchool, 200),
-          graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
-          gpa: s(gpa, 20),
-          languageScore: s(languageScore, 20),
-        }).returning();
-      }
-
-      const fillableFields: Record<string, any> = {};
-      if (!existingStudent.nationality && nationality) fillableFields.nationality = nationality;
-      if (!existingStudent.dateOfBirth && dateOfBirth) fillableFields.dateOfBirth = s(dateOfBirth, 20);
-      if (!(existingStudent as any).gender && normalizedGender) fillableFields.gender = normalizedGender;
-      if (!existingStudent.motherName && motherName) fillableFields.motherName = s(motherName, 100);
-      if (!existingStudent.fatherName && fatherName) fillableFields.fatherName = s(fatherName, 100);
-      if (!existingStudent.passportNumber && passportNumber) fillableFields.passportNumber = s(passportNumber, 50);
-      if (!existingStudent.passportIssueDate && passportIssueDate) fillableFields.passportIssueDate = s(passportIssueDate, 20);
-      if (!existingStudent.passportExpiry && passportExpiry) fillableFields.passportExpiry = s(passportExpiry, 20);
-      if (!existingStudent.address && address) fillableFields.address = s(address, 300);
-      if (!existingStudent.highSchool && highSchool) fillableFields.highSchool = s(highSchool, 200);
-      if (!existingStudent.graduationYear && graduationYear) fillableFields.graduationYear = parseInt(String(graduationYear), 10) || null;
-      if (!existingStudent.gpa && gpa) fillableFields.gpa = s(gpa, 20);
-      if (!existingStudent.languageScore && languageScore) fillableFields.languageScore = s(languageScore, 20);
-      if (Object.keys(fillableFields).length > 0) {
-        await db.update(studentsTable).set(fillableFields).where(eq(studentsTable.id, existingStudent.id));
-      }
-
-      resultStudentId = existingStudent.id;
-      const studentGpaVal = existingStudent.gpa || gpa || null;
-      const studentLangVal = existingStudent.languageScore || languageScore || null;
-      const appResult = await createApplicationForStudent(existingStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, studentGpaVal, studentLangVal);
-      if (appResult.eligibilityErrors) {
-        res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: appResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
-        return;
-      }
-      if (appResult.quotaError) {
-        res.status(422).json({ error: appResult.quotaError, code: "QUOTA_FULL" });
-        return;
-      }
-      resultAppId = appResult.appId;
-
-      const emailContent = await buildExistingAccountEmail({
-        firstName: existingUser.firstName || firstName,
+      res.status(409).json({
+        error: `This email address has already been used in our system. Please log in to your existing account to continue your application: ${loginUrl}`,
+        code: "EMAIL_IN_USE",
         loginUrl,
-        programName: programName || undefined,
-        universityName: universityName || undefined,
       });
-      await sendEmail(normalizedEmail, emailContent);
-
-      console.log(`[PUBLIC-APPLY] Existing user ${normalizedEmail}, created application for student #${existingStudent.id}`);
+      return;
     } else {
       const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
 

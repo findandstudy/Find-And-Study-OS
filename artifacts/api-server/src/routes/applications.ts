@@ -939,11 +939,14 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
 
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [deleted] = await db.update(applicationsTable)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)))
-    .returning();
-  if (!deleted) { res.status(404).json({ error: "Application not found" }); return; }
+  const [existing] = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(eq(applicationsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
+  await db.transaction(async (tx) => {
+    await tx.delete(notesTable).where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")));
+    await tx.delete(documentsTable).where(eq(documentsTable.applicationId, id));
+    await tx.delete(applicationStageDocumentsTable).where(eq(applicationStageDocumentsTable.applicationId, id));
+    await tx.delete(applicationsTable).where(eq(applicationsTable.id, id));
+  });
   await logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
   res.sendStatus(204);
 });

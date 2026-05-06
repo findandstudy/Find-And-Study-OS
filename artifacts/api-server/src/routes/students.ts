@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -573,23 +573,14 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
-    const studentsToArchive = await db.select({ id: studentsTable.id, userId: studentsTable.userId }).from(studentsTable).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
-    const archiveIds = studentsToArchive.map(s => s.id);
-    if (archiveIds.length > 0) {
-      const apps = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(inArray(applicationsTable.studentId, archiveIds));
-      const appIds = apps.map(a => a.id);
-      if (appIds.length > 0) {
-        await db.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.studentId, archiveIds), inArray(documentsTable.applicationId, appIds)));
-        await db.delete(applicationsTable).where(inArray(applicationsTable.id, appIds));
-      }
-      const result = await db.update(studentsTable).set({ deletedAt: new Date() }).where(inArray(studentsTable.id, archiveIds));
-      updated = result.rowCount ?? archiveIds.length;
-      const userIdsToDeactivate = studentsToArchive.filter(s => s.userId).map(s => s.userId!);
-      if (userIdsToDeactivate.length > 0) {
-        await db.update(usersTable).set({ isActive: false }).where(inArray(usersTable.id, userIdsToDeactivate));
-      }
+    const studentsToDelete = await db.select({ id: studentsTable.id, userId: studentsTable.userId }).from(studentsTable).where(inArray(studentsTable.id, numericIds));
+    const deleteIds = studentsToDelete.map(s => s.id);
+    if (deleteIds.length > 0) {
+      const userIds = studentsToDelete.filter(s => s.userId).map(s => s.userId!);
+      await hardDeleteStudents(deleteIds, userIds);
+      updated = deleteIds.length;
     }
-    for (const id of archiveIds) await logAudit(req.user!.id, "archive_student", "student", id, null, req.ip);
+    for (const id of deleteIds) await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(studentsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
@@ -606,28 +597,36 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
 
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
+  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
-  const apps = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(eq(applicationsTable.studentId, id));
-  const appIds = apps.map(a => a.id);
+  await hardDeleteStudents([id], [student.userId].filter(Boolean) as number[]);
 
-  if (appIds.length > 0) {
-    await db.update(documentsTable)
-      .set({ deletedAt: new Date() })
-      .where(and(eq(documentsTable.studentId, id), inArray(documentsTable.applicationId, appIds)));
-    await db.delete(applicationsTable).where(inArray(applicationsTable.id, appIds));
-  }
-
-  await db.update(studentsTable).set({ deletedAt: new Date() }).where(eq(studentsTable.id, id));
-
-  if (student.userId) {
-    await db.update(usersTable).set({ isActive: false }).where(eq(usersTable.id, student.userId));
-  }
-
-  await logAudit(req.user!.id, "archive_student", "student", id, null, req.ip);
+  await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
   res.status(204).end();
 });
+
+async function hardDeleteStudents(studentIds: number[], userIds: number[]): Promise<void> {
+  if (studentIds.length === 0) return;
+  await db.transaction(async (tx) => {
+    const apps = await tx.select({ id: applicationsTable.id }).from(applicationsTable).where(inArray(applicationsTable.studentId, studentIds));
+    const appIds = apps.map(a => a.id);
+    if (appIds.length > 0) {
+      await tx.delete(notesTable).where(and(inArray(notesTable.resourceId, appIds), eq(notesTable.resourceType, "application")));
+      await tx.delete(applicationStageDocumentsTable).where(inArray(applicationStageDocumentsTable.applicationId, appIds));
+    }
+    await tx.delete(notesTable).where(and(inArray(notesTable.resourceId, studentIds), eq(notesTable.resourceType, "student")));
+    await tx.delete(documentsTable).where(inArray(documentsTable.studentId, studentIds));
+    await tx.delete(invoicesTable).where(inArray(invoicesTable.studentId, studentIds));
+    await tx.delete(followUpsTable).where(inArray(followUpsTable.studentId, studentIds));
+    await tx.delete(studentsTable).where(inArray(studentsTable.id, studentIds));
+    if (userIds.length > 0) {
+      await tx.delete(notesTable).where(inArray(notesTable.authorId, userIds));
+      await tx.delete(applicationStageDocumentsTable).where(inArray(applicationStageDocumentsTable.uploadedBy, userIds));
+      await tx.delete(usersTable).where(inArray(usersTable.id, userIds));
+    }
+  });
+}
 
 router.patch("/students/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
