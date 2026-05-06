@@ -266,6 +266,8 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
     universityRanking: universitiesTable.ranking,
     universityQsRanking: universitiesTable.qsRanking,
     universityTimesRanking: universitiesTable.timesRanking,
+    universityShanghaiRanking: universitiesTable.shanghaiRanking,
+    universityCwtsLeidenRanking: universitiesTable.cwtsLeidenRanking,
   }).from(programsTable)
     .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
     .where(where)
@@ -698,7 +700,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-pill-soft{font-size:10px;font-weight:500;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.75);backdrop-filter:blur(4px);color:#475569;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .ew-pill-primary{font-size:10px;font-weight:500;padding:3px 8px;border-radius:6px;background:${primaryColor};color:#fff;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .ew-card-body{padding:18px;flex:1;display:flex;flex-direction:column}
-.ew-card-title{font-size:15px;font-weight:700;color:#1f2937;line-height:1.35;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;transition:color .2s}
+.ew-card-title{font-size:15px;font-weight:700;color:#1f2937;line-height:1.35;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word;word-break:break-word;transition:color .2s}
 .ew-card:hover .ew-card-title{color:${primaryColor}}
 .ew-card-loc{display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b;margin-bottom:14px}
 .ew-card-loc svg{width:14px;height:14px;color:rgba(37,99,235,.5);flex-shrink:0}
@@ -1372,6 +1374,8 @@ function showDetailModal(){
   overlay.addEventListener('click',function(e){if(e.target===overlay){closeDetailModal();}});
   var closeBtn=$('#ew-detail-close',modal);
   if(closeBtn)closeBtn.addEventListener('click',function(){closeDetailModal();});
+  var closeBtn2=$('#ew-detail-close-btn',modal);
+  if(closeBtn2)closeBtn2.addEventListener('click',function(){closeDetailModal();});
   var applyBtn=$('#ew-detail-apply',modal);
   if(applyBtn)applyBtn.addEventListener('click',function(){
     var pid=parseInt(applyBtn.getAttribute('data-apply'));
@@ -1440,12 +1444,14 @@ function renderDetailContent(p){
     h+='<div class="ew-detail-section" style="border-top:1px solid #e2e8f0;padding-top:12px"><div class="ew-detail-section-label">About the University</div><div class="ew-detail-section-text">'+esc(p.universityDescription)+'</div></div>';
   }
 
-  var hasRank=p.universityRanking||p.universityQsRanking||p.universityTimesRanking;
+  var hasRank=p.universityRanking||p.universityQsRanking||p.universityTimesRanking||p.universityShanghaiRanking||p.universityCwtsLeidenRanking;
   if(hasRank){
     h+='<div class="ew-detail-rankings">';
     if(p.universityRanking)h+='<span class="ew-detail-rank-pill">'+ICON_AWARD+'World #'+esc(String(p.universityRanking))+'</span>';
     if(p.universityQsRanking)h+='<span class="ew-detail-rank-pill">QS #'+esc(String(p.universityQsRanking))+'</span>';
     if(p.universityTimesRanking)h+='<span class="ew-detail-rank-pill">THE #'+esc(String(p.universityTimesRanking))+'</span>';
+    if(p.universityShanghaiRanking)h+='<span class="ew-detail-rank-pill">ARWU #'+esc(String(p.universityShanghaiRanking))+'</span>';
+    if(p.universityCwtsLeidenRanking)h+='<span class="ew-detail-rank-pill">Leiden #'+esc(String(p.universityCwtsLeidenRanking))+'</span>';
     h+='</div>';
   }
 
