@@ -28,15 +28,19 @@ echo "[2/5] Running production build..."
 bash deploy/build-production.sh
 
 echo ""
-echo "[3/5] Running database migrations..."
+echo "[3/6] Running database migrations..."
 pnpm --filter db run push
 
 echo ""
-echo "[4/5] Creating log directory..."
+echo "[4/6] Running one-shot data cleanups (idempotent)..."
+node lib/db/cleanup-data.mjs
+
+echo ""
+echo "[5/6] Creating log directory..."
 mkdir -p logs
 
 echo ""
-echo "[5/5] Starting/restarting PM2..."
+echo "[6/6] Starting/restarting PM2..."
 if command -v pm2 &> /dev/null; then
   pm2 startOrRestart deploy/ecosystem.config.cjs --env production
   pm2 save
