@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, X, Check } from "lucide-react";
 
 interface MultiSelectFilterProps {
@@ -15,27 +16,42 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [openUp, setOpenUp] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current && ref.current.contains(target)) return;
+      if (popRef.current && popRef.current.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  useEffect(() => {
-    if (!open || dropDirection !== "auto") {
-      if (dropDirection === "up") setOpenUp(true);
-      else if (dropDirection === "down") setOpenUp(false);
-      return;
-    }
-    if (ref.current) {
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    function update() {
+      if (!ref.current) return;
       const rect = ref.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUp(spaceBelow < 300);
+      const up = dropDirection === "up" || (dropDirection === "auto" && spaceBelow < 300);
+      setOpenUp(up);
+      setPos({
+        top: up ? rect.top + window.scrollY : rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
     }
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
   }, [open, dropDirection]);
 
   const filtered = search
@@ -80,10 +96,18 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
         </div>
       </button>
 
-      {open && (
-        <div className={`absolute z-50 w-full min-w-[180px] bg-popover border border-border rounded-lg shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95 ${
-          openUp ? "bottom-full mb-1" : "top-full mt-1"
-        }`}>
+      {open && pos && createPortal(
+        <div
+          ref={popRef}
+          style={{
+            position: "absolute",
+            top: pos.top,
+            left: pos.left,
+            width: Math.max(pos.width, 180),
+            transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
+          }}
+          className="z-[1000] bg-popover border border-border rounded-lg shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+        >
           {searchable && options.length > 6 && (
             <div className="p-2 border-b border-border">
               <input
@@ -133,7 +157,8 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
