@@ -58,7 +58,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
       const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
       if (prog) {
         const eligibilityErrors: string[] = [];
-        if (prog.minGpa != null) {
+        if (prog.minGpa != null && prog.minGpa > 0) {
           const gpaNum = parseFloat(studentGpa || "");
           if (isNaN(gpaNum)) {
             eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa}, but no GPA was provided`);
@@ -66,7 +66,7 @@ async function createApplicationForStudent(studentId: number, programId: number 
             eligibilityErrors.push(`GPA (${gpaNum}) is below the minimum required (${prog.minGpa})`);
           }
         }
-        if (prog.minLanguageScore != null) {
+        if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {
           const langNum = parseFloat(studentLanguageScore || "");
           if (isNaN(langNum)) {
             eligibilityErrors.push(`Program requires minimum language score of ${prog.minLanguageScore}, but no language score was provided`);

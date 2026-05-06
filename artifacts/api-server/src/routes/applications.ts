@@ -244,7 +244,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, parseInt(String(programId), 10)));
     if (prog) {
       const eligibilityErrors: string[] = [];
-      if (prog.minGpa != null) {
+      if (prog.minGpa != null && prog.minGpa > 0) {
         const studentGpaNum = parseFloat(studentFull.gpa || "");
         if (isNaN(studentGpaNum)) {
           eligibilityErrors.push(`Program requires minimum GPA of ${prog.minGpa}, but student has no GPA recorded`);
@@ -252,7 +252,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
           eligibilityErrors.push(`Student GPA (${studentGpaNum}) is below the minimum required (${prog.minGpa})`);
         }
       }
-      if (prog.minLanguageScore != null) {
+      if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {
         const studentLangNum = parseFloat(studentFull.languageScore || "");
         if (isNaN(studentLangNum)) {
           eligibilityErrors.push(`Program requires minimum language score of ${prog.minLanguageScore}, but student has no language score recorded`);
@@ -1075,7 +1075,7 @@ router.post("/applications/reject-unqualified", requireAuth, requireRole("super_
     minGpa: programsTable.minGpa,
     minLanguageScore: programsTable.minLanguageScore,
   }).from(programsTable).where(inArray(programsTable.id, programIds));
-  const progMap = new Map(programs.filter(p => p.minGpa != null || p.minLanguageScore != null).map(p => [p.id, p]));
+  const progMap = new Map(programs.filter(p => (p.minGpa != null && p.minGpa > 0) || (p.minLanguageScore != null && p.minLanguageScore > 0)).map(p => [p.id, p]));
 
   if (progMap.size === 0) { res.json({ rejected: 0 }); return; }
 
@@ -1096,11 +1096,11 @@ router.post("/applications/reject-unqualified", requireAuth, requireRole("super_
     if (!stu) continue;
 
     let fail = false;
-    if (prog.minGpa != null) {
+    if (prog.minGpa != null && prog.minGpa > 0) {
       const gpaNum = parseFloat(stu.gpa || "");
       if (isNaN(gpaNum) || gpaNum < prog.minGpa) fail = true;
     }
-    if (prog.minLanguageScore != null) {
+    if (prog.minLanguageScore != null && prog.minLanguageScore > 0) {
       const langNum = parseFloat(stu.languageScore || "");
       if (isNaN(langNum) || langNum < prog.minLanguageScore) fail = true;
     }
