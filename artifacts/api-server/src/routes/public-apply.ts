@@ -9,6 +9,7 @@ import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, send
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
+import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { getCurrentSeason } from "../lib/season";
@@ -519,10 +520,11 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           const base64Len = typeof doc.base64 === "string" ? doc.base64.length : 0;
           if (base64Len > MAX_DOC_SIZE * 1.4) continue;
           const docType = String(doc.key || doc.label || "other").slice(0, 100);
+          const descriptiveName = buildDocNameFromParts(firstName, lastName, docType, mime);
           await db.insert(documentsTable).values({
             studentId: resultStudentId,
             applicationId: resultAppId,
-            name: String(doc.name).replace(/[<>"'&]/g, "_").slice(0, 255),
+            name: descriptiveName,
             type: docType,
             status: "pending",
             fileData: doc.base64,

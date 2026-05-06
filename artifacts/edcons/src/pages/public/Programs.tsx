@@ -595,6 +595,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         }
         (newForm as any)[fk] = String(val);
         newExtracted.add(fk);
+        // The server normalizes any source GPA scale (4.0/5/10/20/raw)
+        // into a 0-100 percent string and adds gpaScale=100. Lock the
+        // grading system to /100 so the value displayed matches.
+        if (fk === "gpa" && (data.gpaScale === 100 || data.gpaScale === "100")) {
+          (newForm as any).gradingSystem = "100";
+        }
       }
     }
 

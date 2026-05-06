@@ -570,7 +570,9 @@ function AddStudentModal({
         setAnalysisError(serverWarnings.join(" "));
       }
 
-      const newForm = { ...EMPTY_FORM };
+      // Preserve any fields the user already filled in manually before
+      // clicking "Analyze" — only AI-extracted fields should be overwritten.
+      const newForm = { ...form };
       const newExtracted = new Set<string>();
 
       const mapping: [keyof typeof EMPTY_FORM, keyof ExtractedData][] = [

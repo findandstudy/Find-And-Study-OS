@@ -5,6 +5,7 @@ import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth"
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { validateUploadedFile, sanitizeFileName } from "../lib/fileUploadValidation";
+import { buildDocNameFromParts } from "../lib/docNaming";
 
 const router: IRouter = Router();
 
@@ -96,7 +97,25 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     return;
   }
 
-  const safeName = sanitizeFileName(fileName);
+  let descriptiveName: string | null = null;
+  try {
+    const [appStudent] = await db
+      .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+      .from(applicationsTable)
+      .innerJoin(studentsTable, eq(studentsTable.id, applicationsTable.studentId))
+      .where(eq(applicationsTable.id, applicationId));
+    if (appStudent) {
+      descriptiveName = buildDocNameFromParts(
+        appStudent.firstName,
+        appStudent.lastName,
+        stage,
+        mimeType,
+      );
+    }
+  } catch (e) {
+    console.error("[STAGE-DOC] failed to resolve student name for descriptive doc name:", e);
+  }
+  const safeName = descriptiveName ?? sanitizeFileName(fileName);
 
   if (fileData) {
     if (!mimeType) {

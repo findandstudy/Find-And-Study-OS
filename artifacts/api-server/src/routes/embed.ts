@@ -5,6 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
+import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 const router: IRouter = Router();
@@ -475,11 +476,12 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     if (docArray.length > 0) {
       for (const doc of docArray) {
         if (!doc.label || !doc.data) continue;
-        const docName = sanitizeFileName(`${firstName}-${lastName}-${doc.label}`.slice(0, 255));
+        const docType = String(doc.label || "other").toLowerCase();
+        const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
         await tx.insert(documentsTable).values({
           leadId: lead.id,
           name: docName,
-          type: (doc.label || "other").toLowerCase(),
+          type: docType,
           status: "pending",
           fileData: doc.data,
           mimeType: doc.mediaType || null,
@@ -1582,7 +1584,7 @@ function handleAnalyze(){
         return;
       }
       extractedFields={};
-      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth',motherName:'motherName',fatherName:'fatherName',passportNumber:'passportNumber',address:'address',highSchool:'highSchool'};
+      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth',motherName:'motherName',fatherName:'fatherName',passportNumber:'passportNumber',passportIssueDate:'passportIssueDate',passportExpiry:'passportExpiry',address:'address',highSchool:'highSchool',graduationYear:'graduationYear',gpa:'gpa',languageScore:'languageScore'};
       var mKeys=Object.keys(mapping);
       for(var i=0;i<mKeys.length;i++){
         var ek=mKeys[i];

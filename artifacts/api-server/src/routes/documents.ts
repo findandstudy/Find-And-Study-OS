@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, documentsTable, studentsTable } from "@workspace/db";
+import { db, documentsTable, studentsTable, applicationsTable } from "@workspace/db";
 import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
+import { buildDocNameFromParts } from "../lib/docNaming";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
 
@@ -103,7 +104,40 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const safeName = name ? sanitizeFileName(name) : name;
+  let descriptiveName: string | null = null;
+  let resolvedStudentId: number | null = studentId ?? null;
+  if (!resolvedStudentId && applicationId) {
+    try {
+      const [appRec] = await db
+        .select({ studentId: applicationsTable.studentId })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, applicationId));
+      if (appRec?.studentId) resolvedStudentId = appRec.studentId;
+    } catch (e) {
+      console.error("[DOCUMENTS] failed to resolve studentId from applicationId:", e);
+    }
+  }
+  if (resolvedStudentId) {
+    try {
+      const [studentRec] = await db
+        .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+        .from(studentsTable)
+        .where(eq(studentsTable.id, resolvedStudentId));
+      if (studentRec) {
+        descriptiveName = buildDocNameFromParts(
+          studentRec.firstName,
+          studentRec.lastName,
+          type,
+          mimeType,
+        );
+      }
+    } catch (e) {
+      console.error("[DOCUMENTS] failed to resolve student name for descriptive doc name:", e);
+    }
+  }
+  const safeName = descriptiveName
+    ? descriptiveName
+    : (name ? sanitizeFileName(name) : name);
 
   if (fileData) {
     if (!mimeType) {
