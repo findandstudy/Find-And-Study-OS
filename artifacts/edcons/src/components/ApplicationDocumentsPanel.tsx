@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,6 +47,7 @@ const FALLBACK_LABELS: Record<string, string> = {
 };
 
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
+const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -63,9 +65,12 @@ interface ApplicationDocumentsPanelProps {
   applicationId: number;
   userRole: string;
   userId?: number;
+  /** Current pipeline stage key for this application — used to hide
+   *  future-stage upload zones from students/agents. */
+  currentStage?: string;
 }
 
-export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: ApplicationDocumentsPanelProps) {
+export function ApplicationDocumentsPanel({ applicationId, userRole, userId, currentStage }: ApplicationDocumentsPanelProps) {
   const { t } = useI18n();
 
   const { data: allDocs = [] } = useQuery({
@@ -75,6 +80,20 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: A
   });
 
   const isAdmin = ADMIN_ROLES.includes(userRole);
+  const isStaff = STAFF_ROLES.includes(userRole);
+  const restrictFuture = !isStaff;
+
+  // Determine future-stage gating using pipeline ordering.
+  const { stages: pipelineStages } = usePipelineStages("application");
+  const stageOrder = new Map<string, number>();
+  pipelineStages.forEach((s, i) => stageOrder.set(s.key, s.sortOrder ?? i));
+  const currentOrder = currentStage && stageOrder.has(currentStage)
+    ? (stageOrder.get(currentStage) as number)
+    : Number.POSITIVE_INFINITY;
+  function isFutureCategory(category: string): boolean {
+    if (!stageOrder.has(category)) return false;
+    return (stageOrder.get(category) as number) > currentOrder;
+  }
 
   function getCategoryLabel(category: string): string {
     const translated = t(`apply.appDocLabel_${category}`);
@@ -94,6 +113,10 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: A
           const docs = (allDocs as any[]).filter(
             (d: any) => (d.stage === category || (category === "deposit_paid" && d.stage === "upload_payment")) && !d.isMissingDocNote
           );
+          // Students/agents must not see future-stage upload zones.
+          // Existing uploads stay visible at any stage.
+          const isFuture = restrictFuture && isFutureCategory(category);
+          if (isFuture && docs.length === 0) return null;
           return (
             <CategorySection
               key={category}
@@ -103,6 +126,7 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: A
               docs={docs}
               userId={userId}
               isAdmin={isAdmin}
+              hideUpload={isFuture}
             />
           );
         })}
@@ -112,7 +136,7 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId }: A
 }
 
 function CategorySection({
-  applicationId, category, label, docs, userId, isAdmin,
+  applicationId, category, label, docs, userId, isAdmin, hideUpload,
 }: {
   applicationId: number;
   category: string;
@@ -120,6 +144,7 @@ function CategorySection({
   docs: any[];
   userId?: number;
   isAdmin: boolean;
+  hideUpload?: boolean;
 }) {
   const [expanded, setExpanded] = useState(docs.length > 0);
   const { toast } = useToast();
@@ -128,7 +153,7 @@ function CategorySection({
   const [uploading, setUploading] = useState(false);
 
   const isAdminOnly = ADMIN_ONLY_UPLOAD_STAGES.includes(category);
-  const canUpload = isAdminOnly ? isAdmin : true;
+  const canUpload = hideUpload ? false : (isAdminOnly ? isAdmin : true);
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {

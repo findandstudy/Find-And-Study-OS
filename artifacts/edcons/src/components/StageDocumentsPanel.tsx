@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
+const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -76,12 +78,29 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
   });
 
   const isAdmin = ADMIN_ROLES.includes(userRole);
-  const isStaff = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"].includes(userRole);
+  const isStaff = STAFF_ROLES.includes(userRole);
+  // Students and agents must NOT see future-stage upload zones.
+  // Existing uploaded docs (or notes) for any stage stay visible.
+  const restrictFuture = !isStaff;
+
+  const { stages: pipelineStages } = usePipelineStages("application");
+  const stageOrder = new Map<string, number>();
+  pipelineStages.forEach((s, i) => stageOrder.set(s.key, s.sortOrder ?? i));
+  const currentOrder = stageOrder.has(currentStage)
+    ? (stageOrder.get(currentStage) as number)
+    : Number.POSITIVE_INFINITY;
+  function isFutureStage(stage: string): boolean {
+    if (!stageOrder.has(stage)) return false;
+    return (stageOrder.get(stage) as number) > currentOrder;
+  }
 
   const relevantStages = ALL_DOC_STAGES.filter(stage => {
     if (excludeStages?.includes(stage)) return false;
     const docs = (allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote);
     const notes = stage === "missing_docs" ? (missingNotes as any[]) : [];
+    if (restrictFuture && isFutureStage(stage) && docs.length === 0 && notes.length === 0) {
+      return false;
+    }
     return docs.length > 0 || notes.length > 0 || stage === currentStage;
   });
 
@@ -107,6 +126,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
             isAdmin={isAdmin}
             isStaff={isStaff}
             isCurrent={stage === currentStage}
+            hideUpload={restrictFuture && isFutureStage(stage)}
           />
         ))}
       </div>
@@ -115,7 +135,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
 }
 
 function StageSection({
-  applicationId, stage, docs, missingNotes, userRole, userId, isAdmin, isStaff, isCurrent,
+  applicationId, stage, docs, missingNotes, userRole, userId, isAdmin, isStaff, isCurrent, hideUpload,
 }: {
   applicationId: number;
   stage: string;
@@ -126,6 +146,7 @@ function StageSection({
   isAdmin: boolean;
   isStaff: boolean;
   isCurrent: boolean;
+  hideUpload?: boolean;
 }) {
   const [expanded, setExpanded] = useState(isCurrent || docs.length > 0 || missingNotes.length > 0);
   const { toast } = useToast();
@@ -133,9 +154,11 @@ function StageSection({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  const canUpload = ADMIN_ONLY_UPLOAD_STAGES.includes(stage)
-    ? isAdmin
-    : true;
+  const canUpload = hideUpload
+    ? false
+    : ADMIN_ONLY_UPLOAD_STAGES.includes(stage)
+      ? isAdmin
+      : true;
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {

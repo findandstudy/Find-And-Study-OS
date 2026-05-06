@@ -545,6 +545,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
               applicationId={app.id}
               userRole={authUser.role}
               userId={authUser.id}
+              currentStage={form.stage || app.stage}
             />
             <StageDocumentsPanel
               applicationId={app.id}

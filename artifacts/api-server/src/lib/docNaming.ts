@@ -64,6 +64,18 @@ const DOC_LABELS: Record<string, string> = {
   transcript: "Transcript",
   diploma: "Diploma",
   other: "Other Document",
+  // Stage-document labels (mirror StageDocumentsPanel.STAGE_LABELS) so
+  // that application_stage_documents downloads also get a friendly label.
+  app_fee_paid: "Application Fee Paid",
+  missing_docs: "Missing Documents",
+  upload_payment: "Upload Payment",
+  deposit_paid: "Deposit Paid Receipt",
+  visa_approved: "Visa OK",
+  student_card: "Student Card",
+  visa_reject: "Visa Reject",
+  offer_received: "Offer",
+  acceptance_letter: "Acceptance Letter",
+  final_acceptance: "Final Acceptance Letter",
 };
 
 export function getDocLabel(docType: string | null | undefined): string {

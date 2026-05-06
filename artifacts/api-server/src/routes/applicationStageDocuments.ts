@@ -293,10 +293,31 @@ router.get("/applications/:id/stage-documents/:docId/download", requireAuth, req
 
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
+  // Rebuild descriptive name on the fly so old uploads also get
+  // "FIRSTNAME LASTNAME - StageLabel.ext" at download time.
+  let downloadName = doc.fileName;
+  try {
+    const [appStudent] = await db
+      .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+      .from(applicationsTable)
+      .innerJoin(studentsTable, eq(studentsTable.id, applicationsTable.studentId))
+      .where(eq(applicationsTable.id, applicationId));
+    if (appStudent) {
+      downloadName = buildDocNameFromParts(
+        appStudent.firstName,
+        appStudent.lastName,
+        doc.stage,
+        doc.mimeType,
+      );
+    }
+  } catch (e) {
+    console.error("[STAGE-DOC] failed to rebuild descriptive name on download:", e);
+  }
+
   if (doc.fileData) {
     const buffer = Buffer.from(doc.fileData, "base64");
     res.setHeader("Content-Type", doc.mimeType || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(doc.fileName)}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
     res.setHeader("Content-Length", buffer.length);
     res.send(buffer);
   } else if (doc.fileUrl) {

@@ -90,17 +90,19 @@ export default function StudentApplications() {
                     </div>
                   </div>
 
-                  {/* Progress Tracker */}
-                  {app.stage !== "rejected" && (
+                  {/* Progress Tracker — students only see steps up to current */}
+                  {app.stage !== "rejected" && (() => {
+                    const visibleSteps = currentStep > 0 ? STEPS.slice(0, currentStep) : STEPS;
+                    return (
                     <div className="px-6 py-6 bg-secondary/20">
                       <div className="relative">
                         <div className="absolute top-5 left-5 right-5 h-0.5 bg-border" />
                         <div
                           className="absolute top-5 left-5 h-0.5 bg-primary transition-all duration-500"
-                          style={{ width: currentStep > 0 ? `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` : "0%" }}
+                          style={{ width: visibleSteps.length > 1 ? `${((visibleSteps.length - 1) / Math.max(1, visibleSteps.length - 1)) * 100}%` : "0%" }}
                         />
                         <div className="relative flex justify-between">
-                          {STEPS.map((step, i) => {
+                          {visibleSteps.map((step, i) => {
                             const info = STAGE_CONFIG[step];
                             const isDone = currentStep > i + 1;
                             const isCurrent = currentStep === i + 1;
@@ -124,7 +126,8 @@ export default function StudentApplications() {
                         </div>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {app.stage === "rejected" && (
                     <div className="px-6 py-4 bg-rose-50 border-t border-rose-200">
@@ -147,6 +150,7 @@ export default function StudentApplications() {
                     <ApplicationDocumentsPanel
                       applicationId={app.id}
                       userRole="student"
+                      currentStage={app.stage}
                     />
                     <StageDocumentsPanel
                       applicationId={app.id}

@@ -370,11 +370,21 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
   const archive = archiver("zip", { zlib: { level: 5 } });
   archive.pipe(res);
 
+  // Rebuild descriptive names on the fly so old documents (uploaded before
+  // the descriptive-naming feature) also download as
+  // "FIRSTNAME LASTNAME - DocLabel.ext". Dedupe collisions with " (id)".
+  const seenNames = new Set<string>();
   for (const doc of docs) {
     if (doc.fileData) {
-      const ext = doc.mimeType === "application/pdf" ? ".pdf" : doc.mimeType === "image/png" ? ".png" : ".jpg";
-      const safeName = (doc.name || doc.type || "document").replace(/[^a-zA-Z0-9_\-]/g, "_");
-      archive.append(Buffer.from(doc.fileData, "base64"), { name: `${safeName}_${doc.id}${ext}` });
+      let name = buildDocNameFromParts(student.firstName, student.lastName, doc.type, doc.mimeType);
+      if (seenNames.has(name)) {
+        const dotIdx = name.lastIndexOf(".");
+        name = dotIdx > 0
+          ? `${name.slice(0, dotIdx)} (${doc.id})${name.slice(dotIdx)}`
+          : `${name} (${doc.id})`;
+      }
+      seenNames.add(name);
+      archive.append(Buffer.from(doc.fileData, "base64"), { name });
     }
   }
 

@@ -194,7 +194,12 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                     <SelectValue placeholder="Change stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    {pipelineStages.map((s) => (
+                    {(() => {
+                      // Agents must not see future pipeline stages anywhere.
+                      if (!isAgent) return pipelineStages;
+                      const currentIdx = pipelineStages.findIndex(s => s.key === app?.stage);
+                      return currentIdx >= 0 ? pipelineStages.slice(0, currentIdx + 1) : pipelineStages;
+                    })().map((s) => (
                       <SelectItem key={s.key} value={s.key}>
                         <span className="capitalize">{s.label}</span>
                       </SelectItem>
@@ -257,6 +262,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   applicationId={id}
                   userRole={authUser.role}
                   userId={authUser.id}
+                  currentStage={app.stage}
                 />
                 <StageDocumentsPanel
                   applicationId={id}
@@ -333,7 +339,14 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 <Skeleton className="h-8 w-28 rounded-full" />
               ) : (
                 <div className="space-y-2">
-                  {pipelineStages.map((stage) => (
+                  {(() => {
+                    // Agents must not see future pipeline stages — only the
+                    // ones up to and including the current stage. Staff/admin
+                    // see the full timeline.
+                    if (!isAgent) return pipelineStages;
+                    const currentIdx = pipelineStages.findIndex(s => s.key === app?.stage);
+                    return currentIdx >= 0 ? pipelineStages.slice(0, currentIdx + 1) : pipelineStages;
+                  })().map((stage) => (
                     <div
                       key={stage.key}
                       className={`flex items-center gap-2 text-xs py-1 ${app?.stage === stage.key ? "font-bold text-foreground" : "text-muted-foreground"}`}
