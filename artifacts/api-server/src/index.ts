@@ -366,6 +366,13 @@ async function seedClaudeIntegration() {
       await backfillStudentAppStatus();
     }
 
+    // One-shot data cleanup (idempotent via system_flags). Runs on every
+    // boot but exits early once the version flag is set. This ensures
+    // Replit autoscale publishes — which don't execute deploy/deploy.sh —
+    // still apply the cleanup the first time the new build comes up.
+    const { runDataCleanupOnce } = await import("./lib/dataCleanup");
+    await runDataCleanupOnce();
+
     console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
     const { startEmailWorker } = await import("./lib/email");
     startEmailWorker();
