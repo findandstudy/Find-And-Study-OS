@@ -16,6 +16,7 @@ import { findEquivalentDoc, getDocEquivalenceGroup } from "@workspace/doc-equiva
 import { useAuth } from "@/hooks/use-auth";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
@@ -776,10 +777,11 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 {t("apply.phone")} <span className="text-destructive ml-0.5">*</span>
               </Label>
               <div className="flex gap-1.5">
-                <select value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
-                  className="h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-[100px] shrink-0">
-                  {PHONE_CODES.map(pc => <option key={`${pc.country}-${pc.code}`} value={pc.code}>{pc.label}</option>)}
-                </select>
+                <PhoneCodePicker
+                  value={form.phoneCode}
+                  onChange={(code) => setForm(f => ({ ...f, phoneCode: code }))}
+                  className="w-[110px] shrink-0"
+                />
                 <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder={t("apply.phonePlaceholder")} className="rounded-xl flex-1" />
               </div>
@@ -1006,10 +1008,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                   {extracted.has("phone") && <AiBadge />}
                 </Label>
                 <div className="flex gap-1.5">
-                  <select value={form.phoneCode} onChange={(e) => setForm(f => ({ ...f, phoneCode: e.target.value }))}
-                    className={`h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-[100px] shrink-0 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
-                    {PHONE_CODES.map(pc => <option key={`${pc.country}-${pc.code}`} value={pc.code}>{pc.label}</option>)}
-                  </select>
+                  <PhoneCodePicker
+                    value={form.phoneCode}
+                    onChange={(code) => setForm(f => ({ ...f, phoneCode: code }))}
+                    className="w-[110px] shrink-0"
+                    triggerClassName={extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}
+                  />
                   <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder={t("apply.phonePlaceholder")} className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                 </div>
