@@ -14,6 +14,45 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+async function safeJson(res: Response): Promise<any> {
+  try {
+    const text = await res.text();
+    if (!text) return {};
+    try { return JSON.parse(text); } catch { return {}; }
+  } catch { return {}; }
+}
+
+async function authFetch(url: string, init: RequestInit, retries = 1): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      try {
+        const res = await fetch(url, { ...init, signal: controller.signal });
+        return res;
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+function describeAuthError(status: number, data: any, t: (k: string) => string): string {
+  if (data && typeof data.error === "string" && data.error.trim()) return data.error;
+  if (status === 401) return t("login.invalidCredentials") || "Invalid email or password";
+  if (status === 403) return data?.error || "Access denied";
+  if (status === 429) return t("login.tooManyAttempts") || "Too many attempts. Please wait a moment and try again.";
+  if (status >= 500) return t("login.serverError") || "Server is temporarily unavailable. Please try again in a moment.";
+  return t("login.connectionError");
+}
+
 type Tab = "login" | "register" | "verify" | "set-password" | "forgot-password";
 
 export default function Login() {
@@ -86,15 +125,15 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      const res = await authFetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: loginForm.email, password: loginForm.password }),
         credentials: "include",
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
-        setError(data.error || t("login.connectionError"));
+        setError(describeAuthError(res.status, data, t));
         return;
       }
       if (data.user) {
@@ -214,7 +253,7 @@ export default function Login() {
       }
       setForgotSent(true);
     } catch {
-      setError("Connection error. Please try again.");
+      setError(t("login.connectionError"));
     } finally {
       setLoading(false);
     }

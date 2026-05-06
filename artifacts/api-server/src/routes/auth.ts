@@ -124,43 +124,50 @@ router.get("/auth/me", async (req: Request, res: Response) => {
 });
 
 router.post("/auth/login", async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    res.status(400).json({ error: "Email and password are required" });
-    return;
-  }
-
-  const normalizedEmail = email.toLowerCase().trim();
-
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
-  if (!user || !user.passwordHash) {
-    res.status(401).json({ error: "Invalid email or password" });
-    return;
-  }
-
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Invalid email or password" });
-    return;
-  }
-
-  if (!user.isActive) {
-    const isPublicApplyPendingVerification = user.createdFromSource === "public_apply" && !user.emailVerified && user.passwordHash;
-    if (!isPublicApplyPendingVerification) {
-      res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
+      res.status(400).json({ error: "Email and password are required" });
       return;
     }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+    if (!user || !user.passwordHash) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    if (!user.isActive) {
+      const isPublicApplyPendingVerification = user.createdFromSource === "public_apply" && !user.emailVerified && user.passwordHash;
+      if (!isPublicApplyPendingVerification) {
+        res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
+        return;
+      }
+    }
+
+    const sessionUser = buildSessionUser(user);
+    const sessionData: SessionData = {
+      user: sessionUser,
+      access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
+    };
+
+    const sid = await createSession(sessionData, user.id);
+    setSessionCookie(req, res, sid);
+    res.json({ user: sessionUser });
+  } catch (err) {
+    console.error("[auth/login] error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Server is temporarily unavailable. Please try again in a moment." });
+    }
   }
-
-  const sessionUser = buildSessionUser(user);
-  const sessionData: SessionData = {
-    user: sessionUser,
-    access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
-  };
-
-  const sid = await createSession(sessionData, user.id);
-  setSessionCookie(req, res, sid);
-  res.json({ user: sessionUser });
 });
 
 router.post("/auth/register", async (req: Request, res: Response) => {
