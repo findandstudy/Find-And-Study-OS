@@ -19,7 +19,7 @@ type SessionView = {
   intakeData: Record<string, string> | null;
 };
 
-type Step = "loading" | "expired" | "intake" | "review" | "sign" | "success" | "error";
+type Step = "loading" | "expired" | "revoked" | "intake" | "review" | "sign" | "success" | "error";
 
 export default function SignFlow({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("loading");
@@ -42,13 +42,15 @@ export default function SignFlow({ token }: { token: string }) {
         }
         if (data.expired) { setStep("expired"); return; }
         if (data.status === "signed") { setStep("success"); return; }
-        if (data.status === "revoked") { setErrorMsg("Bu bağlantı iptal edilmiştir."); setStep("error"); return; }
+        if (data.status === "revoked") { setStep("revoked"); return; }
         if (data.mode === "self_fill" && data.status === "intake_pending") { setStep("intake"); return; }
         // Admin-driven OR self-fill after intake -> go straight to review.
         await loadPreview();
         setStep("review");
       } catch (err: any) {
         const status = err?.status || err?.response?.status;
+        const code = err?.body?.code || err?.response?.data?.code || err?.data?.code;
+        if (status === 410 && code === "revoked") { setStep("revoked"); return; }
         if (status === 410) { setStep("expired"); return; }
         if (status === 404) { setErrorMsg("Bağlantı bulunamadı."); setStep("error"); return; }
         setErrorMsg(err?.message || "Bağlantı çözülemedi"); setStep("error");
@@ -99,6 +101,13 @@ export default function SignFlow({ token }: { token: string }) {
       <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
       <h1 className="text-xl font-semibold mb-2">Bağlantı süresi doldu</h1>
       <p className="text-muted-foreground text-sm">Bu imza bağlantısının süresi dolmuş. Lütfen yeni bir bağlantı talep edin.</p>
+    </CenterShell>;
+  }
+  if (step === "revoked") {
+    return <CenterShell>
+      <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+      <h1 className="text-xl font-semibold mb-2">Bağlantı iptal edildi</h1>
+      <p className="text-muted-foreground text-sm">Bu imza bağlantısı yetkilendiren tarafından iptal edilmiştir. Lütfen yöneticinizle iletişime geçin.</p>
     </CenterShell>;
   }
   if (step === "error") {

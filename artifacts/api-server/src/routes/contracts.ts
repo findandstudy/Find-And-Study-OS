@@ -210,12 +210,20 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
 
 router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fill_links.manage"), async (req, res): Promise<void> => {
   try {
-    const { signerEmail, signerName, language, entityType, expiryDays } = req.body || {};
+    const { signerEmail, signerName, language, entityType, expiryDays, templateId } = req.body || {};
     if (!signerEmail || typeof signerEmail !== "string") { res.status(400).json({ error: "signerEmail is required" }); return; }
-    const lang = (language && typeof language === "string") ? language : "en";
-    const ent = entityType === "individual" ? "individual" : "company";
-    const tpl = await pickTemplate(lang, ent);
-    if (!tpl) { res.status(404).json({ error: `No active template found for language=${lang}, entityType=${ent}` }); return; }
+    let tpl: Awaited<ReturnType<typeof pickTemplate>> | Awaited<ReturnType<typeof loadTemplateById>> = null;
+    if (templateId !== undefined && templateId !== null && templateId !== "") {
+      const tid = typeof templateId === "number" ? templateId : parseInt(String(templateId), 10);
+      if (!Number.isInteger(tid) || tid <= 0) { res.status(400).json({ error: "Invalid templateId" }); return; }
+      tpl = await loadTemplateById(tid);
+      if (!tpl) { res.status(404).json({ error: `Active template ${tid} not found` }); return; }
+    } else {
+      const lang = (language && typeof language === "string") ? language : "en";
+      const ent = entityType === "individual" ? "individual" : "company";
+      tpl = await pickTemplate(lang, ent);
+      if (!tpl) { res.status(404).json({ error: `No active template found for language=${lang}, entityType=${ent}` }); return; }
+    }
 
     const { rawToken, tokenHash } = createSigningToken();
     const days = Number.isInteger(expiryDays) && expiryDays > 0 && expiryDays <= 90 ? expiryDays : DEFAULT_EXPIRY_DAYS;

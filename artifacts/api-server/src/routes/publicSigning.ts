@@ -31,15 +31,31 @@ interface ResolvedSession {
   expired: boolean;
 }
 
-async function resolveByToken(rawToken: string): Promise<ResolvedSession | { error: string; status: number }> {
+async function resolveByToken(rawToken: string): Promise<ResolvedSession | { error: string; status: number; code?: string }> {
   if (!rawToken || typeof rawToken !== "string" || rawToken.length < 16 || rawToken.length > 200) {
     return { error: "Invalid token", status: 400 };
   }
   const tokenHash = hashToken(rawToken);
-  const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.tokenHash, tokenHash));
+  let [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.tokenHash, tokenHash));
   if (!session) return { error: "Signing link not found", status: 404 };
-  if (session.status === "revoked") return { error: "This signing link has been revoked", status: 410 };
-  const expired = new Date(session.expiresAt).getTime() < Date.now();
+  if (session.status === "revoked") return { error: "This signing link has been revoked", status: 410, code: "revoked" };
+  // Lazy expire: if past expiresAt and still in a non-terminal state, persist
+  // status=expired so admin lists/badges/filters reflect reality without
+  // waiting for the next sweep tick.
+  const isPastDue = new Date(session.expiresAt).getTime() < Date.now();
+  if (isPastDue && (session.status === "intake_pending" || session.status === "review_pending")) {
+    try {
+      await db.update(signingSessionsTable).set({ status: "expired" }).where(and(
+        eq(signingSessionsTable.id, session.id),
+        eq(signingSessionsTable.status, session.status),
+      ));
+      session = { ...session, status: "expired" };
+    } catch (e) {
+      console.error("[public-sign] lazy expire failed:", e);
+    }
+  }
+  if (session.status === "expired") return { error: "This signing link has expired", status: 410, code: "expired" };
+  const expired = isPastDue;
   const [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
   if (!template) return { error: "Template missing", status: 404 };
   let agent: typeof agentsTable.$inferSelect | null = null;
@@ -53,8 +69,8 @@ async function resolveByToken(rawToken: string): Promise<ResolvedSession | { err
 router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> => {
   try {
     const r = await resolveByToken(req.params.token);
-    if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
-    if (r.expired) { res.status(410).json({ error: "This signing link has expired." }); return; }
+    if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
+    if (r.expired) { res.status(410).json({ error: "This signing link has expired.", code: "expired" }); return; }
     if (!r.session.openedAt && r.session.status !== "signed") {
       try {
         await db.update(signingSessionsTable).set({ openedAt: new Date() }).where(eq(signingSessionsTable.id, r.session.id));

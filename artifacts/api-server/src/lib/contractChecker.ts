@@ -1,5 +1,5 @@
-import { db, agentsTable, usersTable, settingsTable } from "@workspace/db";
-import { and, eq, isNotNull, isNull, inArray, sql } from "drizzle-orm";
+import { db, agentsTable, usersTable, settingsTable, signingSessionsTable } from "@workspace/db";
+import { and, eq, isNotNull, isNull, inArray, lt, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
@@ -156,6 +156,31 @@ export async function checkContractExpiries(): Promise<void> {
   }
 }
 
+// Sweep: transition past-due signing sessions still in non-terminal states
+// to status=expired so admin lists/filters/badges reflect reality. The
+// public flow also lazily expires on resolve, but this catches sessions
+// nobody opens.
+export async function sweepExpiredSigningSessions(): Promise<void> {
+  try {
+    const now = new Date();
+    const updated = await db.update(signingSessionsTable)
+      .set({ status: "expired" })
+      .where(and(
+        lt(signingSessionsTable.expiresAt, now),
+        or(
+          eq(signingSessionsTable.status, "intake_pending"),
+          eq(signingSessionsTable.status, "review_pending"),
+        )!,
+      ))
+      .returning({ id: signingSessionsTable.id });
+    if (updated.length > 0) {
+      console.log(`[CONTRACT] Swept ${updated.length} expired signing session(s)`);
+    }
+  } catch (err) {
+    console.error("[CONTRACT] Sweep error:", err);
+  }
+}
+
 let contractCheckerInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startContractChecker(): void {
@@ -163,12 +188,13 @@ export function startContractChecker(): void {
   console.log(`[CONTRACT] Checker started, running every ${CHECK_INTERVAL / 60000} minute(s)`);
 
   setTimeout(() => {
-    checkContractExpiries().then(() => {
+    Promise.all([checkContractExpiries(), sweepExpiredSigningSessions()]).then(() => {
       console.log("[CONTRACT] Initial check completed");
     });
   }, 12000);
 
   contractCheckerInterval = setInterval(() => {
     checkContractExpiries();
+    sweepExpiredSigningSessions();
   }, CHECK_INTERVAL);
 }
