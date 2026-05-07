@@ -39,6 +39,7 @@ import branchesRouter from "./branches";
 import contractTemplatesRouter from "./contractTemplates";
 import contractsRouter from "./contracts";
 import publicSigningRouter from "./publicSigning";
+import universityContractsRouter from "./universityContracts";
 
 const router: IRouter = Router();
 
@@ -82,5 +83,6 @@ router.use(branchesRouter);
 router.use(contractTemplatesRouter);
 router.use(contractsRouter);
 router.use(publicSigningRouter);
+router.use(universityContractsRouter);
 
 export default router;

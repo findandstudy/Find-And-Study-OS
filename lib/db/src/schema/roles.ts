@@ -146,6 +146,13 @@ export const PERMISSION_CATEGORIES = {
       "self_fill_links.manage": "Manage Self-Fill Links",
     },
   },
+  university_contracts: {
+    label: "University Contracts",
+    permissions: {
+      "university_contracts.view": "View University Contracts",
+      "university_contracts.manage": "Manage University Contracts",
+    },
+  },
 } as const;
 
 export function getAllPermissions(): string[] {

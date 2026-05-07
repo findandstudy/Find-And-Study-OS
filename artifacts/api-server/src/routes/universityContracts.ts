@@ -1,0 +1,345 @@
+import { Router, type IRouter } from "express";
+import {
+  db,
+  universityContractsTable,
+  universitiesTable,
+  destinationsTable,
+  usersTable,
+  getUniversityContractStatus,
+  type UniversityContractStatus,
+} from "@workspace/db";
+import { and, eq, ilike, isNull, isNotNull, desc, lt, lte, gte, or, type SQL } from "drizzle-orm";
+import { requireAuth, requirePermission } from "../lib/auth";
+import { writeAudit } from "../lib/auditLog";
+
+const router: IRouter = Router();
+
+const ALLOWED_STATUSES: UniversityContractStatus[] = ["active", "expiring_soon", "expired", "no_dates"];
+
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  if (typeof value !== "string") return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+class InvalidInputError extends Error {}
+
+function parseDateStrict(value: unknown, field: string): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  const d = parseDate(value);
+  if (d === null) throw new InvalidInputError(`Invalid ${field}`);
+  return d;
+}
+
+function sanitizeUploadedKey(input: unknown): string | null {
+  if (input === null || input === undefined || input === "") return null;
+  if (typeof input !== "string") throw new InvalidInputError("Invalid fileObjectKey");
+  let key = input.trim();
+  if (key.startsWith("https://")) {
+    // Defer to ObjectStorageService normalization synchronously not possible here;
+    // accept only already-normalized /objects/uploads/... keys to prevent binding arbitrary
+    // private object keys. Callers must send the objectPath returned by /api/storage/uploads/request-url.
+    throw new InvalidInputError("fileObjectKey must be a normalized /objects/uploads/... path");
+  }
+  if (!/^\/objects\/[A-Za-z0-9_-]{8,}$/.test(key)) {
+    throw new InvalidInputError("fileObjectKey must match /objects/<uploadId>");
+  }
+  return key;
+}
+
+function enrichRow(row: any): any {
+  return {
+    ...row,
+    status: getUniversityContractStatus(row.expiryDate),
+  };
+}
+
+router.get("/university-contracts", requireAuth, requirePermission("university_contracts.view"), async (req, res): Promise<void> => {
+  try {
+    const { country, year, universityId, search, status } = req.query as Record<string, string>;
+    const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
+    const pageSize = Math.min(100, Math.max(1, parseInt((req.query.pageSize as string) || "25", 10)));
+    const offset = (page - 1) * pageSize;
+
+    const filters: SQL<unknown>[] = [isNull(universityContractsTable.deletedAt)];
+    if (country) filters.push(eq(universityContractsTable.country, country));
+    if (year) {
+      const y = parseInt(year, 10);
+      if (!isNaN(y)) filters.push(eq(universityContractsTable.year, y));
+    }
+    if (universityId) {
+      const u = parseInt(universityId, 10);
+      if (!isNaN(u)) filters.push(eq(universityContractsTable.universityId, u));
+    }
+
+    if (status && ALLOWED_STATUSES.includes(status as UniversityContractStatus)) {
+      const now = new Date();
+      const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      if (status === "expired") filters.push(lt(universityContractsTable.expiryDate, now));
+      else if (status === "expiring_soon") {
+        filters.push(gte(universityContractsTable.expiryDate, now));
+        filters.push(lte(universityContractsTable.expiryDate, in30));
+      } else if (status === "active") filters.push(gte(universityContractsTable.expiryDate, in30));
+      else if (status === "no_dates") filters.push(isNull(universityContractsTable.expiryDate));
+    }
+
+    const where = and(...filters);
+    let rows = await db.select({
+      id: universityContractsTable.id,
+      universityId: universityContractsTable.universityId,
+      destinationId: universityContractsTable.destinationId,
+      country: universityContractsTable.country,
+      year: universityContractsTable.year,
+      effectiveDate: universityContractsTable.effectiveDate,
+      expiryDate: universityContractsTable.expiryDate,
+      fileObjectKey: universityContractsTable.fileObjectKey,
+      fileName: universityContractsTable.fileName,
+      fileMime: universityContractsTable.fileMime,
+      fileSize: universityContractsTable.fileSize,
+      notes: universityContractsTable.notes,
+      uploadedByUserId: universityContractsTable.uploadedByUserId,
+      createdAt: universityContractsTable.createdAt,
+      updatedAt: universityContractsTable.updatedAt,
+      universityName: universitiesTable.name,
+      universityCity: universitiesTable.city,
+    })
+      .from(universityContractsTable)
+      .leftJoin(universitiesTable, eq(universitiesTable.id, universityContractsTable.universityId))
+      .where(where)
+      .orderBy(desc(universityContractsTable.createdAt))
+      .limit(pageSize + 1)
+      .offset(offset);
+
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      rows = rows.filter(r =>
+        (r.universityName || "").toLowerCase().includes(term) ||
+        (r.country || "").toLowerCase().includes(term) ||
+        (r.fileName || "").toLowerCase().includes(term),
+      );
+    }
+
+    const hasMore = rows.length > pageSize;
+    const data = rows.slice(0, pageSize).map(enrichRow);
+    res.json({ data, page, pageSize, hasMore });
+  } catch (err) {
+    console.error("[university-contracts] list:", err);
+    res.status(500).json({ error: "Failed to list university contracts" });
+  }
+});
+
+router.get("/university-contracts/:id", requireAuth, requirePermission("university_contracts.view"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [row] = await db.select().from(universityContractsTable)
+      .where(and(eq(universityContractsTable.id, id), isNull(universityContractsTable.deletedAt)));
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+    const [uni] = row.universityId ? await db.select({
+      id: universitiesTable.id,
+      name: universitiesTable.name,
+      country: universitiesTable.country,
+      city: universitiesTable.city,
+    }).from(universitiesTable).where(eq(universitiesTable.id, row.universityId)) : [null];
+
+    let uploader: { id: number; firstName: string | null; lastName: string | null; email: string | null } | null = null;
+    if (row.uploadedByUserId) {
+      const [u] = await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email })
+        .from(usersTable).where(eq(usersTable.id, row.uploadedByUserId));
+      uploader = u || null;
+    }
+
+    res.json({ data: { ...enrichRow(row), university: uni, uploader } });
+  } catch (err) {
+    console.error("[university-contracts] get:", err);
+    res.status(500).json({ error: "Failed to load contract" });
+  }
+});
+
+router.post("/university-contracts", requireAuth, requirePermission("university_contracts.manage"), async (req, res): Promise<void> => {
+  try {
+    const body = req.body || {};
+    const universityId = parseInt(String(body.universityId), 10);
+    if (!universityId) { res.status(400).json({ error: "universityId is required" }); return; }
+    const [uni] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, universityId));
+    if (!uni) { res.status(404).json({ error: "University not found" }); return; }
+
+    let destinationId: number | null = null;
+    if (body.destinationId) {
+      const dId = parseInt(String(body.destinationId), 10);
+      if (dId) destinationId = dId;
+    }
+    if (!destinationId && uni.country) {
+      const [dest] = await db.select({ id: destinationsTable.id }).from(destinationsTable)
+        .where(eq(destinationsTable.country, uni.country));
+      if (dest) destinationId = dest.id;
+    }
+
+    const effectiveDate = parseDateStrict(body.effectiveDate, "effectiveDate");
+    const expiryDate = parseDateStrict(body.expiryDate, "expiryDate");
+    const year = body.year ? parseInt(String(body.year), 10) : (effectiveDate ? effectiveDate.getFullYear() : null);
+
+    const fileObjectKey = sanitizeUploadedKey(body.fileObjectKey);
+
+    const [row] = await db.insert(universityContractsTable).values({
+      universityId,
+      destinationId,
+      country: uni.country,
+      year: Number.isInteger(year as number) ? (year as number) : null,
+      effectiveDate,
+      expiryDate,
+      fileObjectKey,
+      fileName: body.fileName ? String(body.fileName).slice(0, 500) : null,
+      fileMime: body.fileMime ? String(body.fileMime).slice(0, 200) : null,
+      fileSize: Number.isInteger(body.fileSize) ? body.fileSize : null,
+      notes: body.notes ? String(body.notes).slice(0, 5000) : null,
+      uploadedByUserId: (req as any).user?.id ?? null,
+    }).returning();
+
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "university_contract.created",
+      resource: "university_contract",
+      resourceId: row.id,
+      changes: { universityId, country: uni.country, expiryDate: expiryDate?.toISOString() },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({ data: enrichRow(row) });
+  } catch (err) {
+    if (err instanceof InvalidInputError) { res.status(400).json({ error: err.message }); return; }
+    console.error("[university-contracts] create:", err);
+    res.status(500).json({ error: "Failed to create contract" });
+  }
+});
+
+router.patch("/university-contracts/:id", requireAuth, requirePermission("university_contracts.manage"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [existing] = await db.select().from(universityContractsTable)
+      .where(and(eq(universityContractsTable.id, id), isNull(universityContractsTable.deletedAt)));
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
+    const body = req.body || {};
+    const updates: Record<string, unknown> = {};
+    let resetWarnings = false;
+
+    if (body.universityId !== undefined) {
+      const newUniId = parseInt(String(body.universityId), 10);
+      if (!newUniId) { res.status(400).json({ error: "Invalid universityId" }); return; }
+      const [uni] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, newUniId));
+      if (!uni) { res.status(404).json({ error: "University not found" }); return; }
+      updates.universityId = newUniId;
+      updates.country = uni.country;
+      const [dest] = await db.select({ id: destinationsTable.id }).from(destinationsTable)
+        .where(eq(destinationsTable.country, uni.country));
+      updates.destinationId = dest?.id ?? null;
+    }
+    if (body.destinationId !== undefined) {
+      const dId = body.destinationId === null ? null : parseInt(String(body.destinationId), 10) || null;
+      updates.destinationId = dId;
+    }
+    if (body.year !== undefined) {
+      const y = body.year === null ? null : parseInt(String(body.year), 10);
+      updates.year = y && !isNaN(y) ? y : null;
+    }
+    if (body.effectiveDate !== undefined) updates.effectiveDate = parseDateStrict(body.effectiveDate, "effectiveDate");
+    if (body.expiryDate !== undefined) {
+      const newExpiry = parseDateStrict(body.expiryDate, "expiryDate");
+      updates.expiryDate = newExpiry;
+      const oldExpiryMs = existing.expiryDate ? new Date(existing.expiryDate).getTime() : null;
+      const newExpiryMs = newExpiry ? newExpiry.getTime() : null;
+      if (oldExpiryMs !== newExpiryMs) resetWarnings = true;
+    }
+    if (body.notes !== undefined) updates.notes = body.notes ? String(body.notes).slice(0, 5000) : null;
+
+    if (body.fileObjectKey !== undefined) {
+      updates.fileObjectKey = sanitizeUploadedKey(body.fileObjectKey);
+      updates.fileName = body.fileName ? String(body.fileName).slice(0, 500) : null;
+      updates.fileMime = body.fileMime ? String(body.fileMime).slice(0, 200) : null;
+      updates.fileSize = Number.isInteger(body.fileSize) ? body.fileSize : null;
+    }
+
+    if (resetWarnings) {
+      updates.lastWarning30SentAt = null;
+      updates.lastWarning14SentAt = null;
+      updates.lastWarning7SentAt = null;
+      updates.lastWarning1SentAt = null;
+      updates.expiryNoticeSentAt = null;
+    }
+
+    if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+
+    const [row] = await db.update(universityContractsTable).set(updates)
+      .where(eq(universityContractsTable.id, id)).returning();
+
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "university_contract.updated",
+      resource: "university_contract",
+      resourceId: id,
+      changes: updates as object,
+      ipAddress: req.ip,
+    });
+
+    res.json({ data: enrichRow(row) });
+  } catch (err) {
+    if (err instanceof InvalidInputError) { res.status(400).json({ error: err.message }); return; }
+    console.error("[university-contracts] update:", err);
+    res.status(500).json({ error: "Failed to update contract" });
+  }
+});
+
+router.delete("/university-contracts/:id", requireAuth, requirePermission("university_contracts.manage"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [row] = await db.update(universityContractsTable)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(universityContractsTable.id, id), isNull(universityContractsTable.deletedAt)))
+      .returning();
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "university_contract.deleted",
+      resource: "university_contract",
+      resourceId: id,
+      ipAddress: req.ip,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[university-contracts] delete:", err);
+    res.status(500).json({ error: "Failed to delete contract" });
+  }
+});
+
+router.get("/university-contracts/:id/file", requireAuth, requirePermission("university_contracts.view"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [row] = await db.select().from(universityContractsTable)
+      .where(and(eq(universityContractsTable.id, id), isNull(universityContractsTable.deletedAt)));
+    if (!row || !row.fileObjectKey) { res.status(404).json({ error: "File not found" }); return; }
+
+    const { ObjectStorageService } = await import("../lib/objectStorage");
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(row.fileObjectKey);
+    const [meta] = await file.getMetadata();
+    res.setHeader("Content-Type", (meta.contentType as string) || row.fileMime || "application/octet-stream");
+    const safeName = (row.fileName || `contract-${id}`).replace(/[^A-Za-z0-9._-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+    if (meta.size) res.setHeader("Content-Length", String(meta.size));
+    file.createReadStream().on("error", (e) => { console.error("[university-contracts] stream:", e); try { res.end(); } catch {} }).pipe(res);
+  } catch (err) {
+    console.error("[university-contracts] download:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download file" });
+  }
+});
+
+export default router;

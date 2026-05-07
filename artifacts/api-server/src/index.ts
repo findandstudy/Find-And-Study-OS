@@ -545,6 +545,8 @@ async function seedClaudeIntegration() {
     startContractChecker();
     const { startOfferExpiryChecker } = await import("./lib/offerExpiryChecker");
     startOfferExpiryChecker();
+    const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
+    startUniversityContractChecker();
   }
 
   serveStaticFrontend();

@@ -121,6 +121,9 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contracts.view')) ? [
             { title: "Sözleşmeler", icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' },
           ] : []),
+          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('university_contracts.view')) ? [
+            { title: "Üniversite Sözleşmeleri", icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' },
+          ] : []),
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('self_fill_links.view')) ? [
             { title: "Self-Fill Bağlantıları", icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' },
           ] : []),
