@@ -369,7 +369,7 @@ router.delete("/university-contracts/:id", requireAuth, requirePermission("unive
       ipAddress: req.ip,
     });
 
-    res.json({ ok: true });
+    res.sendStatus(204);
   } catch (err) {
     console.error("[university-contracts] delete:", err);
     res.status(500).json({ error: "Failed to delete contract" });

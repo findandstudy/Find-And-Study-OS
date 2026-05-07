@@ -1,4 +1,4 @@
-import { db, universityContractsTable, universitiesTable, usersTable, rolesTable } from "@workspace/db";
+import { db, universityContractsTable, universitiesTable, usersTable, rolesTable, destinationsTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 import { getAppBaseUrl } from "./email";
@@ -78,7 +78,10 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       universityId: universityContractsTable.universityId,
       country: universityContractsTable.country,
       year: universityContractsTable.year,
+      effectiveDate: universityContractsTable.effectiveDate,
       expiryDate: universityContractsTable.expiryDate,
+      destinationName: destinationsTable.name,
+      destinationCountry: destinationsTable.country,
       lastWarning30SentAt: universityContractsTable.lastWarning30SentAt,
       lastWarning14SentAt: universityContractsTable.lastWarning14SentAt,
       lastWarning7SentAt: universityContractsTable.lastWarning7SentAt,
@@ -90,6 +93,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
     })
       .from(universityContractsTable)
       .leftJoin(universitiesTable, eq(universitiesTable.id, universityContractsTable.universityId))
+      .leftJoin(destinationsTable, eq(destinationsTable.id, universityContractsTable.destinationId))
       .where(and(
         isNotNull(universityContractsTable.expiryDate),
         isNull(universityContractsTable.deletedAt),
@@ -106,7 +110,15 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       const expiry = new Date(row.expiryDate);
       const daysLeft = daysBetween(expiry, now);
       const uniName = row.universityName || `Üniversite #${row.universityId}`;
-      const expiryStr = expiry.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
+      const fmt = (d: Date) => d.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
+      const expiryStr = fmt(expiry);
+      const effective = row.effectiveDate ? new Date(row.effectiveDate) : null;
+      const effectiveStr = effective ? fmt(effective) : "—";
+      const destLabel = row.destinationName
+        ? (row.destinationCountry && row.destinationCountry !== row.destinationName
+            ? `${row.destinationName} (${row.destinationCountry})`
+            : row.destinationName)
+        : (row.country || "—");
 
       // Absolute URL so email clients render a clickable deep link.
       const actionUrl = `${baseUrl}/admin/university-contracts/${row.id}`;
@@ -126,8 +138,8 @@ export async function checkUniversityContractExpiries(): Promise<void> {
         );
         if (recipientIds.length === 0) continue;
 
-        const subject = `[FindAndStudy] University contract expired: ${uniName} (${row.country})`;
-        const body = `The agreement with ${uniName} (${row.country}) expired on ${expiryStr}.\n\nPlease renew the contract or upload an updated version in EduConsult OS.`;
+        const subject = `[FindAndStudy] University contract expired: ${uniName} (${destLabel})`;
+        const body = `University: ${uniName}\nDestination: ${destLabel}\nEffective date: ${effectiveStr}\nExpiry date: ${expiryStr}\n\nThe agreement with ${uniName} expired on ${expiryStr}. Please renew the contract or upload an updated version in EduConsult OS.\n\nOpen contract: ${actionUrl}`;
         await dispatchNotification({
           event: "university_contract.expired",
           title: `Üniversite sözleşmesi sona erdi — ${uniName}`,
@@ -164,8 +176,8 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       );
       if (recipientIds.length === 0) continue;
 
-      const subject = `[FindAndStudy] University contract expiring in ${matched.days} days: ${uniName} (${row.country})`;
-      const body = `The agreement with ${uniName} (${row.country}) is set to expire on ${expiryStr} (${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining).\n\nPlease prepare a renewal or contact the university to extend the contract.`;
+      const subject = `[FindAndStudy] University contract expiring in ${matched.days} days: ${uniName} (${destLabel})`;
+      const body = `University: ${uniName}\nDestination: ${destLabel}\nEffective date: ${effectiveStr}\nExpiry date: ${expiryStr}\n\nThe agreement with ${uniName} is set to expire on ${expiryStr} (${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining). Please prepare a renewal or contact the university to extend the contract.\n\nOpen contract: ${actionUrl}`;
       await dispatchNotification({
         event: "university_contract.expiring",
         title: `Üniversite sözleşmesi ${daysLeft} gün içinde sona eriyor — ${uniName}`,

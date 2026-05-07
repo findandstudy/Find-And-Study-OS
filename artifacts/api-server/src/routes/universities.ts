@@ -17,6 +17,10 @@ const UNI_PATCH_FIELDS = [
 ];
 
 const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
+// Internal fields that must never leak through unauthenticated /universities
+// endpoints. assignedStaffIds is the per-university notification recipient
+// list — exposing it would reveal internal user-id assignments publicly.
+const INTERNAL_FIELDS = ["assignedStaffIds"];
 const PROG_PATCH_FIELDS = [
   "universityId", "name", "degree", "field", "language", "duration",
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
@@ -28,8 +32,15 @@ const PROG_PATCH_FIELDS = [
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
 
 function maskContacts(uni: Record<string, any>, userRole?: string): Record<string, any> {
-  if (userRole === "super_admin") return uni;
+  // Always strip internal fields from any response that flows through
+  // maskContacts (the public /universities + /universities/:id endpoints
+  // call this). Authenticated callers that need the field must read it
+  // directly from the row inside protected handlers.
   const masked = { ...uni };
+  for (const f of INTERNAL_FIELDS) {
+    delete masked[f];
+  }
+  if (userRole === "super_admin") return masked;
   for (const f of CONTACT_FIELDS) {
     delete masked[f];
   }
