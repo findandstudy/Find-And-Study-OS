@@ -366,6 +366,7 @@
     "finance": "Finance",
     "catalog": "Catalogue",
     "users": "Utilisateurs",
+    "branches": "Agences",
     "auditLog": "Journal d'audit",
     "userActivity": "Activité utilisateur",
     "embeds": "Intégrations",
