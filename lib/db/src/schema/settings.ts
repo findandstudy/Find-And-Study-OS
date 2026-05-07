@@ -124,6 +124,9 @@ export const settingsTable = pgTable("settings", {
 
   // Offer letter expiry notification thresholds (CSV days, e.g. "30,14,7,1")
   offerExpiryWarningDays: text("offer_expiry_warning_days").default("30,14,7,1"),
+
+  // Agent contract expiry notification thresholds (CSV days, e.g. "30,14,7,1")
+  contractExpiryReminderDays: text("contract_expiry_reminder_days").default("30,14,7,1"),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

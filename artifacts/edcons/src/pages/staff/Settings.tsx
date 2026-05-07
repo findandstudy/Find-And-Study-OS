@@ -630,6 +630,7 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         {isSuperAdminLocal && <OfferExpiryThresholdsCard />}
+        {isSuperAdminLocal && <ContractExpiryThresholdsCard />}
         <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
       </div>
     );
@@ -2061,6 +2062,74 @@ function OfferExpiryThresholdsCard() {
           <Label htmlFor="offerExpiryWarningDays" className="text-xs">Eşikler (gün)</Label>
           <Input
             id="offerExpiryWarningDays"
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder="30,14,7,1"
+            className="mt-1"
+          />
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Kaydediliyor..." : "Kaydet"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function ContractExpiryThresholdsCard() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: () => customFetch("/api/settings"),
+  });
+
+  const initial = (settings?.contractExpiryReminderDays as string) || "30,14,7,1";
+  const [value, setValue] = useState<string>(initial);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings?.contractExpiryReminderDays !== undefined) {
+      setValue(settings.contractExpiryReminderDays || "30,14,7,1");
+    }
+  }, [settings?.contractExpiryReminderDays]);
+
+  async function handleSave() {
+    const parts = value.split(",").map(s => s.trim()).filter(Boolean);
+    const nums = parts.map(p => parseInt(p, 10));
+    if (nums.some(n => isNaN(n) || n <= 0)) {
+      toast({ title: "Geçersiz değer", description: "Sadece pozitif tam sayıları virgülle ayırarak girin (örn: 30,14,7,1).", variant: "destructive" });
+      return;
+    }
+    const normalized = Array.from(new Set(nums)).sort((a, b) => b - a).join(",");
+    setSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contractExpiryReminderDays: normalized }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Eşikler kaydedildi", description: `Aktif: ${normalized}` });
+    } catch (err: any) {
+      toast({ title: "Kaydetme başarısız", description: err?.message, variant: "destructive" });
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Card className="border shadow-sm p-6">
+      <div className="mb-4">
+        <h3 className="font-display font-semibold text-base">Acente Sözleşme Süre Bildirimi Eşikleri</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Acente sözleşmesinin bitiş tarihine "kaç gün kala" süper admin, acente sahibi ve atanmış ofis personeline (in-app + e-posta) bildirim gönderileceğini belirleyin. Her eşik için her sözleşmede yalnızca bir kez bildirim gönderilir. Virgülle ayrılmış pozitif gün sayıları (örn: <code className="text-xs px-1 py-0.5 rounded bg-secondary">30,14,7,1</code>).
+        </p>
+      </div>
+      <div className="flex items-end gap-3">
+        <div className="flex-1">
+          <Label htmlFor="contractExpiryReminderDays" className="text-xs">Eşikler (gün)</Label>
+          <Input
+            id="contractExpiryReminderDays"
             value={value}
             onChange={e => setValue(e.target.value)}
             placeholder="30,14,7,1"

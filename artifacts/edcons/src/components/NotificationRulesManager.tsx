@@ -68,6 +68,7 @@ const TEMPLATE_VARS: Record<string, string[]> = {
   "finance.agent_payout": ["agentName", "amount"],
   "agent.new_registration": ["firstName", "lastName", "companyName", "email"],
   "agent.sub_agent_added": ["firstName", "lastName", "email"],
+  "agent.contract_expiring": ["agentName", "businessName", "contractEndDate", "daysLeft", "threshold"],
   "system.user_activated": ["firstName", "lastName"],
   "system.broadcast": ["message"],
   "system.announcement": ["title", "message"],

@@ -37,10 +37,11 @@ const SETTINGS_PATCH_FIELDS = [
   "whatsappWidgetNumber", "liveChatScript", "featureFlags",
   "availableYears",
   "offerExpiryWarningDays",
+  "contractExpiryReminderDays",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
-const SUPER_ADMIN_ONLY_FIELDS = ["customHeadScript", "customBodyEndScript", "liveChatScript", "featureFlags", "offerExpiryWarningDays"];
+const SUPER_ADMIN_ONLY_FIELDS = ["customHeadScript", "customBodyEndScript", "liveChatScript", "featureFlags", "offerExpiryWarningDays", "contractExpiryReminderDays"];
 
 router.get("/settings/branding", async (req, res): Promise<void> => {
   const [settings] = await db.select({

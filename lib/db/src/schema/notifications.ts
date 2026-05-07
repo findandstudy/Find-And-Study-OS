@@ -84,6 +84,7 @@ export const NOTIFICATION_EVENTS = {
     events: {
       "agent.new_registration": { name: "New Agent Registration", description: "When a new agent registers in the system" },
       "agent.sub_agent_added": { name: "Sub-Agent Added", description: "When a sub-agent is added under an agent" },
+      "agent.contract_expiring": { name: "Agent Contract Expiring", description: "When an agent's contract end date is approaching one of the configured thresholds" },
     },
   },
   system: {
@@ -137,6 +138,7 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "finance.agent_payout", name: "Agent Payout Processed", category: "finance", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "accountant"] },
   { event: "agent.new_registration", name: "New Agent Registration", category: "agents", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin"] },
   { event: "agent.sub_agent_added", name: "Sub-Agent Added", category: "agents", channels: ["in_app"], recipientType: "role", recipientRoles: ["super_admin", "admin"] },
+  { event: "agent.contract_expiring", name: "Agent Contract Expiring", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "system.user_activated", name: "User Account Activated", category: "system", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "system.broadcast", name: "Broadcast Message", category: "system", channels: ["in_app"], recipientType: "all", recipientRoles: [] },
   { event: "system.announcement", name: "Announcement", category: "system", channels: ["in_app"], recipientType: "all", recipientRoles: [] },

@@ -1,162 +1,155 @@
-import { db, agentsTable, usersTable } from "@workspace/db";
-import { isNotNull, isNull, eq, and, sql } from "drizzle-orm";
-import { sendEmail, getEmailBranding, getAppBaseUrl } from "./email";
+import { db, agentsTable, usersTable, settingsTable } from "@workspace/db";
+import { and, eq, isNotNull, isNull, inArray, sql } from "drizzle-orm";
+import { dispatchNotification } from "./notificationDispatcher";
 
-const CHECK_INTERVAL = 6 * 60 * 60 * 1000;
+const CHECK_INTERVAL = 60 * 60 * 1000;
 
-function buildContractExpiryEmail(
-  brand: { logoUrl: string | null; primaryColor: string; buttonColor: string; companyName: string },
-  agentName: string,
-  businessName: string | null,
-  daysLeft: number,
-  contractEndDate: string,
-  appUrl: string,
-  recipientType: "admin" | "staff" | "agent"
-): { subject: string; html: string; text: string } {
-  const urgency = daysLeft <= 3 ? "URGENT" : "REMINDER";
-  const subject = `[${urgency}] Contract Expiring in ${daysLeft} Days — ${businessName || agentName}`;
+function parseThresholds(csv: string | null | undefined): number[] {
+  const raw = (csv || "30,14,7,1").split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+  return Array.from(new Set(raw)).sort((a, b) => b - a);
+}
 
-  const recipientMessage = recipientType === "agent"
-    ? `Your contract with ${brand.companyName} is expiring soon.`
-    : `The contract for agent <strong>${agentName}</strong>${businessName ? ` (${businessName})` : ""} is expiring soon.`;
-
-  const statusColor = daysLeft <= 3 ? "#dc2626" : "#f59e0b";
-  const statusLabel = daysLeft <= 3 ? "Expiring Soon" : "Expiring Soon";
-
-  const logoHtml = brand.logoUrl
-    ? `<img src="${brand.logoUrl}" alt="${brand.companyName}" style="max-height:48px;max-width:200px;margin:0 auto 8px;" />`
-    : `<h1 style="margin:0 0 4px;color:#fff;font-size:24px;font-weight:700;">${brand.companyName}</h1>`;
-
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
-    <div style="background:linear-gradient(135deg,${brand.primaryColor},${brand.primaryColor}cc);padding:28px 32px;text-align:center;">
-      ${logoHtml}
-      <p style="margin:4px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Contract Expiry Notice</p>
-    </div>
-    <div style="padding:32px;">
-      <div style="background:${statusColor}15;border:1px solid ${statusColor}40;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;">
-        <span style="display:inline-block;background:${statusColor};color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:8px;">${statusLabel}</span>
-        <p style="margin:8px 0 0;font-size:28px;font-weight:700;color:${statusColor};">${daysLeft} Days Left</p>
-      </div>
-      <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">${recipientMessage}</p>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
-        <tr>
-          <td style="padding:8px 0;color:#6b7280;font-size:14px;border-bottom:1px solid #e5e7eb;">Agent</td>
-          <td style="padding:8px 0;color:#111;font-size:14px;font-weight:500;border-bottom:1px solid #e5e7eb;text-align:right;">${agentName}</td>
-        </tr>
-        ${businessName ? `<tr>
-          <td style="padding:8px 0;color:#6b7280;font-size:14px;border-bottom:1px solid #e5e7eb;">Company</td>
-          <td style="padding:8px 0;color:#111;font-size:14px;font-weight:500;border-bottom:1px solid #e5e7eb;text-align:right;">${businessName}</td>
-        </tr>` : ""}
-        <tr>
-          <td style="padding:8px 0;color:#6b7280;font-size:14px;border-bottom:1px solid #e5e7eb;">Contract End Date</td>
-          <td style="padding:8px 0;color:${statusColor};font-size:14px;font-weight:600;border-bottom:1px solid #e5e7eb;text-align:right;">${contractEndDate}</td>
-        </tr>
-      </table>
-      ${recipientType !== "agent" ? `<div style="text-align:center;margin:0 0 16px;">
-        <a href="${appUrl}/agents" style="display:inline-block;background:${brand.buttonColor};color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">View Agent Details</a>
-      </div>` : ""}
-      <p style="color:#6b7280;font-size:13px;line-height:1.5;margin:16px 0 0;">Please take the necessary action to renew or update the contract before it expires.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-  const text = `${urgency}: Contract Expiring in ${daysLeft} Days\n\n${recipientType === "agent" ? `Your contract with ${brand.companyName}` : `Contract for ${agentName}${businessName ? ` (${businessName})` : ""}`} is expiring on ${contractEndDate}.\n\nPlease take action to renew or update the contract.`;
-
-  return { subject, html, text };
+function daysBetween(future: Date, now: Date): number {
+  return Math.ceil((future.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export async function checkContractExpiries(): Promise<void> {
   try {
+    const [settings] = await db.select({ contractExpiryReminderDays: settingsTable.contractExpiryReminderDays }).from(settingsTable);
+    const thresholds = parseThresholds(settings?.contractExpiryReminderDays);
+    if (thresholds.length === 0) return;
+
     const agents = await db.select({
       id: agentsTable.id,
+      userId: agentsTable.userId,
+      parentAgentId: agentsTable.parentAgentId,
       firstName: agentsTable.firstName,
       lastName: agentsTable.lastName,
-      email: agentsTable.email,
       businessName: agentsTable.businessName,
       contractEndDate: agentsTable.contractEndDate,
       contractLastNotified: agentsTable.contractLastNotified,
       assignedStaffId: agentsTable.assignedStaffId,
-      status: agentsTable.status,
     })
       .from(agentsTable)
       .where(and(
         isNotNull(agentsTable.contractEndDate),
         isNull(agentsTable.deletedAt),
-        eq(agentsTable.status, "active")
+        eq(agentsTable.status, "active"),
       ));
 
     if (agents.length === 0) return;
 
-    const brand = await getEmailBranding();
-    const appUrl = getAppBaseUrl();
-    const now = new Date();
-
-    const admins = await db.select({ email: usersTable.email, firstName: usersTable.firstName })
+    // Cache super_admin recipient IDs once per run (active only).
+    const supers = await db.select({ id: usersTable.id })
       .from(usersTable)
-      .where(sql`${usersTable.role} IN ('super_admin', 'admin') AND ${usersTable.email} IS NOT NULL`);
+      .where(and(eq(usersTable.role, "super_admin"), eq(usersTable.isActive, true)));
+    const superIds = supers.map(s => s.id);
+
+    const now = new Date();
+    const ascending = [...thresholds].sort((a, b) => a - b);
 
     for (const agent of agents) {
       if (!agent.contractEndDate) continue;
-
       const endDate = new Date(agent.contractEndDate);
-      const diffMs = endDate.getTime() - now.getTime();
-      const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      const daysLeft = daysBetween(endDate, now);
+      if (daysLeft <= 0) continue;
 
-      if (daysLeft <= 0 || daysLeft > 60) continue;
+      // Pick the smallest threshold >= daysLeft (e.g. daysLeft=6 with [30,14,7,1] → 7).
+      // This way each threshold fires exactly once as the deadline approaches.
+      const matched = ascending.find(t => daysLeft <= t);
+      if (!matched) continue;
 
-      let notifyKey = "";
-      if (daysLeft <= 3) {
-        notifyKey = "3d";
-      } else if (daysLeft <= 60) {
-        notifyKey = "60d";
+      // contractLastNotified is reused as a CSV of already-notified threshold
+      // values. Legacy values like "3d" / "60d" are ignored (treated as "no
+      // matching threshold yet"), so the new system fires fresh reminders for
+      // the configured thresholds.
+      const alreadyNotified = (agent.contractLastNotified || "")
+        .split(",").map(s => s.trim()).filter(Boolean);
+      if (alreadyNotified.includes(String(matched))) continue;
+
+      // Atomically claim this (agent, threshold) by appending the threshold to
+      // contract_last_notified only if it is not already present. This guards
+      // against concurrent workers double-firing the same reminder.
+      const updated = [...alreadyNotified, String(matched)].join(",");
+      const claimToken = String(matched);
+      const claimRows = await db.execute(sql`
+        UPDATE agents
+        SET contract_last_notified = ${updated}
+        WHERE id = ${agent.id}
+          AND (
+            contract_last_notified IS NULL
+            OR (
+              contract_last_notified NOT LIKE ${claimToken + ',%'}
+              AND contract_last_notified NOT LIKE ${'%,' + claimToken + ',%'}
+              AND contract_last_notified NOT LIKE ${'%,' + claimToken}
+              AND contract_last_notified <> ${claimToken}
+            )
+          )
+        RETURNING id
+      `);
+      const rows = (claimRows as any).rows ?? claimRows;
+      if (!rows || (Array.isArray(rows) && rows.length === 0)) {
+        // Another worker already claimed this threshold — skip silently.
+        continue;
       }
 
-      const alreadyNotified = agent.contractLastNotified === notifyKey;
-      const shouldNotify = !alreadyNotified;
+      const recipientUserIds = new Set<number>(superIds);
 
-      if (!shouldNotify) continue;
+      // Assigned staff (agency contact person inside the company).
+      if (agent.assignedStaffId) recipientUserIds.add(agent.assignedStaffId);
 
-      const agentName = `${agent.firstName} ${agent.lastName}`;
-      const contractEndStr = endDate.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
-
-      const emails: { to: string; type: "admin" | "staff" | "agent" }[] = [];
-
-      for (const admin of admins) {
-        if (admin.email) {
-          emails.push({ to: admin.email, type: "admin" });
-        }
+      // Agency owner: for top-level agents this is the agent's own user; for
+      // sub-agents this is the parent agent's user.
+      if (agent.parentAgentId) {
+        const [parent] = await db.select({ userId: agentsTable.userId })
+          .from(agentsTable).where(eq(agentsTable.id, agent.parentAgentId));
+        if (parent?.userId) recipientUserIds.add(parent.userId);
+      } else if (agent.userId) {
+        recipientUserIds.add(agent.userId);
       }
 
-      if (agent.assignedStaffId) {
-        const [staff] = await db.select({ email: usersTable.email })
-          .from(usersTable)
-          .where(eq(usersTable.id, agent.assignedStaffId));
-        if (staff?.email) {
-          emails.push({ to: staff.email, type: "staff" });
-        }
-      }
+      if (recipientUserIds.size === 0) continue;
 
-      if (agent.email) {
-        emails.push({ to: agent.email, type: "agent" });
-      }
+      // Filter to active users only so inactive accounts don't receive
+      // in-app notifications either.
+      const activeRecipients = await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(
+          inArray(usersTable.id, Array.from(recipientUserIds)),
+          eq(usersTable.isActive, true),
+        ));
+      const activeIds = activeRecipients.map(u => u.id);
+      if (activeIds.length === 0) continue;
 
-      for (const recipient of emails) {
-        const emailContent = buildContractExpiryEmail(
-          brand, agentName, agent.businessName, daysLeft, contractEndStr, appUrl, recipient.type
-        );
-        await sendEmail(recipient.to, emailContent);
-      }
+      const agentName = `${agent.firstName} ${agent.lastName}`.trim();
+      const businessName = agent.businessName || "";
+      const contractEndStr = endDate.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
+      const title = `Sözleşme ${daysLeft} gün içinde sona eriyor — ${businessName || agentName}`;
+      const body = `${businessName ? businessName + " (" + agentName + ")" : agentName} acentesinin sözleşmesi ${contractEndStr} tarihinde sona eriyor (${daysLeft} gün kaldı).`;
 
-      await db.update(agentsTable)
-        .set({ contractLastNotified: notifyKey })
-        .where(eq(agentsTable.id, agent.id));
+      await dispatchNotification({
+        event: "agent.contract_expiring",
+        title,
+        body,
+        actionUrl: `/staff/agents`,
+        icon: "AlertTriangle",
+        recipientUserIds: activeIds,
+        data: {
+          agentId: agent.id,
+          contractEndDate: endDate.toISOString(),
+          daysLeft,
+          threshold: matched,
+        },
+        templateVars: {
+          agentName,
+          businessName,
+          contractEndDate: contractEndStr,
+          daysLeft: String(daysLeft),
+          threshold: String(matched),
+        },
+      });
 
-      console.log(`[CONTRACT] Notified ${emails.length} recipient(s) for agent ${agentName} — ${daysLeft} days left`);
+      console.log(`[CONTRACT] Notified ${activeIds.length} recipient(s) for agent ${agentName} — ${daysLeft}d left, threshold ${matched}`);
     }
   } catch (err) {
     console.error("[CONTRACT] Expiry check error:", err);
@@ -167,13 +160,13 @@ let contractCheckerInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startContractChecker(): void {
   if (contractCheckerInterval) return;
-  console.log(`[CONTRACT] Checker started, running every ${CHECK_INTERVAL / 3600000}h`);
+  console.log(`[CONTRACT] Checker started, running every ${CHECK_INTERVAL / 60000} minute(s)`);
 
   setTimeout(() => {
     checkContractExpiries().then(() => {
       console.log("[CONTRACT] Initial check completed");
     });
-  }, 10000);
+  }, 12000);
 
   contractCheckerInterval = setInterval(() => {
     checkContractExpiries();
