@@ -76,6 +76,7 @@ const StaffTasks = lazyRetry(() => import("@/pages/staff/Tasks"));
 
 const AdminDashboard = lazyRetry(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazyRetry(() => import("@/pages/admin/Users"));
+const AdminBranches = lazyRetry(() => import("@/pages/admin/Branches"));
 const AdminCatalog = lazyRetry(() => import("@/pages/admin/Catalog"));
 const AdminCampaigns = lazyRetry(() => import("@/pages/admin/Campaigns"));
 const AdminPopups = lazyRetry(() => import("@/pages/admin/Popups"));
@@ -260,6 +261,9 @@ function StaffAdminShell() {
           <Route path="/admin/dashboard" component={AdminDashboard} />
           <Route path="/admin/users">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/branches">
+            <ProtectedRoute allowedRoles={STAFF_ROLES}><AdminBranches /></ProtectedRoute>
           </Route>
           <Route path="/admin/catalog">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>

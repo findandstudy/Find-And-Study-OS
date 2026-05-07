@@ -1,0 +1,232 @@
+#3 - Dynamic Contract Signing System
+NOT: Bu spec, Find-And-Study-OS (EdCons OS) projesine eklenecek modülü tarif eder. Find-And-Study-OS başka bir Replit projesidir; aşağıdaki dosya yolları o projenin monorepo yapısına göredir (lib/db/src/schema/, artifacts/api-server/, artifacts/edcons/). Mevcut altyapı: React 18 + Vite + shadcn/ui + Wouter + TanStack Query + react-hook-form + Zod + Drizzle ORM + PostgreSQL + Replit Object Storage + nodemailer + Orval (OpenAPI codegen) + pdf-lib (server) + jspdf (client). Hepsi kullanılabilir, yeni paket gerekmez.
+
+What & Why
+Acentelerle dijital sözleşme imzalama akışını ekle. İki kullanım modu olacak:
+
+Admin-driven: Admin panelden mevcut bir acente seçilir; sistem acentenin diline + tipine (şirket/bireysel) uygun şablonu otomatik bulur, acente verisiyle doldurur, acenteye e-posta ile imza linki gönderir.
+Self-fill: Admin, henüz sistemde olmayan/bilgileri tam olmayan biri için "intake link" üretir; muhatap linke girip kendi bilgilerini doldurur, sözleşmeyi inceler, canvas üzerinden parmak/mouse ile imzalar.
+Her iki modda da nihai çıktı: imzalı PDF + imza görseli + cryptographic hash içeren evidence sayfası, Object Storage'a yüklenir ve imzalayan kişiye e-posta ile gönderilir.
+
+Done looks like
+Admin "Contract Templates" sayfasından çok dilli şablonlar oluşturabilir; her şablonun bir language (tr, en, ar, ...) ve entityType (company/individual) alanı vardır
+Admin "Contracts" sayfasından "New Contract" diyince iki seçenek görür: Pick existing agent veya Generate self-fill link
+Mevcut acente seçildiğinde, acentenin preferredContractLanguage + entityType bilgisine göre uygun şablon otomatik seçilir; admin önizler ve "Send" butonuna basar
+Acente, e-postadaki linke tıklar; sözleşmeyi okur; canvas'ta imzalar; PDF üretilir; PDF kendisine e-posta ile gelir
+Self-fill linkinde muhatap bir form doldurur (3 adım: Intake → Review → Sign)
+Admin "Contracts" listesinde her sözleşmenin durumunu görür: pending (link gönderildi), signed (imzalandı), expired (link süresi geçti), revoked
+Filtreleme: durum, dil, tip, tarih aralığı
+Bütün lifecycle olayları audit log'a yazılır (link gönderildi, açıldı, imzalandı, vb.)
+Sayfalar mobil uyumlu; özellikle imzalama sayfası dokunmatik için optimize
+Out of scope
+Çok taraflı imza (multi-signer) — şimdilik tek imzacı
+Şablon WYSIWYG editor — basit HTML/Markdown editor yeterli
+E-imza yasal entegrasyonları (KEP, eIDAS, DocuSign) — şimdilik kendi canvas imzamız + hash evidence
+PDF formu doldurma (PDF içinde input alanları) — HTML şablonu render edip PDF'e çeviriyoruz
+Steps
+1. Schema değişiklikleri (Drizzle)
+a) agentsTable'a 3 yeni alan ekle (lib/db/src/schema/agents.ts):
+
+entityType: text('entity_type', { enum: ['company', 'individual'] }).notNull().default('company')
+taxNumber: text('tax_number') (nullable)
+preferredContractLanguage: text('preferred_contract_language').notNull().default('en') — admin yeni acente eklerken seçer
+b) Yeni schema dosyaları (lib/db/src/schema/):
+
+contractTemplates.ts:
+
+id (uuid, pk)
+name (text, not null)
+language (text: tr/en/ar/... not null) — index
+entityType (enum company/individual, not null) — index
+version (int, default 1)
+bodyHtml (text, not null) — Handlebars/Mustache placeholder syntax: {{agent.companyName}}, {{agent.firstName}}, {{agent.taxNumber}}, {{contract.effectiveDate}} vb.
+intakeSchema (jsonb, nullable) — self-fill için doldurulacak alanlar (zod-compatible JSON schema)
+isActive (boolean, default true)
+createdAt, updatedAt
+Unique compound index: (language, entityType, isActive=true) üzerinden — aynı dil+tip için tek aktif şablon kuralı YOK (versiyon birden fazla olabilir, ama admin "active" olanı seçer)
+signingSessions.ts:
+
+id (uuid, pk)
+templateId (uuid, fk → contractTemplates.id)
+agentId (uuid, fk → agents.id, nullable — self-fill modunda henüz acente yok)
+tokenHash (text, not null, unique) — bcrypt veya sha256 hash; ham token URL'de
+mode (enum: admin_driven | self_fill)
+status (enum: intake_pending | review_pending | sign_pending | signed | expired | revoked)
+intakeData (jsonb, nullable) — self-fill modunda doldurulan form
+expiresAt (timestamp, default now + 14 days)
+signerEmail (text, not null)
+signerName (text)
+createdByUserId (uuid, fk → users.id)
+createdAt, updatedAt
+signedContracts.ts (imzalı sözleşme kaydı):
+
+id (uuid, pk)
+signingSessionId (uuid, fk)
+agentId (uuid, fk → agents.id, nullable — self-fill sonrası yeni acente oluşturulduysa eşleşir)
+templateId (uuid, fk)
+pdfObjectKey (text, not null) — Object Storage path
+signatureImageObjectKey (text)
+evidenceHash (text, not null) — sha256(pdf + timestamp + signer info)
+signedAt (timestamp, not null)
+signerIp (text)
+signerUserAgent (text)
+emailedAt (timestamp, nullable)
+createdAt
+c) lib/db/src/schema/index.ts içinden re-export et.
+
+d) Migration: pnpm db:push (drizzle-kit) ile DB'ye uygula.
+
+2. Backend API (artifacts/api-server/src/)
+Klasör yapısı:
+
+routes/contractTemplates.ts
+routes/contracts.ts (admin tarafı)
+routes/publicSigning.ts (token-bazlı public erişim)
+lib/contractRenderer.ts (HTML template rendering — Handlebars veya basit string replace)
+lib/contractPdf.ts (pdf-lib ile HTML → PDF + imza embed + evidence sayfası)
+lib/signingTokens.ts (token üretim/hash/doğrulama — agents.embedToken ve public-apply.ts pattern'ini referans al)
+Endpoint listesi (OpenAPI ile dokümante et — Orval codegen için gerekli):
+
+Admin (auth + contracts.manage permission gerekli):
+
+GET /api/contract-templates — list (filter: language, entityType, isActive)
+
+POST /api/contract-templates — create
+
+GET /api/contract-templates/:id — detail
+
+PATCH /api/contract-templates/:id — update
+
+DELETE /api/contract-templates/:id — soft delete (isActive=false)
+
+POST /api/contract-templates/:id/preview — body: { agentId? } → render edilmiş HTML döner
+
+GET /api/contracts — signed contracts list
+
+GET /api/contracts/:id — detail (PDF download URL dahil)
+
+POST /api/contracts/send-to-agent — body: { agentId, templateId? } → templateId yoksa otomatik seç (agent.preferredContractLanguage + agent.entityType eşleşmesi). Token üretir, signingSession oluşturur, e-posta gönderir
+
+POST /api/contracts/self-fill-link — body: { templateId, signerEmail, signerName?, expiresInDays? } → token + URL döner
+
+POST /api/contracts/:id/revoke — signingSession.status = revoked
+
+GET /api/signing-sessions — list with status filter (admin "Self-Fill Links" sayfası için)
+
+DELETE /api/signing-sessions/:id — revoke + delete
+
+Public (auth gerekmez, token doğrulama ile):
+
+GET /api/public/signing/:token — session bilgisi + render edilmiş HTML (intake doluysa) veya intake schema (boşsa)
+POST /api/public/signing/:token/intake — intakeData kaydet, status: review_pending
+POST /api/public/signing/:token/sign — body: { signatureImageBase64 } → PDF üret, Object Storage'a yükle, signedContract oluştur, e-posta queue'ya at, status: signed
+GET /api/public/signing/:token/preview-pdf — render edilmiş (henüz imzasız) PDF preview (review aşamasında)
+Şablon eşleştirme mantığı (POST /api/contracts/send-to-agent içinde):
+
+template = SELECT * FROM contractTemplates 
+  WHERE language = agent.preferredContractLanguage 
+    AND entityType = agent.entityType 
+    AND isActive = true
+  ORDER BY version DESC LIMIT 1
+if not template: 400 hata "No active template for {language}/{entityType}"
+
+Token güvenliği:
+
+Ham token: nanoid(32) (URL-safe)
+DB'de sadece sha256(token) hash saklanır (bcrypt ağır olabilir; sha256 + tek seferlik yeterli)
+Public endpoint'te ham token gelir, hash'lenip karşılaştırılır
+expiresAt geçmişse 410 Gone döner
+E-posta gönderimi:
+
+emailQueueTable + mevcut nodemailer + integrationsTable SMTP config kullanılır
+Şablonlar (HTML email): "Sign your contract" (link içerir) ve "Your signed contract" (PDF attachment)
+PDF üretimi (lib/contractPdf.ts):
+
+Mevcut pdf-lib ile
+HTML şablonu basit text+heading'lerden oluşuyorsa pdf-lib ile direkt çizilebilir
+Karmaşık HTML için iki seçenek var: (a) Puppeteer (yeni paket, ağır), (b) HTML'i sadeleştirip pdf-lib ile elle yerleştir. Tercih: (b) — yeni paket kurmadan, mevcut altyapı yeterli
+Son sayfa "Evidence" sayfası: signer name, email, IP, user agent, timestamp, hash
+Audit logs:
+
+Mevcut audit schema dosyasını kullan; her olay (contract.link_sent, contract.opened, contract.signed, contract.revoked) bir satır
+3. Permissions sistemi entegrasyonu
+PERMISSION_CATEGORIES listesine ekle (lib/db/src/schema/roles.ts veya nerede tanımlıysa):
+
+contract_templates: { view, manage }
+contracts: { view, manage }
+self_fill_links: { view, manage }
+Default admin rolüne hepsi true verilsin. Migration sonrası mevcut admin rolünü update eden bir script çalıştır.
+
+4. Frontend (artifacts/edcons/src/)
+Yeni sayfalar:
+
+pages/admin/contract-templates.tsx:
+
+Sol: filter (language, entityType, active)
+Sağ: liste — her satır: name, language badge, entityType badge, version, isActive toggle
+"New Template" butonu → dialog: name, language (select), entityType (select), bodyHtml (textarea — placeholder örnekleri yardım metni olarak), intakeSchema (JSON editor — opsiyonel)
+Edit dialog aynı, ama version otomatik artar
+pages/admin/contracts.tsx:
+
+Tablo: signer name, signer email, agent (link), template, status badge, signedAt, actions
+Filter buttons: All / Pending / Signed / Expired / Revoked (bu projedeki intake-links.tsx pattern'ini referans al)
+"New Contract" butonu → modal:
+Tab 1 "Send to existing agent": agent autocomplete (combobox) → agent seçildiğinde altında "Detected: {language} / {entityType} → Template: {templateName}" preview kartı + "Preview" butonu (yeni sekme) + "Send" butonu
+Tab 2 "Generate self-fill link": template select, signer email, signer name, expires in (default 14 gün) → "Generate" butonu → link gösterilir, kopyala butonu
+pages/admin/self-fill-links.tsx:
+
+Aktif self-fill linklerin listesi (signingSessions where mode=self_fill AND status != signed)
+Filter buttons + bulk delete (visible-selected pattern — bu projedeki intake-links.tsx kodunu birebir uygulanabilir referans olarak)
+Her satırda: signer email, template, status, expiresAt, copy link, revoke
+Public sayfalar (auth dışı, ayrı layout — sidebar yok):
+
+pages/sign/intake.tsx — /sign/:token/intake — intake formu (templateden intakeSchema okur, dinamik form üretir; react-hook-form + zod)
+pages/sign/review.tsx — /sign/:token/review — render edilmiş HTML preview + "I agree, continue to sign"
+pages/sign/sign.tsx — /sign/:token/sign — canvas (<canvas> + pointer events; dokunmatik destek), "Clear" + "Sign & Submit"
+pages/sign/success.tsx — /sign/:token/success — "Your signed contract has been emailed to you"
+pages/sign/expired.tsx — link süresi dolmuşsa
+Admin-driven modda intake adımı atlanır; route doğrudan /sign/:token → review → sign
+Routing (Wouter, App.tsx):
+
+<Route path="/admin/contract-templates" component={ContractTemplates} />
+<Route path="/admin/contracts" component={Contracts} />
+<Route path="/admin/self-fill-links" component={SelfFillLinks} />
+<Route path="/sign/:token" component={SignEntry} />  {/* mod'a göre yönlendirir */}
+<Route path="/sign/:token/intake" component={SignIntake} />
+<Route path="/sign/:token/review" component={SignReview} />
+<Route path="/sign/:token/sign" component={SignSign} />
+<Route path="/sign/:token/success" component={SignSuccess} />
+
+Sidebar:
+
+Yeni grup "Contracts" altında: Contracts, Templates, Self-Fill Links
+Permission'a göre item göster/gizle
+Agent Form değişiklikleri:
+
+entityType select (Company / Individual)
+taxNumber input (opsiyonel)
+preferredContractLanguage select (proje dil listesinden)
+5. Test ve doğrulama
+Manuel test scenarios:
+Admin yeni template ekler (TR + Company)
+Admin yeni acente ekler (lang=TR, type=Company)
+Admin acenteye sözleşme gönderir → otomatik şablon seçilir, e-posta gönderilir
+Acente linke girer → review → imzalar → success → e-posta alır
+Self-fill link üret → 3 adımlı akış çalışır
+Süresi geçmiş link 410 döner
+Revoke edilmiş link "revoked" gösterir
+Audit log'da tüm olaylar görünmeli
+Mobile (iPhone Safari) imzalama çalışmalı
+Relevant files
+Find-And-Study-OS projesindeki mevcut dosyalar — referans olarak kullanılacak (silinmeyecek):
+
+lib/db/src/schema/agents.ts (entityType, taxNumber, preferredContractLanguage eklenecek)
+lib/db/src/schema/index.ts (yeni schema'lar re-export)
+lib/db/src/schema/roles.ts (PERMISSION_CATEGORIES'e yeni kategoriler)
+lib/db/src/schema/audit.ts (audit log için mevcut tablo kullanılacak)
+lib/db/src/schema/integrations.ts (SMTP config)
+lib/db/src/schema/emailQueue.ts (email gönderimi için mevcut kuyruk)
+artifacts/api-server/src/lib/objectStorage.ts (PDF/imza yüklemek için)
+artifacts/api-server/src/routes/public-apply.ts (token-bazlı public flow pattern referansı)
+artifacts/api-server/src/jobs/contractChecker.ts (acente sözleşme kontrolcüsü — yeni kontrolcüler için pattern)
+artifacts/edcons/src/App.tsx (route kayıtları)

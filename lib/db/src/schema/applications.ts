@@ -43,6 +43,7 @@ export const applicationsTable = pgTable("applications", {
   originDisplayName: text("origin_display_name"),
   originLocked: boolean("origin_locked").notNull().default(false),
   originStudentId: integer("origin_student_id"),
+  branchId: integer("branch_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

@@ -24,6 +24,7 @@ export const studentsTable = pgTable("students", {
   status: text("status").notNull().default("active"),
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
+  branchId: integer("branch_id"),
   highSchool: text("high_school"),
   universityBachelor: text("university_bachelor"),
   universityMaster: text("university_master"),

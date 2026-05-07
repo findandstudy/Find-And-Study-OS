@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
-import { db, agentsTable, usersTable, commissionsTable } from "@workspace/db";
+import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
+import { getVisibleBranchIds } from "../lib/branchScope";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
@@ -621,12 +622,26 @@ router.get("/agents/me/staff/permissions", requireAuth, requireRole("agent", "su
 });
 
 router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { search, status, page = "1", limit = "50", type, country } = req.query as Record<string, string>;
+  const { search, status, page = "1", limit = "50", type, country, branchId } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions: SQL[] = [];
+
+  // Branch scoping: super_admin sees all (or filtered by ?branchId=).
+  // Other staff are restricted to agents linked to their visible branches.
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const requestedBranchId = branchId && branchId !== "all" ? parseInt(branchId, 10) : null;
+  if (visible !== null) {
+    if (visible.length === 0) {
+      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      return;
+    }
+    conditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`);
+  } else if (requestedBranchId && !isNaN(requestedBranchId)) {
+    conditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ${requestedBranchId})`);
+  }
 
   if (type === "agent") {
     conditions.push(isNull(agentsTable.parentAgentId));
@@ -673,8 +688,22 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
     .offset(offset)
     .orderBy(desc(agentsTable.createdAt));
 
+  // Pull branch links for the current page in one query.
+  const agentIds = rows.map(r => r.agent.id);
+  const branchLinks = agentIds.length > 0
+    ? await db.select({ agentId: agentBranchesTable.agentId, branchId: agentBranchesTable.branchId })
+        .from(agentBranchesTable).where(inArray(agentBranchesTable.agentId, agentIds))
+    : [];
+  const branchesByAgent = new Map<number, number[]>();
+  for (const l of branchLinks) {
+    const arr = branchesByAgent.get(l.agentId) || [];
+    arr.push(l.branchId);
+    branchesByAgent.set(l.agentId, arr);
+  }
+
   const data = rows.map(r => ({
     ...r.agent,
+    branchIds: branchesByAgent.get(r.agent.id) || [],
     assignedStaffName: r.staffFirstName && r.staffLastName
       ? `${r.staffFirstName} ${r.staffLastName}`.trim()
       : r.staffFirstName || r.staffLastName || null,
@@ -708,7 +737,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     state, city, address, businessName, category,
     logoUrl, agentIdProofUrl, businessCertUrl, contractUrl, branch,
     pointOfContact, parentAgentId, subAgentCommissionRate, hideServiceFees,
-    assignedStaffId,
+    assignedStaffId, branchIds,
   } = req.body;
 
   if (!firstName || !lastName) {
@@ -758,6 +787,30 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     embedToken: crypto.randomUUID(),
   }).returning();
 
+  // Branch links: explicit list, else inherit creator's first visible branch.
+  let finalBranchIds: number[] = Array.isArray(branchIds)
+    ? branchIds.map((x: any) => parseInt(x, 10)).filter((n: number) => !isNaN(n))
+    : [];
+  // Authorization: non-super_admin may only assign visible branches.
+  if (req.user!.role !== "super_admin" && finalBranchIds.length > 0) {
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const allowed = new Set(visible || []);
+    const bad = finalBranchIds.filter(b => !allowed.has(b));
+    if (bad.length > 0) {
+      res.status(403).json({ error: "Cannot assign branches outside your scope", branches: bad });
+      return;
+    }
+  }
+  if (finalBranchIds.length === 0) {
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    if (visible && visible.length > 0) finalBranchIds = [visible[0]];
+  }
+  if (finalBranchIds.length > 0) {
+    await db.insert(agentBranchesTable)
+      .values(finalBranchIds.map(bid => ({ agentId: agent.id, branchId: bid })))
+      .onConflictDoNothing();
+  }
+
   dispatchNotification({
     actorUserId: req.user!.id,
     event: "agent.new_registration",
@@ -775,7 +828,8 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   const id = parseInt(req.params.id, 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-  res.json(agent);
+  const links = await db.select({ branchId: agentBranchesTable.branchId }).from(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
+  res.json({ ...agent, branchIds: links.map(l => l.branchId) });
 });
 
 router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -794,7 +848,7 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
       }
     }
   }
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length === 0 && req.body.branchIds === undefined) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
@@ -804,7 +858,34 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   const [oldAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!oldAgent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  const [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+  // branchIds is a separate concern (join table), handle it before/after the agent update.
+  if (req.body.branchIds !== undefined && Array.isArray(req.body.branchIds)) {
+    const newIds: number[] = req.body.branchIds
+      .map((x: any) => parseInt(x, 10))
+      .filter((n: number) => !isNaN(n));
+    // Authorization: non-super_admin may only assign visible branches.
+    if (req.user!.role !== "super_admin" && newIds.length > 0) {
+      const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+      const allowed = new Set(visible || []);
+      const bad = newIds.filter(b => !allowed.has(b));
+      if (bad.length > 0) {
+        res.status(403).json({ error: "Cannot assign branches outside your scope", branches: bad });
+        return;
+      }
+    }
+    await db.delete(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
+    if (newIds.length > 0) {
+      await db.insert(agentBranchesTable)
+        .values(newIds.map(bid => ({ agentId: id, branchId: bid })))
+        .onConflictDoNothing();
+    }
+  }
+
+  // No regular fields? Return early.
+  let agent = oldAgent;
+  if (Object.keys(updates).length > 0) {
+    [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+  }
   if (oldAgent.userId && Object.prototype.hasOwnProperty.call(updates, "phone")) {
     await db.update(usersTable).set({
       phone: (updates as any).phone,

@@ -29,6 +29,7 @@ export const usersTable = pgTable("users", {
   createdFromSource: text("created_from_source"),
   managingAgentId: integer("managing_agent_id"),
   agentStaffPermissions: jsonb("agent_staff_permissions"),
+  branchId: integer("branch_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

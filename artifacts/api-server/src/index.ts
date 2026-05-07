@@ -357,6 +357,69 @@ async function seedClaudeIntegration() {
     console.error("[migrate] offer-expiry columns:", err);
   }
 
+  // Step 2c: Idempotent migrations for the Branch system.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS branches (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        country TEXT,
+        city TEXT,
+        contact_name TEXT,
+        contact_email TEXT,
+        contact_phone TEXT,
+        logo_url TEXT,
+        notes TEXT,
+        archived_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS branches_name_idx ON branches(name)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS branches_archived_idx ON branches(archived_at)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS agent_branches (
+        agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (agent_id, branch_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS agent_branches_branch_id_idx ON agent_branches(branch_id)`);
+
+    // Add branch_id to other major tables.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS users_branch_id_idx ON users(branch_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS leads_branch_id_idx ON leads(branch_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS students_branch_id_idx ON students(branch_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS applications_branch_id_idx ON applications(branch_id)`);
+
+    // Seed a default branch on first run, then backfill orphan rows once.
+    const seedRes = await pool.query(
+      `INSERT INTO branches (name) VALUES ('Genel Şube') ON CONFLICT (name) DO NOTHING RETURNING id`
+    );
+    if (seedRes.rows.length > 0) {
+      const defaultId = seedRes.rows[0].id;
+      await pool.query(`UPDATE users SET branch_id = $1 WHERE branch_id IS NULL`, [defaultId]);
+      await pool.query(`UPDATE leads SET branch_id = $1 WHERE branch_id IS NULL`, [defaultId]);
+      await pool.query(`UPDATE students SET branch_id = $1 WHERE branch_id IS NULL`, [defaultId]);
+      await pool.query(`UPDATE applications SET branch_id = $1 WHERE branch_id IS NULL`, [defaultId]);
+      await pool.query(
+        `INSERT INTO agent_branches (agent_id, branch_id)
+         SELECT a.id, $1 FROM agents a
+         ON CONFLICT DO NOTHING`,
+        [defaultId]
+      );
+      console.log("[migrate] Branches: seeded default 'Genel Şube' (id=" + defaultId + ") and backfilled existing rows");
+    }
+  } catch (err) {
+    console.error("[migrate] branches columns:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

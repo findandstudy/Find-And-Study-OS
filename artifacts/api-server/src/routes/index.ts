@@ -35,6 +35,7 @@ import tasksRouter from "./tasks";
 import campaignsRouter from "./campaigns";
 import inboxRouter from "./inbox";
 import popupsRouter from "./popups";
+import branchesRouter from "./branches";
 
 const router: IRouter = Router();
 
@@ -74,5 +75,6 @@ router.use(tasksRouter);
 router.use(campaignsRouter);
 router.use(inboxRouter);
 router.use(popupsRouter);
+router.use(branchesRouter);
 
 export default router;

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
@@ -102,6 +103,7 @@ type Agent = {
   contractStartDate: string | null;
   contractEndDate: string | null;
   branch: string | null;
+  branchIds?: number[];
   pointOfContact: string | null;
   notes: string | null;
   createdAt: string;
@@ -118,6 +120,7 @@ const emptyForm = {
   branch: "", pointOfContact: "", notes: "",
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
   assignedStaffId: "",
+  branchIds: [] as number[],
 };
 
 function splitPhone(phone: string | null) {
@@ -164,6 +167,8 @@ export default function AgentsPage() {
   const certRef = useRef<HTMLInputElement>(null);
 
   const [parentAgents, setParentAgents] = useState<Agent[]>([]);
+  const [branchOptions, setBranchOptions] = useState<{ id: number; name: string }[]>([]);
+  const [branchPickerOpen, setBranchPickerOpen] = useState(false);
   const [staffMembers, setStaffMembers] = useState<{ id: number; firstName: string; lastName: string; role: string }[]>([]);
   const [countries, setCountries] = useState<{ id: number; name: string; code: string }[]>([]);
   const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
@@ -230,7 +235,14 @@ export default function AgentsPage() {
 
   useEffect(() => { fetchAgents(); }, [page, search, countryFilter]);
   useEffect(() => { fetchSubAgents(); }, [subPage, subSearch, subCountryFilter]);
-  useEffect(() => { fetchParentAgents(); fetchCountries(); fetchStaffMembers(); }, []);
+  async function fetchBranchOptions() {
+    try {
+      const res: any = await customFetch(`/api/branches?archived=0`);
+      setBranchOptions((res.data || []).map((b: any) => ({ id: b.id, name: b.name })));
+    } catch {}
+  }
+
+  useEffect(() => { fetchParentAgents(); fetchCountries(); fetchStaffMembers(); fetchBranchOptions(); }, []);
 
   function openCreate(isSub: boolean) {
     setEditingAgent(null);
@@ -264,6 +276,7 @@ export default function AgentsPage() {
       contractStartDate: agent.contractStartDate ? agent.contractStartDate.split("T")[0] : "",
       contractEndDate: agent.contractEndDate ? agent.contractEndDate.split("T")[0] : "",
       branch: agent.branch || "",
+      branchIds: Array.isArray(agent.branchIds) ? agent.branchIds : [],
       pointOfContact: agent.pointOfContact || "",
       notes: agent.notes || "",
       parentAgentId: agent.parentAgentId?.toString() || "",
@@ -338,6 +351,7 @@ export default function AgentsPage() {
       contractStartDate: form.contractStartDate || null,
       contractEndDate: form.contractEndDate || null,
       branch: form.branch.trim() || null,
+      branchIds: Array.isArray(form.branchIds) ? form.branchIds : [],
       pointOfContact: form.pointOfContact.trim() || null,
       notes: form.notes.trim() || null,
       parentAgentId: isSubAgent && form.parentAgentId ? parseInt(form.parentAgentId) : null,
@@ -1326,11 +1340,53 @@ export default function AgentsPage() {
                 })()}
               </div>
 
-              {/* Branch & Point of Contact */}
+              {/* Branches (multi-select) & Point of Contact */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Branch</Label>
-                  <Input value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))} className="rounded-xl" />
+                  <Label>Şubeler</Label>
+                  <Popover open={branchPickerOpen} onOpenChange={setBranchPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full justify-start rounded-xl font-normal h-auto min-h-[40px] py-2 flex-wrap gap-1">
+                        {form.branchIds.length === 0 ? (
+                          <span className="text-muted-foreground">Şube seçin...</span>
+                        ) : (
+                          form.branchIds.map(id => {
+                            const b = branchOptions.find(o => o.id === id);
+                            return b ? <Badge key={id} variant="secondary" className="text-xs">{b.name}</Badge> : null;
+                          })
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-2" align="start">
+                      {branchOptions.length === 0 ? (
+                        <p className="text-xs text-muted-foreground p-2">Henüz şube tanımlı değil.</p>
+                      ) : (
+                        <div className="max-h-60 overflow-y-auto space-y-1">
+                          {branchOptions.map(b => {
+                            const checked = form.branchIds.includes(b.id);
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => {
+                                  setForm(f => ({
+                                    ...f,
+                                    branchIds: checked
+                                      ? f.branchIds.filter(x => x !== b.id)
+                                      : [...f.branchIds, b.id],
+                                  }));
+                                }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-secondary text-left"
+                              >
+                                <Checkbox checked={checked} className="pointer-events-none" />
+                                <span className="flex-1">{b.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Point of Contact</Label>

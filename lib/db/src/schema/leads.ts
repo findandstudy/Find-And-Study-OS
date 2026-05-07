@@ -30,6 +30,7 @@ export const leadsTable = pgTable("leads", {
   originEntityId: integer("origin_entity_id"),
   originDisplayName: text("origin_display_name"),
   originLocked: boolean("origin_locked").notNull().default(false),
+  branchId: integer("branch_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
