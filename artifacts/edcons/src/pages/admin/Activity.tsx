@@ -12,6 +12,7 @@ import {
   Timer, BarChart3, TrendingUp, Pause, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { useI18n } from "@/hooks/use-i18n";
 
 function fmt(seconds: number): string {
   if (!seconds || seconds < 0) return "0m";
@@ -97,6 +98,7 @@ function getDateRange(preset: DatePreset): { from: string; to: string } {
 }
 
 function OverviewPage() {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const [preset, setPreset] = useState<DatePreset>("today");
   const [analytics, setAnalytics] = useState<any>(null);
@@ -178,8 +180,8 @@ function OverviewPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">User Activity</h1>
-          <p className="text-muted-foreground text-sm mt-1">Monitor user sessions, active time, and module usage.</p>
+          <h1 className="text-3xl font-display font-bold text-foreground">{t("adminActivity.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("adminActivity.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           {(["today", "yesterday", "7days", "30days"] as DatePreset[]).map(p => (
@@ -560,6 +562,7 @@ function UserDetailPage({ userId }: { userId: number }) {
 }
 
 export default function AdminActivity({ userId }: { userId?: number }) {
+  const { t } = useI18n();
   return (
     <>
       {userId ? <UserDetailPage userId={userId} /> : <OverviewPage />}

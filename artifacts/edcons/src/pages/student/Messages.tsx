@@ -8,12 +8,15 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { MessageSquare, Send, ArrowLeft, Loader2, Paperclip, FileText, X, Download } from "lucide-react";
 import { useLocation } from "wouter";
+import { useI18n } from "@/hooks/use-i18n";
+import { formatTime } from "@/lib/i18n";
 
 function getInitials(first?: string | null, last?: string | null) {
   return `${(first || "")[0] || ""}${(last || "")[0] || ""}`.toUpperCase() || "?";
 }
 
 export default function StudentMessages() {
+  const { t, lang } = useI18n();
   const { user } = useAuth(true);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -75,7 +78,7 @@ export default function StudentMessages() {
       if (!uploadResp.ok) throw new Error("File upload failed");
       return { fileName: file.name, fileUrl: `/api/storage${objectPath}`, fileType: file.type, fileSize: file.size };
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("studentMessages.uploadFailed"), description: err.message, variant: "destructive" });
       return null;
     } finally {
       setUploading(false);
@@ -97,7 +100,7 @@ export default function StudentMessages() {
       qc.invalidateQueries({ queryKey: ["student-conversations"] });
     },
     onError: (err: any) => {
-      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+      toast({ title: t("studentMessages.failedToSend"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -113,7 +116,7 @@ export default function StudentMessages() {
       setConversationId((conv as any).id);
       await qc.invalidateQueries({ queryKey: ["student-conversations"] });
     } catch (err: any) {
-      toast({ title: "Could not start conversation", description: err.message, variant: "destructive" });
+      toast({ title: t("studentMessages.couldNotStart"), description: err.message, variant: "destructive" });
     } finally {
       setStarting(false);
     }
@@ -134,7 +137,7 @@ export default function StudentMessages() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum file size is 25MB", variant: "destructive" });
+      toast({ title: t("studentMessages.fileTooLarge"), description: t("studentMessages.maxFileSize"), variant: "destructive" });
       return;
     }
     setPendingFile(file);
@@ -164,13 +167,13 @@ export default function StudentMessages() {
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      toast({ title: "Download failed", description: "Could not download the file.", variant: "destructive" });
+      toast({ title: t("studentMessages.downloadFailed"), description: t("studentMessages.couldNotDownload"), variant: "destructive" });
     }
   };
 
   const selectedConv = conversations.find((c: any) => c.id === conversationId);
   const otherParticipants = selectedConv?.participants?.filter((p: any) => p.userId !== user?.id) || [];
-  const convHeader = otherParticipants.map((p: any) => `${p.firstName || ""} ${p.lastName || ""}`.trim()).join(", ") || "Conversation";
+  const convHeader = otherParticipants.map((p: any) => `${p.firstName || ""} ${p.lastName || ""}`.trim()).join(", ") || t("studentMessages.conversation");
 
   function getConvOtherParticipants(conv: any) {
     return conv.participants?.filter((p: any) => p.userId !== user?.id) || [];
@@ -178,7 +181,7 @@ export default function StudentMessages() {
 
   function getConvDisplayName(conv: any) {
     const others = getConvOtherParticipants(conv);
-    if (others.length === 0) return "Conversation";
+    if (others.length === 0) return t("studentMessages.conversation");
     return others.map((p: any) => `${p.firstName || ""} ${p.lastName || ""}`.trim()).join(", ");
   }
 
@@ -193,14 +196,14 @@ export default function StudentMessages() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="font-display font-bold text-2xl">Messages</h1>
+            <h1 className="font-display font-bold text-2xl">{t("studentMessages.title")}</h1>
           </div>
         </div>
 
         <Card className="border-none shadow-lg shadow-black/5 flex flex-row overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
           <div className="w-72 border-r flex flex-col shrink-0">
             <div className="p-3 border-b">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conversations</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("studentMessages.conversations")}</p>
             </div>
             <div className="flex-1 overflow-y-auto">
               {convsLoading ? (
@@ -210,7 +213,7 @@ export default function StudentMessages() {
               ) : conversations.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                  <p>No conversations yet</p>
+                  <p>{t("studentMessages.noConversations")}</p>
                 </div>
               ) : (
                 conversations.map((conv: any) => {
@@ -262,7 +265,7 @@ export default function StudentMessages() {
                   disabled={starting}
                 >
                   {starting ? <Loader2 className="w-3 h-3 animate-spin" /> : <MessageSquare className="w-3 h-3" />}
-                  Message Advisor
+                  {t("studentMessages.messageAdvisor")}
                 </Button>
               </div>
             )}
@@ -274,25 +277,25 @@ export default function StudentMessages() {
                 <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
                 {conversations.length === 0 ? (
                   <>
-                    <p className="font-display font-bold text-lg text-foreground">No Messages Yet</p>
+                    <p className="font-display font-bold text-lg text-foreground">{t("studentMessages.noMessagesYet")}</p>
                     {advisor ? (
                       <>
-                        <p className="text-sm mt-1">Start a conversation with your advisor</p>
+                        <p className="text-sm mt-1">{t("studentMessages.startWithAdvisor")}</p>
                         <Button
                           className="mt-4 rounded-xl gap-2 px-8 bg-gradient-to-r from-primary to-accent hover:opacity-90"
                           onClick={startConversation}
                           disabled={starting}
                         >
                           {starting ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                          Start Conversation
+                          {t("studentMessages.startConversation")}
                         </Button>
                       </>
                     ) : (
-                      <p className="text-sm mt-1">Your advisor or staff will be in touch soon.</p>
+                      <p className="text-sm mt-1">{t("studentMessages.advisorWillContact")}</p>
                     )}
                   </>
                 ) : (
-                  <p className="text-sm">Select a conversation from the left</p>
+                  <p className="text-sm">{t("studentMessages.selectConv")}</p>
                 )}
               </div>
             ) : (
@@ -325,7 +328,7 @@ export default function StudentMessages() {
                   ) : msgs.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                      <p className="text-sm">No messages yet. Say hello!</p>
+                      <p className="text-sm">{t("studentMessages.sayHello")}</p>
                     </div>
                   ) : (
                     msgs.map((msg: any) => {
@@ -345,7 +348,7 @@ export default function StudentMessages() {
                                 <button
                                   onClick={() => handleDownload(att.fileUrl, att.fileName)}
                                   className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity hover:bg-black/70"
-                                  title="Download"
+                                  title={t("studentMessages.download")}
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                 </button>
@@ -366,7 +369,7 @@ export default function StudentMessages() {
                             )}
                             {hasTextContent && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                             <p className={`text-[10px] mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              {formatTime(lang, msg.createdAt, { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                         </div>
@@ -411,7 +414,7 @@ export default function StudentMessages() {
                     <Input
                       value={message}
                       onChange={e => setMessage(e.target.value)}
-                      placeholder="Type a message..."
+                      placeholder={t("studentMessages.typeMessage")}
                       className="flex-1 rounded-xl"
                       disabled={sendMutation.isPending || uploading}
                     />

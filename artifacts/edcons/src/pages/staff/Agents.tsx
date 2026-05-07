@@ -23,6 +23,7 @@ import {
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { ColumnHeader } from "@/components/ui/column-header";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -135,6 +136,7 @@ function splitPhone(phone: string | null) {
 }
 
 export default function AgentsPage() {
+  const { t } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
   const isManager = MANAGER_ROLES.includes(user?.role || "");
@@ -870,8 +872,8 @@ export default function AgentsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">Agents</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage agents and sub-agents</p>
+            <h1 className="text-2xl font-display font-bold text-foreground">{t("staffAgents.title")}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{t("staffAgents.subtitle")}</p>
           </div>
         </div>
 

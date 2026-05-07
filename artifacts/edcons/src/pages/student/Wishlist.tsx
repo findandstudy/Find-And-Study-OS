@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 export default function StudentWishlist() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -24,7 +26,7 @@ export default function StudentWishlist() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wishlist-details"] });
       queryClient.invalidateQueries({ queryKey: ["wishlists"] });
-      toast({ title: "Removed from wishlist" });
+      toast({ title: t("studentWishlist.removed") });
     },
   });
 
@@ -36,9 +38,9 @@ export default function StudentWishlist() {
   return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">My Wishlist</h1>
+          <h1 className="text-2xl font-bold">{t("studentWishlist.title")}</h1>
           <p className="text-muted-foreground mt-1">
-            Programs you've saved for later — {programs.length} program{programs.length !== 1 ? "s" : ""}
+            {t(programs.length === 1 ? "studentWishlist.subtitle" : "studentWishlist.subtitlePlural", { count: programs.length })}
           </p>
         </div>
 
@@ -55,12 +57,12 @@ export default function StudentWishlist() {
         ) : programs.length === 0 ? (
           <div className="bg-card rounded-2xl border p-16 text-center">
             <Heart className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-30" />
-            <h3 className="text-lg font-semibold mb-2">No saved programs yet</h3>
+            <h3 className="text-lg font-semibold mb-2">{t("studentWishlist.empty")}</h3>
             <p className="text-muted-foreground text-sm mb-6">
-              Browse programs in the Course Finder and tap the heart icon to save them here.
+              {t("studentWishlist.emptyDesc")}
             </p>
             <Button onClick={() => navigate("/student/course-finder")} variant="outline">
-              Browse Programs
+              {t("studentWishlist.browsePrograms")}
             </Button>
           </div>
         ) : (
@@ -86,7 +88,7 @@ export default function StudentWishlist() {
                       <button
                         onClick={() => removeMutation.mutate(p.id)}
                         className="shrink-0 p-2 rounded-full hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
-                        title="Remove from wishlist"
+                        title={t("studentWishlist.removeFromWishlist")}
                       >
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </button>
@@ -128,7 +130,7 @@ export default function StudentWishlist() {
                             </span>
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Fee not specified</span>
+                          <span className="text-xs text-muted-foreground">{t("studentWishlist.feeNotSpecified")}</span>
                         )}
                       </div>
                       <Button
@@ -138,7 +140,7 @@ export default function StudentWishlist() {
                         onClick={() => navigate("/student/course-finder")}
                       >
                         <ExternalLink className="w-3 h-3 mr-1" />
-                        View Details
+                        {t("studentWishlist.viewDetails")}
                       </Button>
                     </div>
                   </div>

@@ -21,6 +21,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger
 } from "@/components/ui/tabs";
 import {
+import { useI18n } from "@/hooks/use-i18n";
   Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText
 } from "lucide-react";
 
@@ -68,6 +69,7 @@ type Submission = {
 };
 
 export default function Embeds() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
@@ -98,8 +100,8 @@ export default function Embeds() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Embeddable Widgets</h1>
-            <p className="text-muted-foreground text-sm mt-1">Create and manage embeddable course finder widgets for external websites</p>
+            <h1 className="text-2xl font-bold">{t("adminEmbeds.title")}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{t("adminEmbeds.subtitle")}</p>
           </div>
           <Button onClick={() => { setEditWidget(null); setDialogOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" /> New Widget

@@ -231,8 +231,8 @@ export default function AgentAccount() {
   return (
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-display font-bold text-foreground">My Account</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your agent profile and preferences</p>
+          <h1 className="text-2xl font-display font-bold text-foreground">{t("agentAccount.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("agentAccount.subtitle")}</p>
         </div>
 
         <Tabs defaultValue="profile" className="space-y-0">

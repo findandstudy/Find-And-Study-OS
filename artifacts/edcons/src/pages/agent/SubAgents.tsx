@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { CountryFlag } from "@/components/CountryFlag";
+import { useI18n } from "@/hooks/use-i18n";
 
 type SubAgent = {
   id: number;
@@ -138,6 +139,7 @@ function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string }
 }
 
 export default function AgentSubAgents() {
+  const { t } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -361,8 +363,8 @@ export default function AgentSubAgents() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">Sub Agents</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage your sub-agents and their access</p>
+            <h1 className="text-2xl font-display font-bold text-foreground">{t("agentSubAgents.title")}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{t("agentSubAgents.subtitle")}</p>
           </div>
           <Button onClick={openCreate} className="gap-2">
             <Plus className="w-4 h-4" /> Add Sub Agent

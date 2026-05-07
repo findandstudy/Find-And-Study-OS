@@ -55,6 +55,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
@@ -1228,6 +1229,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
 /* ── ApplicationsPage ────────────────────────────────────── */
 export default function ApplicationsPage() {
+  const { t } = useI18n();
   const { levels: studyLevels, labelOf: studyLabelOf } = useStudyLevels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -1481,8 +1483,8 @@ export default function ApplicationsPage() {
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">Applications</h1>
-            <p className="text-muted-foreground text-sm mt-1">Track student applications through every stage.</p>
+            <h1 className="text-3xl font-display font-bold text-foreground">{t("staffApplications.title")}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{t("staffApplications.subtitle")}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative w-64">

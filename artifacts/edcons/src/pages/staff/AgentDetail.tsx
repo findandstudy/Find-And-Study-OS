@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare, Send
+  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare
 } from "lucide-react";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -24,10 +25,11 @@ async function apiFetch(url: string) {
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
 
 export default function AgentDetailPage() {
+  const { t } = useI18n();
   const [, params] = useRoute("/staff/agents/:id");
   const [, setLocation] = useLocation();
   const { season } = useSeason();
-  const { user } = useAuth(true, STAFF_ROLES);
+  useAuth(true, STAFF_ROLES);
   const agentId = params?.id ? parseInt(params.id, 10) : null;
 
   const [tab, setTab] = useState("leads");
@@ -67,7 +69,7 @@ export default function AgentDetailPage() {
   return (
       <div className="max-w-6xl mx-auto space-y-6">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/staff/agents")} className="gap-1.5 text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to Agents
+          <ArrowLeft className="w-4 h-4" /> {t("staffAgentDetail.backToAgents")}
         </Button>
 
         {agentLoading ? (
@@ -109,7 +111,7 @@ export default function AgentDetailPage() {
                     )}
                     {agent.website && (
                       <a href={agent.website.startsWith("http") ? agent.website : `https://${agent.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
-                        <Globe className="w-3.5 h-3.5" /> Website <ExternalLink className="w-3 h-3" />
+                        <Globe className="w-3.5 h-3.5" /> {t("staffAgentDetail.websiteLink")} <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
                   </div>
@@ -123,7 +125,7 @@ export default function AgentDetailPage() {
                 onClose={() => setContactOpen(false)}
                 channel={contactChannel}
                 setChannel={setContactChannel}
-                name={agent.companyName || agent.contactPerson || "Agent"}
+                name={agent.companyName || agent.contactPerson || t("staffAgentDetail.agent")}
                 email={agent.email}
                 phone={agent.phone}
                 entityType="agent"
@@ -134,16 +136,16 @@ export default function AgentDetailPage() {
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="leads" className="gap-1.5">
-                  <Users className="w-4 h-4" /> Leads {Array.isArray(leads) && leads.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{leads.length}</Badge>}
+                  <Users className="w-4 h-4" /> {t("staffAgentDetail.leadsTab")} {Array.isArray(leads) && leads.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{leads.length}</Badge>}
                 </TabsTrigger>
                 <TabsTrigger value="students" className="gap-1.5">
-                  <GraduationCap className="w-4 h-4" /> Students {Array.isArray(students) && students.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{students.length}</Badge>}
+                  <GraduationCap className="w-4 h-4" /> {t("staffAgentDetail.studentsTab")} {Array.isArray(students) && students.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{students.length}</Badge>}
                 </TabsTrigger>
                 <TabsTrigger value="applications" className="gap-1.5">
-                  <FileText className="w-4 h-4" /> Applications {Array.isArray(apps) && apps.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{apps.length}</Badge>}
+                  <FileText className="w-4 h-4" /> {t("staffAgentDetail.appsTab")} {Array.isArray(apps) && apps.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{apps.length}</Badge>}
                 </TabsTrigger>
                 <TabsTrigger value="messaging" className="gap-1.5">
-                  <MessageSquare className="w-4 h-4" /> All Messaging
+                  <MessageSquare className="w-4 h-4" /> {t("staffAgentDetail.messagingTab")}
                 </TabsTrigger>
               </TabsList>
 
@@ -153,12 +155,12 @@ export default function AgentDetailPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Phone</TableHead>
-                          <TableHead>Source</TableHead>
-                          <TableHead>Stage</TableHead>
-                          <TableHead>Program</TableHead>
+                          <TableHead>{t("staffAgentDetail.colName")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colEmail")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colPhone")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colSource")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colStage")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colProgram")}</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -171,7 +173,7 @@ export default function AgentDetailPage() {
                             <TableCell><Badge variant="outline" className="text-xs">{l.source || "-"}</Badge></TableCell>
                             <TableCell><Badge variant="secondary" className="text-xs">{l.stage || "-"}</Badge></TableCell>
                             <TableCell className="max-w-[250px] text-muted-foreground"><span className="line-clamp-2" title={l.interestedProgram || ""}>{l.interestedProgram || "-"}</span></TableCell>
-                            <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/leads/${l.id}`); }}>View</Button></TableCell>
+                            <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/leads/${l.id}`); }}>{t("staffAgentDetail.view")}</Button></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -180,7 +182,7 @@ export default function AgentDetailPage() {
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
                     <Users className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                    <p>No leads from this agent yet</p>
+                    <p>{t("staffAgentDetail.noLeads")}</p>
                   </div>
                 )}
               </TabsContent>
@@ -191,11 +193,11 @@ export default function AgentDetailPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Phone</TableHead>
-                          <TableHead>Nationality</TableHead>
-                          <TableHead>Stage</TableHead>
+                          <TableHead>{t("staffAgentDetail.colName")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colEmail")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colPhone")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colNationality")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colStage")}</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -207,7 +209,7 @@ export default function AgentDetailPage() {
                             <TableCell className="text-muted-foreground">{s.phone || "-"}</TableCell>
                             <TableCell><Badge variant="outline" className="text-xs">{s.nationality || "-"}</Badge></TableCell>
                             <TableCell><Badge variant="secondary" className="text-xs">{s.stage || "-"}</Badge></TableCell>
-                            <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/students/${s.id}`); }}>View</Button></TableCell>
+                            <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/students/${s.id}`); }}>{t("staffAgentDetail.view")}</Button></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -216,7 +218,7 @@ export default function AgentDetailPage() {
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
                     <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                    <p>No students from this agent yet</p>
+                    <p>{t("staffAgentDetail.noStudents")}</p>
                   </div>
                 )}
               </TabsContent>
@@ -227,11 +229,11 @@ export default function AgentDetailPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Student</TableHead>
-                          <TableHead>University</TableHead>
-                          <TableHead>Program</TableHead>
-                          <TableHead>Stage</TableHead>
-                          <TableHead>Country</TableHead>
+                          <TableHead>{t("staffAgentDetail.colStudent")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colUniversity")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colProgram")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colStage")}</TableHead>
+                          <TableHead>{t("staffAgentDetail.colCountry")}</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -243,7 +245,7 @@ export default function AgentDetailPage() {
                             <TableCell className="text-muted-foreground max-w-[250px]"><span className="line-clamp-2" title={a.programName || ""}>{a.programName || "-"}</span></TableCell>
                             <TableCell><Badge variant="secondary" className="text-xs">{a.stage || "-"}</Badge></TableCell>
                             <TableCell>{a.country || "-"}</TableCell>
-                            <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/applications/${a.id}`); }}>View</Button></TableCell>
+                            <TableCell><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setLocation(`/staff/applications/${a.id}`); }}>{t("staffAgentDetail.view")}</Button></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -252,7 +254,7 @@ export default function AgentDetailPage() {
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
                     <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                    <p>No applications from this agent yet</p>
+                    <p>{t("staffAgentDetail.noApps")}</p>
                   </div>
                 )}
               </TabsContent>
@@ -263,7 +265,7 @@ export default function AgentDetailPage() {
             </Tabs>
           </>
         ) : (
-          <div className="text-center py-20 text-muted-foreground">Agent not found</div>
+          <div className="text-center py-20 text-muted-foreground">{t("staffAgentDetail.notFound")}</div>
         )}
       </div>
   );

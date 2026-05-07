@@ -26,6 +26,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -833,6 +834,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
 }
 
 export default function FinancePage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { season } = useSeason();
@@ -1021,8 +1023,8 @@ export default function FinancePage() {
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Finance</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Commission tracking, collections, agent payments & analytics</p>
+            <h1 className="text-2xl font-bold text-slate-800">{t("staffFinance.title")}</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{t("staffFinance.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg">

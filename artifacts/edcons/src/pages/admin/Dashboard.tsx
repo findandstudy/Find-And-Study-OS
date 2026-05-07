@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, UserPlus, FileCheck, CreditCard, MessageCircle, Megaphone, AlertCircle, ArrowUpRight } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 function isOverdue(d: string) { return new Date(d) < new Date(); }
@@ -42,16 +43,10 @@ function getInitials(firstName?: string, lastName?: string) {
   return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
 }
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+// timeAgo is now provided by the i18n helper (formatTimeAgo) so it follows the
+// selected language. We keep this thin wrapper local so the rest of the file can
+// keep its existing call-site, and pass the active `lang` into it.
+import { formatTimeAgo as i18nTimeAgo } from "@/lib/i18n";
 
 const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
   "lead.created": UserPlus,
@@ -79,6 +74,8 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 };
 
 export default function AdminDashboard() {
+  const { t, lang } = useI18n();
+  const timeAgo = (d: string) => i18nTimeAgo(lang, d);
   const { user } = useAuth(true);
   const showOfferDeadlines = user?.role !== "super_admin";
   const { data: stats, isLoading } = useGetOverviewStats();
@@ -121,10 +118,10 @@ export default function AdminDashboard() {
 
   const s: any = stats || {};
   const statCards = [
-    { label: "Total Leads", value: s.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-    { label: "Active Applications", value: s.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
-    { label: "Students Enrolled", value: s.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
-    { label: "Revenue (Month)", value: `$${(s.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10" },
+    { label: t("adminDash.totalLeads"), value: s.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: t("adminDash.activeApplications"), value: s.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
+    { label: t("adminDash.studentsEnrolled"), value: s.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
+    { label: t("adminDash.revenueMonth"), value: `$${(s.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10" },
   ];
 
   return (
@@ -132,11 +129,11 @@ export default function AdminDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">Admin Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Full operational overview — Find And Study OS</p>
+            <h1 className="text-3xl font-display font-bold text-foreground">{t("adminDash.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("adminDash.subtitle")}</p>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/20 px-4 py-2 text-sm font-semibold">
-            <Shield className="w-4 h-4 mr-2" /> Admin Access
+            <Shield className="w-4 h-4 mr-2" /> {t("adminDash.adminAccess")}
           </Badge>
         </div>
 
@@ -165,12 +162,12 @@ export default function AdminDashboard() {
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-sm">Contract Alerts</h3>
-                <p className="text-xs text-muted-foreground">{contractAgents.length} agent(s) need attention</p>
+                <h3 className="font-display font-bold text-sm">{t("adminDash.contractAlerts")}</h3>
+                <p className="text-xs text-muted-foreground">{t("adminDash.agentsNeedAttention", { count: contractAgents.length })}</p>
               </div>
               <Link href="/admin/agents" className="ml-auto">
                 <Badge variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 gap-1">
-                  View All <ArrowUpRight className="w-3 h-3" />
+                  {t("adminDash.viewAll")} <ArrowUpRight className="w-3 h-3" />
                 </Badge>
               </Link>
             </div>
@@ -186,7 +183,7 @@ export default function AdminDashboard() {
                       {a.companyName && <span className="text-xs text-muted-foreground">({a.companyName})</span>}
                     </div>
                     <Badge variant="outline" className={`text-xs ${isExpired ? "bg-red-500/10 text-red-600 border-red-200" : "bg-orange-500/10 text-orange-600 border-orange-200"}`}>
-                      {isExpired ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft}d left`}
+                      {isExpired ? t("common.expiredAgo", { n: Math.abs(daysLeft) }) : t("common.daysLeft", { n: daysLeft })}
                     </Badge>
                   </div>
                 );

@@ -8,12 +8,15 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { MessageSquare, Send, ArrowLeft, Loader2, Plus, Paperclip, FileText, X, Download, Search, User } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useI18n } from "@/hooks/use-i18n";
+import { formatDate, formatTime } from "@/lib/i18n";
 
 function getInitials(first?: string | null, last?: string | null) {
   return `${(first || "")[0] || ""}${(last || "")[0] || ""}`.toUpperCase() || "?";
 }
 
 export default function AgentMessages() {
+  const { t, lang } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -77,7 +80,7 @@ export default function AgentMessages() {
       if (!uploadResp.ok) throw new Error("File upload failed");
       return { fileName: file.name, fileUrl: `/api/storage${objectPath}`, fileType: file.type, fileSize: file.size };
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("agentMessages.uploadFailed"), description: err.message, variant: "destructive" });
       return null;
     } finally {
       setUploading(false);
@@ -99,7 +102,7 @@ export default function AgentMessages() {
       qc.invalidateQueries({ queryKey: ["agent-conversations"] });
     },
     onError: (err: any) => {
-      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+      toast({ title: t("agentMessages.failedToSend"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -115,7 +118,7 @@ export default function AgentMessages() {
       setStaffSearch("");
       await qc.invalidateQueries({ queryKey: ["agent-conversations"] });
     } catch (err: any) {
-      toast({ title: "Could not start conversation", description: err.message, variant: "destructive" });
+      toast({ title: t("agentMessages.couldNotStart"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -134,7 +137,7 @@ export default function AgentMessages() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum file size is 25MB", variant: "destructive" });
+      toast({ title: t("agentMessages.fileTooLarge"), description: t("agentMessages.maxFileSize"), variant: "destructive" });
       return;
     }
     setPendingFile(file);
@@ -164,7 +167,7 @@ export default function AgentMessages() {
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      toast({ title: "Download failed", description: "Could not download the file.", variant: "destructive" });
+      toast({ title: t("agentMessages.downloadFailed"), description: t("agentMessages.couldNotDownload"), variant: "destructive" });
     }
   };
 
@@ -176,29 +179,29 @@ export default function AgentMessages() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-display font-bold text-2xl">Messages</h1>
-            <p className="text-sm text-muted-foreground">Chat with your contacts</p>
+            <h1 className="font-display font-bold text-2xl">{t("agentMessages.title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("agentMessages.subtitle")}</p>
           </div>
           <Button
             className="rounded-xl gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90"
             onClick={() => setShowNewChat(true)}
           >
             <Plus className="w-4 h-4" />
-            New Conversation
+            {t("agentMessages.newConversation")}
           </Button>
         </div>
 
         <div className="flex gap-4" style={{ height: "calc(100vh - 220px)" }}>
           <Card className="w-80 shrink-0 border-none shadow-lg shadow-black/5 flex flex-col overflow-hidden">
             <div className="p-3 border-b">
-              <p className="font-semibold text-sm text-muted-foreground px-1">Conversations</p>
+              <p className="font-semibold text-sm text-muted-foreground px-1">{t("agentMessages.conversations")}</p>
             </div>
             <div className="flex-1 overflow-y-auto">
               {allConversations.length === 0 ? (
                 <div className="p-6 text-center text-sm text-muted-foreground">
                   <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                  <p>No conversations yet</p>
-                  <p className="text-xs mt-1">Start a new conversation</p>
+                  <p>{t("agentMessages.noConversations")}</p>
+                  <p className="text-xs mt-1">{t("agentMessages.startNewConv")}</p>
                 </div>
               ) : (
                 allConversations.map((conv: any) => {
@@ -222,7 +225,7 @@ export default function AgentMessages() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
                           <p className="font-semibold text-sm truncate">
-                            {other ? `${other.firstName} ${other.lastName}` : "Unknown"}
+                            {other ? `${other.firstName} ${other.lastName}` : t("agentMessages.unknown")}
                           </p>
                           {conv.unreadCount > 0 && (
                             <span className="shrink-0 ml-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
@@ -230,10 +233,10 @@ export default function AgentMessages() {
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{conv.lastMessagePreview || "No messages yet"}</p>
+                        <p className="text-xs text-muted-foreground truncate">{conv.lastMessagePreview || t("agentMessages.noMessagesPreview")}</p>
                         {conv.lastMessageAt && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {new Date(conv.lastMessageAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                            {formatDate(lang, conv.lastMessageAt, { month: "short", day: "numeric" })}
                           </p>
                         )}
                       </div>
@@ -248,8 +251,8 @@ export default function AgentMessages() {
             {!conversationId ? (
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">
                 <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
-                <p className="font-display font-bold text-lg text-foreground">Select a conversation</p>
-                <p className="text-sm mt-1">Choose from your conversations or start a new one</p>
+                <p className="font-display font-bold text-lg text-foreground">{t("agentMessages.selectConv")}</p>
+                <p className="text-sm mt-1">{t("agentMessages.selectConvDesc")}</p>
               </div>
             ) : (
               <>
@@ -263,7 +266,7 @@ export default function AgentMessages() {
                   )}
                   <div>
                     <p className="font-semibold text-sm">
-                      {otherParticipant ? `${otherParticipant.firstName} ${otherParticipant.lastName}` : "Unknown"}
+                      {otherParticipant ? `${otherParticipant.firstName} ${otherParticipant.lastName}` : t("agentMessages.unknown")}
                     </p>
                     <p className="text-xs text-muted-foreground capitalize">{otherParticipant?.role?.replace(/_/g, " ")}</p>
                   </div>
@@ -277,7 +280,7 @@ export default function AgentMessages() {
                   ) : msgs.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                      <p className="text-sm">No messages yet. Say hello!</p>
+                      <p className="text-sm">{t("agentMessages.noMessagesYet")}</p>
                     </div>
                   ) : (
                     msgs.map((msg: any) => {
@@ -297,7 +300,7 @@ export default function AgentMessages() {
                                 <button
                                   onClick={() => handleDownload(att.fileUrl, att.fileName)}
                                   className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity hover:bg-black/70"
-                                  title="Download"
+                                  title={t("common.download")}
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                 </button>
@@ -318,7 +321,7 @@ export default function AgentMessages() {
                             )}
                             {hasTextContent && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                             <p className={`text-[10px] mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              {formatTime(lang, msg.createdAt, { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                         </div>
@@ -363,7 +366,7 @@ export default function AgentMessages() {
                     <Input
                       value={message}
                       onChange={e => setMessage(e.target.value)}
-                      placeholder="Type a message..."
+                      placeholder={t("agentMessages.typeMessage")}
                       className="flex-1 rounded-xl"
                       disabled={sendMutation.isPending || uploading}
                     />
@@ -386,7 +389,7 @@ export default function AgentMessages() {
       <Dialog open={showNewChat} onOpenChange={setShowNewChat}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>New Conversation</DialogTitle>
+            <DialogTitle>{t("agentMessages.newConversation")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="relative">
@@ -394,13 +397,13 @@ export default function AgentMessages() {
               <Input
                 value={staffSearch}
                 onChange={e => setStaffSearch(e.target.value)}
-                placeholder="Search contacts..."
+                placeholder={t("agentMessages.searchContacts")}
                 className="pl-9 rounded-xl"
               />
             </div>
             <div className="max-h-64 overflow-y-auto space-y-1">
               {filteredStaff.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No contacts found</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{t("agentMessages.noContactsFound")}</p>
               ) : (
                 filteredStaff.map((s: any) => (
                   <button

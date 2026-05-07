@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
+import { useI18n } from "@/hooks/use-i18n";
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
@@ -1081,10 +1082,11 @@ function RolesTab() {
 }
 
 export default function AdminUsers() {
+  const { t } = useI18n();
   return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-display font-bold text-foreground">User Management</h1>
+          <h1 className="text-2xl font-display font-bold text-foreground">{t("adminUsers.title")}</h1>
         </div>
 
         <Tabs defaultValue="users" className="space-y-6">

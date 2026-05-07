@@ -98,6 +98,75 @@ export function formatTimeAgo(lang: Language, dateStr: string | Date): string {
   return getTranslation(lang, "common.daysAgo", { n: days });
 }
 
+/**
+ * Map our short language code to the BCP47 locale string used by
+ * Intl.DateTimeFormat / Number.toLocaleString. Falls back to "en-US".
+ */
+const LOCALE_MAP: Record<Language, string> = {
+  en: "en-US",
+  tr: "tr-TR",
+  ar: "ar-SA",
+  fr: "fr-FR",
+  ru: "ru-RU",
+  fa: "fa-IR",
+  zh: "zh-CN",
+  hi: "hi-IN",
+  es: "es-ES",
+  id: "id-ID",
+};
+
+export function getLocale(lang: Language): string {
+  return LOCALE_MAP[lang] || "en-US";
+}
+
+/** Format a date with the given language's locale. */
+export function formatDate(
+  lang: Language,
+  date: string | number | Date,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toLocaleDateString(getLocale(lang), options);
+  } catch {
+    return d.toLocaleDateString("en-US", options);
+  }
+}
+
+/** Format a time with the given language's locale. */
+export function formatTime(
+  lang: Language,
+  date: string | number | Date,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toLocaleTimeString(getLocale(lang), options);
+  } catch {
+    return d.toLocaleTimeString("en-US", options);
+  }
+}
+
+/** Format a date+time with the given language's locale. */
+export function formatDateTime(
+  lang: Language,
+  date: string | number | Date,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toLocaleString(getLocale(lang), options);
+  } catch {
+    return d.toLocaleString("en-US", options);
+  }
+}
+
 export function isValidLanguage(lang: string): lang is Language {
   return SUPPORTED_LANGUAGES.includes(lang as Language);
 }

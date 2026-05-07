@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useI18n } from "@/hooks/use-i18n";
 
 interface Conversation {
   id: number;
@@ -1735,6 +1736,7 @@ function TemplatesTab() {
 const BROADCAST_ROLES = ["super_admin", "admin", "manager"];
 
 export default function MessagesPage() {
+  const { t } = useI18n();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -1812,7 +1814,7 @@ export default function MessagesPage() {
   return (
     <>
       <div className="space-y-6">
-        <h1 className="text-2xl font-display font-bold text-foreground">Communication Center</h1>
+        <h1 className="text-2xl font-display font-bold text-foreground">{t("staffMessages.title")}</h1>
 
         <Tabs defaultValue="inbox" className="space-y-4">
           <TabsList className="h-10">

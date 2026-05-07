@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Activity, Search, User, Clock, Filter } from "lucide-react";
+import { Activity, Search, User, Clock } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
+import { useI18n } from "@/hooks/use-i18n";
+import { formatDateTime } from "@/lib/i18n";
 
 const ACTION_COLORS: Record<string, string> = {
   create_user: "bg-green-100 text-green-700 border-green-200",
@@ -53,6 +54,7 @@ function formatChanges(changes: string | null): string {
 }
 
 export default function AdminAuditLog() {
+  const { t, lang } = useI18n();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const limit = 25;
@@ -69,19 +71,18 @@ export default function AdminAuditLog() {
 
   const logs: any[] = data?.data || data || [];
   const total: number = data?.meta?.total || logs.length;
-  const totalPages = Math.ceil(total / limit);
 
   return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
-              <Activity className="w-6 h-6 text-primary" /> Audit Log
+              <Activity className="w-6 h-6 text-primary" /> {t("adminAudit.title")}
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">All system actions recorded chronologically</p>
+            <p className="text-muted-foreground text-sm mt-1">{t("adminAudit.subtitle")}</p>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1.5 text-sm font-semibold self-start sm:self-auto">
-            {total.toLocaleString()} entries
+            {t("adminAudit.entries", { count: total.toLocaleString() })}
           </Badge>
         </div>
 
@@ -90,7 +91,7 @@ export default function AdminAuditLog() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search by action or resource..."
+              placeholder={t("adminAudit.searchPlaceholder")}
               className="pl-9 rounded-xl border-border/60"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
@@ -104,12 +105,12 @@ export default function AdminAuditLog() {
             <table className="w-full">
               <thead>
                 <tr className="bg-secondary/50 text-left">
-                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">When</th>
-                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">User</th>
-                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Action</th>
-                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Resource</th>
-                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Details</th>
-                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">IP</th>
+                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("adminAudit.colWhen")}</th>
+                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("adminAudit.colUser")}</th>
+                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("adminAudit.colAction")}</th>
+                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("adminAudit.colResource")}</th>
+                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("adminAudit.colDetails")}</th>
+                  <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("adminAudit.colIp")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
@@ -127,7 +128,7 @@ export default function AdminAuditLog() {
                   <tr>
                     <td colSpan={6} className="px-5 py-16 text-center">
                       <Activity className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
-                      <p className="text-muted-foreground font-medium">No audit entries found</p>
+                      <p className="text-muted-foreground font-medium">{t("adminAudit.noEntries")}</p>
                     </td>
                   </tr>
                 ) : logs.map((log: any) => (
@@ -135,9 +136,7 @@ export default function AdminAuditLog() {
                     <td className="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3 h-3" />
-                        {new Date(log.createdAt).toLocaleString("en-US", {
-                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                        })}
+                        {formatDateTime(lang, log.createdAt, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -146,7 +145,7 @@ export default function AdminAuditLog() {
                           <User className="w-3.5 h-3.5 text-primary" />
                         </div>
                         <span className="text-sm font-medium text-foreground">
-                          {log.userName || (log.userId ? `User #${log.userId}` : "System")}
+                          {log.userName || (log.userId ? t("adminAudit.userN", { id: log.userId }) : t("adminAudit.system"))}
                         </span>
                       </div>
                     </td>

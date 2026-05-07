@@ -50,6 +50,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { BulkActionBar } from "@/components/BulkActionBar";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -948,6 +949,7 @@ const EMPTY_FORM = {
 
 /* ── LeadsPage ────────────────────────────────────────────── */
 export default function LeadsPage() {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -1280,8 +1282,8 @@ export default function LeadsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-3xl font-display font-bold text-foreground">Leads</h1>
-              <p className="text-muted-foreground text-sm mt-1">Manage and convert prospective students.</p>
+              <h1 className="text-3xl font-display font-bold text-foreground">{t("staffLeads.title")}</h1>
+              <p className="text-muted-foreground text-sm mt-1">{t("staffLeads.subtitle")}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">

@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { apiFetch } from "@/lib/apiFetch";
+import { useI18n } from "@/hooks/use-i18n";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
@@ -2031,6 +2032,7 @@ function OptionsTab() {
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function AdminCatalog() {
+  const { t } = useI18n();
   const tabs = [
     { value: "countries", label: "Countries", icon: Globe },
     { value: "cities", label: "Cities", icon: Building2 },
@@ -2042,8 +2044,8 @@ export default function AdminCatalog() {
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Catalog Management</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage countries, cities, universities and programs</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("adminCatalog.title")}</h1>
+        <p className="text-muted-foreground text-sm mt-1">{t("adminCatalog.subtitle")}</p>
       </div>
       <Tabs defaultValue="countries" className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">

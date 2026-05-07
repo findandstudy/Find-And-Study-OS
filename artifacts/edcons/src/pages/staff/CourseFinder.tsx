@@ -25,6 +25,7 @@ import { normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -140,6 +141,7 @@ function ensureUrl(url: string | null | undefined): string | null {
 }
 
 export default function CourseFinder() {
+  const { t } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -513,8 +515,8 @@ export default function CourseFinder() {
     <>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-display font-bold tracking-tight">Course Finder</h1>
-          <p className="text-muted-foreground mt-1">Search and explore programs across all partner universities</p>
+          <h1 className="text-2xl font-display font-bold tracking-tight">{t("staffCourseFinder.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("staffCourseFinder.subtitle")}</p>
         </div>
 
         <div className="bg-card rounded-2xl border p-4 space-y-4">

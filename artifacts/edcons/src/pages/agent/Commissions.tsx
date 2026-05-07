@@ -3,8 +3,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, CheckCircle, Clock, TrendingUp, AlertCircle, Banknote, Receipt } from "lucide-react";
+import { DollarSign, CheckCircle, Banknote, Receipt } from "lucide-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
+import { useI18n } from "@/hooks/use-i18n";
+import { formatDate } from "@/lib/i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -13,6 +15,7 @@ function formatUSD(v: number) {
 }
 
 export default function AgentCommissions() {
+  const { t, lang } = useI18n();
   const { user } = useAuth(true);
   const pgComm = useTablePagination(25);
   const pgFee = useTablePagination(25);
@@ -60,17 +63,17 @@ export default function AgentCommissions() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-primary" /> My Commissions
+            <DollarSign className="w-6 h-6 text-primary" /> {t("agentCommissions.title")}
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">Track your earnings and pending payments</p>
+          <p className="text-muted-foreground text-sm mt-1">{t("agentCommissions.subtitle")}</p>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "POTENTIAL COMMISSION", value: formatUSD(cs.potential), icon: DollarSign, color: "text-green-500 bg-green-500/10" },
-            { label: "CONFIRMED COMMISSION", value: formatUSD(cs.confirmed), icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
-            { label: "COMMISSION PAID", value: formatUSD(cs.paid), icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
-            { label: "PENDING COMMISSION", value: formatUSD(cs.pending), icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
+            { label: t("agentCommissions.potentialCommission"), value: formatUSD(cs.potential), icon: DollarSign, color: "text-green-500 bg-green-500/10" },
+            { label: t("agentCommissions.confirmedCommission"), value: formatUSD(cs.confirmed), icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
+            { label: t("agentCommissions.commissionPaid"), value: formatUSD(cs.paid), icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
+            { label: t("agentCommissions.pendingCommission"), value: formatUSD(cs.pending), icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
           ].map((s, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
               <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-3`}>
@@ -84,10 +87,10 @@ export default function AgentCommissions() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "POTENTIAL SERVICE FEE", value: formatUSD(fs.potential), icon: DollarSign, color: "text-green-500 bg-green-500/10" },
-            { label: "CONFIRMED SERVICE FEE", value: formatUSD(fs.confirmed), icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
-            { label: "PAID SERVICE FEE", value: formatUSD(fs.paid), icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
-            { label: "PENDING SERVICE FEE", value: formatUSD(fs.pending), icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
+            { label: t("agentCommissions.potentialServiceFee"), value: formatUSD(fs.potential), icon: DollarSign, color: "text-green-500 bg-green-500/10" },
+            { label: t("agentCommissions.confirmedServiceFee"), value: formatUSD(fs.confirmed), icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
+            { label: t("agentCommissions.paidServiceFee"), value: formatUSD(fs.paid), icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
+            { label: t("agentCommissions.pendingServiceFee"), value: formatUSD(fs.pending), icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
           ].map((s, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
               <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-3`}>
@@ -101,26 +104,26 @@ export default function AgentCommissions() {
 
         <Tabs defaultValue="commissions" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="commissions" className="gap-1.5"><Banknote className="w-4 h-4" /> Commission History</TabsTrigger>
-            <TabsTrigger value="service-fees" className="gap-1.5"><Receipt className="w-4 h-4" /> Service Fee History</TabsTrigger>
+            <TabsTrigger value="commissions" className="gap-1.5"><Banknote className="w-4 h-4" /> {t("agentCommissions.commissionHistory")}</TabsTrigger>
+            <TabsTrigger value="service-fees" className="gap-1.5"><Receipt className="w-4 h-4" /> {t("agentCommissions.serviceFeeHistory")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="commissions">
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
               <div className="p-5 border-b border-border/50">
-                <h3 className="font-display font-bold text-lg">Commission History</h3>
+                <h3 className="font-display font-bold text-lg">{t("agentCommissions.commissionHistory")}</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-secondary/50 text-left">
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Student</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">University</th>
-                      {!isSubAgent && <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Program Fee</th>}
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Commission</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Paid</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Date</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.student")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.university")}</th>
+                      {!isSubAgent && <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.programFee")}</th>}
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.commission")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.paid")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.status")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.date")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
@@ -136,7 +139,7 @@ export default function AgentCommissions() {
                       <tr>
                         <td colSpan={isSubAgent ? 6 : 7} className="px-5 py-16 text-center">
                           <DollarSign className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
-                          <p className="text-muted-foreground font-medium">No commissions recorded yet</p>
+                          <p className="text-muted-foreground font-medium">{t("agentCommissions.noCommissions")}</p>
                         </td>
                       </tr>
                     ) : pagedComm.map((c: any) => {
@@ -161,7 +164,7 @@ export default function AgentCommissions() {
                           </Badge>
                         </td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">
-                          {new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          {formatDate(lang, c.createdAt, { month: "short", day: "numeric", year: "numeric" })}
                         </td>
                       </tr>
                       );
@@ -182,19 +185,19 @@ export default function AgentCommissions() {
           <TabsContent value="service-fees">
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
               <div className="p-5 border-b border-border/50">
-                <h3 className="font-display font-bold text-lg">Service Fee History</h3>
+                <h3 className="font-display font-bold text-lg">{t("agentCommissions.serviceFeeHistory")}</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-secondary/50 text-left">
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Student</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">University</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Total</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">1st Installment</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">2nd Installment</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</th>
-                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Date</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.student")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.university")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.total")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.firstInstallment")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.secondInstallment")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.status")}</th>
+                      <th className="px-5 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("agentCommissions.date")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
@@ -210,7 +213,7 @@ export default function AgentCommissions() {
                       <tr>
                         <td colSpan={7} className="px-5 py-16 text-center">
                           <Receipt className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
-                          <p className="text-muted-foreground font-medium">No service fees recorded yet</p>
+                          <p className="text-muted-foreground font-medium">{t("agentCommissions.noServiceFees")}</p>
                         </td>
                       </tr>
                     ) : pagedFees.map((f: any) => (
@@ -244,7 +247,7 @@ export default function AgentCommissions() {
                           </Badge>
                         </td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">
-                          {new Date(f.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          {formatDate(lang, f.createdAt, { month: "short", day: "numeric", year: "numeric" })}
                         </td>
                       </tr>
                     ))}

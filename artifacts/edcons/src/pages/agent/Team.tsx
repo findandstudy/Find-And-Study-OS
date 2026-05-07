@@ -52,6 +52,7 @@ import {
   Shield,
 } from "lucide-react";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { useI18n } from "@/hooks/use-i18n";
 
 type StaffMember = {
   id: number;
@@ -75,6 +76,7 @@ const PERMISSION_OPTIONS = [
 ];
 
 export default function AgentTeam() {
+  const { t } = useI18n();
   const { user } = useAuth(true);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -113,8 +115,8 @@ export default function AgentTeam() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">My Team</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage your agency staff members and their permissions</p>
+            <h1 className="text-2xl font-display font-bold text-foreground">{t("agentTeam.title")}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{t("agentTeam.subtitle")}</p>
           </div>
           <Button onClick={() => setShowCreate(true)} className="gap-2">
             <Plus className="w-4 h-4" />

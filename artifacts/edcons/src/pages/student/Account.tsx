@@ -223,8 +223,8 @@ export default function StudentAccount() {
   return (
       <div className="space-y-6 max-w-3xl">
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">My Account</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your profile and preferences</p>
+          <h1 className="text-2xl font-display font-bold text-foreground">{t("studentAccount.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("studentAccount.subtitle")}</p>
         </div>
 
         <Tabs defaultValue="profile">

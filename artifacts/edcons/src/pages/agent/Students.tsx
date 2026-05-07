@@ -46,6 +46,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1592,6 +1593,7 @@ function StuFilterPopover({ filters, onChange, stages }: {
 }
 
 export default function AgentStudentsPage() {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1734,7 +1736,7 @@ export default function AgentStudentsPage() {
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">Students</h1>
+            <h1 className="text-3xl font-display font-bold text-foreground">{t("agentStudents.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{data?.meta?.total ?? 0} total students</p>
           </div>
           <div className="flex items-center gap-3">
