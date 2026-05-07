@@ -41,9 +41,13 @@ type Contract = {
   fileSize: number | null;
   notes: string | null;
   uploadedByUserId: number | null;
+  assignedUserIds?: number[] | null;
   createdAt: string;
   universityName?: string | null;
   universityLogoUrl?: string | null;
+  destinationName?: string | null;
+  destinationCountry?: string | null;
+  destinationFlagEmoji?: string | null;
   status: Status;
 };
 
@@ -61,6 +65,7 @@ type FormState = {
   fileName: string;
   fileMime: string;
   fileSize: number | null;
+  assignedUserIds: number[];
 };
 
 const emptyForm: FormState = {
@@ -74,7 +79,10 @@ const emptyForm: FormState = {
   fileName: "",
   fileMime: "",
   fileSize: null,
+  assignedUserIds: [],
 };
+
+type StaffUser = { id: number; firstName: string | null; lastName: string | null; email: string | null; role: string };
 
 const STATUS_LABELS: Record<Status, { label: string; tone: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
   active: { label: "Aktif", tone: "outline", icon: CheckCircle2 },
@@ -110,6 +118,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
   const [rows, setRows] = useState<Contract[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -154,14 +163,19 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
 
   async function loadMeta() {
     try {
-      const [unis, cs, dests]: any = await Promise.all([
+      const [unis, cs, dests, users]: any = await Promise.all([
         customFetch(`/api/universities?limit=500`),
         customFetch(`/api/universities/countries`),
         customFetch(`/api/public/destinations`),
+        customFetch(`/api/users?limit=500`).catch(() => ({ data: [] })),
       ]);
       setUniversities(unis.data || []);
       setCountries(cs || []);
       setDestinations(Array.isArray(dests) ? dests : (dests?.data || []));
+      const list: any[] = users?.data || [];
+      setStaffUsers(list
+        .filter(u => u.isActive !== false && ["super_admin", "admin", "manager", "staff", "consultant", "agent_staff"].includes(u.role))
+        .map(u => ({ id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, role: u.role })));
     } catch {}
   }
 
@@ -199,6 +213,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       fileName: c.fileName || "",
       fileMime: c.fileMime || "",
       fileSize: c.fileSize ?? null,
+      assignedUserIds: Array.isArray(c.assignedUserIds) ? c.assignedUserIds : [],
     });
     setShowDialog(true);
   }
@@ -256,6 +271,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         effectiveDate: form.effectiveDate || null,
         expiryDate: form.expiryDate || null,
         notes: form.notes || null,
+        assignedUserIds: form.assignedUserIds,
       };
       if (form.fileObjectKey && (!editing || form.fileObjectKey !== editing.fileObjectKey)) {
         body.fileObjectKey = form.fileObjectKey;
@@ -430,7 +446,12 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   const meta = STATUS_LABELS[c.status];
                   const Icon = meta.icon;
                   const dl = daysLeft(c.expiryDate);
-                  const dest = destByCountry[c.country];
+                  // Prefer destination joined from API by destinationId; fall
+                  // back to country-based lookup only when destinationId is
+                  // not set on the contract.
+                  const dest = c.destinationName
+                    ? { name: c.destinationName, flagEmoji: c.destinationFlagEmoji || null }
+                    : destByCountry[c.country];
                   const tooltipText = dl === null ? "No expiry date set" :
                     dl < 0 ? `Expired ${Math.abs(dl)} day${Math.abs(dl) === 1 ? "" : "s"} ago` :
                     `Expires on ${formatDate(c.expiryDate)}`;
@@ -553,6 +574,36 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
             <div className="col-span-2">
               <Label>Notlar</Label>
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} />
+            </div>
+            <div className="col-span-2">
+              <Label>Bildirim alacak personel</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Aktif yöneticiler her durumda bildirim alır. Burada seçtiğiniz personel de bu sözleşmeye özel olarak uyarılır.
+              </p>
+              <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
+                {staffUsers.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">Personel bulunamadı.</div>
+                ) : staffUsers.map(u => {
+                  const checked = form.assignedUserIds.includes(u.id);
+                  const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
+                  return (
+                    <label key={u.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-background/60 rounded px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setForm(f => ({
+                          ...f,
+                          assignedUserIds: checked
+                            ? f.assignedUserIds.filter(id => id !== u.id)
+                            : [...f.assignedUserIds, u.id],
+                        }))}
+                      />
+                      <span>{name}</span>
+                      <span className="text-xs text-muted-foreground">({u.role})</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
             <div className="col-span-2">
               <Label>Dosya (PDF veya DOCX)</Label>

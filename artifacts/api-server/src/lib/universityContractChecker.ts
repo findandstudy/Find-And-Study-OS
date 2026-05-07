@@ -15,44 +15,28 @@ function daysBetween(future: Date, now: Date): number {
   return Math.ceil((future.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-// Recipients:
-//   * All active admin-level users (super_admin, admin, manager).
-//   * Any active user whose role (rolesTable) grants
-//     `university_contracts.view`.
-//   * Any active staff (agent_staff) whose individual
-//     `agent_staff_permissions` JSON array contains
-//     `university_contracts.view`.
-// This covers admins + staff responsible for the module even when no
-// per-university assignment table exists.
-async function getRecipients(): Promise<number[]> {
-  const PERM = "university_contracts.view";
-  const ADMIN_ROLES = ["super_admin", "admin", "manager"];
-  try {
-    const roles = await db.select({ name: rolesTable.name, perms: rolesTable.permissions })
-      .from(rolesTable);
-    const customRoleNames = roles
-      .filter(r => Array.isArray(r.perms) && (r.perms as string[]).includes(PERM))
-      .map(r => r.name)
-      .filter(n => !ADMIN_ROLES.includes(n));
-    const targetRoles = [...ADMIN_ROLES, ...customRoleNames];
+// Recipients per contract:
+//   * Active admin-level users (super_admin, admin, manager) — they
+//     always receive every expiry notification.
+//   * Active users explicitly assigned to this contract via
+//     `assigned_user_ids`.
+const ADMIN_ROLES = ["super_admin", "admin", "manager"];
 
-    const users = await db.select({ id: usersTable.id })
-      .from(usersTable)
-      .where(and(
-        eq(usersTable.isActive, true),
-        or(
-          inArray(usersTable.role, targetRoles),
-          sql`${usersTable.agentStaffPermissions}::jsonb ? ${PERM}`,
-        ),
-      ));
-    return Array.from(new Set(users.map(u => u.id)));
-  } catch (err) {
-    console.error("[UNI-CONTRACT] getRecipients fallback:", err);
-    const users = await db.select({ id: usersTable.id })
-      .from(usersTable)
-      .where(and(inArray(usersTable.role, ADMIN_ROLES), eq(usersTable.isActive, true)));
-    return users.map(u => u.id);
+async function getAdminRecipients(): Promise<number[]> {
+  const users = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(inArray(usersTable.role, ADMIN_ROLES), eq(usersTable.isActive, true)));
+  return users.map(u => u.id);
+}
+
+async function resolveRecipients(adminIds: number[], assignedUserIds: number[] | null | undefined): Promise<number[]> {
+  if (!assignedUserIds || assignedUserIds.length === 0) {
+    return [...adminIds];
   }
+  const assignedActive = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(inArray(usersTable.id, assignedUserIds), eq(usersTable.isActive, true)));
+  return Array.from(new Set([...adminIds, ...assignedActive.map(u => u.id)]));
 }
 
 function buildEmail(subject: string, body: string, actionUrl: string): { subject: string; html: string; text: string } {
@@ -89,6 +73,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       lastWarning7SentAt: universityContractsTable.lastWarning7SentAt,
       lastWarning1SentAt: universityContractsTable.lastWarning1SentAt,
       expiryNoticeSentAt: universityContractsTable.expiryNoticeSentAt,
+      assignedUserIds: universityContractsTable.assignedUserIds,
       universityName: universitiesTable.name,
     })
       .from(universityContractsTable)
@@ -100,9 +85,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
 
     if (rows.length === 0) return;
 
-    const recipientIds = await getRecipients();
-    if (recipientIds.length === 0) return;
-
+    const adminIds = await getAdminRecipients();
     const now = new Date();
 
     for (const row of rows) {
@@ -122,6 +105,9 @@ export async function checkUniversityContractExpiries(): Promise<void> {
           .returning({ id: universityContractsTable.id });
         if (claimed.length === 0) continue;
 
+        const recipientIds = await resolveRecipients(adminIds, row.assignedUserIds as number[] | null);
+        if (recipientIds.length === 0) continue;
+
         const subject = `[FindAndStudy] University contract expired: ${uniName} (${row.country})`;
         const body = `The agreement with ${uniName} (${row.country}) expired on ${expiryStr}.\n\nPlease renew the contract or upload an updated version in EduConsult OS.`;
         await dispatchNotification({
@@ -135,13 +121,15 @@ export async function checkUniversityContractExpiries(): Promise<void> {
           templateVars: { universityName: uniName, country: row.country, expiryDate: expiryStr },
           emailOverride: buildEmail(subject, body, actionUrl),
         });
-        console.log(`[UNI-CONTRACT] Expiry notice sent for contract ${row.id} (${uniName})`);
+        console.log(`[UNI-CONTRACT] Expiry notice sent for contract ${row.id} (${uniName}) → ${recipientIds.length} recipients`);
         continue;
       }
 
-      // Find smallest matching threshold (e.g. 6 days → 7).
-      const ascending = [...THRESHOLDS].sort((a, b) => a.days - b.days);
-      const matched = ascending.find(t => daysLeft <= t.days);
+      // Exact-day trigger: warning fires only when daysLeft equals one of the
+      // target thresholds (30 / 14 / 7 / 1). Hourly checker + ceil-based day
+      // count means the equality holds for ~24h, but the per-threshold
+      // sentAt column ensures one-shot delivery.
+      const matched = THRESHOLDS.find(t => t.days === daysLeft);
       if (!matched) continue;
       if (row[matched.field]) continue;
 
@@ -150,6 +138,9 @@ export async function checkUniversityContractExpiries(): Promise<void> {
         .where(and(eq(universityContractsTable.id, row.id), isNull(universityContractsTable[matched.field])))
         .returning({ id: universityContractsTable.id });
       if (claimed.length === 0) continue;
+
+      const recipientIds = await resolveRecipients(adminIds, row.assignedUserIds as number[] | null);
+      if (recipientIds.length === 0) continue;
 
       const subject = `[FindAndStudy] University contract expiring in ${matched.days} days: ${uniName} (${row.country})`;
       const body = `The agreement with ${uniName} (${row.country}) is set to expire on ${expiryStr} (${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining).\n\nPlease prepare a renewal or contact the university to extend the contract.`;
@@ -164,7 +155,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
         templateVars: { universityName: uniName, country: row.country, expiryDate: expiryStr, daysLeft: String(daysLeft), threshold: String(matched.days) },
         emailOverride: buildEmail(subject, body, actionUrl),
       });
-      console.log(`[UNI-CONTRACT] Notified ${recipientIds.length} for contract ${row.id} (${uniName}) — ${daysLeft}d, threshold ${matched.days}`);
+      console.log(`[UNI-CONTRACT] Notified ${recipientIds.length} for contract ${row.id} (${uniName}) — exactly ${daysLeft}d (threshold ${matched.days})`);
     }
   } catch (err) {
     console.error("[UNI-CONTRACT] Check error:", err);

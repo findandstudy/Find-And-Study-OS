@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { universitiesTable } from "./universities";
@@ -24,6 +24,9 @@ export const universityContractsTable = pgTable("university_contracts", {
   lastWarning1SentAt: timestamp("last_warning_1_sent_at", { withTimezone: true }),
   expiryNoticeSentAt: timestamp("expiry_notice_sent_at", { withTimezone: true }),
   uploadedByUserId: integer("uploaded_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  // User IDs of staff explicitly assigned to this contract / university —
+  // they receive expiry warnings in addition to active admins.
+  assignedUserIds: jsonb("assigned_user_ids").notNull().default([]).$type<number[]>(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

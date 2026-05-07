@@ -1709,6 +1709,117 @@ paths:
               schema:
                 $ref: "#/components/schemas/OverviewStats"
 
+  /university-contracts:
+    get:
+      operationId: listUniversityContracts
+      tags: [universities]
+      summary: List university contracts (admin)
+      parameters:
+        - { name: country, in: query, schema: { type: string } }
+        - { name: universityId, in: query, schema: { type: integer } }
+        - { name: year, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string, enum: [active, expiring_soon, expired, no_dates] } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      responses:
+        "200":
+          description: Page of contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/UniversityContract" }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  hasMore: { type: boolean }
+                required: [data, page, pageSize, hasMore]
+    post:
+      operationId: createUniversityContract
+      tags: [universities]
+      summary: Create university contract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UniversityContractWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/UniversityContract" }
+                required: [data]
+
+  /university-contracts/{id}:
+    get:
+      operationId: getUniversityContract
+      tags: [universities]
+      summary: Get university contract by ID
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Contract
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/UniversityContract" }
+                required: [data]
+    patch:
+      operationId: updateUniversityContract
+      tags: [universities]
+      summary: Update university contract
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UniversityContractWriteBody" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/UniversityContract" }
+                required: [data]
+    delete:
+      operationId: deleteUniversityContract
+      tags: [universities]
+      summary: Soft-delete university contract (move to trash)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+
+  /university-contracts/{id}/file:
+    get:
+      operationId: downloadUniversityContractFile
+      tags: [universities]
+      summary: Download stored contract file
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Binary contract file (PDF or DOCX)
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "404": { description: No file attached or contract not found }
+
 components:
   schemas:
     HealthStatus:
@@ -3382,6 +3493,63 @@ components:
       required:
         - data
         - meta
+
+    UniversityContract:
+      type: object
+      properties:
+        id: { type: integer }
+        universityId: { type: integer }
+        destinationId: { type: integer, nullable: true }
+        country: { type: string }
+        year: { type: integer, nullable: true }
+        effectiveDate: { type: string, format: date-time, nullable: true }
+        expiryDate: { type: string, format: date-time, nullable: true }
+        fileObjectKey: { type: string, nullable: true }
+        fileName: { type: string, nullable: true }
+        fileMime: { type: string, nullable: true }
+        fileSize: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        uploadedByUserId: { type: integer, nullable: true }
+        assignedUserIds:
+          type: array
+          items: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [active, expiring_soon, expired, no_dates]
+        universityName: { type: string, nullable: true }
+        universityCity: { type: string, nullable: true }
+        universityLogoUrl: { type: string, nullable: true }
+        destinationName: { type: string, nullable: true }
+        destinationCountry: { type: string, nullable: true }
+        destinationFlagEmoji: { type: string, nullable: true }
+      required: [id, universityId, country, status]
+
+    UniversityContractWriteBody:
+      type: object
+      properties:
+        universityId: { type: integer }
+        destinationId: { type: integer, nullable: true }
+        year: { type: integer, nullable: true }
+        effectiveDate: { type: string, format: date, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true }
+        notes: { type: string, nullable: true }
+        fileObjectKey:
+          type: string
+          nullable: true
+          description: "Must match /objects/<uploadId>"
+        fileName: { type: string, nullable: true }
+        fileMime:
+          type: string
+          nullable: true
+          description: "PDF or DOCX MIME only"
+        fileSize: { type: integer, nullable: true }
+        assignedUserIds:
+          type: array
+          items: { type: integer }
+          description: "Active staff that should also receive expiry warnings"
+      required: [universityId]
 
     OverviewStats:
       type: object

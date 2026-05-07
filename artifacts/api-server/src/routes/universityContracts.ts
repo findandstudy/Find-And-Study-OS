@@ -48,6 +48,19 @@ function validateContractFile(mime: unknown, name: unknown): void {
   }
 }
 
+function parseAssignedUserIds(input: unknown): number[] | undefined {
+  if (input === undefined) return undefined;
+  if (input === null) return [];
+  if (!Array.isArray(input)) throw new InvalidInputError("assignedUserIds must be an array of user IDs");
+  const out: number[] = [];
+  for (const v of input) {
+    const n = typeof v === "number" ? v : parseInt(String(v), 10);
+    if (!Number.isInteger(n) || n <= 0) throw new InvalidInputError("assignedUserIds entries must be positive integers");
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 function sanitizeUploadedKey(input: unknown): string | null {
   if (input === null || input === undefined || input === "") return null;
   if (typeof input !== "string") throw new InvalidInputError("Invalid fileObjectKey");
@@ -133,12 +146,17 @@ router.get("/university-contracts", requireAuth, requirePermission("university_c
       uploadedByUserId: universityContractsTable.uploadedByUserId,
       createdAt: universityContractsTable.createdAt,
       updatedAt: universityContractsTable.updatedAt,
+      assignedUserIds: universityContractsTable.assignedUserIds,
       universityName: universitiesTable.name,
       universityCity: universitiesTable.city,
       universityLogoUrl: universitiesTable.logoUrl,
+      destinationName: destinationsTable.name,
+      destinationCountry: destinationsTable.country,
+      destinationFlagEmoji: destinationsTable.flagEmoji,
     })
       .from(universityContractsTable)
       .leftJoin(universitiesTable, eq(universitiesTable.id, universityContractsTable.universityId))
+      .leftJoin(destinationsTable, eq(destinationsTable.id, universityContractsTable.destinationId))
       .where(where)
       .orderBy(desc(universityContractsTable.createdAt))
       .limit(pageSize + 1)
@@ -208,6 +226,8 @@ router.post("/university-contracts", requireAuth, requirePermission("university_
     const fileObjectKey = sanitizeUploadedKey(body.fileObjectKey);
     if (fileObjectKey) validateContractFile(body.fileMime, body.fileName);
 
+    const assignedUserIds = parseAssignedUserIds(body.assignedUserIds) ?? [];
+
     const [row] = await db.insert(universityContractsTable).values({
       universityId,
       destinationId,
@@ -221,6 +241,7 @@ router.post("/university-contracts", requireAuth, requirePermission("university_
       fileSize: Number.isInteger(body.fileSize) ? body.fileSize : null,
       notes: body.notes ? String(body.notes).slice(0, 5000) : null,
       uploadedByUserId: (req as any).user?.id ?? null,
+      assignedUserIds,
     }).returning();
 
     await writeAudit({
@@ -289,6 +310,9 @@ router.patch("/university-contracts/:id", requireAuth, requirePermission("univer
       updates.fileMime = body.fileMime ? String(body.fileMime).slice(0, 200) : null;
       updates.fileSize = Number.isInteger(body.fileSize) ? body.fileSize : null;
     }
+
+    const assignedUserIds = parseAssignedUserIds(body.assignedUserIds);
+    if (assignedUserIds !== undefined) updates.assignedUserIds = assignedUserIds;
 
     if (resetWarnings) {
       updates.lastWarning30SentAt = null;
