@@ -116,16 +116,16 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
           { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contract_templates.view')) ? [
-            { title: "Sözleşme Şablonları", icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' },
+            { title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' },
           ] : []),
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contracts.view')) ? [
-            { title: "Sözleşmeler", icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' },
+            { title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' },
           ] : []),
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('university_contracts.view')) ? [
-            { title: "Üniversite Sözleşmeleri", icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' },
+            { title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' },
           ] : []),
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('self_fill_links.view')) ? [
-            { title: "Self-Fill Bağlantıları", icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' },
+            { title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' },
           ] : []),
           { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
         ]

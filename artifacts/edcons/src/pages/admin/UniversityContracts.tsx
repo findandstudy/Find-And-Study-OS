@@ -20,6 +20,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   GraduationCap, Plus, Edit, Trash2, Loader2, Save, Search,
   Upload, Download, FileText, AlertTriangle, AlertOctagon, CheckCircle2,
@@ -86,11 +87,16 @@ const emptyForm: FormState = {
 
 type StaffUser = { id: number; firstName: string | null; lastName: string | null; email: string | null; role: string };
 
-const STATUS_LABELS: Record<Status, { label: string; tone: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
-  active: { label: "Aktif", tone: "outline", icon: CheckCircle2 },
-  expiring_soon: { label: "Yakında sona eriyor", tone: "secondary", icon: AlertTriangle },
-  expired: { label: "Sona erdi", tone: "destructive", icon: AlertOctagon },
-  no_dates: { label: "Tarih yok", tone: "outline", icon: FileText },
+const STATUS_META: Record<Status, { tone: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
+  active: { tone: "outline", icon: CheckCircle2 },
+  expiring_soon: { tone: "secondary", icon: AlertTriangle },
+  expired: { tone: "destructive", icon: AlertOctagon },
+  no_dates: { tone: "outline", icon: FileText },
+};
+
+const LANG_TO_LOCALE: Record<string, string> = {
+  tr: "tr-TR", en: "en-US", ar: "ar", es: "es-ES", fa: "fa-IR",
+  fr: "fr-FR", hi: "hi-IN", id: "id-ID", ru: "ru-RU", zh: "zh-CN",
 };
 
 const ALLOWED_CONTRACT_EXTS = /\.(pdf|docx|doc)$/i;
@@ -100,9 +106,9 @@ const ALLOWED_CONTRACT_MIMES = new Set([
   "application/msword",
 ]);
 
-function formatDate(d: string | null): string {
+function formatDate(d: string | null, locale: string = "en-US"): string {
   if (!d) return "-";
-  try { return new Date(d).toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" }); }
+  try { return new Date(d).toLocaleDateString(locale, { day: "2-digit", month: "long", year: "numeric" }); }
   catch { return "-"; }
 }
 
@@ -117,6 +123,14 @@ interface Props { openId?: number }
 
 export default function UniversityContractsPage({ openId }: Props = {}) {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
+  const locale = LANG_TO_LOCALE[lang] || "en-US";
+  const STATUS_LABELS: Record<Status, { label: string; tone: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
+    active: { label: t("universityContracts.statusActive"), tone: STATUS_META.active.tone, icon: STATUS_META.active.icon },
+    expiring_soon: { label: t("universityContracts.statusExpiringSoon"), tone: STATUS_META.expiring_soon.tone, icon: STATUS_META.expiring_soon.icon },
+    expired: { label: t("universityContracts.statusExpired"), tone: STATUS_META.expired.tone, icon: STATUS_META.expired.icon },
+    no_dates: { label: t("universityContracts.statusNoDates"), tone: STATUS_META.no_dates.tone, icon: STATUS_META.no_dates.icon },
+  };
   const [rows, setRows] = useState<Contract[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]);
@@ -159,7 +173,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       const res: any = await customFetch(`/api/university-contracts?${params.toString()}`);
       setRows(res.data || []);
     } catch (err: any) {
-      toast({ title: "Yükleme hatası", description: err.message, variant: "destructive" });
+      toast({ title: t("universityContracts.loadError"), description: err.message, variant: "destructive" });
     }
     setLoading(false);
   }
@@ -204,7 +218,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         const res: any = await customFetch(`/api/university-contracts/${openId}`);
         if (res?.data) openEdit(res.data as Contract);
       } catch (err: any) {
-        toast({ title: "Sözleşme bulunamadı", description: err.message, variant: "destructive" });
+        toast({ title: t("universityContracts.notFoundTitle"), description: err.message, variant: "destructive" });
       }
     })();
     // eslint-disable-next-line
@@ -272,7 +286,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
 
   async function uploadFile(file: File) {
     if (!ALLOWED_CONTRACT_MIMES.has(file.type) && !ALLOWED_CONTRACT_EXTS.test(file.name)) {
-      toast({ title: "Dosya türü desteklenmiyor", description: "Yalnızca PDF veya DOCX dosyaları yüklenebilir.", variant: "destructive" });
+      toast({ title: t("universityContracts.fileTypeUnsupported"), description: t("universityContracts.fileTypeUnsupportedDesc"), variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -281,9 +295,9 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
-      if (!urlRes.uploadURL) throw new Error("Yükleme bağlantısı alınamadı");
+      if (!urlRes.uploadURL) throw new Error(t("universityContracts.uploadLinkFailed"));
       const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      if (!putRes.ok) throw new Error("Yükleme başarısız");
+      if (!putRes.ok) throw new Error(t("universityContracts.uploadFailed"));
       setForm(f => ({
         ...f,
         fileObjectKey: urlRes.objectPath,
@@ -291,16 +305,16 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         fileMime: file.type || "application/octet-stream",
         fileSize: file.size,
       }));
-      toast({ title: "Dosya yüklendi" });
+      toast({ title: t("universityContracts.uploadSucceeded") });
     } catch (err: any) {
-      toast({ title: "Yükleme başarısız", description: err.message, variant: "destructive" });
+      toast({ title: t("universityContracts.uploadFailed"), description: err.message, variant: "destructive" });
     } finally {
       setUploading(false);
     }
   }
 
   async function save() {
-    if (!form.universityId) { toast({ title: "Üniversite seçin", variant: "destructive" }); return; }
+    if (!form.universityId) { toast({ title: t("universityContracts.selectUniversityRequired"), variant: "destructive" }); return; }
     setSaving(true);
     try {
       const body: any = {
@@ -322,12 +336,12 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         await customFetch(`/api/university-contracts/${editing.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
-        toast({ title: "Sözleşme güncellendi" });
+        toast({ title: t("universityContracts.contractUpdated") });
       } else {
         await customFetch(`/api/university-contracts`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
-        toast({ title: "Sözleşme oluşturuldu" });
+        toast({ title: t("universityContracts.contractCreated") });
       }
 
       // Persist per-university assigned staff if changed.
@@ -341,13 +355,13 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
             body: JSON.stringify({ assignedStaffIds: a }),
           });
         } catch (err: any) {
-          toast({ title: "Üniversite personel listesi güncellenemedi", description: err.message, variant: "destructive" });
+          toast({ title: t("universityContracts.uniStaffUpdateFailed"), description: err.message, variant: "destructive" });
         }
       }
       setShowDialog(false);
       await load();
     } catch (err: any) {
-      toast({ title: "Kayıt başarısız", description: err.message, variant: "destructive" });
+      toast({ title: t("universityContracts.saveFailed"), description: err.message, variant: "destructive" });
     }
     setSaving(false);
   }
@@ -357,18 +371,18 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     const id = confirmDelete.id;
     try {
       await customFetch(`/api/university-contracts/${id}`, { method: "DELETE" });
-      toast({ title: "Çöpe taşındı", description: "Sözleşme çöpe taşındı ve listeden kaldırıldı." });
+      toast({ title: t("universityContracts.trashDone"), description: t("universityContracts.trashDoneDesc") });
       setConfirmDelete(null);
       await load();
     } catch (err: any) {
-      toast({ title: "Silme hatası", description: err.message, variant: "destructive" });
+      toast({ title: t("universityContracts.deleteFailed"), description: err.message, variant: "destructive" });
     }
   }
 
   async function download(c: Contract) {
     try {
       const res = await fetch(`/api/university-contracts/${c.id}/file`, { credentials: "include" });
-      if (!res.ok) throw new Error("İndirme başarısız");
+      if (!res.ok) throw new Error(t("universityContracts.downloadFailed"));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -379,7 +393,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      toast({ title: "İndirilemedi", description: err.message, variant: "destructive" });
+      toast({ title: t("universityContracts.downloadFailed"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -410,66 +424,66 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <GraduationCap className="w-6 h-6" /> Üniversite Sözleşmeleri
+            <GraduationCap className="w-6 h-6" /> {t("universityContracts.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Üniversitelerle yapılan sözleşmeleri yönetin. Sona erme tarihinden 30, 14, 7 ve 1 gün önce ve bittiği gün otomatik bildirim gönderilir.
+            {t("universityContracts.subtitle")}
           </p>
         </div>
-        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> Yeni sözleşme</Button>
+        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> {t("universityContracts.newContract")}</Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Toplam</div><div className="text-2xl font-bold mt-1">{stats.total}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Aktif</div><div className="text-2xl font-bold mt-1 text-green-600">{stats.active}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Yakında sona eriyor</div><div className="text-2xl font-bold mt-1 text-amber-600">{stats.expiring}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Sona erdi</div><div className="text-2xl font-bold mt-1 text-red-600">{stats.expired}</div></Card>
-        <Card className="p-4"><div className="text-xs text-muted-foreground">Tarih yok</div><div className="text-2xl font-bold mt-1 text-muted-foreground">{stats.no_dates}</div></Card>
+        <Card className="p-4"><div className="text-xs text-muted-foreground">{t("universityContracts.statTotal")}</div><div className="text-2xl font-bold mt-1">{stats.total}</div></Card>
+        <Card className="p-4"><div className="text-xs text-muted-foreground">{t("universityContracts.statActive")}</div><div className="text-2xl font-bold mt-1 text-green-600">{stats.active}</div></Card>
+        <Card className="p-4"><div className="text-xs text-muted-foreground">{t("universityContracts.statExpiring")}</div><div className="text-2xl font-bold mt-1 text-amber-600">{stats.expiring}</div></Card>
+        <Card className="p-4"><div className="text-xs text-muted-foreground">{t("universityContracts.statExpired")}</div><div className="text-2xl font-bold mt-1 text-red-600">{stats.expired}</div></Card>
+        <Card className="p-4"><div className="text-xs text-muted-foreground">{t("universityContracts.statNoDates")}</div><div className="text-2xl font-bold mt-1 text-muted-foreground">{stats.no_dates}</div></Card>
       </div>
 
       <Card className="p-4 flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[200px]">
-          <Label className="text-xs">Ara</Label>
+          <Label className="text-xs">{t("universityContracts.search")}</Label>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-2 top-2.5 text-muted-foreground" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Üniversite, ülke, dosya..." className="pl-8" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("universityContracts.searchPlaceholder")} className="pl-8" />
           </div>
         </div>
         <div className="min-w-[220px]">
-          <Label className="text-xs">Üniversite</Label>
+          <Label className="text-xs">{t("universityContracts.university")}</Label>
           <Select value={filterUniversity} onValueChange={setFilterUniversity}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-[320px]">
-              <SelectItem value="all">Tümü</SelectItem>
+              <SelectItem value="all">{t("universityContracts.all")}</SelectItem>
               {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="min-w-[180px]">
-          <Label className="text-xs">Ülke</Label>
+          <Label className="text-xs">{t("universityContracts.country")}</Label>
           <Select value={filterCountry} onValueChange={setFilterCountry}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
+              <SelectItem value="all">{t("universityContracts.all")}</SelectItem>
               {countries.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="min-w-[180px]">
-          <Label className="text-xs">Durum</Label>
+          <Label className="text-xs">{t("universityContracts.status")}</Label>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
-              <SelectItem value="active">Aktif</SelectItem>
-              <SelectItem value="expiring_soon">Yakında sona eriyor</SelectItem>
-              <SelectItem value="expired">Sona erdi</SelectItem>
-              <SelectItem value="no_dates">Tarih yok</SelectItem>
+              <SelectItem value="all">{t("universityContracts.all")}</SelectItem>
+              <SelectItem value="active">{t("universityContracts.statusActive")}</SelectItem>
+              <SelectItem value="expiring_soon">{t("universityContracts.statusExpiringSoon")}</SelectItem>
+              <SelectItem value="expired">{t("universityContracts.statusExpired")}</SelectItem>
+              <SelectItem value="no_dates">{t("universityContracts.statusNoDates")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="w-[120px]">
-          <Label className="text-xs">Yıl</Label>
+          <Label className="text-xs">{t("universityContracts.year")}</Label>
           <Input type="number" value={filterYear} onChange={e => setFilterYear(e.target.value)} placeholder="2025" />
         </div>
       </Card>
@@ -478,21 +492,21 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         {loading ? (
           <div className="p-12 text-center text-muted-foreground"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></div>
         ) : filteredRows.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Sözleşme bulunamadı.</div>
+          <div className="p-12 text-center text-muted-foreground">{t("universityContracts.emptyList")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="text-left px-4 py-3">Üniversite</th>
-                  <th className="text-left px-4 py-3">Destinasyon</th>
-                  <th className="text-left px-4 py-3">Yıl</th>
-                  <th className="text-left px-4 py-3">Geçerlilik</th>
-                  <th className="text-left px-4 py-3">Bitiş</th>
-                  <th className="text-left px-4 py-3">Kalan gün</th>
-                  <th className="text-left px-4 py-3">Durum</th>
-                  <th className="text-left px-4 py-3">Dosya</th>
-                  <th className="text-right px-4 py-3">İşlemler</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colUniversity")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colDestination")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colYear")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colEffective")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colExpiry")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colDaysLeft")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colStatus")}</th>
+                  <th className="text-left px-4 py-3">{t("universityContracts.colFile")}</th>
+                  <th className="text-right px-4 py-3">{t("universityContracts.colActions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -506,13 +520,14 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   const dest = c.destinationName
                     ? { name: c.destinationName, flagEmoji: c.destinationFlagEmoji || null }
                     : destByCountry[c.country];
-                  const tooltipText = dl === null ? "No expiry date set" :
-                    dl < 0 ? `Expired ${Math.abs(dl)} day${Math.abs(dl) === 1 ? "" : "s"} ago` :
-                    `Expires on ${formatDate(c.expiryDate)}`;
+                  const tooltipText = dl === null ? t("universityContracts.tooltipNoExpiry") :
+                    dl < 0 ? t(Math.abs(dl) === 1 ? "universityContracts.tooltipExpiredAgo" : "universityContracts.tooltipExpiredAgoPlural", { n: Math.abs(dl) }) :
+                    t("universityContracts.tooltipExpiresOn", { date: formatDate(c.expiryDate, locale) });
+                  const daysSuffix = t("universityContracts.daysSuffix");
                   const daysCellText = dl === null ? "-" :
-                    dl < 0 ? `−${Math.abs(dl)} g` :
-                    dl === 0 ? "Bugün" :
-                    `${dl} g`;
+                    dl < 0 ? `−${Math.abs(dl)} ${daysSuffix}` :
+                    dl === 0 ? t("universityContracts.today") :
+                    `${dl} ${daysSuffix}`;
                   const daysCellTone = dl === null ? "text-muted-foreground" :
                     dl < 0 ? "text-red-600 font-semibold" :
                     dl <= 7 ? "text-red-600 font-semibold" :
@@ -539,11 +554,11 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                         </span>
                       </td>
                       <td className="px-4 py-3">{c.year ?? "-"}</td>
-                      <td className="px-4 py-3">{formatDate(c.effectiveDate)}</td>
+                      <td className="px-4 py-3">{formatDate(c.effectiveDate, locale)}</td>
                       <td className="px-4 py-3">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2">{formatDate(c.expiryDate)}</span>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2">{formatDate(c.expiryDate, locale)}</span>
                           </TooltipTrigger>
                           <TooltipContent>{tooltipText}</TooltipContent>
                         </Tooltip>
@@ -562,7 +577,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                       <td className="px-4 py-3">
                         {c.fileObjectKey ? (
                           <Button variant="ghost" size="sm" onClick={() => download(c)}>
-                            <Download className="w-4 h-4 mr-1" /> {c.fileName ? (c.fileName.length > 24 ? c.fileName.slice(0, 24) + "…" : c.fileName) : "İndir"}
+                            <Download className="w-4 h-4 mr-1" /> {c.fileName ? (c.fileName.length > 24 ? c.fileName.slice(0, 24) + "…" : c.fileName) : t("universityContracts.download")}
                           </Button>
                         ) : <span className="text-muted-foreground">-</span>}
                       </td>
@@ -582,13 +597,13 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? "Sözleşmeyi düzenle" : "Yeni sözleşme"}</DialogTitle>
+            <DialogTitle>{editing ? t("universityContracts.editContract") : t("universityContracts.newContract")}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="col-span-2">
-              <Label>Üniversite *</Label>
+              <Label>{t("universityContracts.university")} *</Label>
               <Select value={form.universityId} onValueChange={onUniversityChange}>
-                <SelectTrigger><SelectValue placeholder="Seçin..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("universityContracts.selectUniversity")} /></SelectTrigger>
                 <SelectContent className="max-h-[320px]">
                   {universities.map(u => (
                     <SelectItem key={u.id} value={String(u.id)}>{u.name} — {u.country}{u.city ? `, ${u.city}` : ""}</SelectItem>
@@ -597,9 +612,9 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               </Select>
             </div>
             <div className="col-span-2">
-              <Label>Destinasyon (otomatik doldurulur)</Label>
+              <Label>{t("universityContracts.destinationAuto")}</Label>
               <Select value={form.destinationId} onValueChange={v => setForm(f => ({ ...f, destinationId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Üniversite seçildiğinde otomatik atanır" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("universityContracts.destinationAutoPlaceholder")} /></SelectTrigger>
                 <SelectContent className="max-h-[320px]">
                   {destinations.map(d => (
                     <SelectItem key={d.id} value={String(d.id)}>
@@ -613,32 +628,32 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               </Select>
             </div>
             <div>
-              <Label>Yıl</Label>
+              <Label>{t("universityContracts.year")}</Label>
               <Input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} placeholder="2025" />
             </div>
             <div></div>
             <div>
-              <Label>Geçerlilik tarihi</Label>
+              <Label>{t("universityContracts.effectiveDate")}</Label>
               <Input type="date" value={form.effectiveDate} onChange={e => setForm(f => ({ ...f, effectiveDate: e.target.value }))} />
             </div>
             <div>
-              <Label>Bitiş tarihi</Label>
+              <Label>{t("universityContracts.expiryDate")}</Label>
               <Input type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />
             </div>
             <div className="col-span-2">
-              <Label>Notlar</Label>
+              <Label>{t("universityContracts.notes")}</Label>
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} />
             </div>
             <div className="col-span-2">
-              <Label>Üniversiteden sorumlu personel</Label>
+              <Label>{t("universityContracts.uniStaffLabel")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Bu üniversiteyle ilgili tüm sözleşme uyarıları aşağıdaki personele de gider. Liste, üniversite kaydında saklanır.
+                {t("universityContracts.uniStaffHelp")}
               </p>
               <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
                 {!form.universityId ? (
-                  <div className="text-xs text-muted-foreground">Önce üniversite seçin.</div>
+                  <div className="text-xs text-muted-foreground">{t("universityContracts.selectUniFirst")}</div>
                 ) : staffUsers.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">Personel bulunamadı.</div>
+                  <div className="text-xs text-muted-foreground">{t("universityContracts.noStaffFound")}</div>
                 ) : staffUsers.map(u => {
                   const checked = form.universityAssignedStaffIds.includes(u.id);
                   const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
@@ -662,13 +677,13 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               </div>
             </div>
             <div className="col-span-2">
-              <Label>Bu sözleşmeye özel ek personel (opsiyonel)</Label>
+              <Label>{t("universityContracts.contractStaffLabel")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Aktif yöneticiler ve üniversiteden sorumlu personel her durumda bildirim alır. Burada yalnızca bu sözleşme için ek kişi ekleyebilirsiniz.
+                {t("universityContracts.contractStaffHelp")}
               </p>
               <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
                 {staffUsers.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">Personel bulunamadı.</div>
+                  <div className="text-xs text-muted-foreground">{t("universityContracts.noStaffFound")}</div>
                 ) : staffUsers.map(u => {
                   const checked = form.assignedUserIds.includes(u.id);
                   const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
@@ -692,7 +707,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               </div>
             </div>
             <div className="col-span-2">
-              <Label>Dosya (PDF veya DOCX)</Label>
+              <Label>{t("universityContracts.fileLabel")}</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -703,18 +718,18 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               <div className="flex items-center gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                   {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
-                  {form.fileObjectKey ? "Dosyayı değiştir" : "Dosya yükle"}
+                  {form.fileObjectKey ? t("universityContracts.fileReplace") : t("universityContracts.fileUpload")}
                 </Button>
                 {form.fileName && <span className="text-sm text-muted-foreground">{form.fileName}</span>}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Yalnızca PDF veya DOCX dosyaları kabul edilir.</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("universityContracts.fileAcceptedTypes")}</p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>İptal</Button>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>{t("universityContracts.cancel")}</Button>
             <Button onClick={save} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Kaydet
+              {t("universityContracts.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -723,14 +738,14 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sözleşmeyi çöpe taşı?</AlertDialogTitle>
+            <AlertDialogTitle>{t("universityContracts.trashTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDelete ? `${confirmDelete.universityName || "Sözleşme"} kaydı çöpe taşınacak ve listeden kaldırılacak. Bu işlem geri alınabilir.` : ""}
+              {confirmDelete ? t("universityContracts.trashDesc", { name: confirmDelete.universityName || t("universityContracts.colUniversity") }) : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={performDelete} className="bg-red-600 hover:bg-red-700">Çöpe taşı</AlertDialogAction>
+            <AlertDialogCancel>{t("universityContracts.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={performDelete} className="bg-red-600 hover:bg-red-700">{t("universityContracts.trashAction")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
