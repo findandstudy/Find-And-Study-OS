@@ -11,7 +11,9 @@ const router: IRouter = Router();
 const DEFAULT_EXPIRY_DAYS = 14;
 
 async function pickTemplate(language: string, entityType: string) {
-  // Prefer exact match, latest version. Fall back to active EN+company.
+  // Strict match: only the exact (language, entityType) pair, latest version.
+  // No silent language fallback — caller must surface the 404 to the operator
+  // so they can either pick another language or upload the missing template.
   const exact = await db.select().from(contractTemplatesTable)
     .where(and(
       isNull(contractTemplatesTable.deletedAt),
@@ -21,16 +23,13 @@ async function pickTemplate(language: string, entityType: string) {
     ))
     .orderBy(desc(contractTemplatesTable.version))
     .limit(1);
-  if (exact[0]) return exact[0];
-  const fallbackLang = await db.select().from(contractTemplatesTable)
-    .where(and(
-      isNull(contractTemplatesTable.deletedAt),
-      eq(contractTemplatesTable.isActive, true),
-      eq(contractTemplatesTable.entityType, entityType),
-    ))
-    .orderBy(desc(contractTemplatesTable.version))
-    .limit(1);
-  return fallbackLang[0] || null;
+  return exact[0] || null;
+}
+
+async function loadTemplateById(id: number) {
+  const [row] = await db.select().from(contractTemplatesTable)
+    .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true)));
+  return row || null;
 }
 
 // Mode-aware gate: self-fill listings honor self_fill_links.view, admin-driven listings honor contracts.view.
@@ -105,7 +104,7 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
 
 router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
   try {
-    const { agentId, language: requestedLang, expiryDays } = req.body || {};
+    const { agentId, language: requestedLang, expiryDays, templateId: explicitTemplateId } = req.body || {};
     const aId = parseInt(String(agentId), 10);
     if (!aId) { res.status(400).json({ error: "agentId is required" }); return; }
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, aId));
@@ -113,8 +112,16 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     if (!agent.email) { res.status(400).json({ error: "Agent has no email on file" }); return; }
     const lang = (requestedLang && typeof requestedLang === "string") ? requestedLang : (agent.preferredContractLanguage || "en");
     const entityType = agent.entityType === "individual" ? "individual" : "company";
-    const tpl = await pickTemplate(lang, entityType);
-    if (!tpl) { res.status(404).json({ error: `No active template found for language=${lang}, entityType=${entityType}` }); return; }
+    let tpl = null as Awaited<ReturnType<typeof pickTemplate>>;
+    if (explicitTemplateId) {
+      const tid = parseInt(String(explicitTemplateId), 10);
+      if (!tid) { res.status(400).json({ error: "Invalid templateId" }); return; }
+      tpl = await loadTemplateById(tid);
+      if (!tpl) { res.status(404).json({ error: "Selected template not found or inactive" }); return; }
+    } else {
+      tpl = await pickTemplate(lang, entityType);
+      if (!tpl) { res.status(404).json({ error: `No active template found for language=${lang}, entityType=${entityType}` }); return; }
+    }
 
     const { rawToken, tokenHash } = createSigningToken();
     const days = Number.isInteger(expiryDays) && expiryDays > 0 && expiryDays <= 90 ? expiryDays : DEFAULT_EXPIRY_DAYS;

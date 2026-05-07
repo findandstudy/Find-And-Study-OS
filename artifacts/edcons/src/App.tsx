@@ -448,6 +448,10 @@ function Router() {
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
   const isPublicSignPath = location.startsWith("/sign/");
 
+  // All hooks MUST be declared above any conditional return so hook order stays
+  // stable across navigations between /sign/* and other branches.
+  const prevBranch = useRef<string | null>(null);
+
   if (isPublicSignPath) {
     const token = location.slice("/sign/".length).split("/")[0] || "";
     return (
@@ -459,7 +463,6 @@ function Router() {
     );
   }
 
-  const prevBranch = useRef<string | null>(null);
   const branch = isStaffAdminPath ? "staff" : isStudentPath ? "student" : isAgentPath ? "agent" : "public";
   if (prevBranch.current !== branch) {
     console.log("[Router] branch change:", prevBranch.current, "→", branch, "location=", location);

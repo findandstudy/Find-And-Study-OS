@@ -123,6 +123,38 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
   }
 });
 
+// Render an unsigned PDF preview so signers can review the document before
+// drawing their signature. Same content as /preview but as a downloadable PDF.
+router.get("/public/sign/:token/preview-pdf", signLimiter, async (req, res): Promise<void> => {
+  try {
+    const r = await resolveByToken(req.params.token);
+    if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
+    if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
+    const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
+      signerEmail: r.session.signerEmail,
+      signerName: r.session.signerName || undefined,
+    });
+    const html = renderTemplate(r.template.bodyHtml, ctx);
+    const { buildSignedPdf } = await import("../lib/contractPdf");
+    const { pdfBytes } = await buildSignedPdf({
+      templateName: r.template.name,
+      bodyHtml: html,
+      signerEmail: r.session.signerEmail,
+      signerName: r.session.signerName,
+      signerIp: req.ip,
+      signerUserAgent: req.headers["user-agent"] || null,
+      signedAt: new Date(),
+      signatureImagePngBase64: null,
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="contract-preview.pdf"`);
+    res.end(Buffer.from(pdfBytes));
+  } catch (err) {
+    console.error("[public-sign] preview-pdf:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to render preview PDF" });
+  }
+});
+
 router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise<void> => {
   try {
     const r = await resolveByToken(req.params.token);

@@ -173,19 +173,23 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
   drawText(`Email: ${params.signerEmail}`, { size: 10, spaceAfter: 2 });
   drawText(`Date: ${params.signedAt.toISOString()}`, { size: 10, spaceAfter: 4 });
 
-  // Build evidence hash from signer-stable fields.
-  const evidenceInput = [
-    params.templateName,
-    params.signerEmail,
-    params.signerName || "",
-    params.signerIp || "",
-    params.signerUserAgent || "",
-    params.signedAt.toISOString(),
-    (params.signatureImagePngBase64 || "").slice(0, 4096),
-  ].join("|");
-  const evidenceHash = crypto.createHash("sha256").update(evidenceInput).digest("hex");
+  // Two-pass evidence hash:
+  //   pass 1 — render the contract pages (without an evidence page), serialize
+  //   to bytes, and compute sha256(contentBytes || signerEmail || signerName
+  //   || signedAtIso). This makes the hash bind tamper-evidently to the actual
+  //   signed PDF content plus the signer identity + timestamp.
+  //   pass 2 — append a human-readable evidence page that prints the hash.
+  const contentBytes = await pdf.save();
+  const hasher = crypto.createHash("sha256");
+  hasher.update(Buffer.from(contentBytes));
+  hasher.update("|");
+  hasher.update(params.signerEmail);
+  hasher.update("|");
+  hasher.update(params.signerName || "");
+  hasher.update("|");
+  hasher.update(params.signedAt.toISOString());
+  const evidenceHash = hasher.digest("hex");
 
-  // Evidence page
   page = pdf.addPage([pageWidth, pageHeight]);
   cursorY = pageHeight - margin;
   drawText("Evidence / Delil Sayfası", { size: 16, bold: true, spaceAfter: 14 });
@@ -197,7 +201,7 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
   drawText(`User agent: ${params.signerUserAgent || "-"}`, { size: 10, spaceAfter: 2 });
   drawText(`Signed at (UTC): ${params.signedAt.toISOString()}`, { size: 10, spaceAfter: 2 });
   drawText(`Template: ${params.templateName}`, { size: 10, spaceAfter: 8 });
-  drawText("Evidence hash (SHA-256):", { size: 10, bold: true, spaceAfter: 2 });
+  drawText("Evidence hash (SHA-256 of signed PDF content + signer + timestamp):", { size: 10, bold: true, spaceAfter: 2 });
   drawText(evidenceHash, { size: 9, spaceAfter: 2 });
 
   const pdfBytes = await pdf.save();
