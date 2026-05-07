@@ -57,15 +57,15 @@ export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
           <AlertTriangle className="w-4 h-4 text-amber-600" />
         </div>
         <div>
-          <h3 className="font-semibold text-foreground">Kabul Mektubu Süreleri</h3>
-          <p className="text-xs text-muted-foreground">Yaklaşan geçerlilik tarihleri</p>
+          <h3 className="font-semibold text-foreground">Offer Letter Deadlines</h3>
+          <p className="text-xs text-muted-foreground">Upcoming expiry dates</p>
         </div>
       </div>
 
       {isLoading ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Yükleniyor...</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Loading...</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Yaklaşan kabul mektubu son tarihi yok.</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">No upcoming offer letter deadlines.</p>
       ) : (
         <div className="space-y-2 max-h-[320px] overflow-y-auto">
           {rows.map(r => {
@@ -77,7 +77,7 @@ export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground truncate">
-                        {r.universityName || "Üniversite"}
+                        {r.universityName || "University"}
                         {r.programName ? ` · ${r.programName}` : ""}
                       </p>
                       {!hideStudent && studentName && (
@@ -90,14 +90,14 @@ export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
                         {validUntilDate && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {validUntilDate.toLocaleDateString("tr-TR")}
+                            {validUntilDate.toLocaleDateString("en-US")}
                           </span>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end shrink-0">
                       <Badge className={`text-[10px] px-1.5 py-0 border-0 ${urgencyClass(r.daysLeft)}`}>
-                        {r.daysLeft === null ? "—" : r.daysLeft <= 0 ? "Süresi doldu" : `${r.daysLeft} gün`}
+                        {r.daysLeft === null ? "—" : r.daysLeft <= 0 ? "Expired" : `${r.daysLeft} days`}
                       </Badge>
                       <ChevronRight className="w-3 h-3 text-muted-foreground mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
