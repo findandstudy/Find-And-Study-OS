@@ -185,21 +185,34 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
   useEffect(() => { loadMeta(); }, []);
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterCountry, filterUniversity, filterStatus, filterYear]);
 
-  // Deep-link: open dialog for /admin/university-contracts/:id
+  // Deep-link: open dialog for /admin/university-contracts/:id.
+  // Prefer the loaded list (avoids extra round-trip); otherwise fall
+  // back to a direct fetch so notification links always open the
+  // intended record even when it isn't on the current page.
   useEffect(() => {
     if (!openId || handledOpenIdRef.current === openId) return;
-    if (rows.length === 0) return;
-    const c = rows.find(r => r.id === openId);
-    if (c) {
+    const inList = rows.find(r => r.id === openId);
+    if (inList) {
       handledOpenIdRef.current = openId;
-      openEdit(c);
+      openEdit(inList);
+      return;
     }
+    if (loading) return;
+    handledOpenIdRef.current = openId;
+    (async () => {
+      try {
+        const res: any = await customFetch(`/api/university-contracts/${openId}`);
+        if (res?.data) openEdit(res.data as Contract);
+      } catch (err: any) {
+        toast({ title: "Sözleşme bulunamadı", description: err.message, variant: "destructive" });
+      }
+    })();
     // eslint-disable-next-line
-  }, [openId, rows]);
+  }, [openId, rows, loading]);
 
   async function fetchUniStaffIds(uniId: number): Promise<number[]> {
     try {
-      const u: any = await customFetch(`/api/universities/${uniId}`);
+      const u: any = await customFetch(`/api/universities/${uniId}/assigned-staff`);
       return Array.isArray(u?.assignedStaffIds) ? u.assignedStaffIds : [];
     } catch { return []; }
   }
