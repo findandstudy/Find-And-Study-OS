@@ -302,6 +302,9 @@ function StaffAdminShell() {
           <Route path="/admin/self-fill-links">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminSelfFillLinks /></ProtectedRoute>
           </Route>
+          <Route path="/admin/university-contracts/:id">
+            {(params) => <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUniversityContracts openId={Number(params.id)} /></ProtectedRoute>}
+          </Route>
           <Route path="/admin/university-contracts">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUniversityContracts /></ProtectedRoute>
           </Route>

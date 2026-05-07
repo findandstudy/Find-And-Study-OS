@@ -149,4 +149,6 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "inbox.unmatched", name: "Unmatched External Message", category: "inbox", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager", "staff"] },
   { event: "inbox.assigned", name: "Conversation Assigned", category: "inbox", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
   { event: "inbox.send_failed", name: "Outbound Send Failed", category: "inbox", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager"] },
+  { event: "university_contract.expiring", name: "University Contract Expiring", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "university_contract.expired", name: "University Contract Expired", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
 ];

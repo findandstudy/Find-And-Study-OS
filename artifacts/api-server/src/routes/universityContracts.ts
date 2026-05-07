@@ -33,6 +33,21 @@ function parseDateStrict(value: unknown, field: string): Date | null {
   return d;
 }
 
+const ALLOWED_CONTRACT_MIMES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+  "application/msword", // legacy .doc — accepted as docx-equivalent
+]);
+const ALLOWED_CONTRACT_EXTS = /\.(pdf|docx|doc)$/i;
+
+function validateContractFile(mime: unknown, name: unknown): void {
+  const m = typeof mime === "string" ? mime.toLowerCase() : "";
+  const n = typeof name === "string" ? name : "";
+  if (!ALLOWED_CONTRACT_MIMES.has(m) && !ALLOWED_CONTRACT_EXTS.test(n)) {
+    throw new InvalidInputError("Only PDF or DOCX files are allowed for university contracts");
+  }
+}
+
 function sanitizeUploadedKey(input: unknown): string | null {
   if (input === null || input === undefined || input === "") return null;
   if (typeof input !== "string") throw new InvalidInputError("Invalid fileObjectKey");
@@ -183,6 +198,7 @@ router.post("/university-contracts", requireAuth, requirePermission("university_
     const year = body.year ? parseInt(String(body.year), 10) : (effectiveDate ? effectiveDate.getFullYear() : null);
 
     const fileObjectKey = sanitizeUploadedKey(body.fileObjectKey);
+    if (fileObjectKey) validateContractFile(body.fileMime, body.fileName);
 
     const [row] = await db.insert(universityContractsTable).values({
       universityId,
@@ -258,7 +274,9 @@ router.patch("/university-contracts/:id", requireAuth, requirePermission("univer
     if (body.notes !== undefined) updates.notes = body.notes ? String(body.notes).slice(0, 5000) : null;
 
     if (body.fileObjectKey !== undefined) {
-      updates.fileObjectKey = sanitizeUploadedKey(body.fileObjectKey);
+      const newKey = sanitizeUploadedKey(body.fileObjectKey);
+      if (newKey) validateContractFile(body.fileMime, body.fileName);
+      updates.fileObjectKey = newKey;
       updates.fileName = body.fileName ? String(body.fileName).slice(0, 500) : null;
       updates.fileMime = body.fileMime ? String(body.fileMime).slice(0, 200) : null;
       updates.fileSize = Number.isInteger(body.fileSize) ? body.fileSize : null;

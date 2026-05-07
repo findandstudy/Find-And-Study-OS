@@ -10,8 +10,15 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   GraduationCap, Plus, Edit, Trash2, Loader2, Save, Search,
@@ -40,9 +47,11 @@ type Contract = {
 };
 
 type University = { id: number; name: string; country: string; city: string | null };
+type Destination = { id: number; name: string; country: string; flagEmoji?: string | null };
 
 type FormState = {
   universityId: string;
+  destinationId: string;
   year: string;
   effectiveDate: string;
   expiryDate: string;
@@ -55,6 +64,7 @@ type FormState = {
 
 const emptyForm: FormState = {
   universityId: "",
+  destinationId: "",
   year: "",
   effectiveDate: "",
   expiryDate: "",
@@ -72,6 +82,13 @@ const STATUS_LABELS: Record<Status, { label: string; tone: "default" | "secondar
   no_dates: { label: "Tarih yok", tone: "outline", icon: FileText },
 };
 
+const ALLOWED_CONTRACT_EXTS = /\.(pdf|docx|doc)$/i;
+const ALLOWED_CONTRACT_MIMES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+]);
+
 function formatDate(d: string | null): string {
   if (!d) return "-";
   try { return new Date(d).toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" }); }
@@ -85,14 +102,18 @@ function daysLeft(expiry: string | null): number | null {
   return Math.ceil((e.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-export default function UniversityContractsPage() {
+interface Props { openId?: number }
+
+export default function UniversityContractsPage({ openId }: Props = {}) {
   const { toast } = useToast();
   const [rows, setRows] = useState<Contract[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [filterCountry, setFilterCountry] = useState<string>("all");
+  const [filterUniversity, setFilterUniversity] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -102,13 +123,22 @@ export default function UniversityContractsPage() {
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Contract | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handledOpenIdRef = useRef<number | null>(null);
+
+  const destByCountry = useMemo(() => {
+    const m: Record<string, Destination> = {};
+    for (const d of destinations) m[d.country] = d;
+    return m;
+  }, [destinations]);
 
   async function load() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filterCountry !== "all") params.set("country", filterCountry);
+      if (filterUniversity !== "all") params.set("universityId", filterUniversity);
       if (filterStatus !== "all") params.set("status", filterStatus);
       if (filterYear.trim()) params.set("year", filterYear.trim());
       if (search.trim()) params.set("search", search.trim());
@@ -123,17 +153,31 @@ export default function UniversityContractsPage() {
 
   async function loadMeta() {
     try {
-      const [unis, cs]: any = await Promise.all([
+      const [unis, cs, dests]: any = await Promise.all([
         customFetch(`/api/universities?limit=500`),
         customFetch(`/api/universities/countries`),
+        customFetch(`/api/public/destinations`),
       ]);
       setUniversities(unis.data || []);
       setCountries(cs || []);
+      setDestinations(Array.isArray(dests) ? dests : (dests?.data || []));
     } catch {}
   }
 
   useEffect(() => { loadMeta(); }, []);
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterCountry, filterStatus, filterYear]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterCountry, filterUniversity, filterStatus, filterYear]);
+
+  // Deep-link: open dialog for /admin/university-contracts/:id
+  useEffect(() => {
+    if (!openId || handledOpenIdRef.current === openId) return;
+    if (rows.length === 0) return;
+    const c = rows.find(r => r.id === openId);
+    if (c) {
+      handledOpenIdRef.current = openId;
+      openEdit(c);
+    }
+    // eslint-disable-next-line
+  }, [openId, rows]);
 
   function openCreate() {
     setEditing(null);
@@ -145,6 +189,7 @@ export default function UniversityContractsPage() {
     setEditing(c);
     setForm({
       universityId: String(c.universityId),
+      destinationId: c.destinationId != null ? String(c.destinationId) : "",
       year: c.year != null ? String(c.year) : "",
       effectiveDate: c.effectiveDate ? c.effectiveDate.slice(0, 10) : "",
       expiryDate: c.expiryDate ? c.expiryDate.slice(0, 10) : "",
@@ -157,7 +202,24 @@ export default function UniversityContractsPage() {
     setShowDialog(true);
   }
 
+  // Auto-default destination from selected university's country
+  function onUniversityChange(uniId: string) {
+    setForm(f => {
+      const next = { ...f, universityId: uniId };
+      const uni = universities.find(u => String(u.id) === uniId);
+      if (uni && !next.destinationId) {
+        const dest = destByCountry[uni.country];
+        if (dest) next.destinationId = String(dest.id);
+      }
+      return next;
+    });
+  }
+
   async function uploadFile(file: File) {
+    if (!ALLOWED_CONTRACT_MIMES.has(file.type) && !ALLOWED_CONTRACT_EXTS.test(file.name)) {
+      toast({ title: "Dosya türü desteklenmiyor", description: "Yalnızca PDF veya DOCX dosyaları yüklenebilir.", variant: "destructive" });
+      return;
+    }
     setUploading(true);
     try {
       const urlRes: any = await customFetch(`/api/storage/uploads/request-url`, {
@@ -188,6 +250,7 @@ export default function UniversityContractsPage() {
     try {
       const body: any = {
         universityId: parseInt(form.universityId, 10),
+        destinationId: form.destinationId ? parseInt(form.destinationId, 10) : null,
         year: form.year ? parseInt(form.year, 10) : null,
         effectiveDate: form.effectiveDate || null,
         expiryDate: form.expiryDate || null,
@@ -205,12 +268,6 @@ export default function UniversityContractsPage() {
         });
         toast({ title: "Sözleşme güncellendi" });
       } else {
-        if (form.fileObjectKey) {
-          body.fileObjectKey = form.fileObjectKey;
-          body.fileName = form.fileName;
-          body.fileMime = form.fileMime;
-          body.fileSize = form.fileSize;
-        }
         await customFetch(`/api/university-contracts`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
@@ -224,11 +281,13 @@ export default function UniversityContractsPage() {
     setSaving(false);
   }
 
-  async function remove(id: number) {
-    if (!confirm("Bu sözleşmeyi silmek istediğinizden emin misiniz?")) return;
+  async function performDelete() {
+    if (!confirmDelete) return;
+    const id = confirmDelete.id;
     try {
       await customFetch(`/api/university-contracts/${id}`, { method: "DELETE" });
-      toast({ title: "Silindi" });
+      toast({ title: "Çöpe taşındı", description: "Sözleşme çöpe taşındı ve listeden kaldırıldı." });
+      setConfirmDelete(null);
       await load();
     } catch (err: any) {
       toast({ title: "Silme hatası", description: err.message, variant: "destructive" });
@@ -275,6 +334,7 @@ export default function UniversityContractsPage() {
   }, [rows]);
 
   return (
+    <TooltipProvider>
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -303,6 +363,16 @@ export default function UniversityContractsPage() {
             <Search className="w-4 h-4 absolute left-2 top-2.5 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Üniversite, ülke, dosya..." className="pl-8" />
           </div>
+        </div>
+        <div className="min-w-[220px]">
+          <Label className="text-xs">Üniversite</Label>
+          <Select value={filterUniversity} onValueChange={setFilterUniversity}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-[320px]">
+              <SelectItem value="all">Tümü</SelectItem>
+              {universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="min-w-[180px]">
           <Label className="text-xs">Ülke</Label>
@@ -344,7 +414,7 @@ export default function UniversityContractsPage() {
               <thead className="bg-muted/40">
                 <tr>
                   <th className="text-left px-4 py-3">Üniversite</th>
-                  <th className="text-left px-4 py-3">Ülke</th>
+                  <th className="text-left px-4 py-3">Destinasyon</th>
                   <th className="text-left px-4 py-3">Yıl</th>
                   <th className="text-left px-4 py-3">Geçerlilik</th>
                   <th className="text-left px-4 py-3">Bitiş</th>
@@ -358,17 +428,30 @@ export default function UniversityContractsPage() {
                   const meta = STATUS_LABELS[c.status];
                   const Icon = meta.icon;
                   const dl = daysLeft(c.expiryDate);
+                  const dest = destByCountry[c.country];
                   return (
                     <tr key={c.id} className="border-t hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{c.universityName || `#${c.universityId}`}</td>
-                      <td className="px-4 py-3">{c.country}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="text-base leading-none">{dest?.flagEmoji || "🌍"}</span>
+                          <span>{dest?.name || c.country}</span>
+                        </span>
+                      </td>
                       <td className="px-4 py-3">{c.year ?? "-"}</td>
                       <td className="px-4 py-3">{formatDate(c.effectiveDate)}</td>
                       <td className="px-4 py-3">
-                        {formatDate(c.expiryDate)}
-                        {dl !== null && c.status !== "expired" && (
-                          <div className="text-xs text-muted-foreground">{dl > 0 ? `${dl} gün kaldı` : ""}</div>
-                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{formatDate(c.expiryDate)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {dl === null ? "Bitiş tarihi yok" :
+                              dl < 0 ? `${Math.abs(dl)} gün önce sona erdi` :
+                              dl === 0 ? "Bugün sona eriyor" :
+                              `${dl} gün kaldı`}
+                          </TooltipContent>
+                        </Tooltip>
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={meta.tone}><Icon className="w-3 h-3 mr-1" />{meta.label}</Badge>
@@ -382,7 +465,7 @@ export default function UniversityContractsPage() {
                       </td>
                       <td className="px-4 py-3 text-right space-x-1">
                         <Button variant="ghost" size="sm" onClick={() => openEdit(c)}><Edit className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => remove(c.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(c)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
                       </td>
                     </tr>
                   );
@@ -401,11 +484,27 @@ export default function UniversityContractsPage() {
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="col-span-2">
               <Label>Üniversite *</Label>
-              <Select value={form.universityId} onValueChange={v => setForm(f => ({ ...f, universityId: v }))}>
+              <Select value={form.universityId} onValueChange={onUniversityChange}>
                 <SelectTrigger><SelectValue placeholder="Seçin..." /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[320px]">
                   {universities.map(u => (
                     <SelectItem key={u.id} value={String(u.id)}>{u.name} — {u.country}{u.city ? `, ${u.city}` : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label>Destinasyon (otomatik doldurulur)</Label>
+              <Select value={form.destinationId} onValueChange={v => setForm(f => ({ ...f, destinationId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Üniversite seçildiğinde otomatik atanır" /></SelectTrigger>
+                <SelectContent className="max-h-[320px]">
+                  {destinations.map(d => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      <span className="inline-flex items-center gap-2">
+                        <span>{d.flagEmoji || "🌍"}</span>
+                        <span>{d.name} — {d.country}</span>
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -428,11 +527,12 @@ export default function UniversityContractsPage() {
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} />
             </div>
             <div className="col-span-2">
-              <Label>Dosya</Label>
+              <Label>Dosya (PDF veya DOCX)</Label>
               <input
                 ref={fileInputRef}
                 type="file"
                 hidden
+                accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                 onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
               />
               <div className="flex items-center gap-2">
@@ -442,6 +542,7 @@ export default function UniversityContractsPage() {
                 </Button>
                 {form.fileName && <span className="text-sm text-muted-foreground">{form.fileName}</span>}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">Yalnızca PDF veya DOCX dosyaları kabul edilir.</p>
             </div>
           </div>
           <DialogFooter>
@@ -453,6 +554,22 @@ export default function UniversityContractsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sözleşmeyi çöpe taşı?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete ? `${confirmDelete.universityName || "Sözleşme"} kaydı çöpe taşınacak ve listeden kaldırılacak. Bu işlem geri alınabilir.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction onClick={performDelete} className="bg-red-600 hover:bg-red-700">Çöpe taşı</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+    </TooltipProvider>
   );
 }

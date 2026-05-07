@@ -1,5 +1,5 @@
-import { db, universityContractsTable, universitiesTable, usersTable } from "@workspace/db";
-import { and, eq, isNotNull, isNull, inArray } from "drizzle-orm";
+import { db, universityContractsTable, universitiesTable, usersTable, rolesTable } from "@workspace/db";
+import { and, eq, isNotNull, isNull, inArray, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
@@ -15,14 +15,50 @@ function daysBetween(future: Date, now: Date): number {
   return Math.ceil((future.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// Recipients: any active user whose role grants `university_contracts.view`
+// (covers super_admin/admin and any custom roles assigned to staff responsible
+// for the module). Falls back to super_admin/admin by name.
 async function getRecipients(): Promise<number[]> {
-  const admins = await db.select({ id: usersTable.id })
-    .from(usersTable)
-    .where(and(
-      inArray(usersTable.role, ["super_admin", "admin"]),
-      eq(usersTable.isActive, true),
-    ));
-  return admins.map(u => u.id);
+  try {
+    const roles = await db.select({ name: rolesTable.name, perms: rolesTable.permissions })
+      .from(rolesTable);
+    const allowedRoleNames = roles
+      .filter(r => Array.isArray(r.perms) && (r.perms as string[]).includes("university_contracts.view"))
+      .map(r => r.name);
+    const fallback = ["super_admin", "admin"];
+    const target = allowedRoleNames.length > 0 ? allowedRoleNames : fallback;
+    const users = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(inArray(usersTable.role, target), eq(usersTable.isActive, true)));
+    return users.map(u => u.id);
+  } catch (err) {
+    console.error("[UNI-CONTRACT] getRecipients fallback:", err);
+    const users = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(inArray(usersTable.role, ["super_admin", "admin"]), eq(usersTable.isActive, true)));
+    return users.map(u => u.id);
+  }
+}
+
+function buildEmail(subject: string, body: string, actionUrl: string): { subject: string; html: string; text: string } {
+  const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
+    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px;text-align:center;">
+      <h1 style="margin:0;color:#fff;font-size:22px;">Find &amp; Study</h1>
+      <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:13px;">University Contract Notification</p>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="margin:0 0 14px;color:#111827;font-size:18px;">${escape(subject)}</h2>
+      <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;white-space:pre-line;">${escape(body)}</p>
+      <div style="text-align:center;margin:0 0 20px;">
+        <a href="${actionUrl}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Open contract</a>
+      </div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">Automated notification from Find &amp; Study.</p>
+    </div>
+  </div></body></html>`;
+  return { subject, html, text: body };
 }
 
 export async function checkUniversityContractExpiries(): Promise<void> {
@@ -61,6 +97,8 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       const uniName = row.universityName || `Üniversite #${row.universityId}`;
       const expiryStr = expiry.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
 
+      const actionUrl = `/admin/university-contracts/${row.id}`;
+
       if (daysLeft <= 0) {
         if (row.expiryNoticeSentAt) continue;
         const claimed = await db.update(universityContractsTable)
@@ -69,15 +107,18 @@ export async function checkUniversityContractExpiries(): Promise<void> {
           .returning({ id: universityContractsTable.id });
         if (claimed.length === 0) continue;
 
+        const subject = `[FindAndStudy] University contract expired: ${uniName} (${row.country})`;
+        const body = `The agreement with ${uniName} (${row.country}) expired on ${expiryStr}.\n\nPlease renew the contract or upload an updated version in EduConsult OS.`;
         await dispatchNotification({
           event: "university_contract.expired",
           title: `Üniversite sözleşmesi sona erdi — ${uniName}`,
           body: `${uniName} (${row.country}) sözleşmesi ${expiryStr} tarihinde sona erdi. Lütfen yenileyin.`,
-          actionUrl: `/admin/university-contracts`,
+          actionUrl,
           icon: "AlertOctagon",
           recipientUserIds: recipientIds,
           data: { contractId: row.id, universityId: row.universityId, expiryDate: expiry.toISOString() },
           templateVars: { universityName: uniName, country: row.country, expiryDate: expiryStr },
+          emailOverride: buildEmail(subject, body, actionUrl),
         });
         console.log(`[UNI-CONTRACT] Expiry notice sent for contract ${row.id} (${uniName})`);
         continue;
@@ -95,15 +136,18 @@ export async function checkUniversityContractExpiries(): Promise<void> {
         .returning({ id: universityContractsTable.id });
       if (claimed.length === 0) continue;
 
+      const subject = `[FindAndStudy] University contract expiring in ${matched.days} days: ${uniName} (${row.country})`;
+      const body = `The agreement with ${uniName} (${row.country}) is set to expire on ${expiryStr} (${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining).\n\nPlease prepare a renewal or contact the university to extend the contract.`;
       await dispatchNotification({
         event: "university_contract.expiring",
         title: `Üniversite sözleşmesi ${daysLeft} gün içinde sona eriyor — ${uniName}`,
         body: `${uniName} (${row.country}) sözleşmesi ${expiryStr} tarihinde sona eriyor (${daysLeft} gün kaldı).`,
-        actionUrl: `/admin/university-contracts`,
+        actionUrl,
         icon: "AlertTriangle",
         recipientUserIds: recipientIds,
         data: { contractId: row.id, universityId: row.universityId, expiryDate: expiry.toISOString(), daysLeft, threshold: matched.days },
         templateVars: { universityName: uniName, country: row.country, expiryDate: expiryStr, daysLeft: String(daysLeft), threshold: String(matched.days) },
+        emailOverride: buildEmail(subject, body, actionUrl),
       });
       console.log(`[UNI-CONTRACT] Notified ${recipientIds.length} for contract ${row.id} (${uniName}) — ${daysLeft}d, threshold ${matched.days}`);
     }
