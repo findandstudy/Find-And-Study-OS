@@ -1,6 +1,7 @@
 import { db, universityContractsTable, universitiesTable, usersTable, rolesTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
+import { getAppBaseUrl } from "./email";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
 
@@ -29,14 +30,24 @@ async function getAdminRecipients(): Promise<number[]> {
   return users.map(u => u.id);
 }
 
-async function resolveRecipients(adminIds: number[], assignedUserIds: number[] | null | undefined): Promise<number[]> {
-  if (!assignedUserIds || assignedUserIds.length === 0) {
-    return [...adminIds];
-  }
-  const assignedActive = await db.select({ id: usersTable.id })
+// Recipients per contract: admins ∪ active users on the
+// university's assignedStaffIds (the per-university source of truth
+// for "staff responsible for this university") ∪ any extra users
+// pinned to this individual contract via assignedUserIds.
+async function resolveRecipients(
+  adminIds: number[],
+  universityStaffIds: number[] | null | undefined,
+  contractUserIds: number[] | null | undefined,
+): Promise<number[]> {
+  const extra = [
+    ...(Array.isArray(universityStaffIds) ? universityStaffIds : []),
+    ...(Array.isArray(contractUserIds) ? contractUserIds : []),
+  ];
+  if (extra.length === 0) return [...adminIds];
+  const activeExtras = await db.select({ id: usersTable.id })
     .from(usersTable)
-    .where(and(inArray(usersTable.id, assignedUserIds), eq(usersTable.isActive, true)));
-  return Array.from(new Set([...adminIds, ...assignedActive.map(u => u.id)]));
+    .where(and(inArray(usersTable.id, extra), eq(usersTable.isActive, true)));
+  return Array.from(new Set([...adminIds, ...activeExtras.map(u => u.id)]));
 }
 
 function buildEmail(subject: string, body: string, actionUrl: string): { subject: string; html: string; text: string } {
@@ -75,6 +86,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       expiryNoticeSentAt: universityContractsTable.expiryNoticeSentAt,
       assignedUserIds: universityContractsTable.assignedUserIds,
       universityName: universitiesTable.name,
+      universityAssignedStaffIds: universitiesTable.assignedStaffIds,
     })
       .from(universityContractsTable)
       .leftJoin(universitiesTable, eq(universitiesTable.id, universityContractsTable.universityId))
@@ -87,6 +99,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
 
     const adminIds = await getAdminRecipients();
     const now = new Date();
+    const baseUrl = getAppBaseUrl().replace(/\/$/, "");
 
     for (const row of rows) {
       if (!row.expiryDate) continue;
@@ -95,7 +108,8 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       const uniName = row.universityName || `Üniversite #${row.universityId}`;
       const expiryStr = expiry.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
 
-      const actionUrl = `/admin/university-contracts/${row.id}`;
+      // Absolute URL so email clients render a clickable deep link.
+      const actionUrl = `${baseUrl}/admin/university-contracts/${row.id}`;
 
       if (daysLeft <= 0) {
         if (row.expiryNoticeSentAt) continue;
@@ -105,7 +119,11 @@ export async function checkUniversityContractExpiries(): Promise<void> {
           .returning({ id: universityContractsTable.id });
         if (claimed.length === 0) continue;
 
-        const recipientIds = await resolveRecipients(adminIds, row.assignedUserIds as number[] | null);
+        const recipientIds = await resolveRecipients(
+          adminIds,
+          row.universityAssignedStaffIds as number[] | null,
+          row.assignedUserIds as number[] | null,
+        );
         if (recipientIds.length === 0) continue;
 
         const subject = `[FindAndStudy] University contract expired: ${uniName} (${row.country})`;
@@ -139,7 +157,11 @@ export async function checkUniversityContractExpiries(): Promise<void> {
         .returning({ id: universityContractsTable.id });
       if (claimed.length === 0) continue;
 
-      const recipientIds = await resolveRecipients(adminIds, row.assignedUserIds as number[] | null);
+      const recipientIds = await resolveRecipients(
+        adminIds,
+        row.universityAssignedStaffIds as number[] | null,
+        row.assignedUserIds as number[] | null,
+      );
       if (recipientIds.length === 0) continue;
 
       const subject = `[FindAndStudy] University contract expiring in ${matched.days} days: ${uniName} (${row.country})`;

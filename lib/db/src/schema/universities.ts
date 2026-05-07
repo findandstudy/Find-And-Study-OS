@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, real, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -31,6 +31,11 @@ export const universitiesTable = pgTable("universities", {
   contactPersonPhone: text("contact_person_phone"),
   contactPersonEmail: text("contact_person_email"),
   status: text("status").notNull().default("open"),
+
+  // Active staff explicitly responsible for this university — they
+  // also receive university-contract expiry warnings (alongside
+  // active super_admin/admin/manager users).
+  assignedStaffIds: jsonb("assigned_staff_ids").notNull().default([]).$type<number[]>(),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

@@ -71,8 +71,15 @@ function sanitizeUploadedKey(input: unknown): string | null {
     // private object keys. Callers must send the objectPath returned by /api/storage/uploads/request-url.
     throw new InvalidInputError("fileObjectKey must be a normalized /objects/uploads/... path");
   }
-  if (!/^\/objects\/[A-Za-z0-9_-]{8,}$/.test(key)) {
-    throw new InvalidInputError("fileObjectKey must match /objects/<uploadId>");
+  // Object storage returns canonical paths like
+  //   /objects/uploads/<uuid>
+  //   /objects/<subdir>/<uuid>-<filename>
+  // so allow nested safe path segments under /objects/.
+  if (!/^\/objects\/[A-Za-z0-9_./-]+$/.test(key)) {
+    throw new InvalidInputError("fileObjectKey must be a /objects/... path");
+  }
+  if (key.includes("..") || key.includes("//")) {
+    throw new InvalidInputError("fileObjectKey contains invalid path segments");
   }
   return key;
 }

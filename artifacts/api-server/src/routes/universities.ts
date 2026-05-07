@@ -13,6 +13,7 @@ const UNI_PATCH_FIELDS = [
   "cwtsLeidenRanking", "address", "onlinePaymentUrl", "cricosLink", "documentsLink",
   "currentFeeListLink", "initialDepositOptions", "admissionProcess",
   "contactPersonName", "contactPersonPhone", "contactPersonEmail", "status",
+  "assignedStaffIds",
 ];
 
 const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
@@ -108,7 +109,17 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
   for (const key of UNI_PATCH_FIELDS) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+    if (req.body[key] === undefined) continue;
+    if (key === "assignedStaffIds") {
+      const raw = req.body[key];
+      if (!Array.isArray(raw) || !raw.every((v: unknown) => typeof v === "number" && Number.isInteger(v) && v > 0)) {
+        res.status(400).json({ error: "assignedStaffIds must be an array of positive integers" });
+        return;
+      }
+      updates[key] = Array.from(new Set(raw as number[]));
+    } else {
+      updates[key] = req.body[key];
+    }
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [uni] = await db.update(universitiesTable).set(updates).where(eq(universitiesTable.id, id)).returning();

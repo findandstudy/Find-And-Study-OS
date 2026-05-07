@@ -66,6 +66,7 @@ type FormState = {
   fileMime: string;
   fileSize: number | null;
   assignedUserIds: number[];
+  universityAssignedStaffIds: number[];
 };
 
 const emptyForm: FormState = {
@@ -80,6 +81,7 @@ const emptyForm: FormState = {
   fileMime: "",
   fileSize: null,
   assignedUserIds: [],
+  universityAssignedStaffIds: [],
 };
 
 type StaffUser = { id: number; firstName: string | null; lastName: string | null; email: string | null; role: string };
@@ -132,6 +134,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
   const [editing, setEditing] = useState<Contract | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [originalUniStaffIds, setOriginalUniStaffIds] = useState<number[]>([]);
   const [uploading, setUploading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Contract | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -194,9 +197,17 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     // eslint-disable-next-line
   }, [openId, rows]);
 
+  async function fetchUniStaffIds(uniId: number): Promise<number[]> {
+    try {
+      const u: any = await customFetch(`/api/universities/${uniId}`);
+      return Array.isArray(u?.assignedStaffIds) ? u.assignedStaffIds : [];
+    } catch { return []; }
+  }
+
   function openCreate() {
     setEditing(null);
     setForm({ ...emptyForm });
+    setOriginalUniStaffIds([]);
     setShowDialog(true);
   }
 
@@ -214,14 +225,21 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       fileMime: c.fileMime || "",
       fileSize: c.fileSize ?? null,
       assignedUserIds: Array.isArray(c.assignedUserIds) ? c.assignedUserIds : [],
+      universityAssignedStaffIds: [],
     });
     setShowDialog(true);
+    fetchUniStaffIds(c.universityId).then(ids => {
+      setOriginalUniStaffIds(ids);
+      setForm(f => ({ ...f, universityAssignedStaffIds: ids }));
+    });
   }
 
-  // Auto-default destination from selected university's country
+  // Auto-default destination from selected university's country and
+  // load that university's assigned-staff list (per-university source
+  // of truth for contract expiry recipients).
   function onUniversityChange(uniId: string) {
     setForm(f => {
-      const next = { ...f, universityId: uniId };
+      const next = { ...f, universityId: uniId, universityAssignedStaffIds: [] };
       const uni = universities.find(u => String(u.id) === uniId);
       if (uni && !next.destinationId) {
         const dest = destByCountry[uni.country];
@@ -229,6 +247,14 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       }
       return next;
     });
+    setOriginalUniStaffIds([]);
+    const idNum = parseInt(uniId, 10);
+    if (!Number.isNaN(idNum)) {
+      fetchUniStaffIds(idNum).then(ids => {
+        setOriginalUniStaffIds(ids);
+        setForm(f => (f.universityId === uniId ? { ...f, universityAssignedStaffIds: ids } : f));
+      });
+    }
   }
 
   async function uploadFile(file: File) {
@@ -289,6 +315,21 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
         toast({ title: "Sözleşme oluşturuldu" });
+      }
+
+      // Persist per-university assigned staff if changed.
+      const a = [...form.universityAssignedStaffIds].sort((x, y) => x - y);
+      const b = [...originalUniStaffIds].sort((x, y) => x - y);
+      const changed = a.length !== b.length || a.some((v, i) => v !== b[i]);
+      if (changed && body.universityId) {
+        try {
+          await customFetch(`/api/universities/${body.universityId}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assignedStaffIds: a }),
+          });
+        } catch (err: any) {
+          toast({ title: "Üniversite personel listesi güncellenemedi", description: err.message, variant: "destructive" });
+        }
       }
       setShowDialog(false);
       await load();
@@ -576,9 +617,41 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} />
             </div>
             <div className="col-span-2">
-              <Label>Bildirim alacak personel</Label>
+              <Label>Üniversiteden sorumlu personel</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Aktif yöneticiler her durumda bildirim alır. Burada seçtiğiniz personel de bu sözleşmeye özel olarak uyarılır.
+                Bu üniversiteyle ilgili tüm sözleşme uyarıları aşağıdaki personele de gider. Liste, üniversite kaydında saklanır.
+              </p>
+              <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
+                {!form.universityId ? (
+                  <div className="text-xs text-muted-foreground">Önce üniversite seçin.</div>
+                ) : staffUsers.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">Personel bulunamadı.</div>
+                ) : staffUsers.map(u => {
+                  const checked = form.universityAssignedStaffIds.includes(u.id);
+                  const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
+                  return (
+                    <label key={u.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-background/60 rounded px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setForm(f => ({
+                          ...f,
+                          universityAssignedStaffIds: checked
+                            ? f.universityAssignedStaffIds.filter(id => id !== u.id)
+                            : [...f.universityAssignedStaffIds, u.id],
+                        }))}
+                      />
+                      <span>{name}</span>
+                      <span className="text-xs text-muted-foreground">({u.role})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="col-span-2">
+              <Label>Bu sözleşmeye özel ek personel (opsiyonel)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Aktif yöneticiler ve üniversiteden sorumlu personel her durumda bildirim alır. Burada yalnızca bu sözleşme için ek kişi ekleyebilirsiniz.
               </p>
               <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
                 {staffUsers.length === 0 ? (
