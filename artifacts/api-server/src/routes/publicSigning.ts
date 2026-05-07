@@ -263,7 +263,7 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       signerName: finalSignerName,
     }).where(and(
       eq(signingSessionsTable.id, r.session.id),
-      eq(signingSessionsTable.status, r.session.status as any),
+      eq(signingSessionsTable.status, r.session.status),
     )).returning({ id: signingSessionsTable.id });
 
     if (!statusUpdate) {

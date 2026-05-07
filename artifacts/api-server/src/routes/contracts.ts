@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
@@ -39,12 +39,47 @@ async function gateSessionList(req: any, res: any, next: any) {
   return requirePermission(need)(req, res, next);
 }
 
+type SessionStatus = "intake_pending" | "review_pending" | "signed" | "revoked" | "expired";
+const ALLOWED_STATUSES: readonly SessionStatus[] = ["intake_pending", "review_pending", "signed", "revoked", "expired"] as const;
+
 router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res): Promise<void> => {
   try {
     const mode = (req.query.mode as string) || null;
-    const where = mode === "self_fill" || mode === "admin_driven"
-      ? eq(signingSessionsTable.mode, mode)
-      : undefined;
+    const filters: SQL<unknown>[] = [];
+    if (mode === "self_fill" || mode === "admin_driven") filters.push(eq(signingSessionsTable.mode, mode));
+    const statusParam = (req.query.status as string) || "";
+    if (statusParam) {
+      const wanted = statusParam.split(",").map(s => s.trim()).filter((s): s is SessionStatus => (ALLOWED_STATUSES as readonly string[]).includes(s));
+      if (wanted.length) filters.push(inArray(signingSessionsTable.status, wanted));
+    }
+    const language = (req.query.language as string) || "";
+    const entityType = (req.query.entityType as string) || "";
+    if (language || entityType) {
+      const tplFilters: SQL<unknown>[] = [];
+      if (language) tplFilters.push(eq(contractTemplatesTable.language, language));
+      if (entityType === "company" || entityType === "individual") tplFilters.push(eq(contractTemplatesTable.entityType, entityType));
+      const matchedTpls = await db.select({ id: contractTemplatesTable.id }).from(contractTemplatesTable).where(and(...tplFilters));
+      const ids = matchedTpls.map(t => t.id);
+      if (!ids.length) { res.json({ data: [] }); return; }
+      filters.push(inArray(signingSessionsTable.templateId, ids));
+    }
+    const dateFrom = (req.query.dateFrom as string) || "";
+    const dateTo = (req.query.dateTo as string) || "";
+    if (dateFrom) {
+      const d = new Date(dateFrom);
+      if (!isNaN(d.getTime())) filters.push(gte(signingSessionsTable.createdAt, d));
+    }
+    if (dateTo) {
+      const d = new Date(dateTo);
+      if (!isNaN(d.getTime())) filters.push(lte(signingSessionsTable.createdAt, d));
+    }
+    const search = (req.query.search as string) || "";
+    if (search) {
+      const term = `%${search.replace(/[%_]/g, "\\$&")}%`;
+      const orExpr = or(ilike(signingSessionsTable.signerEmail, term), ilike(signingSessionsTable.signerName, term));
+      if (orExpr) filters.push(orExpr);
+    }
+    const where = filters.length ? and(...filters) : undefined;
     const rows = await db.select({
       id: signingSessionsTable.id,
       templateId: signingSessionsTable.templateId,
@@ -242,11 +277,18 @@ async function gateSessionMutate(req: any, res: any, next: any) {
 router.post("/contracts/sessions/:id/revoke", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
+    // Lifecycle guard: a signed session is final and must not be revoked —
+    // doing so would orphan the signed_contracts row and break token-gated
+    // PDF access. Already-revoked is a no-op.
+    const [existing] = await db.select({ status: signingSessionsTable.status }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (existing.status === "signed") { res.status(409).json({ error: "Cannot revoke a signed session" }); return; }
+    if (existing.status === "revoked") { res.json({ success: true, alreadyRevoked: true }); return; }
     const [row] = await db.update(signingSessionsTable)
       .set({ status: "revoked", revokedAt: new Date() })
-      .where(eq(signingSessionsTable.id, id))
+      .where(and(eq(signingSessionsTable.id, id), eq(signingSessionsTable.status, existing.status)))
       .returning();
-    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    if (!row) { res.status(409).json({ error: "Session state changed; refresh and try again" }); return; }
     await writeAudit({
       userId: (req as any).user?.id ?? null,
       action: "contract.revoked",
@@ -258,6 +300,30 @@ router.post("/contracts/sessions/:id/revoke", requireAuth, gateSessionMutate, as
   } catch (err) {
     console.error("[contracts] revoke:", err);
     res.status(500).json({ error: "Failed to revoke session" });
+  }
+});
+
+// Hard-delete a non-signed session. Signed sessions are protected because the
+// signed_contracts row holds them as the audit anchor.
+router.delete("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [existing] = await db.select({ status: signingSessionsTable.status }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (existing.status === "signed") { res.status(409).json({ error: "Cannot delete a signed session" }); return; }
+    await db.delete(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "contract.session_deleted",
+      resource: "signing_session",
+      resourceId: id,
+      changes: { previousStatus: existing.status },
+      ipAddress: req.ip,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[contracts] delete session:", err);
+    res.status(500).json({ error: "Failed to delete session" });
   }
 });
 

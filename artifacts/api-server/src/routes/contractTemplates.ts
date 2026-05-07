@@ -35,8 +35,22 @@ router.post("/contract-templates/:id/preview", requireAuth, requirePermission("c
     const [row] = await db.select().from(contractTemplatesTable)
       .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt)));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
-    const { renderTemplate } = await import("../lib/contractRenderer");
-    const html = renderTemplate(row.bodyHtml, req.body?.intakeData || {});
+    const { renderTemplate, buildAgentContext } = await import("../lib/contractRenderer");
+    let agent: any = null;
+    const agentIdRaw = req.body?.agentId;
+    if (agentIdRaw) {
+      const aid = parseInt(String(agentIdRaw), 10);
+      if (aid) {
+        const { agentsTable } = await import("@workspace/db");
+        const rows = await db.select().from(agentsTable).where(eq(agentsTable.id, aid));
+        agent = rows[0] || null;
+      }
+    }
+    const ctx = buildAgentContext(agent, req.body?.intakeData || null, {
+      signerEmail: req.body?.signerEmail || (agent?.email ?? ""),
+      signerName: req.body?.signerName || (agent ? `${agent.firstName || ""} ${agent.lastName || ""}`.trim() : ""),
+    });
+    const html = renderTemplate(row.bodyHtml, ctx);
     res.json({ data: { html, templateName: row.name, language: row.language, entityType: row.entityType, version: row.version } });
   } catch (err) {
     console.error("[contract-templates] preview:", err);
