@@ -1,5 +1,5 @@
 import { db, universityContractsTable, universitiesTable, usersTable, rolesTable } from "@workspace/db";
-import { and, eq, isNotNull, isNull, inArray, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, inArray, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
@@ -15,27 +15,42 @@ function daysBetween(future: Date, now: Date): number {
   return Math.ceil((future.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-// Recipients: any active user whose role grants `university_contracts.view`
-// (covers super_admin/admin and any custom roles assigned to staff responsible
-// for the module). Falls back to super_admin/admin by name.
+// Recipients:
+//   * All active admin-level users (super_admin, admin, manager).
+//   * Any active user whose role (rolesTable) grants
+//     `university_contracts.view`.
+//   * Any active staff (agent_staff) whose individual
+//     `agent_staff_permissions` JSON array contains
+//     `university_contracts.view`.
+// This covers admins + staff responsible for the module even when no
+// per-university assignment table exists.
 async function getRecipients(): Promise<number[]> {
+  const PERM = "university_contracts.view";
+  const ADMIN_ROLES = ["super_admin", "admin", "manager"];
   try {
     const roles = await db.select({ name: rolesTable.name, perms: rolesTable.permissions })
       .from(rolesTable);
-    const allowedRoleNames = roles
-      .filter(r => Array.isArray(r.perms) && (r.perms as string[]).includes("university_contracts.view"))
-      .map(r => r.name);
-    const fallback = ["super_admin", "admin"];
-    const target = allowedRoleNames.length > 0 ? allowedRoleNames : fallback;
+    const customRoleNames = roles
+      .filter(r => Array.isArray(r.perms) && (r.perms as string[]).includes(PERM))
+      .map(r => r.name)
+      .filter(n => !ADMIN_ROLES.includes(n));
+    const targetRoles = [...ADMIN_ROLES, ...customRoleNames];
+
     const users = await db.select({ id: usersTable.id })
       .from(usersTable)
-      .where(and(inArray(usersTable.role, target), eq(usersTable.isActive, true)));
-    return users.map(u => u.id);
+      .where(and(
+        eq(usersTable.isActive, true),
+        or(
+          inArray(usersTable.role, targetRoles),
+          sql`${usersTable.agentStaffPermissions}::jsonb ? ${PERM}`,
+        ),
+      ));
+    return Array.from(new Set(users.map(u => u.id)));
   } catch (err) {
     console.error("[UNI-CONTRACT] getRecipients fallback:", err);
     const users = await db.select({ id: usersTable.id })
       .from(usersTable)
-      .where(and(inArray(usersTable.role, ["super_admin", "admin"]), eq(usersTable.isActive, true)));
+      .where(and(inArray(usersTable.role, ADMIN_ROLES), eq(usersTable.isActive, true)));
     return users.map(u => u.id);
   }
 }

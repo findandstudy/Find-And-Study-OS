@@ -8,7 +8,7 @@ import {
   getUniversityContractStatus,
   type UniversityContractStatus,
 } from "@workspace/db";
-import { and, eq, ilike, isNull, isNotNull, desc, lt, lte, gte, or, type SQL } from "drizzle-orm";
+import { and, eq, ilike, isNull, isNotNull, desc, lt, lte, gt, gte, or, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 
@@ -89,6 +89,11 @@ router.get("/university-contracts", requireAuth, requirePermission("university_c
       if (!isNaN(u)) filters.push(eq(universityContractsTable.universityId, u));
     }
 
+    // Status boundaries are derived from getUniversityContractStatus:
+    //   expired       : expiryDate <  now
+    //   expiring_soon : now <= expiryDate <= now+30d
+    //   active        : expiryDate >  now+30d
+    //   no_dates      : expiryDate IS NULL
     if (status && ALLOWED_STATUSES.includes(status as UniversityContractStatus)) {
       const now = new Date();
       const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -96,12 +101,23 @@ router.get("/university-contracts", requireAuth, requirePermission("university_c
       else if (status === "expiring_soon") {
         filters.push(gte(universityContractsTable.expiryDate, now));
         filters.push(lte(universityContractsTable.expiryDate, in30));
-      } else if (status === "active") filters.push(gte(universityContractsTable.expiryDate, in30));
-      else if (status === "no_dates") filters.push(isNull(universityContractsTable.expiryDate));
+      } else if (status === "active") {
+        filters.push(gt(universityContractsTable.expiryDate, in30));
+      } else if (status === "no_dates") filters.push(isNull(universityContractsTable.expiryDate));
+    }
+
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      const orExpr = or(
+        ilike(universitiesTable.name, term),
+        ilike(universityContractsTable.country, term),
+        ilike(universityContractsTable.fileName, term),
+      );
+      if (orExpr) filters.push(orExpr);
     }
 
     const where = and(...filters);
-    let rows = await db.select({
+    const rows = await db.select({
       id: universityContractsTable.id,
       universityId: universityContractsTable.universityId,
       destinationId: universityContractsTable.destinationId,
@@ -119,6 +135,7 @@ router.get("/university-contracts", requireAuth, requirePermission("university_c
       updatedAt: universityContractsTable.updatedAt,
       universityName: universitiesTable.name,
       universityCity: universitiesTable.city,
+      universityLogoUrl: universitiesTable.logoUrl,
     })
       .from(universityContractsTable)
       .leftJoin(universitiesTable, eq(universitiesTable.id, universityContractsTable.universityId))
@@ -126,15 +143,6 @@ router.get("/university-contracts", requireAuth, requirePermission("university_c
       .orderBy(desc(universityContractsTable.createdAt))
       .limit(pageSize + 1)
       .offset(offset);
-
-    if (search && search.trim()) {
-      const term = search.trim().toLowerCase();
-      rows = rows.filter(r =>
-        (r.universityName || "").toLowerCase().includes(term) ||
-        (r.country || "").toLowerCase().includes(term) ||
-        (r.fileName || "").toLowerCase().includes(term),
-      );
-    }
 
     const hasMore = rows.length > pageSize;
     const data = rows.slice(0, pageSize).map(enrichRow);

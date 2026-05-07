@@ -43,6 +43,7 @@ type Contract = {
   uploadedByUserId: number | null;
   createdAt: string;
   universityName?: string | null;
+  universityLogoUrl?: string | null;
   status: Status;
 };
 
@@ -418,6 +419,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   <th className="text-left px-4 py-3">Yıl</th>
                   <th className="text-left px-4 py-3">Geçerlilik</th>
                   <th className="text-left px-4 py-3">Bitiş</th>
+                  <th className="text-left px-4 py-3">Kalan gün</th>
                   <th className="text-left px-4 py-3">Durum</th>
                   <th className="text-left px-4 py-3">Dosya</th>
                   <th className="text-right px-4 py-3">İşlemler</th>
@@ -429,9 +431,32 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   const Icon = meta.icon;
                   const dl = daysLeft(c.expiryDate);
                   const dest = destByCountry[c.country];
+                  const tooltipText = dl === null ? "No expiry date set" :
+                    dl < 0 ? `Expired ${Math.abs(dl)} day${Math.abs(dl) === 1 ? "" : "s"} ago` :
+                    `Expires on ${formatDate(c.expiryDate)}`;
+                  const daysCellText = dl === null ? "-" :
+                    dl < 0 ? `−${Math.abs(dl)} g` :
+                    dl === 0 ? "Bugün" :
+                    `${dl} g`;
+                  const daysCellTone = dl === null ? "text-muted-foreground" :
+                    dl < 0 ? "text-red-600 font-semibold" :
+                    dl <= 7 ? "text-red-600 font-semibold" :
+                    dl <= 30 ? "text-amber-600 font-medium" :
+                    "text-foreground";
                   return (
                     <tr key={c.id} className="border-t hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{c.universityName || `#${c.universityId}`}</td>
+                      <td className="px-4 py-3 font-medium">
+                        <span className="inline-flex items-center gap-2">
+                          {c.universityLogoUrl ? (
+                            <img src={c.universityLogoUrl} alt="" className="w-6 h-6 rounded object-cover bg-muted" />
+                          ) : (
+                            <span className="w-6 h-6 rounded bg-muted inline-flex items-center justify-center text-[10px] text-muted-foreground">
+                              {(c.universityName || "?").slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                          <span>{c.universityName || `#${c.universityId}`}</span>
+                        </span>
+                      </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="text-base leading-none">{dest?.flagEmoji || "🌍"}</span>
@@ -443,14 +468,17 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                       <td className="px-4 py-3">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">{formatDate(c.expiryDate)}</span>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2">{formatDate(c.expiryDate)}</span>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            {dl === null ? "Bitiş tarihi yok" :
-                              dl < 0 ? `${Math.abs(dl)} gün önce sona erdi` :
-                              dl === 0 ? "Bugün sona eriyor" :
-                              `${dl} gün kaldı`}
-                          </TooltipContent>
+                          <TooltipContent>{tooltipText}</TooltipContent>
+                        </Tooltip>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`cursor-help ${daysCellTone}`}>{daysCellText}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>{tooltipText}</TooltipContent>
                         </Tooltip>
                       </td>
                       <td className="px-4 py-3">
