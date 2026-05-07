@@ -276,47 +276,57 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       return;
     }
 
-    // Atomic finalize: only the first concurrent request flips the status to
-    // "signed". The signed_contracts row is then inserted in the same scope
-    // and protected by a UNIQUE(signing_session_id) index as a backstop.
-    const [statusUpdate] = await db.update(signingSessionsTable).set({
-      status: "signed",
-      signedAt,
-      signerName: finalSignerName,
-    }).where(and(
-      eq(signingSessionsTable.id, r.session.id),
-      eq(signingSessionsTable.status, r.session.status),
-    )).returning({ id: signingSessionsTable.id });
-
-    if (!statusUpdate) {
-      res.status(409).json({ error: "This session has already been signed or is no longer pending." });
-      return;
-    }
-
+    // Atomic finalize: wrap status flip + signed_contracts insert in a single
+    // transaction so a mid-flight failure rolls back both. The conditional
+    // UPDATE ensures only the first concurrent request wins; UNIQUE(signing_
+    // session_id) on signed_contracts is a defensive backstop.
     let signed: typeof signedContractsTable.$inferSelect;
+    type FinalizeOutcome =
+      | { ok: true; row: typeof signedContractsTable.$inferSelect }
+      | { ok: false; status: number; error: string };
+    let outcome: FinalizeOutcome;
     try {
-      const [row] = await db.insert(signedContractsTable).values({
-        signingSessionId: r.session.id,
-        agentId: r.session.agentId,
-        templateId: r.template.id,
-        pdfObjectKey,
-        signatureImageObjectKey: signatureObjectKey,
-        evidenceHash,
-        signerEmail: r.session.signerEmail,
-        signerName: finalSignerName,
-        signerIp,
-        signerUserAgent,
-        signedAt,
-      }).returning();
-      signed = row;
-    } catch (insertErr: any) {
-      // Unique violation on signing_session_id — another concurrent request won.
-      if (insertErr?.code === "23505") {
+      outcome = await db.transaction(async (tx): Promise<FinalizeOutcome> => {
+        const [statusUpdate] = await tx.update(signingSessionsTable).set({
+          status: "signed",
+          signedAt,
+          signerName: finalSignerName,
+        }).where(and(
+          eq(signingSessionsTable.id, r.session.id),
+          eq(signingSessionsTable.status, r.session.status),
+        )).returning({ id: signingSessionsTable.id });
+        if (!statusUpdate) {
+          return { ok: false, status: 409, error: "This session has already been signed or is no longer pending." };
+        }
+        const [row] = await tx.insert(signedContractsTable).values({
+          signingSessionId: r.session.id,
+          agentId: r.session.agentId,
+          templateId: r.template.id,
+          pdfObjectKey,
+          signatureImageObjectKey: signatureObjectKey,
+          evidenceHash,
+          signerEmail: r.session.signerEmail,
+          signerName: finalSignerName,
+          signerIp,
+          signerUserAgent,
+          signedAt,
+        }).returning();
+        return { ok: true, row };
+      });
+    } catch (txErr: any) {
+      if (txErr?.code === "23505") {
         res.status(409).json({ error: "This session has already been signed." });
         return;
       }
-      throw insertErr;
+      console.error("[public-sign] finalize transaction failed:", txErr);
+      res.status(500).json({ error: "Failed to complete signing" });
+      return;
     }
+    if (!outcome.ok) {
+      res.status(outcome.status).json({ error: outcome.error });
+      return;
+    }
+    signed = outcome.row;
 
     // Send the signed PDF download link to the signer (best-effort).
     // The signer is unauthenticated — link uses the same opaque token to gate
