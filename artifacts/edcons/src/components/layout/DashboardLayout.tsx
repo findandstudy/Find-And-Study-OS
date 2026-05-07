@@ -111,7 +111,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           { title: t("dashboard.campaigns"), icon: Megaphone, url: '/admin/campaigns' },
           { title: t("dashboard.popupAds"), icon: Bell, url: '/admin/popups' },
           { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
-          { title: "Şubeler", icon: Building, url: '/admin/branches' },
+          ...(role === 'super_admin' ? [{ title: "Şubeler", icon: Building, url: '/admin/branches' }] : []),
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
           { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },

@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
@@ -132,7 +133,17 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
       return;
     }
     conditions.push(inArray(leadsTable.agentId, visibleIds));
-  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+  }
+  // Branch scoping (super_admin: null = all). Applies to staff AND agents.
+  const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+  if (visibleBranchIds !== null) {
+    if (visibleBranchIds.length === 0) {
+      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      return;
+    }
+    conditions.push(inArray(leadsTable.branchId, visibleBranchIds));
+  }
+  if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
     conditions.push(
       or(
         eq(leadsTable.assignedToId, user.id),
@@ -215,7 +226,13 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
     : await inferOriginFromUser(user);
+  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null);
+  if (inheritedBranchId == null && user.role !== "super_admin" && !isAgentRole(user.role)) {
+    res.status(403).json({ error: "No accessible branch — cannot create lead" });
+    return;
+  }
   const [lead] = await db.insert(leadsTable).values({
+    branchId: inheritedBranchId,
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status, email,
     phone, phoneE164: toE164(phone),
     nationality: nationality || null,

@@ -4,6 +4,7 @@ import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -133,6 +134,17 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
       )
     );
   }
+  // Branch scoping (super_admin: null = all). Applies to staff AND agents.
+  if (user.role !== "student") {
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+    if (visibleBranchIds !== null) {
+      if (visibleBranchIds.length === 0) {
+        res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+        return;
+      }
+      conditions.push(inArray(studentsTable.branchId, visibleBranchIds));
+    }
+  }
   if (search) {
     conditions.push(
       or(
@@ -248,7 +260,13 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
     : await inferOriginFromUser(user);
+  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null);
+  if (inheritedBranchId == null && user.role !== "super_admin" && user.role !== "student" && !isAgentRole(user.role)) {
+    res.status(403).json({ error: "No accessible branch — cannot create student" });
+    return;
+  }
   const [student] = await db.insert(studentsTable).values({
+    branchId: inheritedBranchId,
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
     email: email ? email.toLowerCase().trim() : null,
     phone: phone || null,

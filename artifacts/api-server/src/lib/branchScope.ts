@@ -44,8 +44,10 @@ export async function getVisibleBranchIds(userId: number, role: string): Promise
 
 /**
  * Resolve a branch_id to inherit on a newly created record.
- * - If creator is super_admin and explicitly passed a branchId, use it.
- * - Otherwise inherit from the creator's first visible branch (their own).
+ * - super_admin may pass any branchId explicitly (or null = unassigned).
+ * - Branch-scoped users: explicitBranchId is honored only if it is within
+ *   their visible scope; otherwise inherit their first visible branch.
+ *   If they have no visible branches, returns null (caller should 403).
  */
 export async function resolveCreateBranchId(
   userId: number,
@@ -56,6 +58,31 @@ export async function resolveCreateBranchId(
     return explicitBranchId ?? null;
   }
   const visible = await getVisibleBranchIds(userId, role);
-  if (visible && visible.length > 0) return visible[0];
-  return explicitBranchId ?? null;
+  if (!visible || visible.length === 0) return null;
+  if (explicitBranchId != null && visible.includes(explicitBranchId)) {
+    return explicitBranchId;
+  }
+  return visible[0];
+}
+
+/**
+ * Verify that the given agent is in the caller's visible branch scope.
+ * Returns true for super_admin (no scope), or when at least one of the
+ * agent's branches intersects with the caller's visible branches.
+ */
+export async function isAgentInScope(
+  callerUserId: number,
+  callerRole: string,
+  agentId: number,
+): Promise<boolean> {
+  const visible = await getVisibleBranchIds(callerUserId, callerRole);
+  if (visible === null) return true; // super_admin
+  if (visible.length === 0) return false;
+  const links = await db
+    .select({ branchId: agentBranchesTable.branchId })
+    .from(agentBranchesTable)
+    .where(eq(agentBranchesTable.agentId, agentId));
+  if (links.length === 0) return false;
+  const allowed = new Set(visible);
+  return links.some(l => allowed.has(l.branchId));
 }

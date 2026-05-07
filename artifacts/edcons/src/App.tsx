@@ -263,7 +263,7 @@ function StaffAdminShell() {
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></ProtectedRoute>
           </Route>
           <Route path="/admin/branches">
-            <ProtectedRoute allowedRoles={STAFF_ROLES}><AdminBranches /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={["super_admin"]}><AdminBranches /></ProtectedRoute>
           </Route>
           <Route path="/admin/catalog">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminCatalog /></ProtectedRoute>

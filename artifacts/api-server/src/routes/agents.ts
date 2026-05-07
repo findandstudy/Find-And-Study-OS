@@ -4,7 +4,7 @@ import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, bran
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
-import { getVisibleBranchIds } from "../lib/branchScope";
+import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
@@ -722,6 +722,10 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 
 router.get("/agents/:id/sub-agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const parentId = parseInt(req.params.id, 10);
+  if (!(await isAgentInScope(req.user!.id, req.user!.role, parentId))) {
+    res.status(403).json({ error: "Agent not in your branch scope" });
+    return;
+  }
   const { page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
@@ -828,12 +832,20 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   const id = parseInt(req.params.id, 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
+    res.status(403).json({ error: "Agent not in your branch scope" });
+    return;
+  }
   const links = await db.select({ branchId: agentBranchesTable.branchId }).from(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
   res.json({ ...agent, branchIds: links.map(l => l.branchId) });
 });
 
 router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
+    res.status(403).json({ error: "Agent not in your branch scope" });
+    return;
+  }
   const updates: Record<string, unknown> = {};
   for (const key of AGENT_PATCH_FIELDS) {
     if (req.body[key] !== undefined) {
@@ -938,6 +950,10 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
 
 router.delete("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
+    res.status(403).json({ error: "Agent not in your branch scope" });
+    return;
+  }
   const [agent] = await db.delete(agentsTable).where(eq(agentsTable.id, id)).returning();
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   res.json({ success: true });

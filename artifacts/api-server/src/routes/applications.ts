@@ -5,6 +5,8 @@ import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
+import { or as orFn } from "drizzle-orm";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, getCancelledStageKey } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -98,6 +100,18 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     }
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
     if (stage) conditions.push(eq(applicationsTable.stage, stage));
+  }
+
+  // Branch scoping (super_admin: null = all). Applies to staff AND agents.
+  if (user.role !== "student") {
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+    if (visibleBranchIds !== null) {
+      if (visibleBranchIds.length === 0) {
+        res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+        return;
+      }
+      conditions.push(inArray(applicationsTable.branchId, visibleBranchIds));
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -428,7 +442,26 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     ? { originType: studentFull.originType as any, originEntityType: studentFull.originEntityType, originEntityId: studentFull.originEntityId, originDisplayName: studentFull.originDisplayName }
     : await inferOriginFromUser(user);
 
+  let inheritedBranchId: number | null;
+  if (user.role === "super_admin") {
+    inheritedBranchId = studentFull.branchId
+      ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null));
+  } else {
+    const callerVisible = await getVisibleBranchIds(user.id, user.role);
+    if (callerVisible !== null && (callerVisible.length === 0 ||
+        (studentFull.branchId != null && !callerVisible.includes(studentFull.branchId)))) {
+      res.status(403).json({ error: "Student not in your branch scope" });
+      return;
+    }
+    inheritedBranchId = studentFull.branchId
+      ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null));
+    if (inheritedBranchId == null && !isAgentRole(user.role)) {
+      res.status(403).json({ error: "No accessible branch — cannot create application" });
+      return;
+    }
+  }
   const [app] = await db.insert(applicationsTable).values({
+    branchId: inheritedBranchId,
     studentId, stage,
     season: season || currentYear,
     universityId: snapshotUniversityId || null,
