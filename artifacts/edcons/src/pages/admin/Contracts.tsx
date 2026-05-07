@@ -175,7 +175,7 @@ export default function ContractsPage() {
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(c.signedAt).toLocaleString()}</td>
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash.slice(0, 16)}…</td>
                   <td className="px-4 py-3 text-right">
-                    <a href={c.pdfObjectKey} target="_blank" rel="noreferrer">
+                    <a href={`/api/contracts/signed/${c.id}/pdf`} target="_blank" rel="noreferrer">
                       <Button size="sm" variant="ghost"><Download className="w-4 h-4" /></Button>
                     </a>
                   </td>

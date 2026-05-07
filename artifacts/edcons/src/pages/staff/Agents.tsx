@@ -122,6 +122,7 @@ const emptyForm = {
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
   assignedStaffId: "",
   branchIds: [] as number[],
+  entityType: "company", taxNumber: "", preferredContractLanguage: "",
 };
 
 function splitPhone(phone: string | null) {
@@ -300,6 +301,9 @@ export default function AgentsPage() {
       subAgentCommissionRate: agent.subAgentCommissionRate?.toString() || "",
       hideServiceFees: agent.hideServiceFees,
       assignedStaffId: (agent as any).assignedStaffId?.toString() || "",
+      entityType: (agent as any).entityType || "company",
+      taxNumber: (agent as any).taxNumber || "",
+      preferredContractLanguage: (agent as any).preferredContractLanguage || "",
     });
     if (agent.country) {
       const c = countries.find(ct => ct.name === agent.country);
@@ -393,6 +397,9 @@ export default function AgentsPage() {
       subAgentCommissionRate: form.subAgentCommissionRate ? parseFloat(form.subAgentCommissionRate) : null,
       hideServiceFees: form.hideServiceFees,
       assignedStaffId: !isSubAgent && form.assignedStaffId ? parseInt(form.assignedStaffId) : null,
+      entityType: form.entityType || "company",
+      taxNumber: form.taxNumber.trim() || null,
+      preferredContractLanguage: form.preferredContractLanguage || null,
     };
 
     try {
@@ -1203,6 +1210,38 @@ export default function AgentsPage() {
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Contract identity (used for auto-template matching) */}
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Entity Type</Label>
+                  <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v }))}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="company">Company</SelectItem>
+                      <SelectItem value="individual">Individual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Tax / ID Number</Label>
+                  <Input value={form.taxNumber} onChange={e => setForm(f => ({ ...f, taxNumber: e.target.value }))} className="rounded-xl" placeholder="VKN / TCKN" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Contract Language</Label>
+                  <Select value={form.preferredContractLanguage || "__auto__"} onValueChange={v => setForm(f => ({ ...f, preferredContractLanguage: v === "__auto__" ? "" : v }))}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__auto__">Auto</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="tr">Türkçe</SelectItem>
+                      <SelectItem value="ar">العربية</SelectItem>
+                      <SelectItem value="fr">Français</SelectItem>
+                      <SelectItem value="ru">Русский</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -33,7 +33,14 @@ async function pickTemplate(language: string, entityType: string) {
   return fallbackLang[0] || null;
 }
 
-router.get("/contracts/sessions", requireAuth, requirePermission("contracts.view", "self_fill_links.view"), async (req, res): Promise<void> => {
+// Mode-aware gate: self-fill listings honor self_fill_links.view, admin-driven listings honor contracts.view.
+async function gateSessionList(req: any, res: any, next: any) {
+  const mode = (req.query.mode as string) || null;
+  const need = mode === "self_fill" ? "self_fill_links.view" : "contracts.view";
+  return requirePermission(need)(req, res, next);
+}
+
+router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res): Promise<void> => {
   try {
     const mode = (req.query.mode as string) || null;
     const where = mode === "self_fill" || mode === "admin_driven"
@@ -72,6 +79,27 @@ router.get("/contracts/signed", requireAuth, requirePermission("contracts.view")
   } catch (err) {
     console.error("[contracts] signed list:", err);
     res.status(500).json({ error: "Failed to list signed contracts" });
+  }
+});
+
+// Admin-gated streaming download for a signed contract PDF.
+router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contracts.view"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    const { ObjectStorageService } = await import("../lib/objectStorage");
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(row.pdfObjectKey);
+    const [meta] = await file.getMetadata();
+    res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="contract-${id}.pdf"`);
+    if (meta.size) res.setHeader("Content-Length", String(meta.size));
+    file.createReadStream().on("error", (e) => { console.error("[contracts] stream:", e); try { res.end(); } catch {} }).pipe(res);
+  } catch (err) {
+    console.error("[contracts] signed pdf:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download" });
   }
 });
 
@@ -124,7 +152,7 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
 
     await writeAudit({
       userId: (req as any).user?.id ?? null,
-      action: "contract.sign_link_sent",
+      action: "contract.link_sent",
       resource: "signing_session",
       resourceId: session.id,
       changes: { mode: "admin_driven", agentId: aId, templateId: tpl.id, expiresAt: expiresAt.toISOString() },
@@ -181,7 +209,7 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
 
     await writeAudit({
       userId: (req as any).user?.id ?? null,
-      action: "contract.self_fill_link_sent",
+      action: "contract.link_sent",
       resource: "signing_session",
       resourceId: session.id,
       changes: { mode: "self_fill", templateId: tpl.id, expiresAt: expiresAt.toISOString() },
@@ -195,10 +223,18 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
   }
 });
 
-router.post("/contracts/sessions/:id/revoke", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
+async function gateSessionMutate(req: any, res: any, next: any) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db.select({ mode: signingSessionsTable.mode }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  const need = row.mode === "self_fill" ? "self_fill_links.manage" : "contracts.manage";
+  return requirePermission(need)(req, res, next);
+}
+
+router.post("/contracts/sessions/:id/revoke", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.update(signingSessionsTable)
       .set({ status: "revoked", revokedAt: new Date() })
       .where(eq(signingSessionsTable.id, id))
@@ -206,7 +242,7 @@ router.post("/contracts/sessions/:id/revoke", requireAuth, requirePermission("co
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     await writeAudit({
       userId: (req as any).user?.id ?? null,
-      action: "contract.session_revoked",
+      action: "contract.revoked",
       resource: "signing_session",
       resourceId: id,
       ipAddress: req.ip,
@@ -218,7 +254,7 @@ router.post("/contracts/sessions/:id/revoke", requireAuth, requirePermission("co
   }
 });
 
-router.post("/contracts/sessions/:id/resend", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
+router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -252,9 +288,10 @@ router.post("/contracts/sessions/:id/resend", requireAuth, requirePermission("co
     }
     await writeAudit({
       userId: (req as any).user?.id ?? null,
-      action: "contract.session_resent",
+      action: "contract.link_sent",
       resource: "signing_session",
       resourceId: id,
+      changes: { resent: true },
       ipAddress: req.ip,
     });
     res.json({ data: { signUrl, expiresAt } });

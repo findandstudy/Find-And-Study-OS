@@ -54,8 +54,21 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
   try {
     const r = await resolveByToken(req.params.token);
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
+    if (r.expired) { res.status(410).json({ error: "This signing link has expired." }); return; }
     if (!r.session.openedAt && r.session.status !== "signed") {
-      try { await db.update(signingSessionsTable).set({ openedAt: new Date() }).where(eq(signingSessionsTable.id, r.session.id)); } catch {}
+      try {
+        await db.update(signingSessionsTable).set({ openedAt: new Date() }).where(eq(signingSessionsTable.id, r.session.id));
+        await writeAudit({
+          userId: r.session.createdByUserId ?? null,
+          action: "contract.opened",
+          resource: "signing_session",
+          resourceId: r.session.id,
+          changes: { signerEmail: r.session.signerEmail },
+          ipAddress: req.ip,
+        });
+      } catch (auditErr) {
+        console.error("[public-sign] failed to record open:", auditErr);
+      }
     }
     res.json({
       data: {
