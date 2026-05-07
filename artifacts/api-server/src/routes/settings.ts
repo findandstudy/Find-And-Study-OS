@@ -38,6 +38,7 @@ const SETTINGS_PATCH_FIELDS = [
   "availableYears",
   "offerExpiryWarningDays",
   "contractExpiryReminderDays",
+  "defaultSigningDeadlineDays",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
@@ -112,6 +113,14 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
   if (updates.availableYears !== undefined) {
     updates.availableYears = normalizeYears(updates.availableYears);
     invalidateSeasonCache();
+  }
+  if (updates.defaultSigningDeadlineDays !== undefined) {
+    const n = parseInt(String(updates.defaultSigningDeadlineDays), 10);
+    if (!Number.isInteger(n) || n < 1 || n > 365) {
+      res.status(400).json({ error: "defaultSigningDeadlineDays must be an integer between 1 and 365" });
+      return;
+    }
+    updates.defaultSigningDeadlineDays = n;
   }
 
   const [existing] = await db.select().from(settingsTable);

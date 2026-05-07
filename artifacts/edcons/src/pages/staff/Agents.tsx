@@ -123,6 +123,7 @@ const emptyForm = {
   assignedStaffId: "",
   branchIds: [] as number[],
   entityType: "company", taxNumber: "", preferredContractLanguage: "",
+  assignedContractTemplateId: "",
 };
 
 function splitPhone(phone: string | null) {
@@ -400,6 +401,7 @@ export default function AgentsPage() {
       entityType: form.entityType || "company",
       taxNumber: form.taxNumber.trim() || null,
       preferredContractLanguage: form.preferredContractLanguage || null,
+      assignedContractTemplateId: form.assignedContractTemplateId ? parseInt(form.assignedContractTemplateId, 10) : null,
     };
 
     try {
@@ -1233,7 +1235,7 @@ export default function AgentsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Contract Language</Label>
-                  <Select value={form.preferredContractLanguage || "__auto__"} onValueChange={v => setForm(f => ({ ...f, preferredContractLanguage: v === "__auto__" ? "" : v }))}>
+                  <Select value={form.preferredContractLanguage || "__auto__"} onValueChange={v => setForm(f => ({ ...f, preferredContractLanguage: v === "__auto__" ? "" : v, assignedContractTemplateId: "" }))}>
                     <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__auto__">Auto</SelectItem>
@@ -1246,6 +1248,15 @@ export default function AgentsPage() {
                   </Select>
                 </div>
               </div>
+
+              {!editingAgent && (
+                <ContractTemplatePicker
+                  entityType={form.entityType || "company"}
+                  language={form.preferredContractLanguage}
+                  value={form.assignedContractTemplateId}
+                  onChange={v => setForm(f => ({ ...f, assignedContractTemplateId: v }))}
+                />
+              )}
 
               {/* Commission */}
               <div className="grid sm:grid-cols-2 gap-4">
@@ -1505,5 +1516,59 @@ export default function AgentsPage() {
         </div>
       )}
     </>
+  );
+}
+
+function ContractTemplatePicker({ entityType, language, value, onChange }: {
+  entityType: string;
+  language: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [templates, setTemplates] = useState<Array<{ id: number; name: string; language: string; entityType: string; version: number; isActive: boolean }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    customFetch(`/api/contract-templates`).then((r: any) => {
+      setTemplates(r.data || r || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const filtered = templates.filter(t => t.isActive && t.entityType === entityType && (!language || t.language === language));
+
+  // Auto-select if exactly one match and nothing chosen.
+  useEffect(() => {
+    if (!value && filtered.length === 1) onChange(String(filtered[0].id));
+    if (value && !filtered.find(t => String(t.id) === value)) onChange("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered.map(t => t.id).join(",")]);
+
+  return (
+    <div className="space-y-1.5">
+      <Label>Contract Template <span className="text-red-500">*</span></Label>
+      {loading ? (
+        <div className="text-xs text-muted-foreground">Loading templates…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 border border-amber-200 dark:border-amber-800">
+          No active template matches entity type <strong>{entityType}</strong>{language ? <> and language <strong>{language}</strong></> : null}. Create one in the Contract Templates section first.
+        </div>
+      ) : (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select a template" /></SelectTrigger>
+          <SelectContent>
+            {filtered.map(t => (
+              <SelectItem key={t.id} value={String(t.id)}>
+                {t.name} — {t.language.toUpperCase()} v{t.version}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <p className="text-xs text-muted-foreground">
+        On create, a 6-digit verification code is emailed and an admin-driven signing session is opened. The agent must verify their email and sign before accessing the dashboard.
+      </p>
+    </div>
   );
 }

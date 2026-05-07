@@ -40,8 +40,65 @@ import contractTemplatesRouter from "./contractTemplates";
 import contractsRouter from "./contracts";
 import publicSigningRouter from "./publicSigning";
 import universityContractsRouter from "./universityContracts";
+import agentOnboardingRouter, { ONBOARDING_HELPERS } from "./agentOnboarding";
 
 const router: IRouter = Router();
+
+// ────────────────────────────────────────────────────────────────────────────
+// Agent onboarding gate. Runs after the global authMiddleware. For users in
+// AGENT_ROLES, blocks all but the allow-listed endpoints until the user has
+// (a) verified their email, AND (b) signed their primary onboarding contract.
+// Returns 403 with an explicit code so the client can render the right lock
+// screen (verify-email, sign-contract, contract-expired).
+// ────────────────────────────────────────────────────────────────────────────
+const AGENT_ROLES = new Set(["agent", "sub_agent", "agent_staff"]);
+const ALLOWLIST_EXACT = new Set([
+  "/auth/me", "/auth/logout",
+  "/agents/me/onboarding-status",
+  "/agents/me/resend-verification",
+  "/agents/me/verify-email",
+  "/contracts/me",
+  "/contracts/me/sign",
+  "/settings/branding",
+  "/settings/branding/logo",
+  "/settings/available-years",
+  "/health",
+]);
+const ALLOWLIST_PREFIX = ["/storage/", "/auth/"];
+
+router.use(async (req, res, next) => {
+  // Public/unauth endpoints just pass through.
+  if (!req.user || !AGENT_ROLES.has(req.user.role)) { next(); return; }
+  const path = req.path;
+  if (ALLOWLIST_EXACT.has(path)) { next(); return; }
+  for (const p of ALLOWLIST_PREFIX) { if (path.startsWith(p)) { next(); return; } }
+  // Email gate.
+  if (!req.user.emailVerified) {
+    res.status(403).json({ error: "Email verification required", code: "EMAIL_VERIFICATION_REQUIRED" });
+    return;
+  }
+  // Contract gate (primary onboarding only).
+  try {
+    const agent = await ONBOARDING_HELPERS.loadAgentForUser(req.user.id, req.user.role);
+    if (!agent) { next(); return; }
+    let session = await ONBOARDING_HELPERS.loadOnboardingSession(agent.id);
+    if (!session) { next(); return; }
+    session = await ONBOARDING_HELPERS.lazyExpire(session);
+    if (session.status === "signed") { next(); return; }
+    if (session.status === "expired") {
+      res.status(403).json({ error: "Onboarding contract expired", code: "CONTRACT_EXPIRED" });
+      return;
+    }
+    if (session.status === "revoked") {
+      res.status(403).json({ error: "Onboarding contract revoked", code: "CONTRACT_EXPIRED" });
+      return;
+    }
+    res.status(403).json({ error: "Contract signature required", code: "CONTRACT_SIGNATURE_REQUIRED" });
+  } catch (err) {
+    console.error("[agent-onboarding-gate]", err);
+    next();
+  }
+});
 
 router.use(healthRouter);
 router.use(storageRouter);
@@ -84,5 +141,6 @@ router.use(contractTemplatesRouter);
 router.use(contractsRouter);
 router.use(publicSigningRouter);
 router.use(universityContractsRouter);
+router.use(agentOnboardingRouter);
 
 export default router;

@@ -34,6 +34,7 @@ export const agentsTable = pgTable("agents", {
   entityType: text("entity_type").notNull().default("company"),
   taxNumber: text("tax_number"),
   preferredContractLanguage: text("preferred_contract_language").notNull().default("en"),
+  assignedContractTemplateId: integer("assigned_contract_template_id"),
   canManageStaff: boolean("can_manage_staff").notNull().default(true),
   branch: text("branch"),
   assignedStaffId: integer("assigned_staff_id").references(() => usersTable.id, { onDelete: "set null" }),

@@ -631,6 +631,7 @@ export default function SettingsPage() {
       <div className="space-y-6">
         {isSuperAdminLocal && <OfferExpiryThresholdsCard />}
         {isSuperAdminLocal && <ContractExpiryThresholdsCard />}
+        <SigningDeadlineDaysCard />
         <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
       </div>
     );
@@ -2065,6 +2066,73 @@ function OfferExpiryThresholdsCard() {
             value={value}
             onChange={e => setValue(e.target.value)}
             placeholder="30,14,7,1"
+            className="mt-1"
+          />
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Kaydediliyor..." : "Kaydet"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function SigningDeadlineDaysCard() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: () => customFetch("/api/settings"),
+  });
+  const initial = settings?.defaultSigningDeadlineDays ?? 14;
+  const [value, setValue] = useState<string>(String(initial));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings?.defaultSigningDeadlineDays !== undefined) {
+      setValue(String(settings.defaultSigningDeadlineDays));
+    }
+  }, [settings?.defaultSigningDeadlineDays]);
+
+  async function handleSave() {
+    const n = parseInt(value, 10);
+    if (!Number.isInteger(n) || n < 1 || n > 365) {
+      toast({ title: "Geçersiz değer", description: "1 ile 365 arasında bir tam sayı girin.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ defaultSigningDeadlineDays: n }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Süre kaydedildi", description: `Yeni varsayılan: ${n} gün` });
+    } catch (err: any) {
+      toast({ title: "Kaydetme başarısız", description: err?.message, variant: "destructive" });
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Card className="border shadow-sm p-6">
+      <div className="mb-4">
+        <h3 className="font-display font-semibold text-base">Sözleşme imza süresi (gün)</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Yeni acente oluşturulduğunda otomatik açılan birincil onboarding imza oturumu, kaç gün geçerli olsun? Süre dolarsa acente kilit ekranı görür ve admin yeniden gönderebilir. (1–365 gün, varsayılan 14)
+        </p>
+      </div>
+      <div className="flex items-end gap-3">
+        <div className="flex-1 max-w-[200px]">
+          <Label htmlFor="defaultSigningDeadlineDays" className="text-xs">Gün</Label>
+          <Input
+            id="defaultSigningDeadlineDays"
+            type="number"
+            min={1}
+            max={365}
+            value={value}
+            onChange={e => setValue(e.target.value)}
             className="mt-1"
           />
         </div>

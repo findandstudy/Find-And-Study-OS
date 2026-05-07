@@ -1,8 +1,12 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
-import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable } from "@workspace/db";
+import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
+import { writeAudit } from "../lib/auditLog";
+import { sendEmail } from "../lib/email";
+import { createSigningToken } from "../lib/signingTokens";
+import { ONBOARDING_HELPERS } from "./agentOnboarding";
 import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
 import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
 import bcrypt from "bcryptjs";
@@ -18,7 +22,7 @@ const AGENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone",
   "status", "commissionRate", "notes", "companyName", "country",
   "agencyCode", "state", "city", "address", "businessName",
-  "entityType", "taxNumber", "preferredContractLanguage",
+  "entityType", "taxNumber", "preferredContractLanguage", "assignedContractTemplateId",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
   "contractUrl", "contractStartDate", "contractEndDate",
   "branch", "parentAgentId",
@@ -743,6 +747,8 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     logoUrl, agentIdProofUrl, businessCertUrl, contractUrl, branch,
     parentAgentId, subAgentCommissionRate, hideServiceFees,
     assignedStaffId, branchIds,
+    entityType, taxNumber, preferredContractLanguage,
+    assignedContractTemplateId,
   } = req.body;
 
   if (!firstName || !lastName) {
@@ -750,15 +756,50 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     return;
   }
 
+  // Required: a contract template must be selected so the agent can be sent
+  // their primary onboarding sign request as part of account creation.
+  const tplId = assignedContractTemplateId ? parseInt(String(assignedContractTemplateId), 10) : null;
+  if (!tplId || isNaN(tplId)) {
+    res.status(400).json({ error: "assignedContractTemplateId is required" });
+    return;
+  }
+  const [template] = await db.select().from(contractTemplatesTable).where(and(
+    eq(contractTemplatesTable.id, tplId),
+    isNull(contractTemplatesTable.deletedAt),
+    eq(contractTemplatesTable.isActive, true),
+  ));
+  if (!template) {
+    res.status(404).json({ error: "Selected contract template not found or inactive" });
+    return;
+  }
+  // Validate template language/entityType match the agent metadata when provided.
+  const ent = entityType === "individual" ? "individual" : "company";
+  if (template.entityType !== ent) {
+    res.status(400).json({ error: `Template entityType (${template.entityType}) does not match agent entityType (${ent})` });
+    return;
+  }
+  if (preferredContractLanguage && template.language !== preferredContractLanguage) {
+    res.status(400).json({ error: `Template language (${template.language}) does not match agent preferredContractLanguage (${preferredContractLanguage})` });
+    return;
+  }
+  if (!email) {
+    res.status(400).json({ error: "Email is required to send onboarding verification" });
+    return;
+  }
+
   let userId: number | null = null;
-  if (email) {
+  {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (existingUser) {
       userId = existingUser.id;
+      // Force email re-verification for the onboarding flow.
+      await db.update(usersTable).set({ emailVerified: false }).where(eq(usersTable.id, existingUser.id));
     } else {
       const role = parentAgentId ? "sub_agent" : "agent";
       const [newUser] = await db.insert(usersTable).values({
-        email, firstName, lastName, role, phone: phone || null, phoneE164: toE164(phone || null),
+        email, firstName, lastName, role,
+        phone: phone || null, phoneE164: toE164(phone || null),
+        emailVerified: false, isActive: true,
       }).returning();
       userId = newUser.id;
     }
@@ -767,6 +808,10 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   const [agent] = await db.insert(agentsTable).values({
     userId,
     firstName, lastName, status,
+    entityType: ent,
+    taxNumber: taxNumber || null,
+    preferredContractLanguage: preferredContractLanguage || template.language,
+    assignedContractTemplateId: template.id,
     email: email || null,
     phone: phone || null,
     phoneE164: toE164(phone || null),
@@ -813,6 +858,61 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     await db.insert(agentBranchesTable)
       .values(finalBranchIds.map(bid => ({ agentId: agent.id, branchId: bid })))
       .onConflictDoNothing();
+  }
+
+  // ── Onboarding: 6-digit verification code + admin-driven signing session ──
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    await db.update(emailVerificationCodesTable)
+      .set({ used: true })
+      .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
+    const code = ONBOARDING_HELPERS.generateVerificationCode();
+    await db.insert(emailVerificationCodesTable).values({
+      email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    });
+    try {
+      const emailContent = ONBOARDING_HELPERS.buildOnboardingVerificationCodeEmail(firstName, code);
+      await sendEmail(normalizedEmail, emailContent);
+    } catch (err) {
+      console.error("[agents POST] failed to send verification email:", err);
+    }
+    await writeAudit({
+      userId: req.user!.id,
+      action: "agent.email_verification_sent",
+      resource: "user",
+      resourceId: userId,
+      changes: { agentId: agent.id, initial: true },
+      ipAddress: req.ip,
+    });
+
+    const [s] = await db.select({ days: settingsTable.defaultSigningDeadlineDays }).from(settingsTable);
+    const days = Math.max(1, Math.min(365, s?.days || 14));
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const { tokenHash } = createSigningToken();
+    const signerName = `${firstName} ${lastName}`.trim() || businessName || null;
+    const [session] = await db.insert(signingSessionsTable).values({
+      templateId: template.id,
+      agentId: agent.id,
+      tokenHash,
+      mode: "admin_driven",
+      status: "review_pending",
+      intakeData: null,
+      signerEmail: normalizedEmail,
+      signerName,
+      expiresAt,
+      isPrimaryOnboarding: true,
+      createdByUserId: req.user!.id,
+    }).returning();
+    await writeAudit({
+      userId: req.user!.id,
+      action: "agent.contract_auto_assigned",
+      resource: "signing_session",
+      resourceId: session.id,
+      changes: { agentId: agent.id, templateId: template.id, expiresAt: expiresAt.toISOString(), days },
+      ipAddress: req.ip,
+    });
+  } catch (err) {
+    console.error("[agents POST] onboarding setup failed:", err);
   }
 
   dispatchNotification({

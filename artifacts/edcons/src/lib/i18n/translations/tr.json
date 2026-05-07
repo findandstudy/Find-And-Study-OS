@@ -587,7 +587,8 @@
     "website": "Web Sitesi",
     "nationality": "Uyruk",
     "source": "Kaynak",
-    "stage": "Aşama"
+    "stage": "Aşama",
+    "signOut": "Çıkış yap"
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",
@@ -1309,5 +1310,40 @@
     "loadError": "Yükleme hatası",
     "downloadFailed": "İndirilemedi",
     "daysSuffix": "g"
+  },
+  "agentOnboarding": {
+    "verifyEmail": {
+      "title": "E-postanızı doğrulayın",
+      "subtitle": "Şu adrese 6 haneli kod gönderildi:",
+      "codeLabel": "Doğrulama kodu",
+      "submit": "Doğrula ve devam et",
+      "resend": "Kodu tekrar gönder",
+      "resendIn": "Tekrar gönderim",
+      "resent": "Yeni kod gönderildi. Gelen kutunuzu kontrol edin.",
+      "invalidCode": "Lütfen 6 haneli kodu girin.",
+      "failed": "Doğrulama başarısız.",
+      "resendFailed": "Kod tekrar gönderilemedi."
+    },
+    "sign": {
+      "title": "Acente sözleşmenizi imzalayın",
+      "deadline": "Son tarih",
+      "proceed": "İmzalamaya devam et",
+      "unavailable": "Sözleşme mevcut değil",
+      "notFound": "Onboarding sözleşmesi bulunamadı. Lütfen yöneticinizle iletişime geçin.",
+      "failed": "İmzalama başarısız."
+    },
+    "expired": {
+      "title": "Sözleşme imza süresi doldu",
+      "body": "Onboarding sözleşmeniz zamanında imzalanmadı. Lütfen yeni bir imza bağlantısı için yöneticinizle iletişime geçin."
+    },
+    "myContract": {
+      "title": "Sözleşmem",
+      "status": "Durum",
+      "signed": "İmzalandı",
+      "pending": "İmza bekleniyor",
+      "signedAt": "İmzalandığı tarih",
+      "download": "PDF indir",
+      "none": "Kayıtlı sözleşme yok."
+    }
   }
 }

@@ -33,6 +33,7 @@ export const signingSessionsTable = pgTable("signing_sessions", {
   signerName: text("signer_name"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdByUserId: integer("created_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  isPrimaryOnboarding: boolean("is_primary_onboarding").notNull().default(false),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   signedAt: timestamp("signed_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),

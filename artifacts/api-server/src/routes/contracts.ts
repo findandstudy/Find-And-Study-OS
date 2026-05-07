@@ -93,6 +93,7 @@ router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res)
       signedAt: signingSessionsTable.signedAt,
       revokedAt: signingSessionsTable.revokedAt,
       createdAt: signingSessionsTable.createdAt,
+      isPrimaryOnboarding: signingSessionsTable.isPrimaryOnboarding,
     }).from(signingSessionsTable)
       .where(where)
       .orderBy(desc(signingSessionsTable.createdAt))

@@ -587,7 +587,8 @@
     "website": "Website",
     "nationality": "Nationality",
     "source": "Source",
-    "stage": "Stage"
+    "stage": "Stage",
+    "signOut": "Sign out"
   },
   "seo": {
     "homeTitle": "Global Education Consultancy",
@@ -1368,5 +1369,40 @@
     "loadError": "Loading error",
     "downloadFailed": "Download failed",
     "daysSuffix": "d"
+  },
+  "agentOnboarding": {
+    "verifyEmail": {
+      "title": "Verify your email",
+      "subtitle": "We sent a 6-digit code to",
+      "codeLabel": "Verification code",
+      "submit": "Verify and continue",
+      "resend": "Resend code",
+      "resendIn": "Resend in",
+      "resent": "New code sent. Check your inbox.",
+      "invalidCode": "Please enter the 6-digit code.",
+      "failed": "Verification failed.",
+      "resendFailed": "Could not resend code."
+    },
+    "sign": {
+      "title": "Sign your agency contract",
+      "deadline": "Deadline",
+      "proceed": "Proceed to sign",
+      "unavailable": "Contract unavailable",
+      "notFound": "No onboarding contract found. Contact your administrator.",
+      "failed": "Signing failed."
+    },
+    "expired": {
+      "title": "Contract signing window expired",
+      "body": "Your onboarding contract was not signed in time. Please contact your administrator to have a new signing link issued."
+    },
+    "myContract": {
+      "title": "My Contract",
+      "status": "Status",
+      "signed": "Signed",
+      "pending": "Pending signature",
+      "signedAt": "Signed at",
+      "download": "Download PDF",
+      "none": "No contract on file."
+    }
   }
 }

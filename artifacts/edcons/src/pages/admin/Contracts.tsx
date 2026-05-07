@@ -13,6 +13,7 @@ type Session = {
   id: number; templateId: number; agentId: number | null; mode: string; status: string;
   signerEmail: string; signerName: string | null; expiresAt: string;
   openedAt: string | null; signedAt: string | null; revokedAt: string | null; createdAt: string;
+  isPrimaryOnboarding?: boolean;
 };
 type Signed = {
   id: number; signingSessionId: number; agentId: number | null; templateId: number;
@@ -25,6 +26,7 @@ const STATUS_LABELS: Record<string, { label: string; tone: "default" | "secondar
   review_pending: { label: "İmza bekleniyor", tone: "default" },
   signed: { label: "İmzalandı", tone: "outline" },
   revoked: { label: "İptal edildi", tone: "destructive" },
+  expired: { label: "Süresi doldu", tone: "destructive" },
 };
 
 export default function ContractsPage() {
@@ -86,6 +88,14 @@ export default function ContractsPage() {
       await load();
     } catch (err: any) { toast({ title: "Hata", description: err.message, variant: "destructive" }); }
   }
+  async function resendOnboarding(agentId: number) {
+    if (!confirm("Bu acente için yeni bir onboarding imza oturumu açılsın mı?")) return;
+    try {
+      const res: any = await customFetch(`/api/contracts/agent/${agentId}/resend-onboarding`, { method: "POST" });
+      toast({ title: "Onboarding yeniden gönderildi", description: `Bitiş: ${new Date(res.data?.expiresAt).toLocaleString()}` });
+      await load();
+    } catch (err: any) { toast({ title: "Hata", description: err.message, variant: "destructive" }); }
+  }
   async function resend(id: number) {
     try {
       const res: any = await customFetch(`/api/contracts/sessions/${id}/resend`, { method: "POST" });
@@ -134,7 +144,10 @@ export default function ContractsPage() {
                 {sessions.map(s => (
                   <tr key={s.id} className="border-t">
                     <td className="px-4 py-3">
-                      <div className="font-medium">{s.signerName || "-"}</div>
+                      <div className="font-medium flex items-center gap-2">
+                        {s.signerName || "-"}
+                        {s.isPrimaryOnboarding && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Onboarding</Badge>}
+                      </div>
                       <div className="text-xs text-muted-foreground">{s.signerEmail}</div>
                     </td>
                     <td className="px-4 py-3"><Badge variant={STATUS_LABELS[s.status]?.tone}>{STATUS_LABELS[s.status]?.label || s.status}</Badge></td>
@@ -146,6 +159,11 @@ export default function ContractsPage() {
                           <Button size="sm" variant="ghost" title="Yeniden gönder" onClick={() => resend(s.id)}><RotateCw className="w-4 h-4" /></Button>
                           <Button size="sm" variant="ghost" title="İptal et" onClick={() => revoke(s.id)}><Ban className="w-4 h-4 text-red-500" /></Button>
                         </>
+                      )}
+                      {s.isPrimaryOnboarding && (s.status === "expired" || s.status === "revoked") && s.agentId && (
+                        <Button size="sm" variant="outline" title="Onboarding sözleşmesini yeniden gönder" onClick={() => resendOnboarding(s.agentId!)}>
+                          <RotateCw className="w-3.5 h-3.5 mr-1" /> Yeniden gönder (onboarding)
+                        </Button>
                       )}
                     </td>
                   </tr>

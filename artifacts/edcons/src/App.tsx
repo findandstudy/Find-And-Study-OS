@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
+import { AgentOnboardingGuard } from "@/components/auth/AgentOnboardingGuard";
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
@@ -397,13 +398,18 @@ function StudentShell() {
   );
 }
 
+const AgentMyContract = lazy(() => import("@/pages/agent/MyContract"));
+
 function AgentShell() {
   return (
     <ProtectedRoute allowedRoles={AGENT_ROLES}>
+      <AgentOnboardingGuard>
       <DashboardLayout>
         <Suspense fallback={<ShellLoader />}>
         <Switch>
           <Route path="/agent" component={AgentDashboard} />
+          <Route path="/agent/sozlesmem" component={AgentMyContract} />
+          <Route path="/agent/my-contract" component={AgentMyContract} />
           <Route path="/agent/leads/:id">
             {(params) => <ProtectedRoute allowedRoles={AGENT_ROLES} requiredPermission="leads"><LeadDetail id={Number(params.id)} basePath="/agent" /></ProtectedRoute>}
           </Route>
@@ -442,6 +448,7 @@ function AgentShell() {
         </Switch>
         </Suspense>
       </DashboardLayout>
+      </AgentOnboardingGuard>
     </ProtectedRoute>
   );
 }

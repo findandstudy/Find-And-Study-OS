@@ -127,6 +127,11 @@ export const settingsTable = pgTable("settings", {
 
   // Agent contract expiry notification thresholds (CSV days, e.g. "30,14,7,1")
   contractExpiryReminderDays: text("contract_expiry_reminder_days").default("30,14,7,1"),
+
+  // Default deadline (in days) for newly-issued agent onboarding signing sessions.
+  // Configurable 1-365. After this deadline, the session is "expired" and the
+  // agent is locked out until an admin resends the link.
+  defaultSigningDeadlineDays: integer("default_signing_deadline_days").notNull().default(14),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });
