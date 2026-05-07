@@ -20,7 +20,7 @@ const AGENT_PATCH_FIELDS = [
   "agencyCode", "state", "city", "address", "businessName",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
   "contractUrl", "contractStartDate", "contractEndDate",
-  "branch", "pointOfContact", "parentAgentId",
+  "branch", "parentAgentId",
   "subAgentCommissionRate", "hideServiceFees", "assignedStaffId", "canManageStaff",
 ];
 
@@ -740,7 +740,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     companyName, country, commissionRate, agencyCode,
     state, city, address, businessName, category,
     logoUrl, agentIdProofUrl, businessCertUrl, contractUrl, branch,
-    pointOfContact, parentAgentId, subAgentCommissionRate, hideServiceFees,
+    parentAgentId, subAgentCommissionRate, hideServiceFees,
     assignedStaffId, branchIds,
   } = req.body;
 
@@ -783,7 +783,6 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     businessCertUrl: businessCertUrl || null,
     contractUrl: contractUrl || null,
     branch: branch || null,
-    pointOfContact: pointOfContact || null,
     assignedStaffId: assignedStaffId ? parseInt(assignedStaffId, 10) : null,
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,
     subAgentCommissionRate: subAgentCommissionRate ? parseFloat(subAgentCommissionRate) : null,

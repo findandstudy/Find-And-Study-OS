@@ -106,7 +106,6 @@ type Agent = {
   contractEndDate: string | null;
   branch: string | null;
   branchIds?: number[];
-  pointOfContact: string | null;
   notes: string | null;
   createdAt: string;
   assignedStaffId: number | null;
@@ -119,7 +118,7 @@ const emptyForm = {
   businessName: "", category: "", commissionRate: "",
   logoUrl: "", agentIdProofUrl: "", businessCertUrl: "", contractUrl: "",
   contractStartDate: "", contractEndDate: "",
-  branch: "", pointOfContact: "", notes: "",
+  branch: "", notes: "",
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
   assignedStaffId: "",
   branchIds: [] as number[],
@@ -296,7 +295,6 @@ export default function AgentsPage() {
       contractEndDate: agent.contractEndDate ? agent.contractEndDate.split("T")[0] : "",
       branch: agent.branch || "",
       branchIds: Array.isArray(agent.branchIds) ? agent.branchIds : [],
-      pointOfContact: agent.pointOfContact || "",
       notes: agent.notes || "",
       parentAgentId: agent.parentAgentId?.toString() || "",
       subAgentCommissionRate: agent.subAgentCommissionRate?.toString() || "",
@@ -390,7 +388,6 @@ export default function AgentsPage() {
       contractEndDate: form.contractEndDate || null,
       branch: form.branch.trim() || null,
       branchIds: Array.isArray(form.branchIds) ? form.branchIds : [],
-      pointOfContact: form.pointOfContact.trim() || null,
       notes: form.notes.trim() || null,
       parentAgentId: isSubAgent && form.parentAgentId ? parseInt(form.parentAgentId) : null,
       subAgentCommissionRate: form.subAgentCommissionRate ? parseFloat(form.subAgentCommissionRate) : null,
@@ -1401,58 +1398,52 @@ export default function AgentsPage() {
                 })()}
               </div>
 
-              {/* Branches (multi-select) & Point of Contact */}
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Şubeler</Label>
-                  <Popover open={branchPickerOpen} onOpenChange={setBranchPickerOpen}>
-                    <PopoverTrigger asChild>
-                      <Button type="button" variant="outline" className="w-full justify-start rounded-xl font-normal h-auto min-h-[40px] py-2 flex-wrap gap-1">
-                        {form.branchIds.length === 0 ? (
-                          <span className="text-muted-foreground">Şube seçin...</span>
-                        ) : (
-                          form.branchIds.map(id => {
-                            const b = branchOptions.find(o => o.id === id);
-                            return b ? <Badge key={id} variant="secondary" className="text-xs">{b.name}</Badge> : null;
-                          })
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[260px] p-2" align="start">
-                      {branchOptions.length === 0 ? (
-                        <p className="text-xs text-muted-foreground p-2">Henüz şube tanımlı değil.</p>
+              {/* Branches (multi-select) — Point of Contact removed; use Assigned Staff instead */}
+              <div className="space-y-1.5">
+                <Label>Şubeler</Label>
+                <Popover open={branchPickerOpen} onOpenChange={setBranchPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-start rounded-xl font-normal h-auto min-h-[40px] py-2 flex-wrap gap-1">
+                      {form.branchIds.length === 0 ? (
+                        <span className="text-muted-foreground">Şube seçin...</span>
                       ) : (
-                        <div className="max-h-60 overflow-y-auto space-y-1">
-                          {branchOptions.map(b => {
-                            const checked = form.branchIds.includes(b.id);
-                            return (
-                              <button
-                                key={b.id}
-                                type="button"
-                                onClick={() => {
-                                  setForm(f => ({
-                                    ...f,
-                                    branchIds: checked
-                                      ? f.branchIds.filter(x => x !== b.id)
-                                      : [...f.branchIds, b.id],
-                                  }));
-                                }}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-secondary text-left"
-                              >
-                                <Checkbox checked={checked} className="pointer-events-none" />
-                                <span className="flex-1">{b.name}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                        form.branchIds.map(id => {
+                          const b = branchOptions.find(o => o.id === id);
+                          return b ? <Badge key={id} variant="secondary" className="text-xs">{b.name}</Badge> : null;
+                        })
                       )}
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Point of Contact</Label>
-                  <Input value={form.pointOfContact} onChange={e => setForm(f => ({ ...f, pointOfContact: e.target.value }))} className="rounded-xl" />
-                </div>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[260px] p-2" align="start">
+                    {branchOptions.length === 0 ? (
+                      <p className="text-xs text-muted-foreground p-2">Henüz şube tanımlı değil.</p>
+                    ) : (
+                      <div className="max-h-60 overflow-y-auto space-y-1">
+                        {branchOptions.map(b => {
+                          const checked = form.branchIds.includes(b.id);
+                          return (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => {
+                                setForm(f => ({
+                                  ...f,
+                                  branchIds: checked
+                                    ? f.branchIds.filter(x => x !== b.id)
+                                    : [...f.branchIds, b.id],
+                                }));
+                              }}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-secondary text-left"
+                            >
+                              <Checkbox checked={checked} className="pointer-events-none" />
+                              <span className="flex-1">{b.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* Notes */}
