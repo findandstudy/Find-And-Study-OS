@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/hooks/use-i18n";
 import { useListApplications, useListDocuments, customFetch } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -8,15 +9,15 @@ import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPi
 import { useLocation } from "wouter";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 
-const STAGE_LABELS: Record<string, { label: string; color: string; step: number }> = {
-  inquiry: { label: "Inquiry Received", color: "bg-slate-400", step: 1 },
-  documents_collected: { label: "Documents Collected", color: "bg-blue-500", step: 2 },
-  submitted: { label: "Submitted", color: "bg-violet-500", step: 3 },
-  offer_received: { label: "Offer Received", color: "bg-amber-500", step: 4 },
-  visa_applied: { label: "Visa Applied", color: "bg-orange-500", step: 5 },
-  visa_approved: { label: "Visa Approved", color: "bg-emerald-500", step: 6 },
-  enrolled: { label: "Enrolled", color: "bg-green-600", step: 7 },
-  rejected: { label: "Rejected", color: "bg-rose-500", step: 0 },
+const STAGE_META: Record<string, { labelKey: string; color: string; step: number }> = {
+  inquiry: { labelKey: "studentDash.stageInquiry", color: "bg-slate-400", step: 1 },
+  documents_collected: { labelKey: "studentDash.stageDocumentsCollected", color: "bg-blue-500", step: 2 },
+  submitted: { labelKey: "studentDash.stageSubmitted", color: "bg-violet-500", step: 3 },
+  offer_received: { labelKey: "studentDash.stageOfferReceived", color: "bg-amber-500", step: 4 },
+  visa_applied: { labelKey: "studentDash.stageVisaApplied", color: "bg-orange-500", step: 5 },
+  visa_approved: { labelKey: "studentDash.stageVisaApproved", color: "bg-emerald-500", step: 6 },
+  enrolled: { labelKey: "studentDash.stageEnrolled", color: "bg-green-600", step: 7 },
+  rejected: { labelKey: "studentDash.stageRejected", color: "bg-rose-500", step: 0 },
 };
 
 const STEPS = ["inquiry", "documents_collected", "submitted", "offer_received", "visa_applied", "visa_approved", "enrolled"];
@@ -25,13 +26,14 @@ function getInitials(first?: string | null, last?: string | null) {
   return `${(first || "")[0] || ""}${(last || "")[0] || ""}`.toUpperCase() || "?";
 }
 
-function formatRole(role?: string | null) {
-  if (!role) return "Consultant";
+function formatRole(role: string | null | undefined, fallback: string) {
+  if (!role) return fallback;
   return role.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export default function StudentDashboard() {
   const { user } = useAuth(true);
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { data: applicationsResp, isLoading: appsLoading } = useListApplications(undefined, { query: { queryKey: ['student-applications'] } as any });
   const { data: documentsResp } = useListDocuments(undefined, { query: { queryKey: ['student-docs'] } as any });
@@ -59,8 +61,18 @@ export default function StudentDashboard() {
   const quickLinks: any[] = quickLinksData?.data || [];
 
   const latestApp = applications?.[0];
-  const stageInfo = latestApp ? STAGE_LABELS[latestApp.stage] : null;
+  const stageInfo = latestApp ? STAGE_META[latestApp.stage] : null;
   const currentStep = stageInfo?.step || 0;
+  const docStatusLabel = (status: string) => {
+    const map: Record<string, string> = {
+      approved: "studentDash.docStatusApproved",
+      rejected: "studentDash.docStatusRejected",
+      pending: "studentDash.docStatusPending",
+      requested: "studentDash.docStatusRequested",
+      under_review: "studentDash.docStatusUnderReview",
+    };
+    return map[status] ? t(map[status]) : status;
+  };
   const pendingDocs = (documents || []).filter(d => d.status === 'pending' || d.status === 'requested').length;
 
   return (
@@ -70,20 +82,20 @@ export default function StudentDashboard() {
           <div className="relative z-10">
             <GraduationCap className="w-10 h-10 mb-4 text-white/80" />
             <h1 className="text-3xl font-display font-bold mb-2">
-              Welcome back, {user?.firstName || "Student"}!
+              {t("studentDash.welcomeBack", { name: user?.firstName || t("studentDash.welcomeFallback") })}
             </h1>
             <p className="text-white/80 text-lg">
-              {latestApp ? "Your application is progressing well." : "Let's start your global education journey."}
+              {latestApp ? t("studentDash.appProgressing") : t("studentDash.letsStart")}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: "Applications", value: applications?.length || 0, icon: FileText, color: "text-blue-500 bg-blue-500/10" },
-            { label: "Documents", value: documents?.length || 0, icon: Upload, color: "text-purple-500 bg-purple-500/10" },
-            { label: "Pending Docs", value: pendingDocs, icon: AlertCircle, color: "text-amber-500 bg-amber-500/10" },
-            { label: "Enrolled", value: (applications || []).filter(a => a.stage === 'enrolled').length, icon: CheckCircle, color: "text-green-500 bg-green-500/10" },
+            { label: t("studentDash.applications"), value: applications?.length || 0, icon: FileText, color: "text-blue-500 bg-blue-500/10" },
+            { label: t("studentDash.documents"), value: documents?.length || 0, icon: Upload, color: "text-purple-500 bg-purple-500/10" },
+            { label: t("studentDash.pendingDocs"), value: pendingDocs, icon: AlertCircle, color: "text-amber-500 bg-amber-500/10" },
+            { label: t("studentDash.enrolled"), value: (applications || []).filter(a => a.stage === 'enrolled').length, icon: CheckCircle, color: "text-green-500 bg-green-500/10" },
           ].map((s, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5">
               <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-3`}>
@@ -99,14 +111,14 @@ export default function StudentDashboard() {
           <Card className="p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-start justify-between mb-8">
               <div>
-                <h2 className="font-display font-bold text-xl text-foreground">Application Progress</h2>
+                <h2 className="font-display font-bold text-xl text-foreground">{t("studentDash.applicationProgress")}</h2>
                 <p className="text-muted-foreground text-sm mt-1 flex items-center gap-1">
-                  <MapPin className="w-4 h-4" /> Application #{latestApp.id}
+                  <MapPin className="w-4 h-4" /> {t("studentDash.applicationNumber", { id: latestApp.id })}
                 </p>
               </div>
               {stageInfo && (
                 <Badge className={`${stageInfo.color} text-white text-sm px-4 py-1.5`}>
-                  {stageInfo.label}
+                  {t(stageInfo.labelKey)}
                 </Badge>
               )}
             </div>
@@ -114,7 +126,7 @@ export default function StudentDashboard() {
               <div className="absolute top-5 left-5 right-5 h-0.5 bg-border" />
               <div className="relative flex justify-between">
                 {STEPS.map((step, i) => {
-                  const info = STAGE_LABELS[step];
+                  const info = STAGE_META[step];
                   const isDone = currentStep > i + 1;
                   const isCurrent = currentStep === i + 1;
                   return (
@@ -127,7 +139,7 @@ export default function StudentDashboard() {
                       </div>
                       <p className={`text-xs font-medium text-center max-w-[70px] leading-tight hidden sm:block
                         ${isCurrent ? 'text-primary font-bold' : isDone ? 'text-foreground' : 'text-muted-foreground'}`}>
-                        {info.label}
+                        {t(info.labelKey)}
                       </p>
                     </div>
                   );
@@ -138,10 +150,10 @@ export default function StudentDashboard() {
         ) : (
           <Card className="p-12 border-none shadow-lg shadow-black/5 text-center border-2 border-dashed border-primary/20">
             <GraduationCap className="w-16 h-16 text-primary/30 mx-auto mb-4" />
-            <h3 className="text-xl font-display font-bold text-foreground mb-2">Start Your Application</h3>
-            <p className="text-muted-foreground mb-6">Browse programs and submit your first university application.</p>
+            <h3 className="text-xl font-display font-bold text-foreground mb-2">{t("studentDash.startApplication")}</h3>
+            <p className="text-muted-foreground mb-6">{t("studentDash.browsePrograms")}</p>
             <Button className="rounded-xl gap-2 px-8" onClick={() => setLocation("/student/course-finder")}>
-              <Search className="w-4 h-4" /> Apply Now
+              <Search className="w-4 h-4" /> {t("studentDash.applyNow")}
             </Button>
           </Card>
         )}
@@ -152,7 +164,7 @@ export default function StudentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
                 <ExternalLink className="w-4 h-4 text-violet-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Quick Links</h3>
+              <h3 className="font-display font-bold text-base">{t("studentDash.quickLinks")}</h3>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {quickLinks.map((link: any) => (
@@ -185,7 +197,7 @@ export default function StudentDashboard() {
         <div className="grid lg:grid-cols-2 gap-6">
           <Card className="border-none shadow-lg shadow-black/5">
             <div className="p-5 border-b border-border/50 flex items-center justify-between">
-              <h3 className="font-display font-bold text-lg">My Documents</h3>
+              <h3 className="font-display font-bold text-lg">{t("studentDash.myDocuments")}</h3>
               <Badge variant="secondary">{documents?.length || 0}</Badge>
             </div>
             <div className="divide-y divide-border/50">
@@ -194,7 +206,7 @@ export default function StudentDashboard() {
               ) : (documents || []).length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
                   <Upload className="w-10 h-10 mx-auto mb-2 text-muted-foreground/30" />
-                  <p className="font-medium">No documents uploaded yet</p>
+                  <p className="font-medium">{t("studentDash.noDocuments")}</p>
                 </div>
               ) : (documents || []).slice(0, 5).map(doc => (
                 <div key={doc.id} className="flex items-center justify-between px-5 py-4">
@@ -212,20 +224,20 @@ export default function StudentDashboard() {
                     doc.status === 'rejected' ? 'bg-rose-500/10 text-rose-600 border-rose-200' :
                     'bg-amber-500/10 text-amber-600 border-amber-200'
                   }>
-                    {doc.status}
+                    {docStatusLabel(doc.status)}
                   </Badge>
                 </div>
               ))}
             </div>
             <div className="p-4">
               <Button variant="outline" className="w-full rounded-xl gap-2" onClick={() => setLocation("/student/account")}>
-                <Upload className="w-4 h-4" /> Upload Document
+                <Upload className="w-4 h-4" /> {t("studentDash.uploadDocument")}
               </Button>
             </div>
           </Card>
 
           <Card className="border-none shadow-lg shadow-black/5 p-6">
-            <h3 className="font-display font-bold text-lg mb-5">Your Advisor</h3>
+            <h3 className="font-display font-bold text-lg mb-5">{t("studentDash.yourAdvisor")}</h3>
             {advisorLoading ? (
               <div className="space-y-3">
                 <div className="h-20 bg-secondary animate-pulse rounded-2xl" />
@@ -243,7 +255,7 @@ export default function StudentDashboard() {
                   )}
                   <div>
                     <p className="font-display font-bold text-foreground">{advisor.firstName} {advisor.lastName}</p>
-                    <p className="text-muted-foreground text-sm">{formatRole(advisor.role)}</p>
+                    <p className="text-muted-foreground text-sm">{formatRole(advisor.role, t("studentDash.consultant"))}</p>
                     {advisor.email && (
                       <p className="text-primary text-sm font-semibold mt-1 flex items-center gap-1">
                         <Mail className="w-3.5 h-3.5" /> {advisor.email}
@@ -261,14 +273,14 @@ export default function StudentDashboard() {
                   className="w-full rounded-xl gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90"
                   onClick={() => setLocation("/student/messages")}
                 >
-                  <MessageSquare className="w-4 h-4" /> Message Advisor
+                  <MessageSquare className="w-4 h-4" /> {t("studentDash.messageAdvisor")}
                 </Button>
               </>
             ) : (
               <div className="text-center py-6 text-muted-foreground">
                 <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No advisor assigned yet</p>
-                <p className="text-xs mt-1">An advisor will be assigned to you soon</p>
+                <p className="font-medium">{t("studentDash.noAdvisor")}</p>
+                <p className="text-xs mt-1">{t("studentDash.advisorWillBeAssigned")}</p>
               </div>
             )}
           </Card>

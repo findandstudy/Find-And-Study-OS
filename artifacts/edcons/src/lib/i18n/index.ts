@@ -64,14 +64,38 @@ for (const lang of SUPPORTED_LANGUAGES) {
   flatTranslations[lang] = flattenObject(translationFiles[lang]);
 }
 
+const _warnedMissing = new Set<string>();
 export function getTranslation(lang: Language, key: string, params?: Record<string, string | number>): string {
-  let value = flatTranslations[lang]?.[key] || flatTranslations[DEFAULT_LANGUAGE]?.[key] || key;
+  const direct = flatTranslations[lang]?.[key];
+  const fallback = flatTranslations[DEFAULT_LANGUAGE]?.[key];
+  if (import.meta.env?.DEV && !direct && !fallback && !_warnedMissing.has(key)) {
+    _warnedMissing.add(key);
+    // eslint-disable-next-line no-console
+    console.warn(`[i18n] Missing translation key: "${key}" (lang=${lang})`);
+  }
+  let value = direct || fallback || key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       value = value.replace(`{${k}}`, String(v));
     }
   }
   return value;
+}
+
+/**
+ * Format a relative "time ago" string using i18n keys.
+ * Looks up: common.justNow, common.minutesAgo, common.hoursAgo, common.daysAgo (each may use {n}).
+ */
+export function formatTimeAgo(lang: Language, dateStr: string | Date): string {
+  const date = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return getTranslation(lang, "common.justNow");
+  if (mins < 60) return getTranslation(lang, "common.minutesAgo", { n: mins });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return getTranslation(lang, "common.hoursAgo", { n: hours });
+  const days = Math.floor(hours / 24);
+  return getTranslation(lang, "common.daysAgo", { n: days });
 }
 
 export function isValidLanguage(lang: string): lang is Language {

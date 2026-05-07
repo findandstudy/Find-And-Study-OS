@@ -119,18 +119,18 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
     ];
     if (role === 'super_admin' || role === 'admin') {
       groups.push({
-        label: "Website",
+        label: t("dashboard.website"),
         items: [
-          { title: "Pages", icon: FileText, url: '/admin/website/pages' },
-          { title: "Global Components", icon: Component, url: '/admin/website/global-components' },
-          { title: "Navigation", icon: Menu, url: '/admin/website/navigation' },
-          { title: "Blog", icon: BookOpen, url: '/admin/website/blog' },
-          { title: "Collections", icon: Layers, url: '/admin/website/collections' },
-          { title: "Forms", icon: ClipboardList, url: '/admin/website/forms' },
-          { title: "SEO Overrides", icon: Search, url: '/admin/website/seo' },
-          { title: "Theme Builder", icon: Palette, url: '/admin/website/theme' },
-          { title: "Translations", icon: Languages, url: '/admin/website/translations' },
-          { title: "Publish History", icon: History, url: '/admin/website/publish-history' },
+          { title: t("dashboard.websitePages"), icon: FileText, url: '/admin/website/pages' },
+          { title: t("dashboard.websiteGlobalComponents"), icon: Component, url: '/admin/website/global-components' },
+          { title: t("dashboard.websiteNavigation"), icon: Menu, url: '/admin/website/navigation' },
+          { title: t("dashboard.websiteBlog"), icon: BookOpen, url: '/admin/website/blog' },
+          { title: t("dashboard.websiteCollections"), icon: Layers, url: '/admin/website/collections' },
+          { title: t("dashboard.websiteForms"), icon: ClipboardList, url: '/admin/website/forms' },
+          { title: t("dashboard.websiteSeoOverrides"), icon: Search, url: '/admin/website/seo' },
+          { title: t("dashboard.websiteThemeBuilder"), icon: Palette, url: '/admin/website/theme' },
+          { title: t("dashboard.websiteTranslations"), icon: Languages, url: '/admin/website/translations' },
+          { title: t("dashboard.websitePublishHistory"), icon: History, url: '/admin/website/publish-history' },
         ]
       });
     }
@@ -270,7 +270,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [navPending, startNavTransition] = useTransition();
   const navigate = (url: string) => startNavTransition(() => setLocation(url));
   const { t, localePath } = useI18n();
-  useSeo({ title: "Portal", noindex: true });
+  useSeo({ title: t("dashboard.portal"), noindex: true });
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
@@ -420,7 +420,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => navigate(localePath("/"))}
                 className="flex items-center gap-2.5 group/logo group-data-[collapsible=icon]:justify-center"
-                title="Home"
+                title={t("dashboard.homeTooltip")}
               >
                 {/* Expanded: full logo (image or icon+wordmark) */}
                 <span className="flex items-center gap-2.5 group-data-[collapsible=icon]:hidden">
@@ -489,17 +489,17 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                           <div className="space-y-1">
                                             <div>
                                               <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1.5 align-middle" />
-                                              {staffUnreadMine} assigned to you
+                                              {t("dashboard.assignedToYou", { n: staffUnreadMine })}
                                             </div>
                                             <div>
                                               <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
-                                              {totalUnreadMessages} total unread
+                                              {t("dashboard.totalUnread", { n: totalUnreadMessages })}
                                             </div>
                                           </div>
                                         ) : (
                                           <div>
                                             <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5 align-middle" />
-                                            {totalUnreadMessages} total unread
+                                            {t("dashboard.totalUnread", { n: totalUnreadMessages })}
                                           </div>
                                         )}
                                       </TooltipContent>
@@ -536,8 +536,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                             <SidebarMenuAction
                               onClick={(e) => { e.stopPropagation(); e.preventDefault(); togglePin(item.url); }}
                               showOnHover={!isPinned}
-                              title={isPinned ? "Remove from favorites" : "Add to favorites"}
-                              aria-label={isPinned ? "Remove from favorites" : "Add to favorites"}
+                              title={isPinned ? t("dashboard.removeFromFavorites") : t("dashboard.addToFavorites")}
+                              aria-label={isPinned ? t("dashboard.removeFromFavorites") : t("dashboard.addToFavorites")}
                               className={isPinned ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500"}
                             >
                               <Star className={`w-3.5 h-3.5 ${isPinned ? "fill-amber-400" : ""}`} />
@@ -551,7 +551,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     {favoriteItems.length > 0 && (
                       <SidebarGroup className="p-0">
                         <SidebarGroupLabel className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1 px-3 flex items-center gap-1.5">
-                          <Star className="w-3 h-3 fill-amber-400" /> Favorites
+                          <Star className="w-3 h-3 fill-amber-400" /> {t("dashboard.favorites")}
                         </SidebarGroupLabel>
                         <SidebarGroupContent>
                           <SidebarMenu className="space-y-0.5">

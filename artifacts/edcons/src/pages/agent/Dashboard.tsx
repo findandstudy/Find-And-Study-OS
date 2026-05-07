@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/hooks/use-i18n";
+import { formatTimeAgo } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useLocation } from "wouter";
@@ -17,6 +19,11 @@ import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+const DATE_LOCALE: Record<string, string> = {
+  en: "en-US", tr: "tr-TR", ar: "ar-SA", fr: "fr-FR", ru: "ru-RU",
+  fa: "fa-IR", zh: "zh-CN", hi: "hi-IN", es: "es-ES", id: "id-ID",
+};
+
 const AVATAR_COLORS = [
   "bg-blue-500/15 text-blue-600",
   "bg-purple-500/15 text-purple-600",
@@ -28,17 +35,6 @@ const AVATAR_COLORS = [
 
 function getInitials(firstName?: string, lastName?: string) {
   return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
@@ -68,6 +64,8 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 
 export default function AgentDashboard() {
   const { user } = useAuth(true);
+  const { t, lang } = useI18n();
+  const dateLoc = DATE_LOCALE[lang] || "en-US";
   const [, setLocation] = useLocation();
   const { data: stats, isLoading: statsLoading } = useGetOverviewStats();
 
@@ -116,17 +114,17 @@ export default function AgentDashboard() {
       <div className="space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">Agent Portal</h1>
-            <p className="text-muted-foreground mt-1">Track your students, commissions, and application progress</p>
+            <h1 className="text-3xl font-display font-bold text-foreground">{t("agentDash.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("agentDash.subtitle")}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "Total Students", value: s.totalStudents || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-            { label: "Active Applications", value: s.activeApplications || 0, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
-            { label: "Enrolled", value: s.enrolledStudents || 0, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10" },
-            { label: "Total Leads", value: s.totalLeads || 0, icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10" },
+            { label: t("agentDash.totalStudents"), value: s.totalStudents || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+            { label: t("agentDash.activeApplications"), value: s.activeApplications || 0, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
+            { label: t("agentDash.enrolled"), value: s.enrolledStudents || 0, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10" },
+            { label: t("agentDash.totalLeads"), value: s.totalLeads || 0, icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10" },
           ].map((st, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
               <div className={`w-10 h-10 rounded-xl ${st.bg} flex items-center justify-center mb-3`}>
@@ -139,7 +137,7 @@ export default function AgentDashboard() {
         </div>
 
         <Card className="p-6 border-none shadow-lg shadow-black/5">
-          <h3 className="font-display font-bold text-lg mb-6">Growth Overview</h3>
+          <h3 className="font-display font-bold text-lg mb-6">{t("agentDash.growthOverview")}</h3>
           <div className="h-[250px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -157,8 +155,8 @@ export default function AgentDashboard() {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
                 <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }} />
-                <Area type="monotone" dataKey="students" name="Students" stroke="#22c55e" strokeWidth={2.5} fillOpacity={1} fill="url(#agentStudents)" />
-                <Area type="monotone" dataKey="applications" name="Applications" stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#agentLeads)" />
+                <Area type="monotone" dataKey="students" name={t("agentDash.totalStudents")} stroke="#22c55e" strokeWidth={2.5} fillOpacity={1} fill="url(#agentStudents)" />
+                <Area type="monotone" dataKey="applications" name={t("agentDash.activeApplications")} stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#agentLeads)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -171,7 +169,7 @@ export default function AgentDashboard() {
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
                   <Users className="w-4 h-4 text-blue-500" />
                 </div>
-                <h3 className="font-display font-bold text-base">Your Contact Person</h3>
+                <h3 className="font-display font-bold text-base">{t("agentDash.yourContactPerson")}</h3>
               </div>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-lg font-bold text-primary shrink-0 overflow-hidden">
@@ -205,7 +203,7 @@ export default function AgentDashboard() {
                 className="w-full gap-2"
                 onClick={() => setLocation("/agent/messages")}
               >
-                <MessageCircle className="w-4 h-4" /> Send Message
+                <MessageCircle className="w-4 h-4" /> {t("agentDash.sendMessage")}
               </Button>
             </Card>
           )}
@@ -215,7 +213,7 @@ export default function AgentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                 <Plus className="w-4 h-4 text-emerald-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Quick Actions</h3>
+              <h3 className="font-display font-bold text-base">{t("agentDash.quickActions")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Button
@@ -226,7 +224,7 @@ export default function AgentDashboard() {
                 <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <UserPlus className="w-5 h-5 text-blue-500" />
                 </div>
-                <span className="text-xs font-medium">Add Lead</span>
+                <span className="text-xs font-medium">{t("agentDash.addLead")}</span>
               </Button>
               <Button
                 variant="outline"
@@ -236,7 +234,7 @@ export default function AgentDashboard() {
                 <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
                   <GraduationCap className="w-5 h-5 text-green-500" />
                 </div>
-                <span className="text-xs font-medium">Add Student</span>
+                <span className="text-xs font-medium">{t("agentDash.addStudent")}</span>
               </Button>
             </div>
           </Card>
@@ -247,7 +245,7 @@ export default function AgentDashboard() {
                 <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
                   <ExternalLink className="w-4 h-4 text-violet-500" />
                 </div>
-                <h3 className="font-display font-bold text-base">Quick Links</h3>
+                <h3 className="font-display font-bold text-base">{t("agentDash.quickLinks")}</h3>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {quickLinks.map((link: any) => (
@@ -284,11 +282,11 @@ export default function AgentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                 <GraduationCap className="w-4 h-4 text-green-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Latest Students</h3>
+              <h3 className="font-display font-bold text-base">{t("agentDash.latestStudents")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestStudents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No students yet.</p>
+                <p className="text-sm text-muted-foreground">{t("agentDash.noStudents")}</p>
               ) : (
                 latestStudents.map((s: any, i: number) => (
                   <Link key={s.id} href="/agent/students">
@@ -310,8 +308,8 @@ export default function AgentDashboard() {
                           {s.firstName} {s.lastName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(s.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}{", "}
-                          {new Date(s.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                          {new Date(s.createdAt).toLocaleDateString(dateLoc, { day: "numeric", month: "short", year: "numeric" })}{", "}
+                          {new Date(s.createdAt).toLocaleTimeString(dateLoc, { hour: "numeric", minute: "2-digit" })}
                         </p>
                       </div>
                       <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
@@ -329,11 +327,11 @@ export default function AgentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                 <Activity className="w-4 h-4 text-purple-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Latest Updates</h3>
+              <h3 className="font-display font-bold text-base">{t("agentDash.latestUpdates")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestUpdates.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent updates.</p>
+                <p className="text-sm text-muted-foreground">{t("agentDash.noUpdates")}</p>
               ) : (
                 latestUpdates.map((u: any, i: number) => {
                   const detailHref = u.resource && u.resourceId
@@ -352,7 +350,7 @@ export default function AgentDashboard() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-foreground truncate">
-                            {u.userName || "System"}
+                            {u.userName || t("common.system")}
                           </p>
                           <p className="text-xs text-foreground/80 font-medium mt-0.5">
                             {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
@@ -364,7 +362,7 @@ export default function AgentDashboard() {
                         </div>
                         <div className="flex flex-col items-end shrink-0 mt-1">
                           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            {timeAgo(u.createdAt)}
+                            {formatTimeAgo(lang, u.createdAt)}
                           </span>
                           {detailHref && <ArrowUpRight className="w-3 h-3 text-muted-foreground mt-1" />}
                         </div>
@@ -381,11 +379,11 @@ export default function AgentDashboard() {
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <Bell className="w-4 h-4 text-amber-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Notifications</h3>
+              <h3 className="font-display font-bold text-base">{t("agentDash.notifications")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestNotifications.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No notifications.</p>
+                <p className="text-sm text-muted-foreground">{t("agentDash.noNotifications")}</p>
               ) : (
                 latestNotifications.map((n: any) => {
                   const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
@@ -404,7 +402,7 @@ export default function AgentDashboard() {
                           )}
                         </div>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
-                          {timeAgo(n.createdAt)}
+                          {formatTimeAgo(lang, n.createdAt)}
                         </span>
                       </div>
                     </div>

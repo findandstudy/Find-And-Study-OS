@@ -7,9 +7,16 @@ import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, Ext
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/hooks/use-i18n";
+import { formatTimeAgo } from "@/lib/i18n";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const DATE_LOCALE: Record<string, string> = {
+  en: "en-US", tr: "tr-TR", ar: "ar-SA", fr: "fr-FR", ru: "ru-RU",
+  fa: "fa-IR", zh: "zh-CN", hi: "hi-IN", es: "es-ES", id: "id-ID",
+};
 
 const AVATAR_COLORS = [
   "bg-blue-500/15 text-blue-600",
@@ -22,17 +29,6 @@ const AVATAR_COLORS = [
 
 function getInitials(firstName?: string, lastName?: string) {
   return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
@@ -65,6 +61,8 @@ function isOverdue(d: string) { return new Date(d) < new Date(); }
 
 export default function StaffDashboard() {
   const { user } = useAuth(true);
+  const { t, lang } = useI18n();
+  const dateLoc = DATE_LOCALE[lang] || "en-US";
   const showOfferDeadlines = user?.role !== "super_admin";
   const { data: stats, isLoading } = useGetOverviewStats();
 
@@ -131,16 +129,16 @@ export default function StaffDashboard() {
   return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">Welcome Back</h1>
-          <p className="text-muted-foreground mt-1">Here's what's happening with your consultancy today.</p>
+          <h1 className="text-3xl font-display font-bold text-foreground">{t("staffDash.welcomeBack")}</h1>
+          <p className="text-muted-foreground mt-1">{t("staffDash.welcomeSubtitle")}</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
-            { label: "Total Leads", value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-            { label: "Active Applications", value: stats?.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
-            { label: "Students Enrolled", value: (stats as any)?.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
-            { label: "Revenue (Month)", value: `$${((stats as any)?.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+            { label: t("staffDash.totalLeads"), value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+            { label: t("staffDash.activeApplications"), value: stats?.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
+            { label: t("staffDash.studentsEnrolled"), value: (stats as any)?.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
+            { label: t("staffDash.revenueMonth"), value: `$${((stats as any)?.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10" },
           ].map((stat, i) => (
             <Card key={i} className="p-6 border-none shadow-lg shadow-black/5 hover:-translate-y-1 transition-transform duration-300">
               <div className="flex items-start justify-between">
@@ -163,12 +161,12 @@ export default function StaffDashboard() {
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-sm">Contract Alerts</h3>
-                <p className="text-xs text-muted-foreground">{contractAgents.length} agent(s) need attention</p>
+                <h3 className="font-display font-bold text-sm">{t("staffDash.contractAlerts")}</h3>
+                <p className="text-xs text-muted-foreground">{t("staffDash.agentsNeedAttention", { count: contractAgents.length })}</p>
               </div>
               <Link href="/staff/agents" className="ml-auto">
                 <Badge variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 gap-1">
-                  View All <ArrowUpRight className="w-3 h-3" />
+                  {t("staffDash.viewAll")} <ArrowUpRight className="w-3 h-3" />
                 </Badge>
               </Link>
             </div>
@@ -184,7 +182,7 @@ export default function StaffDashboard() {
                       {a.companyName && <span className="text-xs text-muted-foreground">({a.companyName})</span>}
                     </div>
                     <Badge variant="outline" className={`text-xs ${isExpired ? "bg-red-500/10 text-red-600 border-red-200" : "bg-orange-500/10 text-orange-600 border-orange-200"}`}>
-                      {isExpired ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft}d left`}
+                      {isExpired ? t("common.expiredAgo", { n: Math.abs(daysLeft) }) : t("common.daysLeft", { n: daysLeft })}
                     </Badge>
                   </div>
                 );
@@ -195,7 +193,7 @@ export default function StaffDashboard() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
-            <h3 className="font-display font-bold text-lg mb-6">Growth Overview</h3>
+            <h3 className="font-display font-bold text-lg mb-6">{t("staffDash.growthOverview")}</h3>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -221,11 +219,11 @@ export default function StaffDashboard() {
           <Card className="p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-center gap-2 mb-6">
               <CalendarClock className="w-5 h-5 text-primary" />
-              <h3 className="font-display font-bold text-lg">Upcoming Follow-ups</h3>
+              <h3 className="font-display font-bold text-lg">{t("staffDash.upcomingFollowUps")}</h3>
             </div>
             <div className="space-y-3">
               {(upcomingFollowUps as any[]).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
+                <p className="text-sm text-muted-foreground">{t("staffDash.noFollowUps")}</p>
               ) : (
                 (upcomingFollowUps as any[]).slice(0, 6).map((fu: any) => (
                   <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
@@ -240,10 +238,10 @@ export default function StaffDashboard() {
                         <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>
                       )}
                       <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                        {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {new Date(fu.scheduledAt).toLocaleDateString(dateLoc, { day: "2-digit", month: "2-digit", year: "numeric" })}
                         {" "}
-                        {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                        {isOverdue(fu.scheduledAt) && " — Overdue"}
+                        {new Date(fu.scheduledAt).toLocaleTimeString(dateLoc, { hour: "2-digit", minute: "2-digit" })}
+                        {isOverdue(fu.scheduledAt) && ` — ${t("common.overdue")}`}
                       </p>
                     </div>
                   </Link>
@@ -259,7 +257,7 @@ export default function StaffDashboard() {
               <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
                 <LinkIcon className="w-4 h-4 text-violet-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Quick Links</h3>
+              <h3 className="font-display font-bold text-base">{t("staffDash.quickLinks")}</h3>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {quickLinks.map((link: any) => (
@@ -297,11 +295,11 @@ export default function StaffDashboard() {
               <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                 <GraduationCap className="w-4 h-4 text-green-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Latest Students</h3>
+              <h3 className="font-display font-bold text-base">{t("staffDash.latestStudents")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestStudents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No students yet.</p>
+                <p className="text-sm text-muted-foreground">{t("staffDash.noStudents")}</p>
               ) : (
                 latestStudents.map((s: any, i: number) => (
                   <Link key={s.id} href={`/staff/students/${s.id}`}>
@@ -323,8 +321,8 @@ export default function StaffDashboard() {
                           {s.firstName} {s.lastName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(s.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}{", "}
-                          {new Date(s.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                          {new Date(s.createdAt).toLocaleDateString(dateLoc, { day: "numeric", month: "short", year: "numeric" })}{", "}
+                          {new Date(s.createdAt).toLocaleTimeString(dateLoc, { hour: "numeric", minute: "2-digit" })}
                         </p>
                       </div>
                       <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
@@ -342,11 +340,11 @@ export default function StaffDashboard() {
               <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                 <Activity className="w-4 h-4 text-purple-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Latest Updates</h3>
+              <h3 className="font-display font-bold text-base">{t("staffDash.latestUpdates")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestUpdates.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent updates.</p>
+                <p className="text-sm text-muted-foreground">{t("staffDash.noUpdates")}</p>
               ) : (
                 latestUpdates.map((u: any, i: number) => {
                   const detailHref = u.resource && u.resourceId
@@ -365,7 +363,7 @@ export default function StaffDashboard() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-foreground truncate">
-                            {u.userName || "System"}
+                            {u.userName || t("common.system")}
                           </p>
                           <p className="text-xs text-foreground/80 font-medium mt-0.5">
                             {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
@@ -377,7 +375,7 @@ export default function StaffDashboard() {
                         </div>
                         <div className="flex flex-col items-end shrink-0 mt-1">
                           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            {timeAgo(u.createdAt)}
+                            {formatTimeAgo(lang, u.createdAt)}
                           </span>
                           {detailHref && <ArrowUpRight className="w-3 h-3 text-muted-foreground mt-1" />}
                         </div>
@@ -394,11 +392,11 @@ export default function StaffDashboard() {
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <Bell className="w-4 h-4 text-amber-500" />
               </div>
-              <h3 className="font-display font-bold text-base">Notifications</h3>
+              <h3 className="font-display font-bold text-base">{t("staffDash.notifications")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
               {latestNotifications.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No notifications.</p>
+                <p className="text-sm text-muted-foreground">{t("staffDash.noNotifications")}</p>
               ) : (
                 latestNotifications.map((n: any) => {
                   const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
@@ -417,7 +415,7 @@ export default function StaffDashboard() {
                           )}
                         </div>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
-                          {timeAgo(n.createdAt)}
+                          {formatTimeAgo(lang, n.createdAt)}
                         </span>
                       </div>
                     </div>
