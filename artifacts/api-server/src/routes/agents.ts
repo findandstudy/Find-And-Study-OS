@@ -18,6 +18,7 @@ const AGENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone",
   "status", "commissionRate", "notes", "companyName", "country",
   "agencyCode", "state", "city", "address", "businessName",
+  "entityType", "taxNumber", "preferredContractLanguage",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
   "contractUrl", "contractStartDate", "contractEndDate",
   "branch", "parentAgentId",

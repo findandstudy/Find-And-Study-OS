@@ -125,6 +125,27 @@ export const PERMISSION_CATEGORIES = {
       "settings.branding": "Manage Branding",
     },
   },
+  contract_templates: {
+    label: "Contract Templates",
+    permissions: {
+      "contract_templates.view": "View Contract Templates",
+      "contract_templates.manage": "Manage Contract Templates",
+    },
+  },
+  contracts: {
+    label: "Contracts",
+    permissions: {
+      "contracts.view": "View Contracts",
+      "contracts.manage": "Manage Contracts",
+    },
+  },
+  self_fill_links: {
+    label: "Self-Fill Links",
+    permissions: {
+      "self_fill_links.view": "View Self-Fill Links",
+      "self_fill_links.manage": "Manage Self-Fill Links",
+    },
+  },
 } as const;
 
 export function getAllPermissions(): string[] {

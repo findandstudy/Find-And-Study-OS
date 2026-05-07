@@ -36,6 +36,9 @@ import campaignsRouter from "./campaigns";
 import inboxRouter from "./inbox";
 import popupsRouter from "./popups";
 import branchesRouter from "./branches";
+import contractTemplatesRouter from "./contractTemplates";
+import contractsRouter from "./contracts";
+import publicSigningRouter from "./publicSigning";
 
 const router: IRouter = Router();
 
@@ -76,5 +79,8 @@ router.use(campaignsRouter);
 router.use(inboxRouter);
 router.use(popupsRouter);
 router.use(branchesRouter);
+router.use(contractTemplatesRouter);
+router.use(contractsRouter);
+router.use(publicSigningRouter);
 
 export default router;

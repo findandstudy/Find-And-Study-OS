@@ -106,6 +106,31 @@ export class ObjectStorageService {
     return new Response(webStream, { headers });
   }
 
+  async uploadBuffer(opts: {
+    subdir: string;
+    filename: string;
+    buffer: Buffer;
+    contentType: string;
+  }): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    const objectId = randomUUID();
+    const subdir = opts.subdir.replace(/^\/+|\/+$/g, "");
+    const filename = opts.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+    const fullPath = `${privateObjectDir}/${subdir}/${objectId}-${filename}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    await file.save(opts.buffer, {
+      metadata: { contentType: opts.contentType },
+      resumable: false,
+    });
+    // Return canonical /objects/<entityId> path consumable by getObjectEntityFile.
+    let entityDir = privateObjectDir;
+    if (entityDir.endsWith("/")) entityDir = entityDir.slice(0, -1);
+    const relPath = fullPath.slice(entityDir.length + 1);
+    return `/objects/${relPath}`;
+  }
+
   async getObjectEntityUploadURL(): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {

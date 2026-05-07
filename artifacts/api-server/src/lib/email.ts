@@ -402,6 +402,52 @@ If you did not request this, you can safely ignore this email.`;
   return { subject, html, text };
 }
 
+export async function buildContractSignRequestEmail(params: {
+  signerName?: string | null;
+  agentName?: string | null;
+  templateName: string;
+  signUrl: string;
+  expiresAt: Date;
+  selfFill?: boolean;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const greeting = params.signerName ? `Hello ${params.signerName},` : "Hello,";
+  const intro = params.selfFill
+    ? `You have been invited to fill in your details and electronically sign your contract <strong>${params.templateName}</strong>.`
+    : `An electronic signature is requested for your contract <strong>${params.templateName}</strong>${params.agentName ? ` (${params.agentName})` : ""}.`;
+  const expiryStr = params.expiresAt.toUTCString();
+  const subject = params.selfFill
+    ? `Action required: Complete & sign your contract`
+    : `Action required: Sign your contract — ${params.templateName}`;
+  const bodyHtml = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
+    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${greeting}</p>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">${intro}</p>
+    ${emailButton(params.selfFill ? "Start & Sign" : "Open & Sign", params.signUrl, brand.primaryColor)}
+    <p style="margin:0 0 12px;color:#6b7280;font-size:13px;">This signing link expires on <strong>${expiryStr}</strong>.</p>
+    <p style="margin:0;color:#9ca3af;font-size:12px;">If you did not request this, please ignore this email.</p>`;
+  const text = `${greeting}\n\n${params.selfFill ? "You have been invited to fill in and sign your contract." : "An e-signature is requested for your contract."}\n\nOpen: ${params.signUrl}\nExpires: ${expiryStr}`;
+  return { subject, html: emailShell(brand, "Contract signing", bodyHtml), text };
+}
+
+export async function buildSignedContractEmail(params: {
+  signerName?: string | null;
+  templateName: string;
+  pdfDownloadUrl: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const greeting = params.signerName ? `Hello ${params.signerName},` : "Hello,";
+  const subject = `Your signed contract — ${params.templateName}`;
+  const bodyHtml = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
+    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${greeting}</p>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Your signed copy of <strong>${params.templateName}</strong> is ready.</p>
+    ${emailButton("Download signed PDF", params.pdfDownloadUrl, brand.primaryColor)}
+    <p style="margin:0;color:#9ca3af;font-size:12px;">Keep this email for your records.</p>`;
+  const text = `${greeting}\n\nYour signed contract is ready: ${params.pdfDownloadUrl}`;
+  return { subject, html: emailShell(brand, "Signed contract", bodyHtml), text };
+}
+
 export async function sendEmail(to: string, email: { subject: string; html: string; text: string }): Promise<void> {
   console.log(`[EMAIL] Queuing email to ${to}: ${email.subject}`);
 

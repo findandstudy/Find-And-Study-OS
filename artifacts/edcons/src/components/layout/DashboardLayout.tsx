@@ -115,6 +115,9 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
           { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
+          { title: "Sözleşme Şablonları", icon: FileText, url: '/admin/contract-templates' },
+          { title: "Sözleşmeler", icon: FileText, url: '/admin/contracts' },
+          { title: "Self-Fill Bağlantıları", icon: Link2, url: '/admin/self-fill-links' },
           { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
         ]
       },

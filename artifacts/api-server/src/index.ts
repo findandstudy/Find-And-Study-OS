@@ -358,6 +358,98 @@ async function seedClaudeIntegration() {
     console.error("[migrate] offer-expiry columns:", err);
   }
 
+  // Step 2b2: Idempotent migrations for the contract signing system (Task #110).
+  try {
+    await pool.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS entity_type TEXT NOT NULL DEFAULT 'company'`);
+    await pool.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS tax_number TEXT`);
+    await pool.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS preferred_contract_language TEXT NOT NULL DEFAULT 'en'`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS contract_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        language TEXT NOT NULL DEFAULT 'en',
+        entity_type TEXT NOT NULL DEFAULT 'company',
+        version INTEGER NOT NULL DEFAULT 1,
+        body_html TEXT NOT NULL DEFAULT '',
+        intake_schema JSONB,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS contract_templates_language_idx ON contract_templates(language)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS contract_templates_entity_type_idx ON contract_templates(entity_type)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS contract_templates_active_idx ON contract_templates(is_active)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS signing_sessions (
+        id SERIAL PRIMARY KEY,
+        template_id INTEGER NOT NULL,
+        agent_id INTEGER,
+        token_hash TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'admin_driven',
+        status TEXT NOT NULL DEFAULT 'review_pending',
+        intake_data JSONB,
+        signer_email TEXT NOT NULL,
+        signer_name TEXT,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        opened_at TIMESTAMPTZ,
+        signed_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS signing_sessions_token_hash_idx ON signing_sessions(token_hash)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS signing_sessions_status_idx ON signing_sessions(status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS signing_sessions_agent_id_idx ON signing_sessions(agent_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS signing_sessions_template_id_idx ON signing_sessions(template_id)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS signed_contracts (
+        id SERIAL PRIMARY KEY,
+        signing_session_id INTEGER NOT NULL,
+        agent_id INTEGER,
+        template_id INTEGER NOT NULL,
+        pdf_object_key TEXT NOT NULL,
+        signature_image_object_key TEXT,
+        evidence_hash TEXT NOT NULL,
+        signer_email TEXT NOT NULL,
+        signer_name TEXT,
+        signer_ip TEXT,
+        signer_user_agent TEXT,
+        signed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        emailed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // Unique on signing_session_id prevents duplicate signed records (race protection).
+    await pool.query(`DROP INDEX IF EXISTS signed_contracts_session_id_idx`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS signed_contracts_session_id_unique ON signed_contracts(signing_session_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS signed_contracts_agent_id_idx ON signed_contracts(agent_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS signed_contracts_template_id_idx ON signed_contracts(template_id)`);
+
+    // Backfill the new contract permissions for the default admin role.
+    const newPerms = [
+      "contract_templates.view", "contract_templates.manage",
+      "contracts.view", "contracts.manage",
+      "self_fill_links.view", "self_fill_links.manage",
+    ];
+    const adminRoleRes = await pool.query(`SELECT id, permissions FROM roles WHERE name IN ('admin', 'super_admin')`);
+    for (const row of adminRoleRes.rows) {
+      const existing: string[] = Array.isArray(row.permissions) ? row.permissions : [];
+      const merged = Array.from(new Set([...existing, ...newPerms]));
+      if (merged.length !== existing.length) {
+        await pool.query(`UPDATE roles SET permissions = $1::jsonb WHERE id = $2`, [JSON.stringify(merged), row.id]);
+      }
+    }
+  } catch (err) {
+    console.error("[migrate] contract-signing tables:", err);
+  }
+
   // Step 2c: Idempotent migrations for the Branch system.
   try {
     await pool.query(`

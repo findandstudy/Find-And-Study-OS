@@ -84,6 +84,10 @@ const AdminPopups = lazyRetry(() => import("@/pages/admin/Popups"));
 const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
 const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
+const AdminContractTemplates = lazyRetry(() => import("@/pages/admin/ContractTemplates"));
+const AdminContracts = lazyRetry(() => import("@/pages/admin/Contracts"));
+const AdminSelfFillLinks = lazyRetry(() => import("@/pages/admin/SelfFillLinks"));
+const PublicSignFlow = lazyRetry(() => import("@/pages/sign/SignFlow"));
 
 const WebsitePages = lazyRetry(() => import("@/pages/admin/website/Pages"));
 const WebsiteGlobalComponents = lazyRetry(() => import("@/pages/admin/website/GlobalComponents"));
@@ -288,6 +292,15 @@ function StaffAdminShell() {
           <Route path="/admin/embeds">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
           </Route>
+          <Route path="/admin/contract-templates">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminContractTemplates /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/contracts">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminContracts /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/self-fill-links">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminSelfFillLinks /></ProtectedRoute>
+          </Route>
           <Route path="/admin/website/pages/:id/edit">
             {(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePageEditor id={Number(params.id)} /></ProtectedRoute>}
           </Route>
@@ -433,6 +446,18 @@ function Router() {
                             location === "/staff" || location.startsWith("/staff/");
   const isStudentPath = location === "/student" || location.startsWith("/student/");
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
+  const isPublicSignPath = location.startsWith("/sign/");
+
+  if (isPublicSignPath) {
+    const token = location.slice("/sign/".length).split("/")[0] || "";
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <PublicSignFlow token={token} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   const prevBranch = useRef<string | null>(null);
   const branch = isStaffAdminPath ? "staff" : isStudentPath ? "student" : isAgentPath ? "agent" : "public";
