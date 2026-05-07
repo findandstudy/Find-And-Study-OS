@@ -101,6 +101,7 @@ type Agent = {
   logoUrl: string | null;
   agentIdProofUrl: string | null;
   businessCertUrl: string | null;
+  contractUrl: string | null;
   contractStartDate: string | null;
   contractEndDate: string | null;
   branch: string | null;
@@ -116,7 +117,7 @@ const emptyForm = {
   agencyCode: "", firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
   country: "", state: "", city: "", address: "",
   businessName: "", category: "", commissionRate: "",
-  logoUrl: "", agentIdProofUrl: "", businessCertUrl: "",
+  logoUrl: "", agentIdProofUrl: "", businessCertUrl: "", contractUrl: "",
   contractStartDate: "", contractEndDate: "",
   branch: "", pointOfContact: "", notes: "",
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
@@ -164,9 +165,11 @@ export default function AgentsPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [idProofUploading, setIdProofUploading] = useState(false);
   const [certUploading, setCertUploading] = useState(false);
+  const [contractUploading, setContractUploading] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
   const idProofRef = useRef<HTMLInputElement>(null);
   const certRef = useRef<HTMLInputElement>(null);
+  const contractRef = useRef<HTMLInputElement>(null);
 
   const [parentAgents, setParentAgents] = useState<Agent[]>([]);
   const [branchOptions, setBranchOptions] = useState<{ id: number; name: string }[]>([]);
@@ -288,6 +291,7 @@ export default function AgentsPage() {
       logoUrl: agent.logoUrl || "",
       agentIdProofUrl: agent.agentIdProofUrl || "",
       businessCertUrl: agent.businessCertUrl || "",
+      contractUrl: agent.contractUrl || "",
       contractStartDate: agent.contractStartDate ? agent.contractStartDate.split("T")[0] : "",
       contractEndDate: agent.contractEndDate ? agent.contractEndDate.split("T")[0] : "",
       branch: agent.branch || "",
@@ -381,6 +385,7 @@ export default function AgentsPage() {
       logoUrl: form.logoUrl || null,
       agentIdProofUrl: form.agentIdProofUrl || null,
       businessCertUrl: form.businessCertUrl || null,
+      contractUrl: form.contractUrl || null,
       contractStartDate: form.contractStartDate || null,
       contractEndDate: form.contractEndDate || null,
       branch: form.branch.trim() || null,
@@ -1345,6 +1350,29 @@ export default function AgentsPage() {
                       onChange={e => setForm(f => ({ ...f, contractEndDate: e.target.value }))}
                       className="rounded-xl" />
                   </div>
+                </div>
+
+                {/* Contract File */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Contract File (PDF / Image)</Label>
+                  <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
+                    {form.contractUrl ? (
+                      <>
+                        <div className="flex flex-col items-center gap-1 text-green-600">
+                          <p className="text-xs font-medium">Contract uploaded</p>
+                          <a href={form.contractUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] underline hover:text-primary">View / Download</a>
+                        </div>
+                        <button onClick={() => setForm(f => ({ ...f, contractUrl: "" }))} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive/90 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
+                      </>
+                    ) : (
+                      <button onClick={() => contractRef.current?.click()} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary text-xs" disabled={contractUploading}>
+                        {contractUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                        <span>{contractUploading ? "Uploading..." : "Upload Contract"}</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">The agent will see this contract on their account page and can download it.</p>
+                  <input ref={contractRef} type="file" accept="image/*,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f, "contractUrl", setContractUploading); e.target.value = ""; }} />
                 </div>
                 {form.contractStartDate && form.contractEndDate && (() => {
                   const end = new Date(form.contractEndDate);

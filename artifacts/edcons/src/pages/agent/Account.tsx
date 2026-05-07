@@ -132,6 +132,9 @@ export default function AgentAccount() {
     queryKey: ["agent-me"],
     enabled: !!user,
     queryFn: () => customFetch<any>("/api/agents/me"),
+    // Re-fetch when the tab regains focus so admin-side changes (e.g.
+    // uploading/replacing the contract file) appear without a hard reload.
+    refetchOnWindowFocus: true,
   });
 
   async function handleAvatarUpload(file: File) {
