@@ -237,6 +237,19 @@ export default function AgentsPage() {
 
   useEffect(() => { fetchAgents(); }, [page, search, countryFilter]);
   useEffect(() => { fetchSubAgents(); }, [subPage, subSearch, subCountryFilter]);
+  // Keep the admin view fresh: refetch on window focus and when tab regains
+  // visibility, so business-name (and other) edits made by the agent show up
+  // without a hard reload.
+  useEffect(() => {
+    function refresh() { fetchAgents(); fetchSubAgents(); }
+    function onVisible() { if (document.visibilityState === "visible") refresh(); }
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [page, search, countryFilter, subPage, subSearch, subCountryFilter]);
   async function fetchBranchOptions() {
     try {
       const res: any = await customFetch(`/api/branches?archived=0`);
@@ -254,7 +267,7 @@ export default function AgentsPage() {
     setShowDialog(true);
   }
 
-  function openEdit(agent: Agent) {
+  function seedFormFromAgent(agent: Agent) {
     setEditingAgent(agent);
     setIsSubAgent(!!agent.parentAgentId);
     const { code, number } = splitPhone(agent.phone);
@@ -293,7 +306,25 @@ export default function AgentsPage() {
     } else {
       setCities([]);
     }
+  }
+
+  const openEditTokenRef = useRef(0);
+  async function openEdit(agent: Agent) {
+    // Seed immediately from the row snapshot so the dialog opens instantly,
+    // then refetch the live row so values edited by the agent (e.g. business
+    // name, logo) appear without requiring a hard reload.
+    const token = ++openEditTokenRef.current;
+    seedFormFromAgent(agent);
     setShowDialog(true);
+    try {
+      const fresh: any = await customFetch(`/api/agents/${agent.id}`);
+      if (token !== openEditTokenRef.current) return; // stale response, ignore
+      if (fresh && fresh.id) {
+        seedFormFromAgent(fresh as Agent);
+        setAgents(prev => prev.map(a => a.id === fresh.id ? { ...a, ...fresh } : a));
+        setSubAgents(prev => prev.map(a => a.id === fresh.id ? { ...a, ...fresh } : a));
+      }
+    } catch {}
   }
 
   async function uploadFile(file: File, field: string, setUploading: (v: boolean) => void) {
