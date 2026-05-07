@@ -1293,7 +1293,7 @@ export default function AgentsPage() {
 
                   {/* ID Proof */}
                   <div className="space-y-2">
-                    <Label className="text-xs">Contract</Label>
+                    <Label className="text-xs">Agent ID Proof</Label>
                     <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                       {form.agentIdProofUrl ? (
                         <>

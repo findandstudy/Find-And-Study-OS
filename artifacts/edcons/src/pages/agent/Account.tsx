@@ -623,6 +623,8 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
           <DocumentViewer
             label="Contract"
             value={agentProfile.contractUrl}
+            startDate={agentProfile.contractStartDate}
+            endDate={agentProfile.contractEndDate}
           />
           <DocumentUploader
             label="Business Certificate"
@@ -696,7 +698,41 @@ function DocumentUploader({
   );
 }
 
-function DocumentViewer({ label, value }: { label: string; value?: string | null }) {
+function DocumentViewer({
+  label, value, startDate, endDate,
+}: {
+  label: string;
+  value?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}) {
+  // Derive a friendly file name from the storage URL (strip query/hash, take
+  // last path segment, decode URI). Falls back to "contract" if unparseable.
+  const fileName = (() => {
+    if (!value) return "";
+    try {
+      const clean = value.split("?")[0].split("#")[0];
+      const last = clean.substring(clean.lastIndexOf("/") + 1);
+      return decodeURIComponent(last) || "contract";
+    } catch {
+      return "contract";
+    }
+  })();
+
+  function fmtDate(d?: string | null) {
+    if (!d) return null;
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return d;
+      return dt.toLocaleDateString();
+    } catch {
+      return d;
+    }
+  }
+
+  const start = fmtDate(startDate);
+  const end = fmtDate(endDate);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -709,13 +745,13 @@ function DocumentViewer({ label, value }: { label: string; value?: string | null
             {value.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
               <img src={value} alt={label} className="max-h-full max-w-full object-contain p-2" />
             ) : (
-              <div className="flex flex-col items-center gap-1.5 text-green-600">
+              <div className="flex flex-col items-center gap-1.5 text-green-600 px-3 text-center">
                 <FileText className="w-7 h-7" />
-                <span className="text-[10px] font-medium">Contract uploaded</span>
+                <span className="text-[10px] font-medium break-all line-clamp-2" title={fileName}>{fileName}</span>
               </div>
             )}
             <div className="absolute top-1.5 right-1.5">
-              <a href={value} target="_blank" rel="noopener noreferrer"
+              <a href={value} target="_blank" rel="noopener noreferrer" download={fileName}
                 className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90 shadow-sm">
                 <Download className="w-3 h-3" />
               </a>
@@ -728,6 +764,28 @@ function DocumentViewer({ label, value }: { label: string; value?: string | null
           </div>
         )}
       </div>
+      {value && (
+        <div className="space-y-0.5">
+          <p className="text-[11px] font-medium text-foreground break-all" title={fileName}>{fileName}</p>
+          {(start || end) && (
+            <p className="text-[10px] text-muted-foreground">
+              {start ? `Start: ${start}` : ""}
+              {start && end ? "  ·  " : ""}
+              {end ? `End: ${end}` : ""}
+            </p>
+          )}
+          <a
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={fileName}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+          >
+            <Download className="w-3 h-3" />
+            Download
+          </a>
+        </div>
+      )}
     </div>
   );
 }
