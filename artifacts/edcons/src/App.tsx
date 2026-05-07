@@ -18,6 +18,7 @@ import { I18nProvider, useI18nContext } from "@/lib/i18n/context";
 import { isValidLanguage, DEFAULT_LANGUAGE, type Language } from "@/lib/i18n/index";
 import NotFound from "@/pages/not-found";
 import { useGetMe } from "@workspace/api-client-react";
+import { useAgencyBranding } from "@/hooks/use-agency-branding";
 
 import Home from "@/pages/public/Home";
 import Login from "@/pages/auth/Login";
@@ -645,10 +646,16 @@ if (typeof window !== "undefined") {
   setupUnauthorizedHandler();
 }
 
+function AgencyBrandingApplier() {
+  useAgencyBranding();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthPrefetch />
+      <AgencyBrandingApplier />
       <ThemeProvider>
         <SeasonProvider>
           <I18nProvider>
