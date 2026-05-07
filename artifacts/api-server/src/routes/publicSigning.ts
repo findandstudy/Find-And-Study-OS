@@ -70,7 +70,13 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
   try {
     const r = await resolveByToken(req.params.token);
     if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
-    if (r.expired) { res.status(410).json({ error: "This signing link has expired.", code: "expired" }); return; }
+    // Signed sessions are terminal — surface success even if past expiresAt
+    // so the signer can re-open the page and see the success state / PDF link
+    // rather than getting an "expired" message after they already signed.
+    if (r.session.status !== "signed" && r.expired) {
+      res.status(410).json({ error: "This signing link has expired.", code: "expired" });
+      return;
+    }
     if (!r.session.openedAt && r.session.status !== "signed") {
       try {
         await db.update(signingSessionsTable).set({ openedAt: new Date() }).where(eq(signingSessionsTable.id, r.session.id));

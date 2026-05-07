@@ -115,10 +115,14 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
           { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
-          ...((role === 'super_admin' || role === 'admin') ? [
-            { title: "Sözleşme Şablonları", icon: FileText, url: '/admin/contract-templates' },
-            { title: "Sözleşmeler", icon: FileText, url: '/admin/contracts' },
-            { title: "Self-Fill Bağlantıları", icon: Link2, url: '/admin/self-fill-links' },
+          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contract_templates.view')) ? [
+            { title: "Sözleşme Şablonları", icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' },
+          ] : []),
+          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contracts.view')) ? [
+            { title: "Sözleşmeler", icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' },
+          ] : []),
+          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('self_fill_links.view')) ? [
+            { title: "Self-Fill Bağlantıları", icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' },
           ] : []),
           { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
         ]
