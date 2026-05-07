@@ -1,5 +1,7 @@
 import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, UserPlus, FileCheck, CreditCard, MessageCircle, Megaphone, AlertCircle, ArrowUpRight } from "lucide-react";
@@ -77,6 +79,8 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 };
 
 export default function AdminDashboard() {
+  const { user } = useAuth(true);
+  const showOfferDeadlines = user?.role !== "super_admin";
   const { data: stats, isLoading } = useGetOverviewStats();
 
   const { data: growthRaw } = useQuery<unknown>({
@@ -351,6 +355,10 @@ export default function AdminDashboard() {
         </div>
 
         {/* Charts Row */}
+        {showOfferDeadlines && (
+          <OfferDeadlinesWidget detailHrefPrefix="/staff/applications" />
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-center justify-between mb-6">

@@ -15,6 +15,8 @@ export const applicationStageDocumentsTable = pgTable("application_stage_documen
   uploadedByRole: text("uploaded_by_role").notNull(),
   uploadedByName: text("uploaded_by_name"),
   isMissingDocNote: boolean("is_missing_doc_note").default(false),
+  validUntil: timestamp("valid_until", { withTimezone: true }),
+  expiryNotifiedThresholds: text("expiry_notified_thresholds"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("app_stage_docs_application_id_idx").on(table.applicationId),

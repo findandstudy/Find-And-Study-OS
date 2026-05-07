@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, FileText, Trash2, Download, Plus, X,
-  AlertTriangle, ChevronDown, ChevronRight, Save,
+  AlertTriangle, ChevronDown, ChevronRight, Save, Calendar, Pencil,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
@@ -153,6 +153,12 @@ function StageSection({
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingValidUntil, setPendingValidUntil] = useState<string>("");
+  const [editingDocId, setEditingDocId] = useState<number | null>(null);
+  const [editValidUntil, setEditValidUntil] = useState<string>("");
+
+  const requiresValidUntil = stage === "offer_received";
+  const supportsValidUntil = ADMIN_ONLY_UPLOAD_STAGES.includes(stage);
 
   const canUpload = hideUpload
     ? false
@@ -163,24 +169,45 @@ function StageSection({
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const base64 = await fileToBase64(file);
+      const body: any = {
+        stage,
+        fileName: file.name,
+        fileData: base64,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      };
+      if (supportsValidUntil && pendingValidUntil) body.validUntil = pendingValidUntil;
       return customFetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stage,
-          fileName: file.name,
-          fileData: base64,
-          mimeType: file.type,
-          sizeBytes: file.size,
-        }),
+        body: JSON.stringify(body),
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
+      setPendingValidUntil("");
       toast({ title: "Document uploaded" });
     },
     onError: (err: any) => {
       toast({ title: "Upload failed", description: err?.message || "An error occurred", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ docId, validUntil }: { docId: number; validUntil: string | null }) =>
+      customFetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents/${docId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ validUntil }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
+      setEditingDocId(null);
+      setEditValidUntil("");
+      toast({ title: "Geçerlilik tarihi güncellendi" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Güncelleme başarısız", description: err?.message, variant: "destructive" });
     },
   });
 
@@ -196,6 +223,11 @@ function StageSection({
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (requiresValidUntil && !pendingValidUntil) {
+      toast({ title: "Geçerlilik tarihi gerekli", description: "Lütfen önce kabul mektubunun son geçerlilik tarihini girin.", variant: "destructive" });
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     const validation = validateFile(file);
     if (!validation.valid) {
       toast({ title: "Dosya hatas\u0131", description: validation.message, variant: "destructive" });
@@ -253,7 +285,13 @@ function StageSection({
 
           {docs.length > 0 ? (
             <div className="space-y-1.5">
-              {docs.map((doc: any) => (
+              {docs.map((doc: any) => {
+                const validUntil = doc.validUntil ? new Date(doc.validUntil) : null;
+                const daysLeft = validUntil
+                  ? Math.ceil((validUntil.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                  : null;
+                const isEditingThis = editingDocId === doc.id;
+                return (
                 <div key={doc.id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 text-sm group">
                   <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -262,8 +300,69 @@ function StageSection({
                       {doc.uploadedByName || "Unknown"} · {new Date(doc.createdAt).toLocaleDateString()}
                       {doc.sizeBytes && ` · ${(doc.sizeBytes / 1024).toFixed(0)}KB`}
                     </p>
+                    {validUntil && (
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+                          <Calendar className="w-3 h-3" />
+                          Son geçerlilik: {validUntil.toLocaleDateString("tr-TR")}
+                        </Badge>
+                        {daysLeft !== null && (
+                          <Badge
+                            className={`text-[10px] px-1.5 py-0 border-0 ${
+                              daysLeft <= 0 ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                                : daysLeft <= 7 ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                                : daysLeft <= 14 ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                                : daysLeft <= 30 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300"
+                                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                            }`}
+                          >
+                            {daysLeft <= 0 ? "Süresi doldu" : `${daysLeft} gün kaldı`}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {isEditingThis && (
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <Input
+                          type="date"
+                          value={editValidUntil}
+                          onChange={e => setEditValidUntil(e.target.value)}
+                          className="h-7 text-xs w-40"
+                        />
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => updateMutation.mutate({ docId: doc.id, validUntil: editValidUntil || null })}
+                          disabled={updateMutation.isPending}
+                        >
+                          Kaydet
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => { setEditingDocId(null); setEditValidUntil(""); }}
+                        >
+                          İptal
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {supportsValidUntil && isAdmin && !isEditingThis && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => {
+                          setEditingDocId(doc.id);
+                          setEditValidUntil(validUntil ? validUntil.toISOString().slice(0, 10) : "");
+                        }}
+                        title="Geçerlilik tarihini düzenle"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -287,7 +386,7 @@ function StageSection({
                     )}
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           ) : (
             stage !== "missing_docs" && (
@@ -297,6 +396,20 @@ function StageSection({
 
           {canUpload && (
             <div className="pt-1 space-y-1">
+              {supportsValidUntil && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    Son geçerlilik tarihi{requiresValidUntil ? " *" : ""}:
+                  </label>
+                  <Input
+                    type="date"
+                    value={pendingValidUntil}
+                    onChange={e => setPendingValidUntil(e.target.value)}
+                    className="h-7 text-xs flex-1"
+                  />
+                </div>
+              )}
               <input
                 ref={fileRef}
                 type="file"

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable } from "@workspace/db";
-import { eq, sql, and, inArray, desc, isNull } from "drizzle-orm";
+import { eq, sql, and, inArray, desc, isNull, isNotNull } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -170,6 +170,67 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
 router.get("/applications/doc-required-stages", requireAuth, (_req, res) => {
   res.json(DOC_REQUIRED_STAGES);
+});
+
+router.get("/applications/offer-letter-deadlines", requireAuth, async (req, res): Promise<void> => {
+  const user = req.user!;
+
+  // Super admin sees nothing per product rules.
+  if (user.role === "super_admin") {
+    res.json({ data: [] });
+    return;
+  }
+
+  const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
+  const isStaff = STAFF_ROLES.includes(user.role as any);
+
+  const conditions = [
+    isNull(applicationsTable.deletedAt),
+    isNotNull(applicationStageDocumentsTable.validUntil),
+    inArray(applicationStageDocumentsTable.stage, OFFER_DOC_STAGES),
+  ];
+
+  if (user.role === "student") {
+    const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+    if (!studentRec) { res.json({ data: [] }); return; }
+    conditions.push(eq(applicationsTable.studentId, studentRec.id));
+  } else if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (visibleIds.length === 0) { res.json({ data: [] }); return; }
+    conditions.push(inArray(applicationsTable.agentId, visibleIds));
+  } else if (!isStaff) {
+    res.json({ data: [] });
+    return;
+  }
+
+  const rows = await db.select({
+    docId: applicationStageDocumentsTable.id,
+    applicationId: applicationsTable.id,
+    stage: applicationStageDocumentsTable.stage,
+    fileName: applicationStageDocumentsTable.fileName,
+    validUntil: applicationStageDocumentsTable.validUntil,
+    studentFirstName: studentsTable.firstName,
+    studentLastName: studentsTable.lastName,
+    universityName: applicationsTable.universityName,
+    programName: applicationsTable.programName,
+  })
+    .from(applicationStageDocumentsTable)
+    .innerJoin(applicationsTable, eq(applicationStageDocumentsTable.applicationId, applicationsTable.id))
+    .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+    .where(and(...conditions))
+    .orderBy(applicationStageDocumentsTable.validUntil);
+
+  const now = Date.now();
+  const data = rows
+    .map(r => {
+      const validUntil = r.validUntil ? new Date(r.validUntil) : null;
+      const daysLeft = validUntil ? Math.ceil((validUntil.getTime() - now) / (1000 * 60 * 60 * 24)) : null;
+      return { ...r, validUntil: validUntil?.toISOString() || null, daysLeft };
+    })
+    .filter(r => r.daysLeft !== null && r.daysLeft > -7)
+    .slice(0, 50);
+
+  res.json({ data });
 });
 
 router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {

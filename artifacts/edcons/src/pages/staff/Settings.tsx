@@ -626,7 +626,13 @@ export default function SettingsPage() {
   }
 
   function NotificationsTab() {
-    return <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />;
+    const isSuperAdminLocal = user?.role === "super_admin";
+    return (
+      <div className="space-y-6">
+        {isSuperAdminLocal && <OfferExpiryThresholdsCard />}
+        <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
+      </div>
+    );
   }
 
   function SecurityTab() {
@@ -1998,5 +2004,73 @@ function WebToLeadTab() {
         </ol>
       </Card>
     </div>
+  );
+}
+
+function OfferExpiryThresholdsCard() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: () => customFetch("/api/settings"),
+  });
+
+  const initial = (settings?.offerExpiryWarningDays as string) || "30,14,7,1";
+  const [value, setValue] = useState<string>(initial);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings?.offerExpiryWarningDays !== undefined) {
+      setValue(settings.offerExpiryWarningDays || "30,14,7,1");
+    }
+  }, [settings?.offerExpiryWarningDays]);
+
+  async function handleSave() {
+    const parts = value.split(",").map(s => s.trim()).filter(Boolean);
+    const nums = parts.map(p => parseInt(p, 10));
+    if (nums.some(n => isNaN(n) || n <= 0)) {
+      toast({ title: "Geçersiz değer", description: "Sadece pozitif tam sayıları virgülle ayırarak girin (örn: 30,14,7,1).", variant: "destructive" });
+      return;
+    }
+    const normalized = Array.from(new Set(nums)).sort((a, b) => b - a).join(",");
+    setSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerExpiryWarningDays: normalized }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Eşikler kaydedildi", description: `Aktif: ${normalized}` });
+    } catch (err: any) {
+      toast({ title: "Kaydetme başarısız", description: err?.message, variant: "destructive" });
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Card className="border shadow-sm p-6">
+      <div className="mb-4">
+        <h3 className="font-display font-semibold text-base">Kabul Mektubu Süre Bildirimi Eşikleri</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Yüklenen kabul mektubunun son geçerlilik tarihine "kaç gün kala" bildirim gönderileceğini belirleyin. Virgülle ayrılmış pozitif gün sayıları (örn: <code className="text-xs px-1 py-0.5 rounded bg-secondary">30,14,7,1</code>).
+        </p>
+      </div>
+      <div className="flex items-end gap-3">
+        <div className="flex-1">
+          <Label htmlFor="offerExpiryWarningDays" className="text-xs">Eşikler (gün)</Label>
+          <Input
+            id="offerExpiryWarningDays"
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder="30,14,7,1"
+            className="mt-1"
+          />
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Kaydediliyor..." : "Kaydet"}
+        </Button>
+      </div>
+    </Card>
   );
 }

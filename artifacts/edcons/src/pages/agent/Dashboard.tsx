@@ -13,6 +13,7 @@ import {
   MessageCircle, Megaphone, AlertCircle, Shield, Mail, Phone,
   ExternalLink, UserPlus as AddStudent, Plus, ArrowUpRight,
 } from "lucide-react";
+import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -274,6 +275,8 @@ export default function AgentDashboard() {
             </Card>
           )}
         </div>
+
+        <OfferDeadlinesWidget detailHrefPrefix="/agent/apps" />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-6 border-none shadow-lg shadow-black/5">

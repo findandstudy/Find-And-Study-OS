@@ -36,10 +36,11 @@ const SETTINGS_PATCH_FIELDS = [
   "linkedinInsightTag", "clarityId", "recaptchaSiteKey",
   "whatsappWidgetNumber", "liveChatScript", "featureFlags",
   "availableYears",
+  "offerExpiryWarningDays",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
-const SUPER_ADMIN_ONLY_FIELDS = ["customHeadScript", "customBodyEndScript", "liveChatScript", "featureFlags"];
+const SUPER_ADMIN_ONLY_FIELDS = ["customHeadScript", "customBodyEndScript", "liveChatScript", "featureFlags", "offerExpiryWarningDays"];
 
 router.get("/settings/branding", async (req, res): Promise<void> => {
   const [settings] = await db.select({

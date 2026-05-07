@@ -121,6 +121,9 @@ export const settingsTable = pgTable("settings", {
   whatsappWidgetNumber: text("whatsapp_widget_number"),
   liveChatScript: text("live_chat_script"),
   featureFlags: jsonb("feature_flags").default({}),
+
+  // Offer letter expiry notification thresholds (CSV days, e.g. "30,14,7,1")
+  offerExpiryWarningDays: text("offer_expiry_warning_days").default("30,14,7,1"),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

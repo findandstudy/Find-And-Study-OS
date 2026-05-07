@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare, Search, Mail, Phone, User, ExternalLink } from "lucide-react";
 import { useLocation } from "wouter";
+import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 
 const STAGE_LABELS: Record<string, { label: string; color: string; step: number }> = {
   inquiry: { label: "Inquiry Received", color: "bg-slate-400", step: 1 },
@@ -178,6 +179,8 @@ export default function StudentDashboard() {
             </div>
           </Card>
         )}
+
+        <OfferDeadlinesWidget detailHrefPrefix="/student/applications" hideStudent />
 
         <div className="grid lg:grid-cols-2 gap-6">
           <Card className="border-none shadow-lg shadow-black/5">

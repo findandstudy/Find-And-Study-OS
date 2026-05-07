@@ -348,6 +348,15 @@ async function seedClaudeIntegration() {
   const { ensureRateLimitsTable } = await import("./lib/pgRateLimiter");
   await ensureRateLimitsTable();
 
+  // Step 2b: Idempotent migrations for offer-letter expiry feature.
+  try {
+    await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS expiry_notified_thresholds TEXT`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS offer_expiry_warning_days TEXT DEFAULT '30,14,7,1'`);
+  } catch (err) {
+    console.error("[migrate] offer-expiry columns:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
@@ -378,6 +387,8 @@ async function seedClaudeIntegration() {
     startEmailWorker();
     const { startContractChecker } = await import("./lib/contractChecker");
     startContractChecker();
+    const { startOfferExpiryChecker } = await import("./lib/offerExpiryChecker");
+    startOfferExpiryChecker();
   }
 
   serveStaticFrontend();

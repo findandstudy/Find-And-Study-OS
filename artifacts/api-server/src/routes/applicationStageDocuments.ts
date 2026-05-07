@@ -66,6 +66,8 @@ router.get("/applications/:id/stage-documents", requireAuth, requireAgentStaffPe
       uploadedByRole: applicationStageDocumentsTable.uploadedByRole,
       uploadedByName: applicationStageDocumentsTable.uploadedByName,
       isMissingDocNote: applicationStageDocumentsTable.isMissingDocNote,
+      validUntil: applicationStageDocumentsTable.validUntil,
+      expiryNotifiedThresholds: applicationStageDocumentsTable.expiryNotifiedThresholds,
       hasFileData: sql<boolean>`${applicationStageDocumentsTable.fileData} IS NOT NULL`.as("has_file_data"),
       createdAt: applicationStageDocumentsTable.createdAt,
     })
@@ -85,7 +87,22 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes } = req.body;
+  const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes, validUntil } = req.body;
+
+  let validUntilDate: Date | null = null;
+  if (validUntil) {
+    const parsed = new Date(validUntil);
+    if (isNaN(parsed.getTime())) {
+      res.status(400).json({ error: "validUntil must be a valid date" });
+      return;
+    }
+    validUntilDate = parsed;
+  }
+  const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
+  if (stage === "offer_received" && !validUntilDate) {
+    res.status(400).json({ error: "validUntil is required for offer letters" });
+    return;
+  }
 
   if (!stage || !fileName) {
     res.status(400).json({ error: "stage and fileName are required" });
@@ -176,10 +193,55 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     uploadedByRole: user.role,
     uploadedByName: uploaderName,
     isMissingDocNote: false,
+    validUntil: OFFER_DOC_STAGES.includes(stage) ? validUntilDate : null,
   }).returning();
 
   await logAudit(user.id, "upload_stage_document", "application", applicationId, { stage, fileName, docId: doc.id }, req.ip);
   res.status(201).json(doc);
+});
+
+router.patch("/applications/:id/stage-documents/:docId", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const applicationId = parseInt(req.params.id, 10);
+  const docId = parseInt(req.params.docId, 10);
+  const user = req.user!;
+
+  const isAdmin = ADMIN_ROLES.includes(user.role as any);
+  if (!isAdmin) {
+    res.status(403).json({ error: "Only administrators can edit document metadata" });
+    return;
+  }
+
+  const [doc] = await db.select().from(applicationStageDocumentsTable)
+    .where(and(eq(applicationStageDocumentsTable.id, docId), eq(applicationStageDocumentsTable.applicationId, applicationId)));
+  if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const updates: Record<string, unknown> = {};
+  if (req.body.validUntil !== undefined) {
+    if (req.body.validUntil === null || req.body.validUntil === "") {
+      updates.validUntil = null;
+    } else {
+      const parsed = new Date(req.body.validUntil);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: "validUntil must be a valid date" });
+        return;
+      }
+      updates.validUntil = parsed;
+    }
+    updates.expiryNotifiedThresholds = null;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
+    return;
+  }
+
+  const [updated] = await db.update(applicationStageDocumentsTable)
+    .set(updates)
+    .where(eq(applicationStageDocumentsTable.id, docId))
+    .returning();
+
+  await logAudit(user.id, "update_stage_document", "application", applicationId, { docId, ...updates }, req.ip);
+  res.json(updated);
 });
 
 router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {

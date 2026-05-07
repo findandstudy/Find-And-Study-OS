@@ -57,6 +57,7 @@ const TEMPLATE_VARS: Record<string, string[]> = {
   "application.created": ["studentName", "universityName", "programName"],
   "application.stage_changed": ["studentName", "universityName", "programName", "newStage"],
   "application.offer_received": ["studentName", "universityName", "programName"],
+  "application.offer_letter_expiring": ["studentName", "universityName", "programName", "validUntil", "daysLeft", "stageLabel"],
   "application.visa_update": ["studentName", "universityName"],
   "student.created": ["firstName", "lastName", "email", "nationality"],
   "student.document_uploaded": ["documentName", "documentType"],

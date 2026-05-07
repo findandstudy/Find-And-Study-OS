@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, AlertTriangle, Shield, Link as LinkIcon } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -62,6 +64,8 @@ const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
 function isOverdue(d: string) { return new Date(d) < new Date(); }
 
 export default function StaffDashboard() {
+  const { user } = useAuth(true);
+  const showOfferDeadlines = user?.role !== "super_admin";
   const { data: stats, isLoading } = useGetOverviewStats();
 
   const { data: growthData = [] } = useQuery<any[]>({
@@ -281,6 +285,10 @@ export default function StaffDashboard() {
               ))}
             </div>
           </Card>
+        )}
+
+        {showOfferDeadlines && (
+          <OfferDeadlinesWidget detailHrefPrefix="/staff/applications" />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
