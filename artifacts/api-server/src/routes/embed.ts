@@ -910,7 +910,7 @@ function loadProgramDocs(pid,cb){
   }).catch(function(){}).finally(function(){if(cb)cb();});
 }
 var detailProgram=null, detailOpen=false;
-var formStep='upload';
+var formStep='personal';
 var uploadedDocs={};
 var aiResult=null;
 var extractedFields={};
@@ -1214,10 +1214,13 @@ function renderFormInline(){
 }
 
 function renderSteps(){
-  var steps=['Upload Docs','Your Info','Submit'];
-  var stepKeys=['upload','form','submit'];
+  // Mirror the homepage non-login ApplyDialog ordering:
+  // 1) Personal Info  2) Documents  3) Review & Submit
+  var steps=['Personal Info','Documents','Review & Submit'];
+  var stepKeys=['personal','documents','review'];
   var currentIdx=stepKeys.indexOf(formStep);
-  if(formStep==='analyzing')currentIdx=0;
+  // 'analyzing' is a transient sub-state of the documents step.
+  if(formStep==='analyzing')currentIdx=1;
   var h='<div class="ew-steps">';
   for(var i=0;i<steps.length;i++){
     var cls='ew-step';
@@ -1244,11 +1247,47 @@ function getFormLevel(){
 
 function renderFormContent(prog){
   var h=renderSteps();
-  if(formStep==='upload'){
+  // Shared helper: render a single form field, optionally tagged as
+  // AI-extracted (green border + "AI" badge), used by both the personal
+  // step and the review step. Declared in this scope so it can append to
+  // the local h accumulator.
+  function aiField(name,label,type,required,isHalf){
+    var val=savedFormData[name]||'';
+    var isAi=!!extractedFields[name];
+    var cls='ew-form-group'+(isHalf?'':' full');
+    var style=isAi?'border-color:#22c55e;background:#f0fdf4':'';
+    h+='<div class="'+cls+'"><label>'+label+(required?' *':'')+(isAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><input name="'+name+'" type="'+(type||'text')+'" value="'+esc(val)+'" style="'+style+'"'+(required?' required':'')+'></div>';
+  }
+  if(formStep==='personal'){
+    // Step 1 — Personal Info: collect basic contact fields up front, the
+    // same ordering used by the homepage non-login ApplyDialog.
+    h+='<h3>Apply'+(prog?' \\u2014 '+esc(prog.name):'')+'</h3>';
+    if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.universityName||'')+'</div>';
+    else h+='<div class="ew-modal-subtitle">Tell us about yourself to get started.</div>';
+    h+='<form id="ew-personal-form" onsubmit="return false">';
+    h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
+    h+='<div class="ew-form-grid">';
+    aiField('firstName','First Name','text',true,true);
+    aiField('lastName','Last Name','text',true,true);
+    aiField('email','Email','email',true,true);
+    var fv=savedFormData;
+    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90"'+((fv.countryCode||'+90')==='+90'?' selected':'')+'>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div></div>';
+    aiField('nationality','Nationality','text',false,true);
+    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
+    if(!prog){
+      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv.preferredUniversity||'')+'"></div>';
+      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv.desiredProgram||'')+'"></div>';
+    }
+    h+='</div>';
+    h+='<div class="ew-form-actions">';
+    h+='<button type="button" class="ew-btn" id="ew-next-personal" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">Continue \\u2192</button>';
+    if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
+    h+='</div></form>';
+  } else if(formStep==='documents'){
+    // Step 2 — Documents: upload + AI extract option.
     h+='<div class="ew-ai-badge">\\u2728 AI-Powered Document Analysis</div>';
     h+='<h3>Apply'+(prog?' \\u2014 '+esc(prog.name):'')+'</h3>';
     if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.universityName||'')+'</div>';
-    else h+='<div class="ew-modal-subtitle">Upload your documents and our AI will automatically extract your information.</div>';
     h+='<div style="background:${primaryColor}08;border:1px solid ${primaryColor}25;border-radius:10px;padding:14px;margin:12px 0">';
     h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:1rem">\\u2728</span><strong style="font-size:0.85rem">AI-Powered Document Analysis</strong></div>';
     h+='<p style="font-size:0.78rem;color:#64748b;margin:0">Upload your documents and our AI will automatically extract your information. You can review and edit before submitting.</p>';
@@ -1276,11 +1315,11 @@ function renderFormContent(prog){
       h+='</div>';
     }
     h+='</div>';
-    var uploadCount=Object.keys(uploadedDocs).length;
     h+='<div class="ew-form-actions" style="margin-top:16px">';
-    h+='<button type="button" class="ew-btn" id="ew-analyze-btn" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">'+(uploadCount>0?'\\u2728 Analyze with AI & Continue':'\\u2728 Analyze with AI & Continue')+'</button>';
-    h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-skip-btn">Skip, fill manually</button>';
-    if(formOpen)h+='<button type="button" class="ew-btn-back" id="ew-cancel">Cancel</button>';
+    h+='<button type="button" class="ew-btn" id="ew-analyze-btn" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">\\u2728 Analyze with AI & Continue</button>';
+    h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-skip-btn">Skip & Continue</button>';
+    h+='<button type="button" class="ew-btn-back" id="ew-back-personal">\\u2190 Back</button>';
+    if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
     h+='</div>';
   } else if(formStep==='analyzing'){
     h+='<div class="ew-analyzing">';
@@ -1288,10 +1327,12 @@ function renderFormContent(prog){
     h+='<h4>\\u2728 AI is analyzing your documents...</h4>';
     h+='<p>This usually takes a few seconds</p>';
     h+='</div>';
-  } else if(formStep==='form'){
-    h+='<h3>Your Information</h3>';
+  } else if(formStep==='review'){
+    // Step 3 — Review & Submit: show every field editable, AI-extracted
+    // ones tagged with the green AI badge. Submit happens here.
+    h+='<h3>Review & Submit</h3>';
     if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.name)+' \\u2014 '+esc(prog.universityName||'')+'</div>';
-    else h+='<div class="ew-modal-subtitle">Review and complete your details</div>';
+    else h+='<div class="ew-modal-subtitle">Review your details and submit your application</div>';
     var eKeys=Object.keys(extractedFields);
     if(eKeys.length>0){
       h+='<div class="ew-extracted-info" style="margin-bottom:16px">';
@@ -1301,25 +1342,18 @@ function renderFormContent(prog){
     h+='<form id="ew-form">';
     h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
     h+='<div class="ew-form-grid">';
-    var fv=savedFormData;
-    function aiField(name,label,type,required,isHalf){
-      var val=fv[name]||'';
-      var isAi=!!extractedFields[name];
-      var cls='ew-form-group'+(isHalf?'':' full');
-      var style=isAi?'border-color:#22c55e;background:#f0fdf4':'';
-      h+='<div class="'+cls+'"><label>'+label+(required?' *':'')+(isAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><input name="'+name+'" type="'+(type||'text')+'" value="'+esc(val)+'" style="'+style+'"'+(required?' required':'')+'></div>';
-    }
+    var fv2=savedFormData;
     aiField('firstName','First Name','text',true,true);
     aiField('lastName','Last Name','text',true,true);
     aiField('email','Email','email',true,true);
-    h+='<div class="ew-form-group"><label>Phone</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90" selected>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'"></div></div>';
+    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90"'+((fv2.countryCode||'+90')==='+90'?' selected':'')+'>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
     aiField('nationality','Nationality','text',false,true);
-    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
+    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv2.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv2.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv2.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv2.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv2.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
     if(!prog){
-      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv.preferredUniversity||'')+'"></div>';
-      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv.desiredProgram||'')+'"></div>';
+      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv2.preferredUniversity||'')+'"></div>';
+      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv2.desiredProgram||'')+'"></div>';
     }
-    h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3">'+esc(fv.message||'')+'</textarea></div>';
+    h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3">'+esc(fv2.message||'')+'</textarea></div>';
     h+='</div>';
     var docCount=Object.keys(uploadedDocs).length;
     if(docCount>0){
@@ -1440,7 +1474,7 @@ function showDetailModal(){
     var pid=parseInt(applyBtn.getAttribute('data-apply'));
     closeDetailModal();
     formProgram=programs.find(function(p){return p.id===pid})||null;
-    formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
+    formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
     showModal();
     loadProgramDocs(pid,function(){if(formOpen)showModal();});
   });
@@ -1550,16 +1584,56 @@ function bindModalEvents(modal,overlay){
   var analyzeBtn=$('#ew-analyze-btn',modal);
   if(analyzeBtn)analyzeBtn.addEventListener('click',handleAnalyze);
   var skipBtn=$('#ew-skip-btn',modal);
-  if(skipBtn)skipBtn.addEventListener('click',function(){formStep='form';if(formOpen)showModal();else render(false)});
+  // Skip the AI extract and go straight to the review step.
+  if(skipBtn)skipBtn.addEventListener('click',function(){formStep='review';if(formOpen)showModal();else render(false)});
   var backUploadBtn=$('#ew-back-upload',modal);
-  if(backUploadBtn)backUploadBtn.addEventListener('click',function(){formStep='upload';if(formOpen)showModal();else render(false)});
+  // From review step → back to documents. Snapshot any review-form edits
+  // first so they survive the round-trip.
+  if(backUploadBtn)backUploadBtn.addEventListener('click',function(){snapshotForm(modal);formStep='documents';if(formOpen)showModal();else render(false)});
+  var backPersonalBtn=$('#ew-back-personal',modal);
+  // From documents step → back to personal info.
+  if(backPersonalBtn)backPersonalBtn.addEventListener('click',function(){formStep='personal';if(formOpen)showModal();else render(false)});
+  var nextPersonalBtn=$('#ew-next-personal',modal);
+  if(nextPersonalBtn)nextPersonalBtn.addEventListener('click',function(){handleNextPersonal(modal);});
 }
 
 var savedFormData={};
+// Optional override for where handleAnalyze() should land after the AI
+// extract finishes. Set inside .then() (e.g. expired-passport branch)
+// before returning so the trailing .finally() honors the chosen step
+// instead of unconditionally jumping to 'review'.
+var analyzeNextStep=null;
+
+// Helper: snapshot any currently rendered form fields into savedFormData
+// so back-navigation does not lose user edits. Called before transitions
+// triggered by buttons that live alongside an editable form.
+function snapshotForm(scope){
+  var ids=['ew-personal-form','ew-form'];
+  for(var i=0;i<ids.length;i++){
+    var f=scope?$('#'+ids[i],scope):$('#'+ids[i]);
+    if(f){new FormData(f).forEach(function(v,k){savedFormData[k]=v});}
+  }
+}
+
+// Capture the personal-info form values into savedFormData and advance to
+// the documents step. Validates the small set of required basics. Used by
+// the "Continue" button on step 1 in both the modal and the inline view.
+function handleNextPersonal(scope){
+  var form=scope?$('#ew-personal-form',scope):$('#ew-personal-form');
+  if(form){
+    new FormData(form).forEach(function(v,k){savedFormData[k]=v});
+  }
+  if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email||!savedFormData.phone){
+    alert('Please fill in all required fields.');
+    return;
+  }
+  formStep='documents';
+  if(formOpen)showModal();else render(false);
+}
 
 function handleAnalyze(){
   var docKeys=Object.keys(uploadedDocs);
-  if(docKeys.length===0){formStep='form';if(formOpen)showModal();else render(false);return;}
+  if(docKeys.length===0){formStep='review';if(formOpen)showModal();else render(false);return;}
   formStep='analyzing';
   if(formOpen)showModal();else render(false);
   var docPayload=docKeys.map(function(k){
@@ -1580,7 +1654,10 @@ function handleAnalyze(){
       if(aiResult.passportExpired===true){
         alert('Warning: This passport has expired ('+aiResult.passportExpiry+'). Expired passports cannot be used for applications. Please upload a valid passport.');
         aiResult=null;
-        formStep='upload';renderForm();
+        // Send the user back to the documents step to re-upload. Mark the
+        // transition so the .finally() below does not override us with
+        // 'review'.
+        analyzeNextStep='documents';
         return;
       }
       extractedFields={};
@@ -1599,7 +1676,8 @@ function handleAnalyze(){
   }).catch(function(){
     aiResult=null;
   }).finally(function(){
-    formStep='form';
+    formStep=analyzeNextStep||'review';
+    analyzeNextStep=null;
     if(formOpen)showModal();else render(false);
   });
 }
@@ -1674,7 +1752,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
-      formOpen=true;formSubmitted=false;formStep='upload';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
+      formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
       loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();
     });
@@ -1697,9 +1775,13 @@ function bindEvents(){
   var inlineAnalyzeBtn=$('#ew-analyze-btn');
   if(inlineAnalyzeBtn&&!formOpen)inlineAnalyzeBtn.addEventListener('click',handleAnalyze);
   var inlineSkipBtn=$('#ew-skip-btn');
-  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){formStep='form';render(false)});
+  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){formStep='review';render(false)});
   var inlineBackUploadBtn=$('#ew-back-upload');
-  if(inlineBackUploadBtn&&!formOpen)inlineBackUploadBtn.addEventListener('click',function(){formStep='upload';render(false)});
+  if(inlineBackUploadBtn&&!formOpen)inlineBackUploadBtn.addEventListener('click',function(){snapshotForm(null);formStep='documents';render(false)});
+  var inlineBackPersonalBtn=$('#ew-back-personal');
+  if(inlineBackPersonalBtn&&!formOpen)inlineBackPersonalBtn.addEventListener('click',function(){formStep='personal';render(false)});
+  var inlineNextPersonalBtn=$('#ew-next-personal');
+  if(inlineNextPersonalBtn&&!formOpen)inlineNextPersonalBtn.addEventListener('click',function(){handleNextPersonal(null);});
   $$('[data-doc-input]').forEach(function(input){
     if(formOpen)return;
     input.addEventListener('change',function(e){
