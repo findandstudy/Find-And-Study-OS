@@ -666,6 +666,8 @@ function generateWidgetHTML(slug: string, baseUrl: string, widget: any): string 
   const fontFamily = theme.fontFamily || "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const safeMode = VALID_MODES.includes(widget.mode) ? widget.mode : "combined";
 
+  const NATIONALITIES = ["Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cabo Verde","Cambodia","Cameroon","Canada","Central African Republic","Chad","Chile","China","Colombia","Comoros","Congo","Costa Rica","Croatia","Cuba","Cyprus","Czech Republic","Denmark","Djibouti","Dominican Republic","East Timor","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Ivory Coast","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kosovo","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria","North Korea","North Macedonia","Norway","Oman","Pakistan","Palau","Palestine","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saint Kitts and Nevis","Saint Lucia","Samoa","San Marino","São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Tajikistan","Tanzania","Thailand","Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay","Uzbekistan","Vanuatu","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"];
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -914,6 +916,7 @@ var formStep='personal';
 var uploadedDocs={};
 var aiResult=null;
 var extractedFields={};
+var NATIONALITIES=${JSON.stringify(NATIONALITIES)};
 var searchDebounce=null;
 var userFilters={};
 var parentViewport=null;
@@ -1376,7 +1379,12 @@ function renderFormContent(prog){
     aiField('lastName','Last Name','text',true,true);
     aiField('email','Email','email',true,true);
     h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90"'+((fv2.countryCode||'+90')==='+90'?' selected':'')+'>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
-    aiField('nationality','Nationality','text',false,true);
+    var natVal=savedFormData.nationality||'';
+    var natIsAi=!!extractedFields.nationality;
+    var natStyle=natIsAi?'border-color:#22c55e;background:#f0fdf4':'';
+    var natOpts='<option value="">Select nationality...</option>';
+    for(var ni=0;ni<NATIONALITIES.length;ni++){var nc=NATIONALITIES[ni];natOpts+='<option value="'+esc(nc)+'"'+(natVal===nc?' selected':'')+'>'+esc(nc)+'</option>';}
+    h+='<div class="ew-form-group"><label>Nationality'+(natIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><select name="nationality" style="'+natStyle+'">'+natOpts+'</select></div>';
     h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv2.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv2.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv2.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv2.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv2.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
     if(!prog){
       h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv2.preferredUniversity||'')+'"></div>';
