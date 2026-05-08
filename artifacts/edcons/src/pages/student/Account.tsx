@@ -54,7 +54,7 @@ const LANGUAGES = [
 
 export default function StudentAccount() {
   const { user } = useAuth(true);
-  const { lang, setLang } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
 

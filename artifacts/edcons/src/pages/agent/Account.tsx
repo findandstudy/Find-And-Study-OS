@@ -103,7 +103,7 @@ async function uploadFileToStorage(file: File): Promise<string> {
 
 export default function AgentAccount() {
   const { user } = useAuth(true);
-  const { lang, setLang } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const avatarInputRef = useRef<HTMLInputElement>(null);

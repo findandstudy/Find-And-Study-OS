@@ -5,4 +5,8 @@ export {
   LANGUAGE_META,
   getTranslation as translations,
   formatTimeAgo,
+  formatDate,
+  formatTime,
+  formatDateTime,
+  getLocale,
 } from "./i18n/index";
