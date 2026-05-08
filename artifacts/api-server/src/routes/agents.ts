@@ -749,7 +749,15 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     assignedStaffId, branchIds,
     entityType, taxNumber, preferredContractLanguage,
     assignedContractTemplateId,
+    contractStartDate, contractEndDate, notes,
   } = req.body;
+
+  const parseDate = (v: unknown): Date | null => {
+    if (v === null || v === undefined || v === "") return null;
+    if (v instanceof Date) return v;
+    const d = new Date(String(v));
+    return isNaN(d.getTime()) ? null : d;
+  };
 
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
@@ -828,6 +836,9 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     agentIdProofUrl: agentIdProofUrl || null,
     businessCertUrl: businessCertUrl || null,
     contractUrl: contractUrl || null,
+    contractStartDate: parseDate(contractStartDate),
+    contractEndDate: parseDate(contractEndDate),
+    notes: notes || null,
     branch: branch || null,
     assignedStaffId: assignedStaffId ? parseInt(assignedStaffId, 10) : null,
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,
@@ -955,6 +966,16 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
         updates[key] = req.body[key] === true || req.body[key] === "true";
       } else if (key === "parentAgentId" || key === "assignedStaffId") {
         updates[key] = req.body[key] ? parseInt(req.body[key], 10) : null;
+      } else if (key === "contractStartDate" || key === "contractEndDate") {
+        const v = req.body[key];
+        if (v === null || v === "" || v === undefined) {
+          updates[key] = null;
+        } else if (v instanceof Date) {
+          updates[key] = v;
+        } else {
+          const d = new Date(String(v));
+          updates[key] = isNaN(d.getTime()) ? null : d;
+        }
       } else {
         updates[key] = req.body[key];
       }
