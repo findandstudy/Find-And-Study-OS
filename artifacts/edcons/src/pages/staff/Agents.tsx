@@ -992,7 +992,7 @@ export default function AgentsPage() {
                 </div>
                 {isManager && (
                   <Button onClick={() => openCreate(false)} className="rounded-xl gap-2">
-                    <Plus className="w-4 h-4" /> New Agent
+                    <Plus className="w-4 h-4" /> {t("staffAgents.newAgent")}
                   </Button>
                 )}
               </div>
@@ -1031,7 +1031,7 @@ export default function AgentsPage() {
                 </div>
                 {isManager && (
                   <Button onClick={() => openCreate(true)} className="rounded-xl gap-2">
-                    <UserPlus className="w-4 h-4" /> New Sub Agent
+                    <UserPlus className="w-4 h-4" /> {t("staffAgents.newSubAgent")}
                   </Button>
                 )}
               </div>
@@ -1073,7 +1073,7 @@ export default function AgentsPage() {
               </div>
             </div>
             <div className="px-6 py-4 border-t border-border/50 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setPasswordDialog(null)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setPasswordDialog(null)} className="rounded-xl">{t("staffAgents.cancel")}</Button>
               <Button onClick={handleSetPassword} disabled={passwordSaving || newPassword.length < 6} className="rounded-xl gap-2">
                 {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Password
@@ -1089,7 +1089,7 @@ export default function AgentsPage() {
           <div className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-card border-b border-border/50 px-6 py-4 rounded-t-2xl flex items-center justify-between z-10">
               <h2 className="font-display font-bold text-lg text-foreground">
-                {editingAgent ? (isSubAgent ? "Edit Sub Agent" : "Edit Agent") : (isSubAgent ? "New Sub Agent" : "New Agent")}
+                {editingAgent ? (isSubAgent ? t("staffAgents.editSubAgent") : t("staffAgents.editAgent")) : (isSubAgent ? t("staffAgents.newSubAgent") : t("staffAgents.newAgent"))}
               </h2>
               <Button size="icon" variant="ghost" onClick={() => setShowDialog(false)} className="w-8 h-8 rounded-lg">
                 <X className="w-4 h-4" />
@@ -1382,17 +1382,17 @@ export default function AgentsPage() {
               <div className="space-y-4">
                 <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-                  Contract Details
+                  {t("staffAgents.contractDetails")}
                 </h3>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label>Contract Start Date</Label>
+                    <Label>{t("staffAgents.contractStartDate")}</Label>
                     <Input type="date" value={form.contractStartDate}
                       onChange={e => setForm(f => ({ ...f, contractStartDate: e.target.value }))}
                       className="rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Contract End Date</Label>
+                    <Label>{t("staffAgents.contractEndDate")}</Label>
                     <Input type="date" value={form.contractEndDate}
                       onChange={e => setForm(f => ({ ...f, contractEndDate: e.target.value }))}
                       className="rounded-xl" />
@@ -1401,24 +1401,24 @@ export default function AgentsPage() {
 
                 {/* Contract File */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Contract File (PDF / Image)</Label>
+                  <Label className="text-xs">{t("staffAgents.contractFile")}</Label>
                   <div className="relative h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                     {form.contractUrl ? (
                       <>
                         <div className="flex flex-col items-center gap-1 text-green-600">
-                          <p className="text-xs font-medium">Contract uploaded</p>
-                          <a href={form.contractUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] underline hover:text-primary">View / Download</a>
+                          <p className="text-xs font-medium">{t("staffAgents.contractUploaded")}</p>
+                          <a href={form.contractUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] underline hover:text-primary">{t("staffAgents.viewDownload")}</a>
                         </div>
                         <button onClick={() => setForm(f => ({ ...f, contractUrl: "" }))} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive/90 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
                       </>
                     ) : (
                       <button onClick={() => contractRef.current?.click()} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary text-xs" disabled={contractUploading}>
                         {contractUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                        <span>{contractUploading ? "Uploading..." : "Upload Contract"}</span>
+                        <span>{contractUploading ? t("staffAgents.uploading") : t("staffAgents.uploadContract")}</span>
                       </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">The agent will see this contract on their account page and can download it.</p>
+                  <p className="text-[11px] text-muted-foreground">{t("staffAgents.contractHelp")}</p>
                   <input ref={contractRef} type="file" accept="image/*,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f, "contractUrl", setContractUploading); e.target.value = ""; }} />
                 </div>
                 {form.contractStartDate && form.contractEndDate && (() => {
@@ -1433,7 +1433,7 @@ export default function AgentsPage() {
                   const textColor = isExpired ? "text-red-700 dark:text-red-400" :
                     isExpiring ? "text-orange-700 dark:text-orange-400" :
                     "text-green-700 dark:text-green-400";
-                  const label = isExpired ? "Expired" : isExpiring ? "Expiring Soon" : "Active";
+                  const label = isExpired ? t("staffAgents.expired") : isExpiring ? t("staffAgents.expiringSoon") : t("staffAgents.active");
                   return (
                     <div className={`p-3 rounded-xl border ${bgColor} flex items-center justify-between`}>
                       <div className="flex items-center gap-2">
@@ -1441,7 +1441,7 @@ export default function AgentsPage() {
                         <span className={`text-sm font-medium ${textColor}`}>{label}</span>
                       </div>
                       <span className={`text-sm font-semibold ${textColor}`}>
-                        {isExpired ? `Expired ${Math.abs(daysLeft)} day(s) ago` : `${daysLeft} day(s) remaining`}
+                        {isExpired ? t("staffAgents.expiredAgo", { n: Math.abs(daysLeft) }) : t("staffAgents.daysRemaining", { n: daysLeft })}
                       </span>
                     </div>
                   );
@@ -1450,12 +1450,12 @@ export default function AgentsPage() {
 
               {/* Branches (multi-select) — Point of Contact removed; use Assigned Staff instead */}
               <div className="space-y-1.5">
-                <Label>Şubeler</Label>
+                <Label>{t("staffAgents.branches")}</Label>
                 <Popover open={branchPickerOpen} onOpenChange={setBranchPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-start rounded-xl font-normal h-auto min-h-[40px] py-2 flex-wrap gap-1">
                       {form.branchIds.length === 0 ? (
-                        <span className="text-muted-foreground">Şube seçin...</span>
+                        <span className="text-muted-foreground">{t("staffAgents.selectBranches")}</span>
                       ) : (
                         form.branchIds.map(id => {
                           const b = branchOptions.find(o => o.id === id);
@@ -1466,7 +1466,7 @@ export default function AgentsPage() {
                   </PopoverTrigger>
                   <PopoverContent className="w-[260px] p-2" align="start">
                     {branchOptions.length === 0 ? (
-                      <p className="text-xs text-muted-foreground p-2">Henüz şube tanımlı değil.</p>
+                      <p className="text-xs text-muted-foreground p-2">{t("staffAgents.noBranches")}</p>
                     ) : (
                       <div className="max-h-60 overflow-y-auto space-y-1">
                         {branchOptions.map(b => {
@@ -1498,7 +1498,7 @@ export default function AgentsPage() {
 
               {/* Notes */}
               <div className="space-y-1.5">
-                <Label>Notes</Label>
+                <Label>{t("staffAgents.notes")}</Label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}
                   className="flex w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
               </div>
@@ -1506,10 +1506,10 @@ export default function AgentsPage() {
 
             {/* Footer */}
             <div className="sticky bottom-0 bg-card border-t border-border/50 px-6 py-4 rounded-b-2xl flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">Cancel</Button>
+              <Button variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl">{t("staffAgents.cancel")}</Button>
               <Button onClick={handleSave} disabled={saving} className="rounded-xl gap-2 px-6">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingAgent ? "Update" : "Create Agent"}
+                {editingAgent ? t("staffAgents.update") : t("staffAgents.createAgent")}
               </Button>
             </div>
           </div>
