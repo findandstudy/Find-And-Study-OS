@@ -3,7 +3,21 @@ import rateLimit from "express-rate-limit";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { hashToken } from "../lib/signingTokens";
-import { renderTemplate, buildAgentContext } from "../lib/contractRenderer";
+import { renderTemplate, buildAgentContext, cleanupSignatureImages } from "../lib/contractRenderer";
+
+function contractNumber(sessionId: number, signedAt?: Date): string {
+  const d = signedAt || new Date();
+  const yy = String(d.getUTCFullYear()).slice(-2);
+  return `FAS-${yy}-${String(sessionId).padStart(5, "0")}`;
+}
+
+const SIG_PLACEHOLDER: Record<string, string> = {
+  en: "Signature will appear here",
+  tr: "İmza buraya yerleşecek",
+  ar: "سيظهر التوقيع هنا",
+  fr: "La signature apparaîtra ici",
+  ru: "Подпись появится здесь",
+};
 import { buildSignedPdf } from "../lib/contractPdf";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { writeAudit } from "../lib/auditLog";
@@ -136,8 +150,11 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
     const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
       signerEmail: r.session.signerEmail,
       signerName: r.session.signerName || undefined,
+      number: contractNumber(r.session.id),
     });
-    const html = renderTemplate(r.template.bodyHtml, ctx);
+    const rendered = renderTemplate(r.template.bodyHtml, ctx);
+    const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
+    const html = cleanupSignatureImages(rendered, placeholder);
     res.json({ data: { html, templateName: r.template.name } });
   } catch (err) {
     console.error("[public-sign] preview:", err);
@@ -155,8 +172,11 @@ router.get("/public/sign/:token/preview-pdf", signLimiter, async (req, res): Pro
     const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
       signerEmail: r.session.signerEmail,
       signerName: r.session.signerName || undefined,
+      number: contractNumber(r.session.id),
     });
-    const html = renderTemplate(r.template.bodyHtml, ctx);
+    const rendered = renderTemplate(r.template.bodyHtml, ctx);
+    const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
+    const html = cleanupSignatureImages(rendered, placeholder);
     const { buildSignedPdf } = await import("../lib/contractPdf");
     const { pdfBytes } = await buildSignedPdf({
       templateName: r.template.name,
@@ -240,8 +260,11 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       signerEmail: r.session.signerEmail,
       signerName: finalSignerName || undefined,
       date: signedAt.toISOString().slice(0, 10),
+      number: contractNumber(r.session.id, signedAt),
     });
-    const renderedHtml = renderTemplate(r.template.bodyHtml, ctx);
+    const rendered = renderTemplate(r.template.bodyHtml, ctx);
+    const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
+    const renderedHtml = cleanupSignatureImages(rendered, placeholder);
 
     const { pdfBytes, evidenceHash } = await buildSignedPdf({
       templateName: r.template.name,
@@ -333,10 +356,13 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     // access via /api/public/sign/:token/pdf, which only serves once status=signed.
     try {
       const downloadUrl = `${getAppBaseUrl()}/api/public/sign/${rawTokenForLink}/pdf`;
+      const portalUrl = `${getAppBaseUrl()}/login`;
       const email = await buildSignedContractEmail({
         signerName: finalSignerName,
         templateName: r.template.name,
         pdfDownloadUrl: downloadUrl,
+        portalUrl,
+        language: r.template.language,
       });
       await sendEmail(r.session.signerEmail, email);
       await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));

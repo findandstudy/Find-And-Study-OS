@@ -1396,6 +1396,8 @@
     "signAndSend": "Подписать и отправить",
     "stepIntake": "Данные",
     "stepReview": "Просмотр",
-    "stepSign": "Подпись"
+    "stepSign": "Подпись",
+    "downloadPdf": "Скачать подписанный PDF",
+    "openPortal": "Открыть портал"
   }
 }

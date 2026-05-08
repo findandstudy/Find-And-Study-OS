@@ -439,22 +439,94 @@ export async function buildContractSignRequestEmail(params: {
   return { subject, html: emailShell(brand, "Contract signing", bodyHtml), text };
 }
 
+type SignedEmailLang = "en" | "tr" | "ar" | "fr" | "ru";
+const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
+  subject: (n: string) => string;
+  greeting: (n?: string | null) => string;
+  body: (n: string) => string;
+  download: string;
+  portal: string;
+  portalIntro: string;
+  footer: string;
+  shellSubtitle: string;
+}> = {
+  en: {
+    subject: n => `Your signed contract — ${n}`,
+    greeting: n => n ? `Hello ${n},` : "Hello,",
+    body: n => `Your signed copy of <strong>${n}</strong> is ready.`,
+    download: "Download signed PDF",
+    portal: "Open the portal",
+    portalIntro: "You can also access your contracts and applications from the agent portal:",
+    footer: "Keep this email for your records.",
+    shellSubtitle: "Signed contract",
+  },
+  tr: {
+    subject: n => `İmzalanmış sözleşmeniz — ${n}`,
+    greeting: n => n ? `Merhaba ${n},` : "Merhaba,",
+    body: n => `<strong>${n}</strong> sözleşmesinin imzalı kopyası hazırlandı.`,
+    download: "İmzalı PDF'i indir",
+    portal: "Portala giriş yap",
+    portalIntro: "Sözleşmelerinize ve başvurularınıza acente portalından da ulaşabilirsiniz:",
+    footer: "Bu e-postayı kayıtlarınız için saklayın.",
+    shellSubtitle: "İmzalı sözleşme",
+  },
+  ar: {
+    subject: n => `عقدك الموقّع — ${n}`,
+    greeting: n => n ? `مرحباً ${n}،` : "مرحباً،",
+    body: n => `نسختك الموقّعة من <strong>${n}</strong> جاهزة.`,
+    download: "تنزيل ملف PDF الموقّع",
+    portal: "افتح البوابة",
+    portalIntro: "يمكنك أيضاً الوصول إلى عقودك وطلباتك من بوابة الوكيل:",
+    footer: "احتفظ بهذا البريد الإلكتروني لسجلاتك.",
+    shellSubtitle: "عقد موقّع",
+  },
+  fr: {
+    subject: n => `Votre contrat signé — ${n}`,
+    greeting: n => n ? `Bonjour ${n},` : "Bonjour,",
+    body: n => `Votre copie signée de <strong>${n}</strong> est prête.`,
+    download: "Télécharger le PDF signé",
+    portal: "Ouvrir le portail",
+    portalIntro: "Vous pouvez aussi consulter vos contrats et candidatures depuis le portail agent :",
+    footer: "Conservez cet e-mail pour vos archives.",
+    shellSubtitle: "Contrat signé",
+  },
+  ru: {
+    subject: n => `Ваш подписанный договор — ${n}`,
+    greeting: n => n ? `Здравствуйте, ${n},` : "Здравствуйте,",
+    body: n => `Ваша подписанная копия <strong>${n}</strong> готова.`,
+    download: "Скачать подписанный PDF",
+    portal: "Открыть портал",
+    portalIntro: "Вы также можете просматривать договоры и заявки в портале агента:",
+    footer: "Сохраните это письмо для своих записей.",
+    shellSubtitle: "Подписанный договор",
+  },
+};
+
 export async function buildSignedContractEmail(params: {
   signerName?: string | null;
   templateName: string;
   pdfDownloadUrl: string;
+  portalUrl?: string;
+  language?: string;
 }): Promise<{ subject: string; html: string; text: string }> {
   const brand = await getEmailBranding();
-  const greeting = params.signerName ? `Hello ${params.signerName},` : "Hello,";
-  const subject = `Your signed contract — ${params.templateName}`;
+  const lang: SignedEmailLang = (params.language && (["en","tr","ar","fr","ru"] as const).includes(params.language as any))
+    ? (params.language as SignedEmailLang)
+    : "en";
+  const s = SIGNED_EMAIL_STRINGS[lang];
+  const subject = s.subject(params.templateName);
+  const portalLink = params.portalUrl
+    ? `<p style="margin:24px 0 8px;color:#374151;font-size:14px;line-height:1.6;">${s.portalIntro}</p>${emailButton(s.portal, params.portalUrl, brand.primaryColor)}`
+    : "";
   const bodyHtml = `
     <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
-    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${greeting}</p>
-    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Your signed copy of <strong>${params.templateName}</strong> is ready.</p>
-    ${emailButton("Download signed PDF", params.pdfDownloadUrl, brand.primaryColor)}
-    <p style="margin:0;color:#9ca3af;font-size:12px;">Keep this email for your records.</p>`;
-  const text = `${greeting}\n\nYour signed contract is ready: ${params.pdfDownloadUrl}`;
-  return { subject, html: emailShell(brand, "Signed contract", bodyHtml), text };
+    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${s.greeting(params.signerName)}</p>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">${s.body(params.templateName)}</p>
+    ${emailButton(s.download, params.pdfDownloadUrl, brand.primaryColor)}
+    ${portalLink}
+    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">${s.footer}</p>`;
+  const text = `${s.greeting(params.signerName)}\n\n${s.download}: ${params.pdfDownloadUrl}${params.portalUrl ? `\n${s.portal}: ${params.portalUrl}` : ""}`;
+  return { subject, html: emailShell(brand, s.shellSubtitle, bodyHtml), text };
 }
 
 export async function sendEmail(to: string, email: { subject: string; html: string; text: string }): Promise<void> {

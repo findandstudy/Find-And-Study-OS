@@ -1450,6 +1450,8 @@
     "signAndSend": "İmzala ve gönder",
     "stepIntake": "Bilgiler",
     "stepReview": "İncele",
-    "stepSign": "İmzala"
+    "stepSign": "İmzala",
+    "downloadPdf": "İmzalı PDF'i indir",
+    "openPortal": "Portala giriş yap"
   }
 }

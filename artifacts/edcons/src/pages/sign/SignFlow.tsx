@@ -161,10 +161,22 @@ export default function SignFlow({ token }: { token: string }) {
     </CenterShell>;
   }
   if (step === "success") {
+    const pdfUrl = `/api/public/sign/${encodeURIComponent(token)}/pdf`;
     return <CenterShell>
       <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
       <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
-      <p className="text-muted-foreground text-sm text-center max-w-md">{t("signedBody")}</p>
+      <p className="text-muted-foreground text-sm text-center max-w-md mb-6">{t("signedBody")}</p>
+      <div className="flex flex-col sm:flex-row gap-2 w-full">
+        <Button asChild className="flex-1">
+          <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
+            <FileSignature className="w-4 h-4 mr-2" />
+            {t("downloadPdf")}
+          </a>
+        </Button>
+        <Button asChild variant="outline" className="flex-1">
+          <a href="/login">{t("openPortal")}</a>
+        </Button>
+      </div>
     </CenterShell>;
   }
 

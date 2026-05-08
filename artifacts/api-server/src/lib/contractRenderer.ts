@@ -26,14 +26,46 @@ export function renderTemplate(body: string, ctx: Ctx): string {
   return out;
 }
 
-export function buildAgentContext(agent: any | null, intake: Record<string, any> | null, contract: { date?: string; signerEmail?: string; signerName?: string } = {}): Ctx {
+export function buildAgentContext(agent: any | null, intake: Record<string, any> | null, contract: { date?: string; signerEmail?: string; signerName?: string; number?: string } = {}): Ctx {
+  const dateStr = contract.date || new Date().toISOString().slice(0, 10);
   return {
     agent: agent || {},
     intake: intake || {},
     contract: {
-      date: contract.date || new Date().toISOString().slice(0, 10),
+      date: dateStr,
+      number: contract.number || "",
       signerEmail: contract.signerEmail || "",
       signerName: contract.signerName || "",
     },
+    // Signature placeholders kept empty so templates can still reference them
+    // via {{signature}} / {{main_agency_signature}}; the rendered preview is
+    // post-processed by `cleanupSignatureImages` to swap empty <img src="">
+    // tags for styled placeholder boxes (avoiding the broken-image icon).
+    signature: "",
+    main_agency_signature: "",
   };
+}
+
+/**
+ * Replace `<img>` tags whose `src` is empty (rendered from an unfilled
+ * `{{signature}}` placeholder) with a styled placeholder box. Also strips
+ * literal `<img src="{{...}}">` placeholders that the renderer left intact
+ * because the path didn't match its regex.
+ */
+export function cleanupSignatureImages(html: string, placeholderText: string): string {
+  // Strip the literal `{{...}}` (3-dot) placeholder that the contract author
+  // left in the template — it's not a real path, just a visual marker.
+  let out = html.replace(/<img[^>]*src=["']\{\{\.\.\.\}\}["'][^>]*>/gi, "");
+
+  out = out.replace(/<img\b([^>]*)>/gi, (full, attrs) => {
+    const srcMatch = (attrs as string).match(/\bsrc\s*=\s*(["'])(.*?)\1/i);
+    const src = srcMatch ? srcMatch[2].trim() : "";
+    if (src && !/^\{\{[\w.]+\}\}$/.test(src)) return full;
+    const altMatch = (attrs as string).match(/\balt\s*=\s*(["'])(.*?)\1/i);
+    const alt = altMatch ? altMatch[2].trim() : placeholderText;
+    const safe = escapeHtml(alt || placeholderText);
+    return `<div style="display:flex;align-items:center;justify-content:center;min-height:64px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;color:#94a3b8;font-size:12px;font-style:italic;padding:16px;margin:4px 0;">${safe}</div>`;
+  });
+
+  return out;
 }

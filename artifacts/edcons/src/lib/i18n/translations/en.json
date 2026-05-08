@@ -1509,6 +1509,8 @@
     "signAndSend": "Sign & send",
     "stepIntake": "Details",
     "stepReview": "Review",
-    "stepSign": "Sign"
+    "stepSign": "Sign",
+    "downloadPdf": "Download signed PDF",
+    "openPortal": "Open the portal"
   }
 }
