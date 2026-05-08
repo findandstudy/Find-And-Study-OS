@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
+import { setActiveAgencyBusinessName } from "@/lib/agency-branding-store";
 
 const AGENT_ROLES = new Set(["agent", "sub_agent", "agent_staff"]);
 
@@ -65,14 +66,20 @@ export function useAgencyBranding() {
     const defaults = defaultsRef.current;
     if (!defaults) return;
     if (!isAgent) {
+      setActiveAgencyBusinessName(null);
       document.title = defaults.title;
       restoreDefaultIcon(defaults.favicon);
       return;
     }
     if (!agentProfile) return;
     const businessName = (agentProfile.businessName || "").trim();
-    if (businessName) document.title = businessName;
-    else document.title = defaults.title;
+    if (businessName) {
+      setActiveAgencyBusinessName(businessName);
+      document.title = businessName;
+    } else {
+      setActiveAgencyBusinessName(null);
+      document.title = defaults.title;
+    }
     if (agentProfile.logoUrl) setIcon(agentProfile.logoUrl);
     else restoreDefaultIcon(defaults.favicon);
   }, [isAgent, agentProfile?.businessName, agentProfile?.logoUrl]);
@@ -82,6 +89,7 @@ export function useAgencyBranding() {
     return () => {
       const defaults = defaultsRef.current;
       if (!defaults) return;
+      setActiveAgencyBusinessName(null);
       document.title = defaults.title;
       restoreDefaultIcon(defaults.favicon);
     };

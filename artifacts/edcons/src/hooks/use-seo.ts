@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, buildLocalizedPath, stripLanguagePrefix, type Language } from "@/lib/i18n/index";
+import { getActiveAgencyBusinessName, subscribeAgencyBusinessName } from "@/lib/agency-branding-store";
 
 interface SeoOptions {
   title: string;
@@ -41,9 +42,17 @@ function removeHreflangLinks() {
 }
 
 export function useSeo({ title, description, canonical, noindex = false, ogImage, ogType = "website", lang }: SeoOptions) {
+  const agencyBusinessName = useSyncExternalStore(
+    subscribeAgencyBusinessName,
+    getActiveAgencyBusinessName,
+    () => null,
+  );
+
   useEffect(() => {
-    const siteName = "Find And Study";
-    const fullTitle = `${title} | ${siteName}`;
+    // White-label: when an agent / sub-agent is logged in, the browser tab
+    // shows ONLY their business name — no page title, no site suffix.
+    const siteName = agencyBusinessName || "Find And Study";
+    const fullTitle = agencyBusinessName ? agencyBusinessName : `${title} | ${siteName}`;
 
     document.title = fullTitle;
 
@@ -92,5 +101,5 @@ export function useSeo({ title, description, canonical, noindex = false, ogImage
     return () => {
       removeHreflangLinks();
     };
-  }, [title, description, canonical, noindex, ogImage, ogType, lang]);
+  }, [title, description, canonical, noindex, ogImage, ogType, lang, agencyBusinessName]);
 }
