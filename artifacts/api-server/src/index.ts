@@ -16,7 +16,9 @@ process.on("unhandledRejection", (reason) => {
 
 process.on("uncaughtException", (err) => {
   console.error("[fatal] Uncaught exception:", err);
-  process.exit(1);
+  if (isProd) {
+    process.exit(1);
+  }
 });
 
 function getSeedDir(): string {
