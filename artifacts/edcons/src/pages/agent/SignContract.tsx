@@ -3,6 +3,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useI18n } from "@/hooks/use-i18n";
 import { Loader2, FileSignature, Eraser, AlertCircle, LogOut } from "lucide-react";
 
@@ -16,13 +17,18 @@ interface SessionData {
   previewHtml: string | null;
 }
 
-interface Props { onSigned: () => void; }
+interface Props {
+  onSigned: () => void;
+  /** When true, renders the signing flow inside a non-dismissible modal dialog
+   *  overlaid on top of the dashboard instead of as a full-screen lock. */
+  asModal?: boolean;
+}
 
 /**
  * Authenticated agent signing flow for the primary onboarding contract.
  * No token; uses the session resolved from /api/contracts/me.
  */
-export default function SignContract({ onSigned }: Props) {
+export default function SignContract({ onSigned, asModal = false }: Props) {
   const { t } = useI18n();
   const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,58 +69,86 @@ export default function SignContract({ onSigned }: Props) {
     setSubmitting(false);
   }
 
+  const loadingNode = (
+    <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+  );
+  const errorNode = (
+    <div className="flex items-center justify-center p-6">
+      <div className="max-w-md text-center space-y-3">
+        <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+        <h1 className="text-xl font-semibold">{t("agentOnboarding.sign.unavailable") || "Contract unavailable"}</h1>
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <Button variant="outline" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+      </div>
+    </div>
+  );
+
+  const innerContent = data ? (
+    <>
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-semibold">{t("agentOnboarding.sign.title") || "Sign your agency contract"}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{data.template?.name}</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {t("agentOnboarding.sign.deadline") || "Deadline"}: <strong>{new Date(data.expiresAt).toLocaleString()}</strong>
+        </p>
+      </div>
+      <div className="bg-card border rounded-2xl shadow-sm p-6">
+        {step === "review" ? (
+          <>
+            <div className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: data.previewHtml || "" }} />
+            <div className="flex justify-between mt-6">
+              <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+              <Button onClick={() => setStep("sign")}>
+                <FileSignature className="w-4 h-4 mr-2" /> {t("agentOnboarding.sign.proceed") || "Proceed to sign"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <SignaturePad
+            onSubmit={submitSignature}
+            submitting={submitting}
+            onCancel={() => setStep("review")}
+            signerName={signerName}
+            onChangeName={setSignerName}
+            confirmed={confirmed}
+            setConfirmed={setConfirmed}
+            error={error}
+          />
+        )}
+      </div>
+    </>
+  ) : null;
+
+  if (asModal) {
+    return (
+      <Dialog open={true} onOpenChange={() => { /* non-dismissible */ }}>
+        <DialogContent
+          className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 [&>button]:hidden"
+          onPointerDownOutside={e => e.preventDefault()}
+          onEscapeKeyDown={e => e.preventDefault()}
+          onInteractOutside={e => e.preventDefault()}
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>{t("agentOnboarding.sign.title") || "Sign your agency contract"}</DialogTitle>
+            <DialogDescription>{data?.template?.name || ""}</DialogDescription>
+          </DialogHeader>
+          {loading ? loadingNode : (error || !data) ? errorNode : innerContent}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
   if (error || !data) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
-        <div className="max-w-md text-center space-y-3">
-          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
-          <h1 className="text-xl font-semibold">{t("agentOnboarding.sign.unavailable") || "Contract unavailable"}</h1>
-          <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
-        </div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center bg-background">{errorNode}</div>;
   }
 
   return (
     <div className="min-h-screen bg-secondary/30 py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-semibold">{t("agentOnboarding.sign.title") || "Sign your agency contract"}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{data.template?.name}</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("agentOnboarding.sign.deadline") || "Deadline"}: <strong>{new Date(data.expiresAt).toLocaleString()}</strong>
-          </p>
-        </div>
-        <div className="bg-card border rounded-2xl shadow-sm p-6">
-          {step === "review" ? (
-            <>
-              <div className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
-                dangerouslySetInnerHTML={{ __html: data.previewHtml || "" }} />
-              <div className="flex justify-between mt-6">
-                <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
-                <Button onClick={() => setStep("sign")}>
-                  <FileSignature className="w-4 h-4 mr-2" /> {t("agentOnboarding.sign.proceed") || "Proceed to sign"}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <SignaturePad
-              onSubmit={submitSignature}
-              submitting={submitting}
-              onCancel={() => setStep("review")}
-              signerName={signerName}
-              onChangeName={setSignerName}
-              confirmed={confirmed}
-              setConfirmed={setConfirmed}
-              error={error}
-            />
-          )}
-        </div>
-      </div>
+      <div className="max-w-3xl mx-auto">{innerContent}</div>
     </div>
   );
 }

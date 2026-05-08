@@ -63,7 +63,14 @@ export function AgentOnboardingGuard({ children }: Props) {
     return <VerifyEmail email={status.email || user.email || ""} onVerified={() => { fetched.current = false; void reload(); }} />;
   }
   if (status.contractStatus === "pending") {
-    return <SignContract onSigned={() => { fetched.current = false; void reload(); }} />;
+    // Render the dashboard underneath but overlay a non-dismissible signing
+    // dialog so the agent must sign before doing anything else.
+    return (
+      <>
+        {children}
+        <SignContract asModal onSigned={() => { fetched.current = false; void reload(); }} />
+      </>
+    );
   }
   if (status.contractStatus === "expired" || status.contractStatus === "revoked") {
     return <ContractExpired />;
