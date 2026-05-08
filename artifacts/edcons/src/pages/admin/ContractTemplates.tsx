@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { FileText, Plus, Edit, Trash2, Loader2 } from "lucide-react";
 
 type Template = {
@@ -54,6 +55,7 @@ const STARTER_INTAKE: IntakeField[] = [
 
 export default function ContractTemplatesPage() {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [rows, setRows] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
@@ -75,7 +77,7 @@ export default function ContractTemplatesPage() {
       const res: any = await customFetch(`/api/contract-templates`);
       setRows(res.data || []);
     } catch (err: any) {
-      toast({ title: "Hata", description: err.message, variant: "destructive" });
+      toast({ title: t("contractTemplates.error"), description: err.message, variant: "destructive" });
     }
     setLoading(false);
   }
@@ -106,7 +108,7 @@ export default function ContractTemplatesPage() {
   }
 
   async function save() {
-    if (!form.name.trim()) { toast({ title: "Ad gerekli", variant: "destructive" }); return; }
+    if (!form.name.trim()) { toast({ title: t("contractTemplates.nameRequired"), variant: "destructive" }); return; }
     setSaving(true);
     try {
       const body = JSON.stringify(form);
@@ -115,23 +117,23 @@ export default function ContractTemplatesPage() {
       } else {
         await customFetch(`/api/contract-templates`, { method: "POST", headers: { "content-type": "application/json" }, body });
       }
-      toast({ title: editing ? "Şablon güncellendi" : "Şablon oluşturuldu" });
+      toast({ title: editing ? t("contractTemplates.updated") : t("contractTemplates.created") });
       setShowDialog(false);
       await load();
     } catch (err: any) {
-      toast({ title: "Hata", description: err.message, variant: "destructive" });
+      toast({ title: t("contractTemplates.error"), description: err.message, variant: "destructive" });
     }
     setSaving(false);
   }
 
   async function remove(id: number) {
-    if (!confirm("Şablonu silmek istediğinize emin misiniz?")) return;
+    if (!confirm(t("contractTemplates.confirmDelete"))) return;
     try {
       await customFetch(`/api/contract-templates/${id}`, { method: "DELETE" });
-      toast({ title: "Silindi" });
+      toast({ title: t("contractTemplates.deleted") });
       await load();
     } catch (err: any) {
-      toast({ title: "Hata", description: err.message, variant: "destructive" });
+      toast({ title: t("contractTemplates.error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -139,40 +141,40 @@ export default function ContractTemplatesPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6" /> Sözleşme Şablonları</h1>
-          <p className="text-sm text-muted-foreground mt-1">Çok dilli sözleşme şablonları — entegre edilen değişkenler: <code className="text-xs">{`{{agent.field}}, {{intake.field}}, {{contract.date}}, {{contract.signerName}}`}</code></p>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6" /> {t("contractTemplates.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("contractTemplates.subtitle")} <code className="text-xs">{`{{agent.field}}, {{intake.field}}, {{contract.date}}, {{contract.signerName}}`}</code></p>
         </div>
-        <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Yeni şablon</Button>
+        <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> {t("contractTemplates.newTemplate")}</Button>
       </div>
 
       <Card className="p-0 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-muted-foreground"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></div>
         ) : rows.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Henüz şablon yok.</div>
+          <div className="p-12 text-center text-muted-foreground">{t("contractTemplates.empty")}</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
-                <th className="text-left px-4 py-3 font-medium">Ad</th>
-                <th className="text-left px-4 py-3 font-medium">Dil</th>
-                <th className="text-left px-4 py-3 font-medium">Tip</th>
-                <th className="text-left px-4 py-3 font-medium">Versiyon</th>
-                <th className="text-left px-4 py-3 font-medium">Durum</th>
-                <th className="text-right px-4 py-3 font-medium">İşlemler</th>
+                <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colName")}</th>
+                <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colLanguage")}</th>
+                <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colType")}</th>
+                <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colVersion")}</th>
+                <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colStatus")}</th>
+                <th className="text-right px-4 py-3 font-medium">{t("contractTemplates.colActions")}</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(t => (
-                <tr key={t.id} className="border-t">
-                  <td className="px-4 py-3 font-medium">{t.name}</td>
-                  <td className="px-4 py-3 uppercase">{t.language}</td>
-                  <td className="px-4 py-3">{t.entityType === "individual" ? "Bireysel" : "Şirket"}</td>
-                  <td className="px-4 py-3">v{t.version}</td>
-                  <td className="px-4 py-3">{t.isActive ? <Badge>Aktif</Badge> : <Badge variant="secondary">Pasif</Badge>}</td>
+              {rows.map(tpl => (
+                <tr key={tpl.id} className="border-t">
+                  <td className="px-4 py-3 font-medium">{tpl.name}</td>
+                  <td className="px-4 py-3 uppercase">{tpl.language}</td>
+                  <td className="px-4 py-3">{tpl.entityType === "individual" ? t("contractTemplates.entityIndividual") : t("contractTemplates.entityCompany")}</td>
+                  <td className="px-4 py-3">v{tpl.version}</td>
+                  <td className="px-4 py-3">{tpl.isActive ? <Badge>{t("contractTemplates.statusActive")}</Badge> : <Badge variant="secondary">{t("contractTemplates.statusInactive")}</Badge>}</td>
                   <td className="px-4 py-3 text-right space-x-2">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(t)}><Edit className="w-4 h-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => remove(t.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(tpl)}><Edit className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => remove(tpl.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                   </td>
                 </tr>
               ))}
@@ -184,17 +186,17 @@ export default function ContractTemplatesPage() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Şablonu düzenle" : "Yeni şablon"}</DialogTitle>
+            <DialogTitle>{editing ? t("contractTemplates.editTemplate") : t("contractTemplates.newTemplate")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label>Ad *</Label>
+                <Label>{t("contractTemplates.colName")} *</Label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <Label>Dil</Label>
+                  <Label>{t("contractTemplates.colLanguage")}</Label>
                   <Select value={form.language} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -203,23 +205,23 @@ export default function ContractTemplatesPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Tip</Label>
+                  <Label>{t("contractTemplates.colType")}</Label>
                   <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v as any }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="company">Şirket</SelectItem>
-                      <SelectItem value="individual">Bireysel</SelectItem>
+                      <SelectItem value="company">{t("contractTemplates.entityCompany")}</SelectItem>
+                      <SelectItem value="individual">{t("contractTemplates.entityIndividual")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Versiyon</Label>
+                  <Label>{t("contractTemplates.colVersion")}</Label>
                   <Input type="number" min={1} value={form.version} onChange={e => setForm(f => ({ ...f, version: parseInt(e.target.value, 10) || 1 }))} />
                 </div>
               </div>
             </div>
             <div>
-              <Label>Sözleşme metni (HTML — h1/h2/h3, p, ul/li destekli)</Label>
+              <Label>{t("contractTemplates.bodyLabel")}</Label>
               <Textarea
                 rows={14}
                 value={form.bodyHtml}
@@ -228,7 +230,7 @@ export default function ContractTemplatesPage() {
               />
             </div>
             <div>
-              <Label>Self-fill için ek alanlar (JSON)</Label>
+              <Label>{t("contractTemplates.intakeSchemaLabel")}</Label>
               <Textarea
                 rows={6}
                 value={JSON.stringify(form.intakeSchema, null, 2)}
@@ -242,16 +244,16 @@ export default function ContractTemplatesPage() {
                 }}
                 className="font-mono text-xs"
               />
-              <p className="text-xs text-muted-foreground mt-1">Her alan: {`{ key, label, type: "text"|"email"|"date"|"textarea", required? }`}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("contractTemplates.intakeSchemaHint")}</p>
             </div>
             <div className="flex items-center gap-2">
               <input id="isActive" type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} />
-              <Label htmlFor="isActive">Aktif</Label>
+              <Label htmlFor="isActive">{t("contractTemplates.statusActive")}</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>İptal</Button>
-            <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} Kaydet</Button>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>{t("contractTemplates.cancel")}</Button>
+            <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("contractTemplates.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
