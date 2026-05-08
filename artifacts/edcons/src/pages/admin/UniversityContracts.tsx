@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -603,30 +604,52 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="col-span-2">
               <Label>{t("universityContracts.university")} *</Label>
-              <Select value={form.universityId} onValueChange={onUniversityChange}>
-                <SelectTrigger><SelectValue placeholder={t("universityContracts.selectUniversity")} /></SelectTrigger>
-                <SelectContent className="max-h-[320px]">
-                  {universities.map(u => (
-                    <SelectItem key={u.id} value={String(u.id)}>{u.name} — {u.country}{u.city ? `, ${u.city}` : ""}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={form.universityId}
+                onChange={onUniversityChange}
+                placeholder={t("universityContracts.selectUniversity")}
+                searchPlaceholder={t("universityContracts.searchUniversity")}
+                options={universities.map(u => ({
+                  value: String(u.id),
+                  label: `${u.name} — ${u.country}${u.city ? `, ${u.city}` : ""}`,
+                }))}
+              />
             </div>
             <div className="col-span-2">
               <Label>{t("universityContracts.destinationAuto")}</Label>
-              <Select value={form.destinationId} onValueChange={v => setForm(f => ({ ...f, destinationId: v }))}>
-                <SelectTrigger><SelectValue placeholder={t("universityContracts.destinationAutoPlaceholder")} /></SelectTrigger>
-                <SelectContent className="max-h-[320px]">
-                  {destinations.map(d => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      <span className="inline-flex items-center gap-2">
-                        <span>{d.flagEmoji || "🌍"}</span>
-                        <span>{d.name} — {d.country}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {(() => {
+                const selectedUni = universities.find(u => String(u.id) === form.universityId);
+                const uniCountry = selectedUni?.country || "";
+                const sortedDestinations = [...destinations].sort((a, b) => {
+                  if (uniCountry) {
+                    if (a.country === uniCountry && b.country !== uniCountry) return -1;
+                    if (b.country === uniCountry && a.country !== uniCountry) return 1;
+                  }
+                  return a.country.localeCompare(b.country);
+                });
+                const matchExists = uniCountry ? destinations.some(d => d.country === uniCountry) : true;
+                return (
+                  <>
+                    <SearchableSelect
+                      value={form.destinationId}
+                      onChange={v => setForm(f => ({ ...f, destinationId: v }))}
+                      placeholder={t("universityContracts.destinationAutoPlaceholder")}
+                      searchPlaceholder={t("universityContracts.searchDestination")}
+                      clearable
+                      options={sortedDestinations.map(d => ({
+                        value: String(d.id),
+                        label: `${d.flagEmoji || "🌍"} ${d.name} — ${d.country}`,
+                        group: uniCountry && d.country === uniCountry ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
+                      }))}
+                    />
+                    {selectedUni && !matchExists && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        {t("universityContracts.noMatchingDestination", { country: uniCountry })}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             <div>
               <Label>{t("universityContracts.year")}</Label>

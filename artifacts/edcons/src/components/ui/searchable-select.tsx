@@ -1,146 +1,173 @@
-import * as React from "react";
-import { useState, useRef, useEffect } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-interface SearchableSelectOption {
-  value: string;
-  label: string;
-  icon?: React.ReactNode;
-}
+import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ChevronDown, X, Check } from "lucide-react";
 
 interface SearchableSelectProps {
   value: string;
-  onValueChange: (value: string) => void;
-  options: SearchableSelectOption[];
-  placeholder?: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string; node?: ReactNode; group?: string }[];
+  placeholder: string;
+  searchPlaceholder?: string;
   className?: string;
+  searchable?: boolean;
+  clearable?: boolean;
   disabled?: boolean;
 }
 
 export function SearchableSelect({
   value,
-  onValueChange,
+  onChange,
   options,
-  placeholder = "Select…",
-  className,
+  placeholder,
+  searchPlaceholder = "Search...",
+  className = "",
+  searchable = true,
+  clearable = false,
   disabled = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const filtered = search
-    ? options.filter((o) =>
-        o.label.toLowerCase().includes(search.toLowerCase())
-      )
-    : options;
-
-  const selected = options.find((o) => o.value === value);
+  const [openUp, setOpenUp] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
-
-  useEffect(() => {
-    if (open && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 0);
+    function handleClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (ref.current && ref.current.contains(target)) return;
+      if (popRef.current && popRef.current.contains(target)) return;
+      setOpen(false);
     }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    function update() {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const up = spaceBelow < 320;
+      setOpenUp(up);
+      setPos({
+        top: up ? rect.top + window.scrollY : rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) setSearch("");
   }, [open]);
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-    return undefined;
-  }, [open]);
+  const filtered = search
+    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  const selected = options.find(o => o.value === value);
 
   return (
-    <div ref={containerRef} className={cn("relative", className)}>
+    <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen(!open)}
-        className={cn(
-          "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring",
-          disabled && "cursor-not-allowed opacity-50"
-        )}
+        className={`flex items-center justify-between w-full h-10 px-3 rounded-md border text-sm transition-colors ${
+          disabled
+            ? "border-input bg-muted/50 text-muted-foreground cursor-not-allowed"
+            : "border-input bg-background hover:bg-accent/30"
+        }`}
       >
-        <span className={cn("line-clamp-1 flex items-center gap-1.5", !selected && "text-muted-foreground")}>
-          {selected ? (
-            <>
-              {selected.icon}
-              {selected.label}
-            </>
-          ) : (
-            placeholder
-          )}
+        <span className={`truncate text-left ${selected ? "text-foreground" : "text-muted-foreground"}`}>
+          {selected ? (selected.node || selected.label) : placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {clearable && value && !disabled && (
+            <span
+              role="button"
+              onClick={e => { e.stopPropagation(); onChange(""); }}
+              className="hover:text-destructive transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </span>
+          )}
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </div>
       </button>
 
-      {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[220px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
-          <div className="flex items-center border-b px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-muted-foreground mr-1.5 shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
-            {search && (
-              <button type="button" onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground">
-                <X className="h-3.5 w-3.5" />
-              </button>
+      {open && pos && createPortal(
+        <div
+          ref={popRef}
+          style={{
+            position: "absolute",
+            top: pos.top,
+            left: pos.left,
+            width: Math.max(pos.width, 240),
+            transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
+          }}
+          className="z-[1000] bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+        >
+          {searchable && options.length > 6 && (
+            <div className="p-2 border-b border-border">
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="max-h-72 overflow-y-auto p-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-3 text-xs text-muted-foreground text-center">No results</div>
+            ) : (
+              (() => {
+                const groups = new Map<string, typeof filtered>();
+                for (const opt of filtered) {
+                  const g = opt.group || "";
+                  if (!groups.has(g)) groups.set(g, []);
+                  groups.get(g)!.push(opt);
+                }
+                return Array.from(groups.entries()).map(([group, items]) => (
+                  <div key={group}>
+                    {group && (
+                      <div className="px-2.5 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{group}</div>
+                    )}
+                    {items.map(opt => {
+                      const isSelected = opt.value === value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => { onChange(opt.value); setOpen(false); }}
+                          className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
+                            isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent text-foreground"
+                          }`}
+                        >
+                          <span className="truncate flex-1">{opt.node || opt.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ));
+              })()
             )}
           </div>
-          <div className="max-h-[240px] overflow-y-auto p-1">
-            {filtered.length === 0 && (
-              <div className="py-4 text-center text-sm text-muted-foreground">
-                No results found
-              </div>
-            )}
-            {filtered.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  onValueChange(option.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                  value === option.value && "bg-accent/50"
-                )}
-              >
-                <span className="flex items-center gap-1.5">
-                  {option.icon}
-                  {option.label}
-                </span>
-                {value === option.value && (
-                  <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
-                    <Check className="h-4 w-4 text-primary" />
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
