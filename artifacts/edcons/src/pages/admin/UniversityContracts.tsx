@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -649,62 +650,40 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               <p className="text-xs text-muted-foreground mb-2">
                 {t("universityContracts.uniStaffHelp")}
               </p>
-              <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
-                {!form.universityId ? (
-                  <div className="text-xs text-muted-foreground">{t("universityContracts.selectUniFirst")}</div>
-                ) : staffUsers.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">{t("universityContracts.noStaffFound")}</div>
-                ) : staffUsers.map(u => {
-                  const checked = form.universityAssignedStaffIds.includes(u.id);
-                  const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
-                  return (
-                    <label key={u.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-background/60 rounded px-2 py-1">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => setForm(f => ({
-                          ...f,
-                          universityAssignedStaffIds: checked
-                            ? f.universityAssignedStaffIds.filter(id => id !== u.id)
-                            : [...f.universityAssignedStaffIds, u.id],
-                        }))}
-                      />
-                      <span>{name}</span>
-                      <span className="text-xs text-muted-foreground">({u.role})</span>
-                    </label>
-                  );
-                })}
-              </div>
+              {!form.universityId ? (
+                <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/20">{t("universityContracts.selectUniFirst")}</div>
+              ) : staffUsers.length === 0 ? (
+                <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/20">{t("universityContracts.noStaffFound")}</div>
+              ) : (
+                <MultiSelectFilter
+                  values={form.universityAssignedStaffIds.map(String)}
+                  onChange={(vals) => setForm(f => ({ ...f, universityAssignedStaffIds: vals.map(Number) }))}
+                  options={staffUsers.map(u => {
+                    const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
+                    return { value: String(u.id), label: `${name} (${u.role})` };
+                  })}
+                  placeholder={t("universityContracts.selectStaffPlaceholder")}
+                />
+              )}
             </div>
             <div className="col-span-2">
               <Label>{t("universityContracts.contractStaffLabel")}</Label>
               <p className="text-xs text-muted-foreground mb-2">
                 {t("universityContracts.contractStaffHelp")}
               </p>
-              <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-muted/20">
-                {staffUsers.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">{t("universityContracts.noStaffFound")}</div>
-                ) : staffUsers.map(u => {
-                  const checked = form.assignedUserIds.includes(u.id);
-                  const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
-                  return (
-                    <label key={u.id} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-background/60 rounded px-2 py-1">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => setForm(f => ({
-                          ...f,
-                          assignedUserIds: checked
-                            ? f.assignedUserIds.filter(id => id !== u.id)
-                            : [...f.assignedUserIds, u.id],
-                        }))}
-                      />
-                      <span>{name}</span>
-                      <span className="text-xs text-muted-foreground">({u.role})</span>
-                    </label>
-                  );
-                })}
-              </div>
+              {staffUsers.length === 0 ? (
+                <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/20">{t("universityContracts.noStaffFound")}</div>
+              ) : (
+                <MultiSelectFilter
+                  values={form.assignedUserIds.map(String)}
+                  onChange={(vals) => setForm(f => ({ ...f, assignedUserIds: vals.map(Number) }))}
+                  options={staffUsers.map(u => {
+                    const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
+                    return { value: String(u.id), label: `${name} (${u.role})` };
+                  })}
+                  placeholder={t("universityContracts.selectStaffPlaceholder")}
+                />
+              )}
             </div>
             <div className="col-span-2">
               <Label>{t("universityContracts.fileLabel")}</Label>

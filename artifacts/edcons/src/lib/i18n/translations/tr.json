@@ -1285,6 +1285,7 @@
     "noStaffFound": "Personel bulunamadı.",
     "contractStaffLabel": "Bu sözleşmeye özel ek personel (opsiyonel)",
     "contractStaffHelp": "Aktif yöneticiler ve üniversiteden sorumlu personel her durumda bildirim alır. Burada yalnızca bu sözleşme için ek kişi ekleyebilirsiniz.",
+    "selectStaffPlaceholder": "Personel seçin...",
     "fileLabel": "Dosya (PDF veya DOCX)",
     "fileReplace": "Dosyayı değiştir",
     "fileUpload": "Dosya yükle",

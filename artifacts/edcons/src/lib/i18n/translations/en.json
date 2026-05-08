@@ -1344,6 +1344,7 @@
     "noStaffFound": "No staff found.",
     "contractStaffLabel": "Extra staff for this contract (optional)",
     "contractStaffHelp": "Active admins and the university's responsible staff always receive notifications. Add additional people here only for this specific contract.",
+    "selectStaffPlaceholder": "Select staff...",
     "fileLabel": "File (PDF or DOCX)",
     "fileReplace": "Replace file",
     "fileUpload": "Upload file",
