@@ -1482,5 +1482,33 @@
       "download": "Download PDF",
       "none": "No contract on file."
     }
+  },
+  "sign": {
+    "title": "Enter your details",
+    "titleReview": "Review the contract",
+    "titleSign": "Draw your signature",
+    "signed": "Signed",
+    "signedBody": "A copy of the signed PDF has been sent to your email. You may close this window.",
+    "expired": "Link expired",
+    "expiredBody": "This signing link has expired. Please request a new one.",
+    "revoked": "Link revoked",
+    "revokedBody": "This signing link was revoked by the issuer. Please contact your administrator.",
+    "notFound": "Link not found.",
+    "error": "Error",
+    "loadError": "Could not load link.",
+    "saveError": "Failed to save details.",
+    "signError": "Failed to submit signature.",
+    "fullName": "Full name",
+    "signature": "Your signature",
+    "signatureHint": "Draw your signature with mouse or finger.",
+    "clear": "Clear",
+    "consent": "I confirm that I have read and understood this contract and that my electronic signature shall be considered valid.",
+    "back": "Back",
+    "continue": "Continue",
+    "sign": "Sign",
+    "signAndSend": "Sign & send",
+    "stepIntake": "Details",
+    "stepReview": "Review",
+    "stepSign": "Sign"
   }
 }

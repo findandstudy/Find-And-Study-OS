@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, CheckCircle2, AlertCircle, FileSignature, Eraser } from "lucide-react";
+import { getTranslation, isValidLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
 
 type SessionView = {
   sessionId: number;
@@ -21,6 +22,23 @@ type SessionView = {
 
 type Step = "loading" | "expired" | "revoked" | "intake" | "review" | "sign" | "success" | "error";
 
+// Heuristic: detect intake fields that already capture the signer's full name
+// so we don't render two identical "name" inputs (template author may have
+// added one explicitly, and we always collect signerName for the signature).
+const NAME_FIELD_PATTERNS = [
+  /full[\s_-]?name/i,
+  /signer[\s_-]?name/i,
+  /\bname\b/i,
+  /isim|ad\s*soyad|ad\s+soyad/i,
+  /الاسم/i,
+  /имя/i,
+  /nom\s+complet/i,
+];
+function isNameLikeField(f: { key?: string; label?: string }): boolean {
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return NAME_FIELD_PATTERNS.some(rx => rx.test(haystack));
+}
+
 export default function SignFlow({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -29,6 +47,23 @@ export default function SignFlow({ token }: { token: string }) {
   const [intake, setIntake] = useState<Record<string, string>>({});
   const [signerName, setSignerName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Sign flow language is driven by the contract template's language so the
+  // signing experience matches the language the issuer picked when sending
+  // the link, regardless of the recipient's browser locale.
+  const lang: Language = useMemo(() => {
+    const raw = session?.template?.language;
+    return raw && isValidLanguage(raw) ? raw : "en";
+  }, [session?.template?.language]);
+  const t = (key: string, params?: Record<string, string | number>) =>
+    getTranslation(lang, `sign.${key}`, params);
+  const isRTL = RTL_LANGUAGES.includes(lang);
+
+  useEffect(() => {
+    if (!session) return;
+    document.documentElement.lang = lang;
+    document.documentElement.dir = isRTL ? "rtl" : "ltr";
+  }, [lang, isRTL, session]);
 
   useEffect(() => {
     (async () => {
@@ -44,16 +79,16 @@ export default function SignFlow({ token }: { token: string }) {
         if (data.status === "signed") { setStep("success"); return; }
         if (data.status === "revoked") { setStep("revoked"); return; }
         if (data.mode === "self_fill" && data.status === "intake_pending") { setStep("intake"); return; }
-        // Admin-driven OR self-fill after intake -> go straight to review.
         await loadPreview();
         setStep("review");
       } catch (err: any) {
         const status = err?.status || err?.response?.status;
         const code = err?.body?.code || err?.response?.data?.code || err?.data?.code;
+        const langGuess: Language = "en";
         if (status === 410 && code === "revoked") { setStep("revoked"); return; }
         if (status === 410) { setStep("expired"); return; }
-        if (status === 404) { setErrorMsg("Bağlantı bulunamadı."); setStep("error"); return; }
-        setErrorMsg(err?.message || "Bağlantı çözülemedi"); setStep("error");
+        if (status === 404) { setErrorMsg(getTranslation(langGuess, "sign.notFound")); setStep("error"); return; }
+        setErrorMsg(err?.message || getTranslation(langGuess, "sign.loadError")); setStep("error");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,17 +99,25 @@ export default function SignFlow({ token }: { token: string }) {
     setPreviewHtml(r.data?.html || "");
   }
 
+  // If the intake schema already contains a name field, mirror its value into
+  // signerName so the signature record stays correct without showing a second
+  // input.
+  const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean }[];
+  const intakeNameField = fields.find(isNameLikeField);
+
   async function submitIntake() {
     setSubmitting(true);
     try {
+      const effectiveName = intakeNameField ? (intake[intakeNameField.key] || "").trim() : signerName;
+      if (intakeNameField && effectiveName !== signerName) setSignerName(effectiveName);
       await customFetch(`/api/public/sign/${encodeURIComponent(token)}/intake`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ intake: { ...intake, signerName } }),
+        body: JSON.stringify({ intake: { ...intake, signerName: effectiveName } }),
       });
       await loadPreview();
       setStep("review");
     } catch (err: any) {
-      alert(err?.message || "Bilgileri kaydetme başarısız");
+      alert(err?.message || t("saveError"));
     }
     setSubmitting(false);
   }
@@ -88,7 +131,7 @@ export default function SignFlow({ token }: { token: string }) {
       });
       setStep("success");
     } catch (err: any) {
-      alert(err?.message || "İmza gönderilemedi");
+      alert(err?.message || t("signError"));
     }
     setSubmitting(false);
   }
@@ -99,44 +142,48 @@ export default function SignFlow({ token }: { token: string }) {
   if (step === "expired") {
     return <CenterShell>
       <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
-      <h1 className="text-xl font-semibold mb-2">Bağlantı süresi doldu</h1>
-      <p className="text-muted-foreground text-sm">Bu imza bağlantısının süresi dolmuş. Lütfen yeni bir bağlantı talep edin.</p>
+      <h1 className="text-xl font-semibold mb-2">{t("expired")}</h1>
+      <p className="text-muted-foreground text-sm">{t("expiredBody")}</p>
     </CenterShell>;
   }
   if (step === "revoked") {
     return <CenterShell>
       <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-      <h1 className="text-xl font-semibold mb-2">Bağlantı iptal edildi</h1>
-      <p className="text-muted-foreground text-sm">Bu imza bağlantısı yetkilendiren tarafından iptal edilmiştir. Lütfen yöneticinizle iletişime geçin.</p>
+      <h1 className="text-xl font-semibold mb-2">{t("revoked")}</h1>
+      <p className="text-muted-foreground text-sm">{t("revokedBody")}</p>
     </CenterShell>;
   }
   if (step === "error") {
     return <CenterShell>
       <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-      <h1 className="text-xl font-semibold mb-2">Hata</h1>
+      <h1 className="text-xl font-semibold mb-2">{t("error")}</h1>
       <p className="text-muted-foreground text-sm">{errorMsg}</p>
     </CenterShell>;
   }
   if (step === "success") {
     return <CenterShell>
       <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
-      <h1 className="text-2xl font-semibold mb-2">İmzalandı</h1>
-      <p className="text-muted-foreground text-sm text-center max-w-md">İmzalı PDF kopyası e-posta adresinize gönderildi. Bu pencereyi kapatabilirsiniz.</p>
+      <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
+      <p className="text-muted-foreground text-sm text-center max-w-md">{t("signedBody")}</p>
     </CenterShell>;
   }
 
   if (!session) return null;
 
   if (step === "intake") {
-    const fields = (session.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean }[];
+    const canContinue = (intakeNameField
+      ? (intake[intakeNameField.key] || "").trim().length > 0
+      : signerName.trim().length > 0);
     return (
-      <Shell title="Bilgilerinizi girin" subtitle={session.template.name}>
-        <Stepper step={1} />
+      <Shell title={t("title")} subtitle={session.template.name}>
+        <Stepper step={1} labels={[t("stepIntake"), t("stepReview"), t("stepSign")]} />
         <div className="space-y-4">
-          <div>
-            <Label>İsim Soyisim *</Label>
-            <Input value={signerName} onChange={e => setSignerName(e.target.value)} required />
-          </div>
+          {!intakeNameField && (
+            <div>
+              <Label>{t("fullName")} *</Label>
+              <Input value={signerName} onChange={e => setSignerName(e.target.value)} required />
+            </div>
+          )}
           {fields.map(f => (
             <div key={f.key}>
               <Label>{f.label}{f.required ? " *" : ""}</Label>
@@ -149,8 +196,8 @@ export default function SignFlow({ token }: { token: string }) {
           ))}
         </div>
         <div className="flex justify-end mt-6">
-          <Button onClick={submitIntake} disabled={submitting || !signerName.trim()}>
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} Devam et
+          <Button onClick={submitIntake} disabled={submitting || !canContinue}>
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("continue")}
           </Button>
         </div>
       </Shell>
@@ -159,17 +206,21 @@ export default function SignFlow({ token }: { token: string }) {
 
   if (step === "review") {
     return (
-      <Shell title="Sözleşmeyi inceleyin" subtitle={session.template.name}>
-        <Stepper step={session.mode === "self_fill" ? 2 : 1} hideIntake={session.mode !== "self_fill"} />
+      <Shell title={t("titleReview")} subtitle={session.template.name}>
+        <Stepper step={session.mode === "self_fill" ? 2 : 1} labels={
+          session.mode === "self_fill"
+            ? [t("stepIntake"), t("stepReview"), t("stepSign")]
+            : [t("stepReview"), t("stepSign")]
+        } />
         <div
           className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
         <div className="flex justify-between mt-6">
           {session.mode === "self_fill" ? (
-            <Button variant="outline" onClick={() => setStep("intake")}>Geri</Button>
+            <Button variant="outline" onClick={() => setStep("intake")}>{t("back")}</Button>
           ) : <span />}
-          <Button onClick={() => setStep("sign")}><FileSignature className="w-4 h-4 mr-2" /> İmzala</Button>
+          <Button onClick={() => setStep("sign")}><FileSignature className="w-4 h-4 mr-2" /> {t("sign")}</Button>
         </div>
       </Shell>
     );
@@ -177,14 +228,20 @@ export default function SignFlow({ token }: { token: string }) {
 
   if (step === "sign") {
     return (
-      <Shell title="İmzanızı çizin" subtitle={session.template.name}>
-        <Stepper step={session.mode === "self_fill" ? 3 : 2} hideIntake={session.mode !== "self_fill"} />
+      <Shell title={t("titleSign")} subtitle={session.template.name}>
+        <Stepper step={session.mode === "self_fill" ? 3 : 2} labels={
+          session.mode === "self_fill"
+            ? [t("stepIntake"), t("stepReview"), t("stepSign")]
+            : [t("stepReview"), t("stepSign")]
+        } />
         <SignaturePad
           onSubmit={submitSignature}
           submitting={submitting}
           onCancel={() => setStep("review")}
           signerName={signerName}
           onChangeName={setSignerName}
+          t={t}
+          showNameInput={!intakeNameField}
         />
       </Shell>
     );
@@ -215,11 +272,10 @@ function Shell({ title, subtitle, children }: { title: string; subtitle: string;
   );
 }
 
-function Stepper({ step, hideIntake }: { step: number; hideIntake?: boolean }) {
-  const steps = hideIntake ? ["İncele", "İmzala"] : ["Bilgiler", "İncele", "İmzala"];
+function Stepper({ step, labels }: { step: number; labels: string[] }) {
   return (
     <div className="flex items-center justify-center gap-2 mb-6">
-      {steps.map((label, i) => {
+      {labels.map((label, i) => {
         const num = i + 1;
         const active = num === step;
         const done = num < step;
@@ -229,7 +285,7 @@ function Stepper({ step, hideIntake }: { step: number; hideIntake?: boolean }) {
               {done ? "✓" : num}
             </div>
             <span className={`ml-2 text-sm ${active ? "font-semibold" : "text-muted-foreground"}`}>{label}</span>
-            {i < steps.length - 1 && <div className="w-8 h-px bg-border mx-3" />}
+            {i < labels.length - 1 && <div className="w-8 h-px bg-border mx-3" />}
           </div>
         );
       })}
@@ -237,12 +293,14 @@ function Stepper({ step, hideIntake }: { step: number; hideIntake?: boolean }) {
   );
 }
 
-function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName }: {
+function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName, t, showNameInput }: {
   onSubmit: (b64: string) => void;
   submitting: boolean;
   onCancel: () => void;
   signerName: string;
   onChangeName: (v: string) => void;
+  t: (k: string) => string;
+  showNameInput: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
@@ -296,12 +354,14 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
 
   return (
     <div className="space-y-4">
+      {showNameInput && (
+        <div>
+          <Label>{t("fullName")} *</Label>
+          <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
+        </div>
+      )}
       <div>
-        <Label>İsim Soyisim *</Label>
-        <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
-      </div>
-      <div>
-        <Label>İmzanız</Label>
+        <Label>{t("signature")}</Label>
         <div className="border rounded-lg bg-white relative" style={{ height: 200 }}>
           <canvas
             ref={canvasRef}
@@ -312,19 +372,19 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
             onPointerCancel={end}
           />
           <button type="button" onClick={clear} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
-            <Eraser className="w-3 h-3" /> Temizle
+            <Eraser className="w-3 h-3" /> {t("clear")}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Fareyle ya da parmağınızla imzanızı çizin.</p>
+        <p className="text-xs text-muted-foreground mt-1">{t("signatureHint")}</p>
       </div>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" />
-        <span>Bu sözleşmeyi okuduğumu, anladığımı ve elektronik imzamın geçerli kabul edileceğini onaylıyorum.</span>
+        <span>{t("consent")}</span>
       </label>
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onCancel}>Geri</Button>
+        <Button variant="outline" onClick={onCancel}>{t("back")}</Button>
         <Button onClick={submit} disabled={!hasInk || !confirmed || !signerName.trim() || submitting}>
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />} İmzala ve gönder
+          {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />} {t("signAndSend")}
         </Button>
       </div>
     </div>

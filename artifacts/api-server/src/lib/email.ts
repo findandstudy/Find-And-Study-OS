@@ -160,7 +160,16 @@ export async function getEmailBranding(): Promise<EmailBranding> {
     let logoUrl: string | null = null;
     const rawLogo = settings?.emailLogoUrl || settings?.logoSquareUrl || settings?.logoUrl || null;
     if (rawLogo) {
-      logoUrl = rawLogo.startsWith("http") ? rawLogo : `${baseUrl}${rawLogo.startsWith("/") ? "" : "/"}${rawLogo}`;
+      // Private object-storage URLs (/api/storage/objects/...) require auth and
+      // break in email clients. Route them through the public branding endpoint
+      // which streams the logo without authentication.
+      if (rawLogo.startsWith("http") && !rawLogo.includes("/api/storage/objects/")) {
+        logoUrl = rawLogo;
+      } else if (rawLogo.includes("/api/storage/objects/") || rawLogo.startsWith("/objects/")) {
+        logoUrl = `${baseUrl}/api/settings/branding/logo`;
+      } else {
+        logoUrl = `${baseUrl}${rawLogo.startsWith("/") ? "" : "/"}${rawLogo}`;
+      }
     }
 
     const data: EmailBranding = {

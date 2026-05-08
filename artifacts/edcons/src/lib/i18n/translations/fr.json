@@ -1369,5 +1369,33 @@
     "loadError": "Loading error",
     "downloadFailed": "Download failed",
     "daysSuffix": "d"
+  },
+  "sign": {
+    "title": "Saisissez vos informations",
+    "titleReview": "Vérifiez le contrat",
+    "titleSign": "Tracez votre signature",
+    "signed": "Signé",
+    "signedBody": "Une copie du PDF signé a été envoyée à votre adresse e-mail. Vous pouvez fermer cette fenêtre.",
+    "expired": "Lien expiré",
+    "expiredBody": "Ce lien de signature a expiré. Veuillez en demander un nouveau.",
+    "revoked": "Lien révoqué",
+    "revokedBody": "Ce lien de signature a été révoqué par l'émetteur. Veuillez contacter votre administrateur.",
+    "notFound": "Lien introuvable.",
+    "error": "Erreur",
+    "loadError": "Impossible de charger le lien.",
+    "saveError": "Échec de l'enregistrement des informations.",
+    "signError": "Échec de l'envoi de la signature.",
+    "fullName": "Nom complet",
+    "signature": "Votre signature",
+    "signatureHint": "Tracez votre signature avec la souris ou le doigt.",
+    "clear": "Effacer",
+    "consent": "Je confirme avoir lu et compris ce contrat et que ma signature électronique sera considérée comme valide.",
+    "back": "Retour",
+    "continue": "Continuer",
+    "sign": "Signer",
+    "signAndSend": "Signer et envoyer",
+    "stepIntake": "Informations",
+    "stepReview": "Vérifier",
+    "stepSign": "Signer"
   }
 }

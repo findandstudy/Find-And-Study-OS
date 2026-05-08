@@ -1423,5 +1423,33 @@
       "download": "PDF indir",
       "none": "Kayıtlı sözleşme yok."
     }
+  },
+  "sign": {
+    "title": "Bilgilerinizi girin",
+    "titleReview": "Sözleşmeyi inceleyin",
+    "titleSign": "İmzanızı çizin",
+    "signed": "İmzalandı",
+    "signedBody": "İmzalı PDF kopyası e-posta adresinize gönderildi. Bu pencereyi kapatabilirsiniz.",
+    "expired": "Bağlantı süresi doldu",
+    "expiredBody": "Bu imza bağlantısının süresi dolmuş. Lütfen yeni bir bağlantı talep edin.",
+    "revoked": "Bağlantı iptal edildi",
+    "revokedBody": "Bu imza bağlantısı yetkilendiren tarafından iptal edilmiştir. Lütfen yöneticinizle iletişime geçin.",
+    "notFound": "Bağlantı bulunamadı.",
+    "error": "Hata",
+    "loadError": "Bağlantı çözülemedi.",
+    "saveError": "Bilgileri kaydetme başarısız.",
+    "signError": "İmza gönderilemedi.",
+    "fullName": "İsim Soyisim",
+    "signature": "İmzanız",
+    "signatureHint": "Fareyle ya da parmağınızla imzanızı çizin.",
+    "clear": "Temizle",
+    "consent": "Bu sözleşmeyi okuduğumu, anladığımı ve elektronik imzamın geçerli kabul edileceğini onaylıyorum.",
+    "back": "Geri",
+    "continue": "Devam et",
+    "sign": "İmzala",
+    "signAndSend": "İmzala ve gönder",
+    "stepIntake": "Bilgiler",
+    "stepReview": "İncele",
+    "stepSign": "İmzala"
   }
 }
