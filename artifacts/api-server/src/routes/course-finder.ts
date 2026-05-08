@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
 import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable } from "@workspace/db";
-import { eq, ilike, sql, and, inArray, desc, or } from "drizzle-orm";
+import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { usersTable } from "@workspace/db";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { getCurrentSeason } from "../lib/season";
+import { getAgentVisibleIds } from "../lib/agentVisibility";
+import { getVisibleBranchIds } from "../lib/branchScope";
 
 const router: IRouter = Router();
 
@@ -285,10 +287,40 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
 });
 
 router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("course_finder"), async (req, res): Promise<void> => {
+  const user = req.user!;
   const { search, limit = "10" } = req.query as Record<string, string>;
   const limitNum = Math.min(20, Math.max(1, parseInt(limit, 10)));
 
-  const conditions = [];
+  // Always exclude soft-deleted students.
+  const conditions: any[] = [isNull(studentsTable.deletedAt)];
+
+  // Ownership scoping — mirrors GET /api/students so agents only see their
+  // own students (and their sub-agents'/agent_staff's), and non-admin staff
+  // see assigned-or-unassigned students. Admins see everything.
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (visibleIds.length === 0) { res.json([]); return; }
+    conditions.push(inArray(studentsTable.agentId, visibleIds));
+  } else if (user.role === "student") {
+    conditions.push(eq(studentsTable.userId, user.id));
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    conditions.push(
+      or(
+        eq(studentsTable.assignedToId, user.id),
+        isNull(studentsTable.assignedToId),
+      )
+    );
+  }
+
+  // Branch scoping for staff and agents (super_admin → null = all).
+  if (user.role !== "student") {
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+    if (visibleBranchIds !== null) {
+      if (visibleBranchIds.length === 0) { res.json([]); return; }
+      conditions.push(inArray(studentsTable.branchId, visibleBranchIds));
+    }
+  }
+
   if (search && search.trim()) {
     const s = `%${escapeLikePattern(search.trim())}%`;
     conditions.push(
@@ -302,7 +334,7 @@ router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("
     );
   }
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
   const rows = await db
     .select({
       id: studentsTable.id,
@@ -350,6 +382,38 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
 
   const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, Number(resolvedStudentId)));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+
+  // Authorization — verify the caller may act on this student. The student
+  // self-apply branch above already guarantees ownership; admins are
+  // unrestricted. Everyone else is checked against the same scoping rules
+  // as GET /api/students.
+  if (!isStudentRole && !(ADMIN_ROLES as readonly string[]).includes(req.user!.role)) {
+    if (student.deletedAt) {
+      res.status(403).json({ error: "You do not have access to this student" });
+      return;
+    }
+    if (isAgentRole(req.user!.role)) {
+      const visibleIds = await getAgentVisibleIds(req.user!.id, req.user!.role);
+      if (!student.agentId || !visibleIds.includes(student.agentId)) {
+        res.status(403).json({ error: "You do not have access to this student" });
+        return;
+      }
+    } else {
+      // Non-admin staff: assigned to caller (or unassigned).
+      if (student.assignedToId != null && student.assignedToId !== req.user!.id) {
+        res.status(403).json({ error: "You do not have access to this student" });
+        return;
+      }
+    }
+    // Branch scoping (applies to both staff and agents).
+    const visibleBranchIds = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    if (visibleBranchIds !== null) {
+      if (visibleBranchIds.length === 0 || (student.branchId != null && !visibleBranchIds.includes(student.branchId))) {
+        res.status(403).json({ error: "You do not have access to this student" });
+        return;
+      }
+    }
+  }
 
   const [program] = await db
     .select({
