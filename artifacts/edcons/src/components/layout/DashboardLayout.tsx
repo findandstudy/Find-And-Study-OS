@@ -284,7 +284,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [navPending, startNavTransition] = useTransition();
   const navigate = (url: string) => startNavTransition(() => setLocation(url));
   const { t, localePath } = useI18n();
-  useSeo({ title: t("dashboard.portal"), noindex: true });
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
@@ -295,6 +294,13 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     queryFn: () => customFetch<any>("/api/agents/me"),
     staleTime: 5 * 60 * 1000,
   });
+
+  // For agents/sub-agents/agent staff, use their business name as the tab
+  // title so it matches the agency-branding hook (otherwise useSeo would
+  // overwrite the tab title with the generic "Portal" string).
+  const agentBusinessName = (agentProfile as any)?.businessName?.trim?.() || "";
+  const seoTitle = isAgentRole && agentBusinessName ? agentBusinessName : t("dashboard.portal");
+  useSeo({ title: seoTitle, noindex: true });
 
   const isStaff = ["super_admin","admin","manager","staff","consultant","editor","accountant"].includes(user?.role || "");
   const isStudent = user?.role === "student";
