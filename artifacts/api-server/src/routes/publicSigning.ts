@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, settingsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { hashToken } from "../lib/signingTokens";
 import { renderTemplate, buildAgentContext, cleanupSignatureImages } from "../lib/contractRenderer";
@@ -9,6 +9,35 @@ function contractNumber(sessionId: number, signedAt?: Date): string {
   const d = signedAt || new Date();
   const yy = String(d.getUTCFullYear()).slice(-2);
   return `FAS-${yy}-${String(sessionId).padStart(5, "0")}`;
+}
+
+function sanitizeFilenamePart(s: string): string {
+  return (s || "")
+    .replace(/[\\/:*?"<>|\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+async function buildContractFilename(params: { agent: any | null; signedAt: Date }): Promise<string> {
+  let brand = "Find And Study";
+  try {
+    const [s] = await db.select({
+      publicBrandName: settingsTable.publicBrandName,
+      legalCompanyName: settingsTable.legalCompanyName,
+      companyName: settingsTable.companyName,
+    }).from(settingsTable).limit(1);
+    brand = sanitizeFilenamePart(s?.publicBrandName || s?.legalCompanyName || s?.companyName || brand) || brand;
+  } catch {
+    // fall through to default brand
+  }
+  const agentName = sanitizeFilenamePart(
+    params.agent?.businessName || params.agent?.companyName || "Agent"
+  ) || "Agent";
+  const d = params.signedAt;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ts = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}`;
+  return `${agentName} - ${brand} - ${ts}.pdf`;
 }
 
 const SIG_PLACEHOLDER: Record<string, string> = {
@@ -413,8 +442,12 @@ router.get("/public/sign/:token/pdf", signLimiter, async (req, res): Promise<voi
     if (normalizedPath.startsWith("objects/")) normalizedPath = normalizedPath.slice("objects/".length);
     const file = await objectStorage.getObjectEntityFile(`/objects/${normalizedPath}`);
     const [metadata] = await file.getMetadata();
+    const filename = await buildContractFilename({
+      agent: r.agent,
+      signedAt: signed.createdAt || new Date(),
+    });
     res.setHeader("Content-Type", (metadata.contentType as string) || "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="signed-contract-${signed.id}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader("Cache-Control", "private, no-store");
     if (metadata.size) res.setHeader("Content-Length", String(metadata.size));
     file.createReadStream()

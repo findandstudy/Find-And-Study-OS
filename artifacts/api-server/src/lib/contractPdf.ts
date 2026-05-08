@@ -26,12 +26,17 @@ function htmlToBlocks(html: string): { kind: "h1" | "h2" | "h3" | "p" | "li" | "
   const blocks: { kind: "h1" | "h2" | "h3" | "p" | "li" | "blank"; text: string }[] = [];
   const normalized = html
     .replace(/\r\n/g, "\n")
+    // Strip non-textual blocks entirely (their inner content is CSS/JS, not
+    // contract prose, and would otherwise leak into the PDF as visible text).
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/(p|h1|h2|h3|li|ul|ol|div)>/gi, "\n")
-    .replace(/<(?!\/?(?:h1|h2|h3|p|li|ul|ol|div|br)\b)[^>]+>/gi, "");
+    .replace(/<\/(p|h1|h2|h3|li|ul|ol|div|section|article|header|footer)>/gi, "\n")
+    .replace(/<(?!\/?(?:h1|h2|h3|p|li|ul|ol|div|section|article|header|footer|br)\b)[^>]+>/gi, "");
 
   let mode: "h1" | "h2" | "h3" | "p" | "li" = "p";
-  const tagRe = /<(h1|h2|h3|p|li|ul|ol|div)[^>]*>/gi;
+  const tagRe = /<(h1|h2|h3|p|li|ul|ol|div|section|article|header|footer)[^>]*>/gi;
   const segments: { tag: string; text: string }[] = [];
   let lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -41,7 +46,7 @@ function htmlToBlocks(html: string): { kind: "h1" | "h2" | "h3" | "p" | "li" | "
     }
     const t = m[1].toLowerCase();
     if (t === "h1" || t === "h2" || t === "h3" || t === "li" || t === "p") mode = t as any;
-    else mode = "p";
+    else mode = "p"; // div/section/article/header/footer treated as paragraph blocks
     lastIndex = m.index + m[0].length;
   }
   if (lastIndex < normalized.length) segments.push({ tag: mode, text: normalized.slice(lastIndex) });

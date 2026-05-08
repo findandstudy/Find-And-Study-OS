@@ -2,6 +2,20 @@ type Ctx = Record<string, any>;
 
 function lookup(ctx: Ctx, path: string): string {
   const parts = path.split(".");
+  // For unqualified keys (e.g. {{agency_name}}) fall through into the standard
+  // sub-contexts so author-defined intake/agent fields resolve regardless of
+  // whether the template uses {{agency_name}} or {{intake.agency_name}}.
+  if (parts.length === 1) {
+    const key = parts[0];
+    for (const scope of [ctx, ctx.intake, ctx.agent, ctx.contract]) {
+      if (scope && scope[key] != null && scope[key] !== "") {
+        const v = scope[key];
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        return String(v);
+      }
+    }
+    return "";
+  }
   let cur: any = ctx;
   for (const p of parts) {
     if (cur == null) return "";
@@ -37,6 +51,10 @@ export function buildAgentContext(agent: any | null, intake: Record<string, any>
       signerEmail: contract.signerEmail || "",
       signerName: contract.signerName || "",
     },
+    // Top-level aliases used directly by author templates such as
+    // {{contract_number}} and {{sign_date}}.
+    contract_number: contract.number || "",
+    sign_date: dateStr,
     // Signature placeholders kept empty so templates can still reference them
     // via {{signature}} / {{main_agency_signature}}; the rendered preview is
     // post-processed by `cleanupSignatureImages` to swap empty <img src="">
