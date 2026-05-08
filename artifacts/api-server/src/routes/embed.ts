@@ -1259,28 +1259,57 @@ function renderFormContent(prog){
     h+='<div class="'+cls+'"><label>'+label+(required?' *':'')+(isAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><input name="'+name+'" type="'+(type||'text')+'" value="'+esc(val)+'" style="'+style+'"'+(required?' required':'')+'></div>';
   }
   if(formStep==='personal'){
-    // Step 1 — Personal Info: collect basic contact fields up front, the
-    // same ordering used by the homepage non-login ApplyDialog.
+    // Step 1 — Personal Info: collect ONLY the same basic contact fields
+    // shown on the homepage non-login ApplyDialog (first/last name, email,
+    // phone) plus an "Applying for" summary pill. Nationality / desired
+    // level / preferred uni or program are deliberately deferred to the
+    // Review step to keep the first screen short and welcoming.
     h+='<h3>Apply'+(prog?' \\u2014 '+esc(prog.name):'')+'</h3>';
     if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.universityName||'')+'</div>';
     else h+='<div class="ew-modal-subtitle">Tell us about yourself to get started.</div>';
+    // Lightly tinted info card matching the portal's primary/5 callout.
+    h+='<div style="background:${primaryColor}10;border:1px solid ${primaryColor}30;border-radius:12px;padding:14px;margin:14px 0">';
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:0.95rem">\\ud83d\\udc65</span><strong style="font-size:0.88rem;color:${primaryColor}">Personal Information</strong></div>';
+    h+='<p style="font-size:0.78rem;color:#64748b;margin:0;line-height:1.45">Please provide your contact details. You will be able to review and update them before submitting.</p>';
+    h+='</div>';
     h+='<form id="ew-personal-form" onsubmit="return false">';
     h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
     h+='<div class="ew-form-grid">';
     aiField('firstName','First Name','text',true,true);
     aiField('lastName','Last Name','text',true,true);
-    aiField('email','Email','email',true,true);
+    aiField('email','Email','email',true,false);
     var fv=savedFormData;
-    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90"'+((fv.countryCode||'+90')==='+90'?' selected':'')+'>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div></div>';
-    aiField('nationality','Nationality','text',false,true);
-    h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
-    if(!prog){
-      h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv.preferredUniversity||'')+'"></div>';
-      h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv.desiredProgram||'')+'"></div>';
+    // Phone with a flag-prefixed country code picker (matches the portal's
+    // PhoneCodePicker visual). Spans the full row.
+    var ccOpts=[
+      ['+1','\\ud83c\\uddfa\\ud83c\\uddf8'],['+44','\\ud83c\\uddec\\ud83c\\udde7'],
+      ['+90','\\ud83c\\uddf9\\ud83c\\uddf7'],['+971','\\ud83c\\udde6\\ud83c\\uddea'],
+      ['+966','\\ud83c\\uddf8\\ud83c\\udde6'],['+33','\\ud83c\\uddeb\\ud83c\\uddf7'],
+      ['+49','\\ud83c\\udde9\\ud83c\\uddea'],['+7','\\ud83c\\uddf7\\ud83c\\uddfa'],
+      ['+86','\\ud83c\\udde8\\ud83c\\uddf3'],['+91','\\ud83c\\uddee\\ud83c\\uddf3'],
+      ['+81','\\ud83c\\uddef\\ud83c\\uddf5'],['+82','\\ud83c\\uddf0\\ud83c\\uddf7'],
+      ['+55','\\ud83c\\udde7\\ud83c\\uddf7'],['+20','\\ud83c\\uddea\\ud83c\\uddec'],
+      ['+234','\\ud83c\\uddf3\\ud83c\\uddec'],['+254','\\ud83c\\uddf0\\ud83c\\uddea'],
+      ['+27','\\ud83c\\uddff\\ud83c\\udde6'],['+62','\\ud83c\\uddee\\ud83c\\udde9'],
+      ['+60','\\ud83c\\uddf2\\ud83c\\uddfe'],['+63','\\ud83c\\uddf5\\ud83c\\udded']
+    ];
+    var sel=fv.countryCode||'+90';
+    var ccHtml='';
+    for(var ci=0;ci<ccOpts.length;ci++){
+      var o=ccOpts[ci];
+      ccHtml+='<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+' '+o[0]+'</option>';
     }
+    h+='<div class="ew-form-group full"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode">'+ccHtml+'</select><input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div></div>';
     h+='</div>';
-    h+='<div class="ew-form-actions">';
-    h+='<button type="button" class="ew-btn" id="ew-next-personal" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">Continue \\u2192</button>';
+    if(prog){
+      // "Applying for" summary pill (mirrors portal's bg-secondary/50 card).
+      h+='<div style="background:#f1f5f9;border-radius:12px;padding:12px 14px;margin:14px 0;font-size:0.85rem">';
+      h+='<div style="font-weight:600;color:#0f172a;margin-bottom:2px">Applying for:</div>';
+      h+='<div style="color:#64748b">'+esc(prog.name)+(prog.universityName?' \\u2014 '+esc(prog.universityName):'')+'</div>';
+      h+='</div>';
+    }
+    h+='<div class="ew-form-actions" style="margin-top:14px">';
+    h+='<button type="button" class="ew-btn" id="ew-next-personal" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">Next \\u2192</button>';
     if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
     h+='</div></form>';
   } else if(formStep==='documents'){
