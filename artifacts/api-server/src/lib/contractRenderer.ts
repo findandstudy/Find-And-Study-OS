@@ -40,9 +40,57 @@ export function renderTemplate(body: string, ctx: Ctx): string {
   return out;
 }
 
+/**
+ * Map an agent record to the standard "Template Variables" naming used in
+ * contract templates (snake_case). Returning empty strings for missing
+ * values so templates render with blanks rather than the literal `{{...}}`.
+ */
+function autoFromAgent(agent: any | null): Record<string, string> {
+  if (!agent) return {};
+  const fullName = [agent.firstName, agent.lastName].filter(Boolean).join(" ").trim();
+  return {
+    agency_name: agent.businessName || agent.companyName || "",
+    agency_legal_name: agent.companyName || agent.businessName || "",
+    agency_email: agent.email || "",
+    agency_phone: agent.phoneE164 || agent.phone || "",
+    whatsapp_phone: agent.phoneE164 || agent.phone || "",
+    contact_person_name: agent.pointOfContact || fullName || "",
+    contact_person_first_name: agent.firstName || "",
+    contact_person_last_name: agent.lastName || "",
+    country: agent.country || "",
+    city: agent.city || "",
+    address: agent.address || "",
+    tax_number: agent.taxNumber || "",
+    agency_code: agent.agencyCode || "",
+  };
+}
+
 export function buildAgentContext(agent: any | null, intake: Record<string, any> | null, contract: { date?: string; signerEmail?: string; signerName?: string; number?: string } = {}): Ctx {
   const dateStr = contract.date || new Date().toISOString().slice(0, 10);
+  const yearStr = String(new Date(dateStr).getUTCFullYear());
+
+  // Auto-mapped standard template variables (snake_case). Order of precedence
+  // for unqualified placeholders such as `{{agency_name}}`:
+  //   1. intake (highest — explicit value entered by signer)
+  //   2. autoFromAgent (system-known agent fields)
+  //   3. contract metadata (sign_date / contract_number)
+  // Achieved by spreading intake LAST so it wins on key collisions.
+  const auto = {
+    ...autoFromAgent(agent),
+    contract_number: contract.number || "",
+    sign_date: dateStr,
+    year: yearStr,
+    signer_email: contract.signerEmail || "",
+    signer_name: contract.signerName || "",
+    // Signature image placeholders. They stay empty for the unsigned preview;
+    // `cleanupSignatureImages` swaps empty <img src=""> for a styled box.
+    signature: "",
+    main_agency_signature: "",
+    ...(intake || {}),
+  };
+
   return {
+    ...auto,
     agent: agent || {},
     intake: intake || {},
     contract: {
@@ -51,16 +99,6 @@ export function buildAgentContext(agent: any | null, intake: Record<string, any>
       signerEmail: contract.signerEmail || "",
       signerName: contract.signerName || "",
     },
-    // Top-level aliases used directly by author templates such as
-    // {{contract_number}} and {{sign_date}}.
-    contract_number: contract.number || "",
-    sign_date: dateStr,
-    // Signature placeholders kept empty so templates can still reference them
-    // via {{signature}} / {{main_agency_signature}}; the rendered preview is
-    // post-processed by `cleanupSignatureImages` to swap empty <img src="">
-    // tags for styled placeholder boxes (avoiding the broken-image icon).
-    signature: "",
-    main_agency_signature: "",
   };
 }
 
