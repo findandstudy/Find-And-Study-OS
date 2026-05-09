@@ -1,0 +1,85 @@
+Selam! Bu projeyi başka bir Replit projem olan "Find And Study OS" 
+ile SSO (Single Sign-On) ile bağlamak istiyorum. Find And Study OS, 
+Express + cookie-tabanlı session (express-session + PostgreSQL store) 
++ bcrypt parolayla çalışan bir sistem. Amaç: Find And Study OS'a 
+giriş yapan kullanıcı, oradaki bir butona tıklayınca bu CRM'e 
+şifresiz girebilsin (tek auth, tek parola).
+
+Bu projede karar vermek için aşağıdaki soruları cevaplamana 
+ihtiyacım var. Lütfen mümkün olduğunca somut cevap ver:
+
+1. TEKNİK STACK
+   Bu projenin backend'i ne? (Node.js + Express TS / JS, Next.js, 
+   FastAPI, Django, Flask, vs.) Frontend tarafı ne (React, Vue, 
+   vanilla, yok)? package.json veya requirements.txt'i özetler misin?
+
+2. MEVCUT AUTH
+   Şu an bu CRM'in kendi login sistemi var mı? Varsa nasıl çalışıyor 
+   (session-based mi JWT mi, hangi kütüphane, parola hash yöntemi)? 
+   Yoksa hiç auth yok mu?
+
+3. KULLANICI TABLOSU
+   Kendi users (veya benzeri) tablon var mı? Varsa şu kolonları 
+   söyler misin: id tipi (uuid/int), email var mı, role var mı, 
+   başka kimlik alanı (ör: external_id) var mı? Yoksa hiç DB tablosu 
+   yok mu?
+
+4. VERİTABANI
+   Hangi DB kullanıyorsun? PostgreSQL mi başka bir şey mi? 
+   DATABASE_URL env var mevcut mu? Drizzle/Prisma/Sequelize gibi 
+   ORM kullanıyor mu?
+
+5. ÜRETİM DOMAİNİ
+   Deploy edildiğinde hangi domain altında olacak? Örnek:
+   - academy.findandstudy.com'un alt-domain'i mi olacak 
+     (crm.findandstudy.com gibi)?
+   - Tamamen farklı bir domain mi (.com.tr, başka)?
+   - Henüz Replit subdomain'inde mi kalıyor?
+
+6. SESSION / COOKIE
+   Şu an cookie veya session kullanıyor musun? Kullanıyorsan 
+   cookie ayarların ne (httpOnly, sameSite, secure, domain)? 
+   Hangi store (memory, Redis, Postgres)?
+
+7. ROUTING
+   Anasayfa (/) ne gösteriyor? Korumalı sayfaların nasıl ayrılıyor 
+   (örn: /dashboard, /admin gibi)? Hangi middleware route'ları 
+   koruyor?
+
+8. CORS
+   Express kullanıyorsan cors middleware'in ayarı ne? Hangi 
+   origin'lere izin veriyor?
+
+9. PORT
+   npm run dev kaç portunda çalışıyor? Workflow konfigürasyonun ne?
+
+10. ENV / SECRETS
+    Şu an hangi env var/secret tanımlı? (Sadece isimleri yaz, 
+    değerleri verme.) JWT_SECRET, SESSION_SECRET gibi bir şey 
+    var mı?
+
+11. ENTEGRASYONLAR
+    Replit Integrations panelinde aktif olan entegrasyonlar 
+    neler? (Object Storage, GitHub, Database, AI, vs.)
+
+12. DEPLOY
+    Bu projeyi nereye deploy edeceğim? Replit Deployments mı 
+    yoksa benim bir VPS'im var (Find And Study için Hostinger 
+    kullanıyorum, aynısına gelebilir)?
+
+13. ROL/YETKİ
+    Bu CRM içinde farklı rol/yetki seviyeleri olacak mı? Yoksa 
+    "giriş yapan herkes her şeyi görür" mü? Örneğin: Find And 
+    Study'deki agent rolü CRM'de neyi görsün, admin neyi görsün?
+
+14. DOSYA YAPISI
+    Klasör/dosya yapını özetler misin? src/, server/, client/, 
+    pages/ gibi ana klasörler ne?
+
+15. UYARI
+    Şu an bu projede çalışan/çözülmemiş bir bug, eksik özellik 
+    var mı? SSO'ya geçmeden önce bilmem gereken bir şey?
+
+Her soruya net cevap ver, "bilmiyorum" varsa onu da yaz. Cevapları 
+toplayıp Find And Study projesindeki agent'a vereceğim, o iki 
+tarafı bağlayacak.

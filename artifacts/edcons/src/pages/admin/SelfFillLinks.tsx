@@ -29,7 +29,7 @@ export default function SelfFillLinksPage() {
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ signerEmail: "", signerName: "", language: "en", entityType: "company" as "company" | "individual" });
+  const [form, setForm] = useState({ signerEmail: "", signerName: "", language: "tr", entityType: "company" as "company" | "individual" });
   const [lastUrl, setLastUrl] = useState("");
 
   async function load() {
@@ -52,7 +52,7 @@ export default function SelfFillLinksPage() {
       });
       setLastUrl(res.data?.signUrl || "");
       toast({ title: "Bağlantı oluşturuldu" });
-      setForm({ signerEmail: "", signerName: "", language: "en", entityType: "company" });
+      setForm({ signerEmail: "", signerName: "", language: "tr", entityType: "company" });
       await load();
     } catch (err: any) { toast({ title: "Hata", description: err.message, variant: "destructive" }); }
     setCreating(false);
@@ -118,9 +118,9 @@ export default function SelfFillLinksPage() {
       </Card>
 
       <Dialog open={showDialog} onOpenChange={(o) => { setShowDialog(o); if (!o) setLastUrl(""); }}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Yeni self-fill bağlantı</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <div>
               <Label>E-posta *</Label>
               <Input type="email" value={form.signerEmail} onChange={e => setForm(f => ({ ...f, signerEmail: e.target.value }))} />
@@ -135,11 +135,11 @@ export default function SelfFillLinksPage() {
                 <Select value={form.language} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
                     <SelectItem value="tr">Türkçe</SelectItem>
-                    <SelectItem value="ar">العربية</SelectItem>
-                    <SelectItem value="fr">Français</SelectItem>
-                    <SelectItem value="ru">Русский</SelectItem>
+                    <SelectItem value="en">İngilizce (English)</SelectItem>
+                    <SelectItem value="ar">Arapça (العربية)</SelectItem>
+                    <SelectItem value="fr">Fransızca (Français)</SelectItem>
+                    <SelectItem value="ru">Rusça (Русский)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -155,9 +155,9 @@ export default function SelfFillLinksPage() {
               </div>
             </div>
             {lastUrl && (
-              <div className="bg-muted/40 rounded-lg p-3 text-xs flex items-center gap-2">
-                <Copy className="w-4 h-4 cursor-pointer" onClick={() => { navigator.clipboard.writeText(lastUrl); toast({ title: "Kopyalandı" }); }} />
-                <span className="font-mono truncate">{lastUrl}</span>
+              <div className="bg-muted/40 rounded-lg p-3 text-xs flex items-center gap-2 min-w-0 overflow-hidden">
+                <Copy className="w-4 h-4 shrink-0 cursor-pointer" onClick={() => { navigator.clipboard.writeText(lastUrl); toast({ title: "Kopyalandı" }); }} />
+                <span className="font-mono truncate flex-1 min-w-0">{lastUrl}</span>
               </div>
             )}
           </div>
