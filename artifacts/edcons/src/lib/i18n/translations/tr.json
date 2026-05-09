@@ -1478,5 +1478,55 @@
     "stepSign": "İmzala",
     "downloadPdf": "İmzalı PDF'i indir",
     "openPortal": "Portala giriş yap"
+  },
+  "languages": {
+    "tr": "Türkçe",
+    "en": "İngilizce",
+    "ar": "Arapça",
+    "fr": "Fransızca",
+    "ru": "Rusça",
+    "fa": "Farsça",
+    "zh": "Çince",
+    "hi": "Hintçe",
+    "es": "İspanyolca",
+    "id": "Endonezce"
+  },
+  "selfFill": {
+    "title": "Self-Fill Bağlantıları",
+    "subtitle": "Henüz sistemde olmayan kişilere kendileri doldurup imzalayacakları link gönderin.",
+    "newLink": "Yeni bağlantı",
+    "empty": "Henüz bağlantı yok.",
+    "columns": {
+      "signer": "İmzalayan",
+      "expires": "Bitiş"
+    },
+    "status": {
+      "intake_pending": "Bilgi bekleniyor",
+      "review_pending": "İmza bekleniyor",
+      "signed": "İmzalandı",
+      "revoked": "İptal edildi"
+    },
+    "modalTitle": "Yeni self-fill bağlantı",
+    "fields": {
+      "email": "E-posta *",
+      "name": "İsim (opsiyonel)",
+      "language": "Dil",
+      "type": "Tip"
+    },
+    "types": {
+      "company": "Şirket",
+      "individual": "Bireysel"
+    },
+    "actions": {
+      "createAndSend": "Oluştur ve gönder",
+      "resend": "Yeniden gönder",
+      "revoke": "İptal et"
+    },
+    "toast": {
+      "emailRequired": "E-posta gerekli",
+      "linkCreated": "Bağlantı oluşturuldu",
+      "resent": "Yeniden gönderildi"
+    },
+    "confirmRevoke": "Bu bağlantı iptal edilsin mi?"
   }
 }

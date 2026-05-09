@@ -1537,5 +1537,55 @@
     "stepSign": "Sign",
     "downloadPdf": "Download signed PDF",
     "openPortal": "Open the portal"
+  },
+  "languages": {
+    "tr": "Turkish",
+    "en": "English",
+    "ar": "Arabic",
+    "fr": "French",
+    "ru": "Russian",
+    "fa": "Persian",
+    "zh": "Chinese",
+    "hi": "Hindi",
+    "es": "Spanish",
+    "id": "Indonesian"
+  },
+  "selfFill": {
+    "title": "Self-Fill Links",
+    "subtitle": "Send a link that lets people who are not yet in the system fill in and sign their own contract.",
+    "newLink": "New link",
+    "empty": "No links yet.",
+    "columns": {
+      "signer": "Signer",
+      "expires": "Expires"
+    },
+    "status": {
+      "intake_pending": "Awaiting info",
+      "review_pending": "Awaiting signature",
+      "signed": "Signed",
+      "revoked": "Revoked"
+    },
+    "modalTitle": "New self-fill link",
+    "fields": {
+      "email": "Email *",
+      "name": "Name (optional)",
+      "language": "Language",
+      "type": "Type"
+    },
+    "types": {
+      "company": "Company",
+      "individual": "Individual"
+    },
+    "actions": {
+      "createAndSend": "Create and send",
+      "resend": "Resend",
+      "revoke": "Revoke"
+    },
+    "toast": {
+      "emailRequired": "Email is required",
+      "linkCreated": "Link created",
+      "resent": "Link resent"
+    },
+    "confirmRevoke": "Revoke this link?"
   }
 }
