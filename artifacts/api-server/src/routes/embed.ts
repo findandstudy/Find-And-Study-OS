@@ -1296,8 +1296,8 @@ function renderFormContent(prog){
       ['+27','\\ud83c\\uddff\\ud83c\\udde6'],['+62','\\ud83c\\uddee\\ud83c\\udde9'],
       ['+60','\\ud83c\\uddf2\\ud83c\\uddfe'],['+63','\\ud83c\\uddf5\\ud83c\\udded']
     ];
-    var sel=fv.countryCode||'+90';
-    var ccHtml='';
+    var sel=fv.countryCode||'';
+    var ccHtml='<option value=""'+(sel===''?' selected':'')+'>Code</option>';
     for(var ci=0;ci<ccOpts.length;ci++){
       var o=ccOpts[ci];
       ccHtml+='<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+' '+o[0]+'</option>';
@@ -1378,7 +1378,11 @@ function renderFormContent(prog){
     aiField('firstName','First Name','text',true,true);
     aiField('lastName','Last Name','text',true,true);
     aiField('email','Email','email',true,true);
-    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode"><option value="+1">+1</option><option value="+44">+44</option><option value="+90"'+((fv2.countryCode||'+90')==='+90'?' selected':'')+'>+90</option><option value="+971">+971</option><option value="+966">+966</option><option value="+33">+33</option><option value="+49">+49</option><option value="+7">+7</option><option value="+86">+86</option><option value="+91">+91</option><option value="+81">+81</option><option value="+82">+82</option><option value="+55">+55</option><option value="+20">+20</option><option value="+234">+234</option><option value="+254">+254</option><option value="+27">+27</option><option value="+62">+62</option><option value="+60">+60</option><option value="+63">+63</option></select><input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
+    var sel2=fv2.countryCode||'';
+    var ccCodes=['+1','+44','+90','+971','+966','+33','+49','+7','+86','+91','+81','+82','+55','+20','+234','+254','+27','+62','+60','+63'];
+    var ccHtml2='<option value=""'+(sel2===''?' selected':'')+'>Code</option>';
+    for(var cj=0;cj<ccCodes.length;cj++){ccHtml2+='<option value="'+ccCodes[cj]+'"'+(sel2===ccCodes[cj]?' selected':'')+'>'+ccCodes[cj]+'</option>';}
+    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode">'+ccHtml2+'</select><input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
     var natVal=savedFormData.nationality||'';
     var natIsAi=!!extractedFields.nationality;
     var natStyle=natIsAi?'border-color:#22c55e;background:#f0fdf4':'';
@@ -1660,8 +1664,8 @@ function handleNextPersonal(scope){
   if(form){
     new FormData(form).forEach(function(v,k){savedFormData[k]=v});
   }
-  if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email||!savedFormData.phone){
-    alert('Please fill in all required fields.');
+  if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email||!savedFormData.phone||!savedFormData.countryCode){
+    alert('Please fill in all required fields, including the phone country code.');
     return;
   }
   formStep='documents';
@@ -1725,6 +1729,10 @@ function handleFormSubmit(e){
   new FormData(form).forEach(function(v,k){savedFormData[k]=v});
   if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email){
     alert('Please fill in all required fields.');
+    return;
+  }
+  if(savedFormData.phone&&!savedFormData.countryCode){
+    alert('Please select the phone country code.');
     return;
   }
   if(formLoading)return;

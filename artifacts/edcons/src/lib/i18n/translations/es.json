@@ -102,7 +102,8 @@
     "required": "*",
     "latinOnly": "Solo se permiten caracteres latinos",
     "messageTooLong": "El mensaje no puede exceder 400 caracteres",
-    "phoneCode": "Código de país"
+    "phoneCode": "Código de país",
+    "phoneCodeRequired": "Por favor seleccione el código de país"
   },
   "blog": {
     "badge": "El Blog",

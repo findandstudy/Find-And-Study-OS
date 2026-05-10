@@ -102,7 +102,8 @@
     "required": "*",
     "latinOnly": "Hanya karakter Latin yang diperbolehkan",
     "messageTooLong": "Pesan tidak boleh melebihi 400 karakter",
-    "phoneCode": "Kode negara"
+    "phoneCode": "Kode negara",
+    "phoneCodeRequired": "Silakan pilih kode negara"
   },
   "blog": {
     "badge": "Blog",

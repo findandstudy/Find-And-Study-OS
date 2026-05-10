@@ -102,7 +102,8 @@
     "required": "*",
     "latinOnly": "يُسمح فقط بالأحرف اللاتينية",
     "messageTooLong": "الرسالة لا يمكن أن تتجاوز 400 حرف",
-    "phoneCode": "كود الدولة"
+    "phoneCode": "كود الدولة",
+    "phoneCodeRequired": "يرجى اختيار رمز الدولة"
   },
   "blog": {
     "badge": "المدونة",

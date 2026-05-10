@@ -158,7 +158,7 @@ type ExtractedData = {
 };
 
 const EMPTY_FORM = {
-  firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
+  firstName: "", lastName: "", email: "", phone: "", phoneCode: "",
   nationality: "", dateOfBirth: "", gender: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
@@ -1626,7 +1626,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
+    firstName: "", lastName: "", email: "", phone: "", phoneCode: "",
     nationality: "", status: "active", dateOfBirth: "",
     passportNumber: "", passportIssueDate: "", passportExpiry: "",
     motherName: "", fatherName: "", address: "",
@@ -1647,7 +1647,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
 
   useEffect(() => {
     if (open && student) {
-      let phoneCode = "+90";
+      let phoneCode = "";
       let phoneNum = student.phone || "";
       if (phoneNum.startsWith("+")) {
         const sortedCodes = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);

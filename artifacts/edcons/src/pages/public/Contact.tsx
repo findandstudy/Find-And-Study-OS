@@ -96,7 +96,7 @@ export default function Contact() {
       },
     },
   ]);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phoneCode: "", phone: "", nationality: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -137,6 +137,9 @@ export default function Contact() {
     }
     if (form.message.length > MSG_MAX) {
       setError(t("contact.messageTooLong")); return;
+    }
+    if (form.phone && !form.phoneCode) {
+      setError(t("contact.phoneCodeRequired")); return;
     }
     setLoading(true);
     setError("");
@@ -200,7 +203,7 @@ export default function Contact() {
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-xl font-display font-bold text-foreground mb-2">{t("contact.successTitle")}</h3>
                 <p className="text-muted-foreground">{successMsg || t("contact.successMessage")}</p>
-                <Button onClick={() => { setSubmitted(false); setSuccessMsg(""); setForm({ firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "", nationality: "", message: "" }); }} 
+                <Button onClick={() => { setSubmitted(false); setSuccessMsg(""); setForm({ firstName: "", lastName: "", email: "", phoneCode: "", phone: "", nationality: "", message: "" }); }} 
                   variant="outline" className="mt-6 rounded-full">
                   {t("contact.sendAnother")}
                 </Button>
@@ -240,7 +243,9 @@ export default function Contact() {
                         value={form.phoneCode}
                         onChange={e => setField("phoneCode", e.target.value)}
                         aria-label={t("contact.phoneCode")}
+                        required aria-required="true"
                         className="h-10 rounded-xl border border-input bg-background px-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-24">
+                        <option value="">{t("contact.phoneCode")}</option>
                         {PHONE_CODES.map(pc => (
                           <option key={pc.code} value={pc.code}>{pc.country} {pc.code}</option>
                         ))}

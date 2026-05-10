@@ -925,11 +925,11 @@ const PHONE_CODES = [
 ];
 
 function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
-  if (!fullPhone) return { phoneCode: "+90", phone: "" };
+  if (!fullPhone) return { phoneCode: "", phone: "" };
   const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
   const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
   if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length).trim() };
-  return { phoneCode: "+90", phone: fullPhone.replace(/^\+/, "").trim() };
+  return { phoneCode: "", phone: fullPhone.replace(/^\+/, "").trim() };
 }
 
 /* ── EMPTY_FORM ───────────────────────────────────────────── */
@@ -937,7 +937,7 @@ const EMPTY_FORM = {
   firstName: "",
   lastName: "",
   email: "",
-  phoneCode: "+90",
+  phoneCode: "",
   phone: "",
   source: "website",
   interestedProgram: "",

@@ -43,11 +43,12 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
   const searchRef = useRef<HTMLInputElement>(null);
 
   const selected = useMemo(() => {
+    if (!value) return null;
     if (pickedIso) {
       const m = ALL_ITEMS.find(i => i.iso === pickedIso && i.code === value);
       if (m) return m;
     }
-    return ALL_ITEMS.find(i => i.code === value) || ALL_ITEMS.find(i => i.iso === "TR")!;
+    return ALL_ITEMS.find(i => i.code === value) || null;
   }, [value, pickedIso]);
 
   useEffect(() => {
@@ -82,7 +83,7 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
   }
 
   function renderItem(item: Item) {
-    const isSelected = item.code === value && item.iso === selected.iso;
+    const isSelected = !!selected && item.code === value && item.iso === selected.iso;
     return (
       <button
         key={`${item.iso}-${item.code}`}
@@ -111,8 +112,14 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
           triggerClassName
         )}
       >
-        <CountryFlag code={selected.iso} size="sm" />
-        <span className="text-foreground font-mono text-xs flex-1 text-left">{selected.code}</span>
+        {selected ? (
+          <>
+            <CountryFlag code={selected.iso} size="sm" />
+            <span className="text-foreground font-mono text-xs flex-1 text-left">{selected.code}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground text-xs flex-1 text-left">Code</span>
+        )}
         <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
       </button>
 

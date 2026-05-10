@@ -275,7 +275,7 @@ function AiBadge() {
 type ApplyStep = "personal" | "documents" | "analyzing" | "review" | "success";
 
 const EMPTY_FORM = {
-  firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
+  firstName: "", lastName: "", email: "", phone: "", phoneCode: "",
   nationality: "", dateOfBirth: "", gender: "", notes: "",
   motherName: "", fatherName: "", passportNumber: "",
   passportIssueDate: "", passportExpiry: "",
@@ -363,7 +363,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         if (cancelled) return;
         if (profile && typeof profile === "object") {
           const phoneStr = (profile as any).phone || user?.phone || "";
-          const { code, number } = splitPhoneNumber(phoneStr, "+90");
+          const { code, number } = splitPhoneNumber(phoneStr, "");
           setForm(f => ({
             ...f,
             firstName: (profile as any).firstName || user?.firstName || f.firstName,
@@ -474,7 +474,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   }
 
   async function handleNextPersonal() {
-    if (!form.firstName || !form.lastName || !form.email || !form.phone) {
+    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.phoneCode) {
       toast({ title: t("apply.fillAllFields"), variant: "destructive" });
       return;
     }
@@ -637,7 +637,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   async function handleSubmit() {
     setEmailError(null);
 
-    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.motherName || !form.fatherName || !form.nationality || !form.gender) {
+    if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.phoneCode || !form.motherName || !form.fatherName || !form.nationality || !form.gender) {
       toast({ title: t("apply.fillRequiredFields"), variant: "destructive" });
       return;
     }
