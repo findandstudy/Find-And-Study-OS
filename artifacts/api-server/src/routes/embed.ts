@@ -1,12 +1,16 @@
 import { Router, type IRouter } from "express";
-import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable } from "@workspace/db";
-import { eq, ilike, sql, and, desc, inArray } from "drizzle-orm";
+import crypto from "crypto";
+import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable } from "@workspace/db";
+import { eq, ilike, sql, and, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { createApplicationForStudent } from "./public-apply";
+import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
+import { generateSecureToken } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -373,6 +377,56 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
   }
 });
 
+// Step-1 lead capture for the embed widget. Mirrors /public/lead but is
+// slug-aware so the lead is tagged with `embed:<slug>` and validated against
+// the widget's allowed-domains list. Called by the widget JS when the user
+// clicks "Continue" on the Personal Info step so the lead lands in the
+// "new" column even if the user abandons the form before submitting docs.
+router.post("/public/embed/:slug/lead", embedSubmitLimiter, async (req, res): Promise<void> => {
+  const { slug } = req.params;
+  const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
+  if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+
+  const origin = req.headers.origin as string | undefined;
+  const referer = req.headers.referer as string | undefined;
+  if (!validateDomain(widget, origin, referer)) {
+    res.status(403).json({ error: "Domain not allowed" });
+    return;
+  }
+
+  const { firstName, lastName, email, phone, countryCode, programName, universityName, _hp } = req.body;
+  if (_hp) { res.json({ success: true, leadId: null }); return; }
+
+  if (!firstName || !lastName || !email) {
+    res.status(400).json({ error: "firstName, lastName, and email are required" });
+    return;
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    res.status(400).json({ error: "Invalid email format" });
+    return;
+  }
+
+  const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
+
+  try {
+    const [lead] = await db.insert(leadsTable).values({
+      firstName: s(firstName, 100)!,
+      lastName: s(lastName, 100)!,
+      email: s(email, 255),
+      phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+      source: `embed:${widget.slug}`,
+      status: "new",
+      interestedProgram: s(programName, 255),
+      interestedCountry: s(universityName, 255),
+    }).returning();
+    res.status(201).json({ success: true, leadId: lead.id });
+  } catch (err: any) {
+    console.error("[embed/lead] failed:", err?.message || err);
+    res.status(500).json({ error: "Failed to save lead" });
+  }
+});
+
 router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): Promise<void> => {
   const { slug } = req.params;
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
@@ -385,7 +439,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     return;
   }
 
-  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData } = req.body;
+  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, leadId: incomingLeadId, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, highSchool, graduationYear, gpa, languageScore } = req.body;
 
   if (_hp) { res.json({ success: true }); return; }
 
@@ -431,19 +485,60 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     return;
   }
 
+  // Resolve the lead row: prefer the leadId already issued during Step 1
+  // (from POST /public/embed/:slug/lead). If absent or invalid, create a
+  // fresh lead now so direct submissions still work. We update the
+  // existing lead with the richer payload collected during the form.
+  //
+  // SECURITY: never trust a client-supplied leadId blindly — that would
+  // let an attacker overwrite or convert any lead in the system by
+  // guessing IDs (IDOR). Only reuse the lead when it was issued by the
+  // SAME widget slug AND the submitted email matches the original lead's
+  // email. Anything else falls back to inserting a fresh lead row.
+  const incomingLeadIdNum = incomingLeadId ? parseInt(String(incomingLeadId), 10) : null;
+  let leadRow: typeof leadsTable.$inferSelect | null = null;
+  if (incomingLeadIdNum && Number.isFinite(incomingLeadIdNum) && incomingLeadIdNum > 0) {
+    const [found] = await db.select().from(leadsTable).where(eq(leadsTable.id, incomingLeadIdNum));
+    if (found) {
+      const expectedSource = `embed:${widget.slug}`;
+      const submittedEmail = String(email || "").toLowerCase().trim();
+      const leadEmail = String(found.email || "").toLowerCase().trim();
+      if (found.source === expectedSource && submittedEmail && leadEmail && submittedEmail === leadEmail) {
+        leadRow = found;
+      } else {
+        console.warn(`[embed/apply] Rejected leadId=${incomingLeadIdNum} reuse — source/email mismatch (slug=${widget.slug})`);
+      }
+    }
+  }
+
   const result = await db.transaction(async (tx) => {
-    const [lead] = await tx.insert(leadsTable).values({
-      firstName: s(firstName, 100)!,
-      lastName: s(lastName, 100)!,
-      email: s(email, 255),
-      phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
-      nationality: s(nationality, 100),
-      source: `embed:${widget.slug}`,
-      status: "new",
-      interestedProgram: s(programName || desiredProgram, 255),
-      interestedCountry: null,
-      notes: s(message, 2000),
-    }).returning();
+    let lead;
+    if (leadRow) {
+      const [updated] = await tx.update(leadsTable).set({
+        firstName: s(firstName, 100)!,
+        lastName: s(lastName, 100)!,
+        email: s(email, 255),
+        phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+        nationality: s(nationality, 100),
+        interestedProgram: s(programName || desiredProgram, 255),
+        notes: s(message, 2000),
+      }).where(eq(leadsTable.id, leadRow.id)).returning();
+      lead = updated;
+    } else {
+      const [inserted] = await tx.insert(leadsTable).values({
+        firstName: s(firstName, 100)!,
+        lastName: s(lastName, 100)!,
+        email: s(email, 255),
+        phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+        nationality: s(nationality, 100),
+        source: `embed:${widget.slug}`,
+        status: "new",
+        interestedProgram: s(programName || desiredProgram, 255),
+        interestedCountry: null,
+        notes: s(message, 2000),
+      }).returning();
+      lead = inserted;
+    }
 
     const [submission] = await tx.insert(embedSubmissionsTable).values({
       widgetId: widget.id,
@@ -473,13 +568,140 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
       status: "new",
     }).returning();
 
-    if (docArray.length > 0) {
+    return { leadId: lead.id, submissionId: submission.id };
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // After the lead+submission row is saved, create a student account and
+  // application so the embed submission shows up in the same Students /
+  // Applications views as a public-apply submission. Mirrors the
+  // public-apply flow but is more permissive about missing fields (the
+  // embed widget collects fewer data points than the full Programs.tsx
+  // dialog). On any failure we still return success for the lead — the
+  // staff can finish the conversion manually from the lead row.
+  // ─────────────────────────────────────────────────────────────────────
+  let resultStudentId: number | null = null;
+  let resultAppId: number | null = null;
+  try {
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+
+    if (existingUser && existingUser.role === "student") {
+      const [existingStudent] = await db.select().from(studentsTable)
+        .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
+      if (existingStudent) {
+        resultStudentId = existingStudent.id;
+        const reuseAppResult = await createApplicationForStudent(
+          existingStudent.id,
+          programId ? parseInt(String(programId), 10) : null,
+          s(programName, 255),
+          s(universityName, 255),
+          existingStudent.gpa || s(gpa, 20) || null,
+          existingStudent.languageScore || s(languageScore, 20) || null,
+        );
+        resultAppId = reuseAppResult.appId;
+      }
+    }
+
+    if (!resultStudentId && (!existingUser || existingUser.role === "student")) {
+      // Create a placeholder user + student record. Account starts inactive
+      // and unverified; staff can invite the student later when they want
+      // to give them portal access.
+      let userId: number;
+      if (existingUser) {
+        userId = existingUser.id;
+      } else {
+        const passwordToken = generateSecureToken();
+        const verificationToken = generateSecureToken();
+        const [newUser] = await db.insert(usersTable).values({
+          email: normalizedEmail,
+          firstName: s(firstName, 100)!,
+          lastName: s(lastName, 100)!,
+          phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+          role: "student",
+          isActive: false,
+          emailVerified: false,
+          language: "en",
+          passwordResetToken: crypto.createHash("sha256").update(passwordToken).digest("hex"),
+          passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),
+          emailVerificationToken: verificationToken,
+          createdFromSource: `embed:${widget.slug}`,
+        }).returning();
+        userId = newUser.id;
+      }
+
+      // Reuse an archived student row for this email if present.
+      const [archivedByEmail] = await db.select().from(studentsTable)
+        .where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
+
+      let newStudent: any;
+      if (archivedByEmail) {
+        await db.update(studentsTable).set({ deletedAt: null, userId }).where(eq(studentsTable.id, archivedByEmail.id));
+        newStudent = { ...archivedByEmail, deletedAt: null, userId };
+      } else {
+        const normalizedGender = gender ? String(gender).toLowerCase() : null;
+        const safeGender = (normalizedGender === "female" || normalizedGender === "male") ? normalizedGender : null;
+        [newStudent] = await db.insert(studentsTable).values({
+          userId,
+          firstName: s(firstName, 100)!,
+          lastName: s(lastName, 100)!,
+          email: normalizedEmail,
+          phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+          nationality: s(nationality, 100),
+          dateOfBirth: s(dateOfBirth, 20),
+          gender: safeGender,
+          motherName: s(motherName, 100),
+          fatherName: s(fatherName, 100),
+          passportNumber: s(passportNumber, 50),
+          passportIssueDate: s(passportIssueDate, 20),
+          passportExpiry: s(passportExpiry, 20),
+          address: s(address, 300),
+          highSchool: s(highSchool, 200),
+          graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
+          gpa: s(gpa, 20),
+          languageScore: s(languageScore, 20),
+        }).returning();
+      }
+      resultStudentId = newStudent.id;
+      const newAppResult = await createApplicationForStudent(
+        newStudent.id,
+        programId ? parseInt(String(programId), 10) : null,
+        s(programName, 255),
+        s(universityName, 255),
+        s(gpa, 20),
+        s(languageScore, 20),
+      );
+      resultAppId = newAppResult.appId;
+    }
+
+    // Attach the uploaded documents to the student/application so they
+    // surface in the application detail view, not just on the lead row.
+    if (docArray.length > 0 && resultStudentId && resultAppId) {
       for (const doc of docArray) {
         if (!doc.label || !doc.data) continue;
         const docType = String(doc.label || "other").toLowerCase();
         const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
-        await tx.insert(documentsTable).values({
-          leadId: lead.id,
+        await db.insert(documentsTable).values({
+          studentId: resultStudentId,
+          applicationId: resultAppId,
+          leadId: result.leadId,
+          name: docName,
+          type: docType,
+          status: "pending",
+          fileData: doc.data,
+          mimeType: doc.mediaType || null,
+          sizeBytes: doc.sizeBytes || null,
+        });
+      }
+    } else if (docArray.length > 0) {
+      // Fallback: attach to the lead only (legacy behavior) so files are
+      // not lost when student/app creation could not be performed.
+      for (const doc of docArray) {
+        if (!doc.label || !doc.data) continue;
+        const docType = String(doc.label || "other").toLowerCase();
+        const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
+        await db.insert(documentsTable).values({
+          leadId: result.leadId,
           name: docName,
           type: docType,
           status: "pending",
@@ -490,10 +712,83 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
       }
     }
 
-    return { leadId: lead.id, submissionId: submission.id };
-  });
+    // Auto-convert the lead → "converted" + flip student → "active" when
+    // the application has every required document group covered. Mirrors
+    // the same heuristic used in /public/apply.
+    if (resultStudentId && resultAppId) {
+      try {
+        const [appRow] = await db.select({
+          programId: applicationsTable.programId,
+          level: applicationsTable.level,
+        }).from(applicationsTable).where(eq(applicationsTable.id, resultAppId));
 
-  res.status(201).json({ success: true, submissionId: result.submissionId });
+        const normalizeLevel = (level: string | null | undefined): string | null => {
+          if (!level) return null;
+          const l = level.toLowerCase().replace(/[\s.-]/g, "_");
+          if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
+          if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
+          if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
+          if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
+          if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
+          return null;
+        };
+
+        let extraTypes: string[] = [];
+        if (appRow?.programId) {
+          const reqs = await db.select({ documentType: programDocumentRequirementsTable.documentType })
+            .from(programDocumentRequirementsTable)
+            .where(eq(programDocumentRequirementsTable.programId, appRow.programId));
+          extraTypes = reqs.map(r => r.documentType);
+        }
+
+        let requiredGroups = getRelevantGroupsForLevel(normalizeLevel(appRow?.level), extraTypes);
+        if (requiredGroups === null && extraTypes.length > 0) {
+          const fromProgram = new Set<DocEquivalenceGroupId>();
+          for (const t of extraTypes) {
+            const g = getDocEquivalenceGroup(t);
+            if (g) fromProgram.add(g);
+          }
+          if (fromProgram.size > 0) requiredGroups = fromProgram;
+        }
+
+        const appDocs = await db.select({ type: documentsTable.type, status: documentsTable.status })
+          .from(documentsTable)
+          .where(and(
+            eq(documentsTable.applicationId, resultAppId),
+            isNull(documentsTable.deletedAt),
+          ));
+        const coveredGroups = new Set<DocEquivalenceGroupId>();
+        for (const d of appDocs) {
+          if (d.status === "rejected") continue;
+          const g = getDocEquivalenceGroup(d.type || "");
+          if (g) coveredGroups.add(g);
+        }
+
+        let isDocumentComplete = true;
+        if (requiredGroups && requiredGroups.size > 0) {
+          for (const g of requiredGroups) {
+            if (!coveredGroups.has(g)) { isDocumentComplete = false; break; }
+          }
+        }
+
+        if (isDocumentComplete) {
+          await db.update(studentsTable)
+            .set({ status: "active" })
+            .where(eq(studentsTable.id, resultStudentId));
+          await db.update(leadsTable)
+            .set({ status: "converted", convertedStudentId: resultStudentId })
+            .where(eq(leadsTable.id, result.leadId));
+          console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug})`);
+        }
+      } catch (convertErr) {
+        console.error("[EMBED-APPLY] Failed to evaluate document completion / auto-convert:", convertErr);
+      }
+    }
+  } catch (postErr) {
+    console.error("[EMBED-APPLY] Post-processing (student/app/auto-convert) failed:", postErr);
+  }
+
+  res.status(201).json({ success: true, submissionId: result.submissionId, leadId: result.leadId, studentId: resultStudentId, applicationId: resultAppId });
 });
 
 router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
@@ -1515,7 +1810,7 @@ function showDetailModal(){
     var pid=parseInt(applyBtn.getAttribute('data-apply'));
     closeDetailModal();
     formProgram=programs.find(function(p){return p.id===pid})||null;
-    formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
+    formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;
     showModal();
     loadProgramDocs(pid,function(){if(formOpen)showModal();});
   });
@@ -1639,6 +1934,11 @@ function bindModalEvents(modal,overlay){
 }
 
 var savedFormData={};
+// Lead id issued by POST /public/embed/<slug>/lead during Step 1. Sent
+// back on the final /apply call so the server reuses (instead of
+// duplicating) the existing "new" lead and can flip it to "converted".
+var leadId=null;
+var leadCreating=false;
 // Optional override for where handleAnalyze() should land after the AI
 // extract finishes. Set inside .then() (e.g. expired-passport branch)
 // before returning so the trailing .finally() honors the chosen step
@@ -1668,8 +1968,42 @@ function handleNextPersonal(scope){
     alert('Please fill in all required fields, including the phone country code.');
     return;
   }
-  formStep='documents';
-  if(formOpen)showModal();else render(false);
+  // If a lead was already issued during this session (user clicked Next,
+  // came back, edited, clicked Next again) skip the create call and just
+  // advance — the final /apply will update that same row.
+  if(leadId||leadCreating){
+    formStep='documents';
+    if(formOpen)showModal();else render(false);
+    return;
+  }
+  leadCreating=true;
+  var leadPayload={
+    firstName:savedFormData.firstName,
+    lastName:savedFormData.lastName,
+    email:savedFormData.email,
+    phone:savedFormData.phone,
+    countryCode:savedFormData.countryCode,
+    programName:formProgram?formProgram.name:null,
+    universityName:formProgram?formProgram.universityName:null
+  };
+  fetch(API+'/lead',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(leadPayload)
+  }).then(function(r){
+    return r.json().then(function(d){return {ok:r.ok,data:d}});
+  }).then(function(res){
+    leadCreating=false;
+    if(res.ok&&res.data&&res.data.leadId)leadId=res.data.leadId;
+    // Always advance — failing to create the lead should not block the
+    // user from completing the form. The final /apply will create it.
+    formStep='documents';
+    if(formOpen)showModal();else render(false);
+  }).catch(function(){
+    leadCreating=false;
+    formStep='documents';
+    if(formOpen)showModal();else render(false);
+  });
 }
 
 function handleAnalyze(){
@@ -1760,6 +2094,7 @@ function handleFormSubmit(e){
     });
   }
   if(aiResult)data.aiExtractedData=aiResult;
+  if(leadId)data.leadId=leadId;
   fetch(API+'/apply',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1797,7 +2132,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
-      formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};
+      formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;
       loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();
     });

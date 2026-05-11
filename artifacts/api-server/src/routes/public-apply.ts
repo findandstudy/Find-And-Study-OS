@@ -99,7 +99,7 @@ async function precheckProgramEligibility(
   return null;
 }
 
-async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {
+export async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {
   try {
     let snapshotTuitionFee: number | null = null;
     let snapshotDiscountedFee: number | null = null;
