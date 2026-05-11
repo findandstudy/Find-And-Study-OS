@@ -492,6 +492,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       return;
     }
 
+    // Lead capture is BEST-EFFORT — never block the applicant from
+    // advancing to Documents/Review/Submit if /public/lead fails (e.g.
+    // strict name normalization, rate limit, transient network issue).
+    // The final /public/apply call will create the lead row if needed,
+    // and the user's primary goal is to submit the application — the
+    // CRM-side lead row is a nice-to-have, not a hard prerequisite.
     setCreatingLead(true);
     try {
       const resp = await fetch(`${BASE_URL}/api/public/lead`, {
@@ -507,19 +513,23 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         }),
       });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: t("apply.failedToSave") }));
-        toast({ title: err.error || t("apply.failedToSave"), variant: "destructive" });
-        return;
+      if (resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        if (data?.leadId) setLeadId(data.leadId);
+      } else {
+        // Log for staff visibility but do not block the user.
+        try {
+          const err = await resp.json();
+          console.warn("[apply] lead capture failed (non-blocking):", err?.error || resp.status);
+        } catch {
+          console.warn("[apply] lead capture failed (non-blocking):", resp.status);
+        }
       }
-
-      const data = await resp.json();
-      if (data.leadId) setLeadId(data.leadId);
-      setStep("documents");
-    } catch {
-      toast({ title: t("apply.failedToSave"), variant: "destructive" });
+    } catch (e) {
+      console.warn("[apply] lead capture network error (non-blocking):", e);
     } finally {
       setCreatingLead(false);
+      setStep("documents");
     }
   }
 
