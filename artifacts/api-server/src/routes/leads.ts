@@ -144,16 +144,14 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     conditions.push(inArray(leadsTable.branchId, visibleBranchIds));
   }
   if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    // Non-admin staff (manager/staff/consultant/editor/accountant): see only
+    // leads explicitly assigned to them or still unassigned. Origin (direct
+    // vs agent vs sub_agent) is intentionally NOT a filter here — once a
+    // lead has been routed to a staff member, they need to handle it.
     conditions.push(
       or(
         eq(leadsTable.assignedToId, user.id),
         isNull(leadsTable.assignedToId)
-      )
-    );
-    conditions.push(
-      or(
-        eq(leadsTable.originType, "direct"),
-        isNull(leadsTable.originType)
       )
     );
   }
@@ -276,10 +274,6 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       res.status(403).json({ error: "Access denied" });
       return;
     }
-    if (lead.originType && lead.originType !== "direct") {
-      res.status(403).json({ error: "Access denied" });
-      return;
-    }
   }
   res.json(lead);
 });
@@ -308,10 +302,6 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
     if (existing.assignedToId !== null && existing.assignedToId !== user.id) {
-      res.status(403).json({ error: "Access denied" });
-      return;
-    }
-    if (existing.originType && existing.originType !== "direct") {
       res.status(403).json({ error: "Access denied" });
       return;
     }

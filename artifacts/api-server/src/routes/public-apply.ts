@@ -495,13 +495,9 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
       console.log(`[PUBLIC-APPLY] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id})`);
     }
 
-    if (leadId) {
-      try {
-        await db.update(leadsTable).set({ status: "converted" }).where(eq(leadsTable.id, parseInt(String(leadId), 10)));
-      } catch (e) {
-        console.error("[PUBLIC-APPLY] Failed to update lead status:", e);
-      }
-    }
+    // Lead → student/application conversion happens AFTER document linking
+    // below, conditional on the application being document-complete. See the
+    // "auto-convert lead + activate student" block at the end of this handler.
 
     if (Array.isArray(documents) && documents.length > 0 && resultStudentId && resultAppId) {
       const MAX_DOCS = 10;
@@ -719,6 +715,101 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
         }
       } catch (reuseErr) {
         console.error("[PUBLIC-APPLY] Failed to reuse existing documents:", reuseErr);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Auto-convert lead + activate student when the application is
+    // document-complete.
+    //
+    // Spec: when a public apply submission ends with every required
+    // document attached to the new application, we treat the funnel as
+    // fully closed:
+    //   - lead.status            → "converted" (+ convertedStudentId set)
+    //   - student.status         → "active"
+    //   - application.stage      → "inquiry"  (already set on insert)
+    //
+    // Otherwise (partial docs) we leave the lead status untouched so
+    // staff can still work it manually, and we keep whatever interim
+    // student status createApplicationForStudent assigned.
+    // ─────────────────────────────────────────────────────────────────────
+    if (resultStudentId && resultAppId) {
+      try {
+        const [appRow] = await db.select({
+          programId: applicationsTable.programId,
+          level: applicationsTable.level,
+        }).from(applicationsTable).where(eq(applicationsTable.id, resultAppId));
+
+        const normalizeLevel = (level: string | null | undefined): string | null => {
+          if (!level) return null;
+          const l = level.toLowerCase().replace(/[\s.-]/g, "_");
+          if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
+          if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
+          if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
+          if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
+          if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
+          return null;
+        };
+
+        let extraTypes: string[] = [];
+        if (appRow?.programId) {
+          const reqs = await db.select({ documentType: programDocumentRequirementsTable.documentType })
+            .from(programDocumentRequirementsTable)
+            .where(eq(programDocumentRequirementsTable.programId, appRow.programId));
+          extraTypes = reqs.map(r => r.documentType);
+        }
+
+        let requiredGroups = getRelevantGroupsForLevel(normalizeLevel(appRow?.level), extraTypes);
+        if (requiredGroups === null && extraTypes.length > 0) {
+          const fromProgram = new Set<DocEquivalenceGroupId>();
+          for (const t of extraTypes) {
+            const g = getDocEquivalenceGroup(t);
+            if (g) fromProgram.add(g);
+          }
+          if (fromProgram.size > 0) requiredGroups = fromProgram;
+        }
+
+        // Compute which groups the application actually has covered.
+        const appDocs = await db.select({ type: documentsTable.type, status: documentsTable.status })
+          .from(documentsTable)
+          .where(and(
+            eq(documentsTable.applicationId, resultAppId),
+            isNull(documentsTable.deletedAt),
+          ));
+        const coveredGroups = new Set<DocEquivalenceGroupId>();
+        for (const d of appDocs) {
+          if (d.status === "rejected") continue;
+          const g = getDocEquivalenceGroup(d.type || "");
+          if (g) coveredGroups.add(g);
+        }
+
+        let isDocumentComplete = true;
+        if (requiredGroups && requiredGroups.size > 0) {
+          for (const g of requiredGroups) {
+            if (!coveredGroups.has(g)) { isDocumentComplete = false; break; }
+          }
+        }
+
+        if (isDocumentComplete) {
+          await db.update(studentsTable)
+            .set({ status: "active" })
+            .where(eq(studentsTable.id, resultStudentId));
+
+          if (leadId) {
+            const leadIdNum = parseInt(String(leadId), 10);
+            if (Number.isFinite(leadIdNum) && leadIdNum > 0) {
+              await db.update(leadsTable)
+                .set({ status: "converted", convertedStudentId: resultStudentId })
+                .where(eq(leadsTable.id, leadIdNum));
+              console.log(`[PUBLIC-APPLY] Auto-converted lead #${leadIdNum} → student #${resultStudentId} (all required docs present)`);
+            }
+          }
+          console.log(`[PUBLIC-APPLY] Application #${resultAppId} is document-complete — student #${resultStudentId} → active`);
+        } else {
+          console.log(`[PUBLIC-APPLY] Application #${resultAppId} is missing required documents — lead/student status unchanged`);
+        }
+      } catch (convertErr) {
+        console.error("[PUBLIC-APPLY] Failed to evaluate document completion / auto-convert:", convertErr);
       }
     }
 
