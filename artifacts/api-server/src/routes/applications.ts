@@ -85,6 +85,16 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
     if (agentId) conditions.push(eq(applicationsTable.agentId, parseInt(agentId, 10)));
     if (stage) conditions.push(eq(applicationsTable.stage, stage));
+    // Non-admin staff: only see applications assigned to them or unassigned
+    // (mirrors the leads / students lists). Admins see everything in scope.
+    if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+      conditions.push(
+        orFn(
+          eq(applicationsTable.assignedToId, user.id),
+          isNull(applicationsTable.assignedToId),
+        )!,
+      );
+    }
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
     if (!studentRec) {
@@ -107,10 +117,10 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
-        res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
-        return;
+        conditions.push(isNull(applicationsTable.branchId));
+      } else {
+        conditions.push(orFn(inArray(applicationsTable.branchId, visibleBranchIds), isNull(applicationsTable.branchId))!);
       }
-      conditions.push(inArray(applicationsTable.branchId, visibleBranchIds));
     }
   }
 

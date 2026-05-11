@@ -135,14 +135,16 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     );
   }
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
+  // Null-branch students (created via public apply popup, embed widgets) are
+  // visible to any branch-scoped user so they can be claimed and assigned.
   if (user.role !== "student") {
     const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
-        res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
-        return;
+        conditions.push(isNull(studentsTable.branchId));
+      } else {
+        conditions.push(or(inArray(studentsTable.branchId, visibleBranchIds), isNull(studentsTable.branchId))!);
       }
-      conditions.push(inArray(studentsTable.branchId, visibleBranchIds));
     }
   }
   if (search) {

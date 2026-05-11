@@ -316,8 +316,11 @@ router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("
   if (user.role !== "student") {
     const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
     if (visibleBranchIds !== null) {
-      if (visibleBranchIds.length === 0) { res.json([]); return; }
-      conditions.push(inArray(studentsTable.branchId, visibleBranchIds));
+      if (visibleBranchIds.length === 0) {
+        conditions.push(isNull(studentsTable.branchId));
+      } else {
+        conditions.push(or(inArray(studentsTable.branchId, visibleBranchIds), isNull(studentsTable.branchId))!);
+      }
     }
   }
 

@@ -135,13 +135,18 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     conditions.push(inArray(leadsTable.agentId, visibleIds));
   }
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
+  // We include null-branch records: public-form leads (POST /public/lead,
+  // embed widgets, course-finder apply popup step 1) are created without a
+  // branch, so excluding nulls would hide every web inbox lead from
+  // branch-scoped staff. Treat null-branch as "global / unassigned to a
+  // branch — visible to any branch's staff so they can pick it up".
   const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
   if (visibleBranchIds !== null) {
     if (visibleBranchIds.length === 0) {
-      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
-      return;
+      conditions.push(isNull(leadsTable.branchId));
+    } else {
+      conditions.push(or(inArray(leadsTable.branchId, visibleBranchIds), isNull(leadsTable.branchId))!);
     }
-    conditions.push(inArray(leadsTable.branchId, visibleBranchIds));
   }
   if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
     // Non-admin staff (manager/staff/consultant/editor/accountant): see only

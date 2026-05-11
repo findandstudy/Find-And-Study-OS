@@ -317,6 +317,39 @@ async function backfillStudentAppStatus() {
   }
 }
 
+async function backfillLeadConversion() {
+  // Past public-form / embed flows didn't always promote a lead when the
+  // applicant later completed full apply. Reconcile retroactively: any lead
+  // whose email matches a student that already has at least one application
+  // should be marked converted and linked. Idempotent — only touches rows
+  // that are still in a pre-converted state OR missing the link.
+  try {
+    const result = await db.execute(sql`
+      UPDATE leads l
+      SET status = 'converted',
+          converted_student_id = sub.student_id,
+          updated_at = NOW()
+      FROM (
+        SELECT DISTINCT ON (LOWER(s.email)) LOWER(s.email) AS email_key, s.id AS student_id
+        FROM students s
+        WHERE s.email IS NOT NULL
+          AND s.email <> ''
+          AND s.deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM applications a WHERE a.student_id = s.id AND a.deleted_at IS NULL)
+        ORDER BY LOWER(s.email), s.created_at ASC
+      ) sub
+      WHERE LOWER(l.email) = sub.email_key
+        AND (l.status <> 'converted' OR l.converted_student_id IS NULL)
+    `);
+    const count = (result as any)?.rowCount || 0;
+    if (count > 0) {
+      console.log(`[backfill] Linked ${count} historical lead(s) to existing students with applications (status=converted)`);
+    }
+  } catch (err) {
+    console.error("[backfill] backfillLeadConversion error:", err);
+  }
+}
+
 async function seedClaudeIntegration() {
   const envKey = process.env.ANTHROPIC_API_KEY;
   if (!envKey) return;
@@ -531,6 +564,7 @@ async function seedClaudeIntegration() {
       await backfillConversationChannel();
       await backfillMissingCommissions();
       await backfillStudentAppStatus();
+      await backfillLeadConversion();
     }
 
     // One-shot data cleanup (idempotent via system_flags). Runs on every
