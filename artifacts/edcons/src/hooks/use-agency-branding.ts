@@ -1,17 +1,21 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { setActiveAgencyBusinessName } from "@/lib/agency-branding-store";
 
 const AGENT_ROLES = new Set(["agent", "sub_agent", "agent_staff"]);
+const STATIC_FAVICON = "/favicon.svg";
+const STATIC_TITLE = "Find And Study";
+const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
-function setIcon(href: string) {
+function setIcon(href: string, type?: string) {
   document.querySelectorAll<HTMLLinkElement>(
     'link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'
   ).forEach((el) => el.remove());
   const link = document.createElement("link");
   link.rel = "icon";
+  if (type) link.type = type;
   link.href = href;
   document.head.appendChild(link);
   const apple = document.createElement("link");
@@ -20,41 +24,34 @@ function setIcon(href: string) {
   document.head.appendChild(apple);
 }
 
-function restoreDefaultIcon(href: string) {
-  document.querySelectorAll<HTMLLinkElement>(
-    'link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'
-  ).forEach((el) => el.remove());
-  const link = document.createElement("link");
-  link.rel = "icon";
-  link.type = "image/svg+xml";
-  link.href = href;
-  document.head.appendChild(link);
-  const apple = document.createElement("link");
-  apple.rel = "apple-touch-icon";
-  apple.setAttribute("sizes", "180x180");
-  apple.href = "/apple-touch-icon.png";
-  document.head.appendChild(apple);
-}
-
 /**
- * When an agent / sub_agent / agent_staff is logged in, override the browser
- * tab title with their configured business name and the favicon with their
- * uploaded logo. Reverts to the default app branding for everyone else.
+ * Browser tab branding (favicon + title) by role:
+ *
+ * - **Agent roles** (agent / sub_agent / agent_staff): show the agent's own
+ *   uploaded logo and business name. This is per-account white-labeling so
+ *   each agency sees their own brand on their tab.
+ * - **Everyone else** (super_admin / admin / staff / student / public visitor):
+ *   show the main tenant brand — the logo/favicon configured by the portal
+ *   admin in Settings → Branding, falling back to the static `/favicon.svg`
+ *   shipped with the app and the static base title.
+ *
+ * Defaults are *never* read from the live DOM: doing so would let one
+ * session's agent logo leak in as the "default" for the next session
+ * (e.g. after switching accounts without a hard reload).
  */
 export function useAgencyBranding() {
   const { user } = useAuth();
   const role = (user as any)?.role as string | undefined;
   const isAgent = !!role && AGENT_ROLES.has(role);
 
-  const defaultsRef = useRef<{ title: string; favicon: string } | null>(null);
-  if (defaultsRef.current === null && typeof document !== "undefined") {
-    const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    defaultsRef.current = {
-      title: document.title || "Find And Study",
-      favicon: existing?.href || "/favicon.svg",
-    };
-  }
+  // Tenant branding (public endpoint, safe for any role and even logged out).
+  const { data: tenantBranding } = useQuery({
+    queryKey: ["settings", "branding", "tab"],
+    queryFn: () => customFetch<any>("/api/settings/branding"),
+    staleTime: 5 * 60_000,
+  });
 
+  // Agent's own profile only when the logged-in user is an agent role.
   const { data: agentProfile } = useQuery({
     queryKey: ["agent-me", "branding"],
     queryFn: () => customFetch<any>("/api/agents/me"),
@@ -63,14 +60,23 @@ export function useAgencyBranding() {
   });
 
   useEffect(() => {
-    const defaults = defaultsRef.current;
-    if (!defaults) return;
+    // Tenant defaults — same for super_admin, admin, staff, student, public.
+    const tenantTitle = (tenantBranding?.publicBrandName || tenantBranding?.companyName || "").trim() || STATIC_TITLE;
+    const tenantFaviconRaw = tenantBranding?.faviconUrl || tenantBranding?.logoUrl || "";
+    const tenantFavicon = tenantFaviconRaw
+      ? `${BASE_URL}/api/settings/branding/logo`
+      : STATIC_FAVICON;
+    const tenantFaviconType = tenantFaviconRaw ? undefined : "image/svg+xml";
+
     if (!isAgent) {
       setActiveAgencyBusinessName(null);
-      document.title = defaults.title;
-      restoreDefaultIcon(defaults.favicon);
+      document.title = tenantTitle;
+      setIcon(tenantFavicon, tenantFaviconType);
       return;
     }
+
+    // Agent role — wait until we know their profile before swapping anything,
+    // so we don't briefly show tenant branding then flicker to the agent's.
     if (!agentProfile) return;
     const businessName = (agentProfile.businessName || "").trim();
     if (businessName) {
@@ -78,20 +84,30 @@ export function useAgencyBranding() {
       document.title = businessName;
     } else {
       setActiveAgencyBusinessName(null);
-      document.title = defaults.title;
+      document.title = tenantTitle;
     }
-    if (agentProfile.logoUrl) setIcon(agentProfile.logoUrl);
-    else restoreDefaultIcon(defaults.favicon);
-  }, [isAgent, agentProfile?.businessName, agentProfile?.logoUrl]);
+    if (agentProfile.logoUrl) {
+      setIcon(agentProfile.logoUrl);
+    } else {
+      setIcon(tenantFavicon, tenantFaviconType);
+    }
+  }, [
+    isAgent,
+    agentProfile?.businessName,
+    agentProfile?.logoUrl,
+    tenantBranding?.publicBrandName,
+    tenantBranding?.companyName,
+    tenantBranding?.faviconUrl,
+    tenantBranding?.logoUrl,
+  ]);
 
-  // On unmount (full app teardown), restore defaults.
+  // On full app teardown, restore the static defaults so a stale agent logo
+  // never persists into a fresh session.
   useEffect(() => {
     return () => {
-      const defaults = defaultsRef.current;
-      if (!defaults) return;
       setActiveAgencyBusinessName(null);
-      document.title = defaults.title;
-      restoreDefaultIcon(defaults.favicon);
+      document.title = STATIC_TITLE;
+      setIcon(STATIC_FAVICON, "image/svg+xml");
     };
   }, []);
 }
