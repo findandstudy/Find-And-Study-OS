@@ -408,10 +408,21 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
         return;
       }
     }
-    // Branch scoping (applies to both staff and agents).
+    // Branch scoping (applies to both staff and agents). Mirrors the
+    // listing semantics in /course-finder/students and /students:
+    //  - visibleBranchIds=null    → unrestricted (admin-equivalent)
+    //  - visibleBranchIds=[ids]   → only those branches OR null-branch
+    //  - visibleBranchIds=[]      → only null-branch students allowed
+    // Returning a blanket 403 when the list is empty would deny legitimate
+    // access to null-branch students that ARE visible in the picker,
+    // breaking the listing/apply consistency contract.
     const visibleBranchIds = await getVisibleBranchIds(req.user!.id, req.user!.role);
     if (visibleBranchIds !== null) {
-      if (visibleBranchIds.length === 0 || (student.branchId != null && !visibleBranchIds.includes(student.branchId))) {
+      const studentBranchId = student.branchId;
+      const allowed = studentBranchId == null
+        ? true
+        : visibleBranchIds.includes(studentBranchId);
+      if (!allowed) {
         res.status(403).json({ error: "You do not have access to this student" });
         return;
       }
