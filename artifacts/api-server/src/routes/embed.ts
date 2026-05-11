@@ -712,76 +712,23 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
       }
     }
 
-    // Auto-convert the lead → "converted" + flip student → "active" when
-    // the application has every required document group covered. Mirrors
-    // the same heuristic used in /public/apply.
+    // Auto-convert the lead → "converted" + flip student → "active" on
+    // every successful full submit. Spec: hitting Submit at the end of
+    // the widget IS the funnel-closing event for this lead, regardless
+    // of whether every required document group was uploaded — staff
+    // handle missing docs from the student/application detail view, not
+    // from the leads kanban "new" column.
     if (resultStudentId && resultAppId) {
       try {
-        const [appRow] = await db.select({
-          programId: applicationsTable.programId,
-          level: applicationsTable.level,
-        }).from(applicationsTable).where(eq(applicationsTable.id, resultAppId));
-
-        const normalizeLevel = (level: string | null | undefined): string | null => {
-          if (!level) return null;
-          const l = level.toLowerCase().replace(/[\s.-]/g, "_");
-          if (["pre_bachelors", "associate", "foundation", "pre_bachelor"].some(k => l.includes(k))) return "pre_bachelors";
-          if (["bachelor"].some(k => l.includes(k)) && !l.includes("pre")) return "bachelors";
-          if (["master"].some(k => l.includes(k)) && !l.includes("pre")) return "masters";
-          if (["phd", "ph_d", "doctorate", "doctoral"].some(k => l.includes(k))) return "phd";
-          if (["language", "pathway", "other"].some(k => l.includes(k))) return "others";
-          return null;
-        };
-
-        let extraTypes: string[] = [];
-        if (appRow?.programId) {
-          const reqs = await db.select({ documentType: programDocumentRequirementsTable.documentType })
-            .from(programDocumentRequirementsTable)
-            .where(eq(programDocumentRequirementsTable.programId, appRow.programId));
-          extraTypes = reqs.map(r => r.documentType);
-        }
-
-        let requiredGroups = getRelevantGroupsForLevel(normalizeLevel(appRow?.level), extraTypes);
-        if (requiredGroups === null && extraTypes.length > 0) {
-          const fromProgram = new Set<DocEquivalenceGroupId>();
-          for (const t of extraTypes) {
-            const g = getDocEquivalenceGroup(t);
-            if (g) fromProgram.add(g);
-          }
-          if (fromProgram.size > 0) requiredGroups = fromProgram;
-        }
-
-        const appDocs = await db.select({ type: documentsTable.type, status: documentsTable.status })
-          .from(documentsTable)
-          .where(and(
-            eq(documentsTable.applicationId, resultAppId),
-            isNull(documentsTable.deletedAt),
-          ));
-        const coveredGroups = new Set<DocEquivalenceGroupId>();
-        for (const d of appDocs) {
-          if (d.status === "rejected") continue;
-          const g = getDocEquivalenceGroup(d.type || "");
-          if (g) coveredGroups.add(g);
-        }
-
-        let isDocumentComplete = true;
-        if (requiredGroups && requiredGroups.size > 0) {
-          for (const g of requiredGroups) {
-            if (!coveredGroups.has(g)) { isDocumentComplete = false; break; }
-          }
-        }
-
-        if (isDocumentComplete) {
-          await db.update(studentsTable)
-            .set({ status: "active" })
-            .where(eq(studentsTable.id, resultStudentId));
-          await db.update(leadsTable)
-            .set({ status: "converted", convertedStudentId: resultStudentId })
-            .where(eq(leadsTable.id, result.leadId));
-          console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug})`);
-        }
+        await db.update(studentsTable)
+          .set({ status: "active" })
+          .where(eq(studentsTable.id, resultStudentId));
+        await db.update(leadsTable)
+          .set({ status: "converted", convertedStudentId: resultStudentId })
+          .where(eq(leadsTable.id, result.leadId));
+        console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug})`);
       } catch (convertErr) {
-        console.error("[EMBED-APPLY] Failed to evaluate document completion / auto-convert:", convertErr);
+        console.error("[EMBED-APPLY] Failed to auto-convert lead/student:", convertErr);
       }
     }
   } catch (postErr) {
