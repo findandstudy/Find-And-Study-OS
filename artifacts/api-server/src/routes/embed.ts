@@ -634,7 +634,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
       const [archivedByEmail] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
 
-      let newStudent: any;
+      let newStudent: typeof studentsTable.$inferSelect;
       if (archivedByEmail) {
         await db.update(studentsTable).set({ deletedAt: null, userId }).where(eq(studentsTable.id, archivedByEmail.id));
         newStudent = { ...archivedByEmail, deletedAt: null, userId };
