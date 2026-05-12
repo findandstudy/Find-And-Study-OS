@@ -607,10 +607,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     const mapping: [keyof typeof EMPTY_FORM, string][] = [
       ["motherName", "motherName"], ["fatherName", "fatherName"],
       ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
+      ["gender", "gender"],
       ["passportNumber", "passportNumber"],
       ["passportIssueDate", "passportIssueDate"], ["passportExpiry", "passportExpiry"],
       ["address", "address"], ["highSchool", "highSchool"],
       ["graduationYear", "graduationYear"], ["gpa", "gpa"],
+      ["languageScore", "languageScore"],
     ];
 
     for (const [fk, ek] of mapping) {
@@ -619,6 +621,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         if (fk === "nationality") {
           const countryNames = allCountries.map(c => c.name);
           val = normalizeNationality(String(val), countryNames);
+        }
+        if (fk === "gender") {
+          const gl = String(val).trim().toLowerCase();
+          if (gl === "f" || gl === "female") val = "female";
+          else if (gl === "m" || gl === "male") val = "male";
+          else continue;
         }
         (newForm as any)[fk] = String(val);
         newExtracted.add(fk);
@@ -1092,13 +1100,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                         </div>
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-sm font-semibold">
+                        <Label className="text-sm font-semibold flex items-center">
                           {t("apply.gender")} <span className="text-destructive ml-0.5">*</span>
+                          {labelExtras("gender")}
                         </Label>
                         <select
                           value={form.gender}
                           onChange={(e) => setForm(f => ({ ...f, gender: e.target.value }))}
-                          className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                          className={`flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ${extracted.has("gender") ? "border-emerald-300 bg-emerald-50/40" : needsReview("gender") ? "border-amber-300 bg-amber-50/40" : ""}`}
                         >
                           <option value="">{t("apply.selectGender")}</option>
                           <option value="female">{t("apply.genderFemale")}</option>
@@ -1230,11 +1239,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             })()}
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-semibold">
+              <Label className="text-sm font-semibold flex items-center">
                 {t("apply.languageScore")}
+                {labelExtras("languageScore")}
               </Label>
               <Input value={form.languageScore} onChange={(e) => setForm(f => ({ ...f, languageScore: e.target.value }))}
-                placeholder={t("apply.languageScorePlaceholder")} className="rounded-xl" />
+                placeholder={t("apply.languageScorePlaceholder")} className={fieldClass("languageScore")} />
             </div>
 
             <div className="space-y-1.5">
