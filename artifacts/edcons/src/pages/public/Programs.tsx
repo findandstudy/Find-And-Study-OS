@@ -21,6 +21,7 @@ import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
+  AlertTriangle, FileText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -269,8 +270,24 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
 }
 
 function AiBadge() {
-  return <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-medium">AI</span>;
+  return <span className="ml-1.5 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-semibold tracking-wide">AI</span>;
 }
+
+function MissingHint({ label }: { label: string }) {
+  return (
+    <span className="ml-1.5 inline-flex items-center" title={label} aria-label={label}>
+      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+    </span>
+  );
+}
+
+const PASSPORT_EXTRACTED_FIELDS = new Set<string>([
+  "passportNumber", "passportIssueDate", "passportExpiry",
+  "dateOfBirth", "nationality", "motherName", "fatherName", "address",
+]);
+const DIPLOMA_EXTRACTED_FIELDS = new Set<string>([
+  "highSchool", "graduationYear", "gpa",
+]);
 
 type ApplyStep = "personal" | "documents" | "analyzing" | "review" | "success";
 
@@ -636,6 +653,17 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     setExtracted(newExtracted);
   }
 
+  function setField<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
+    setForm(f => ({ ...f, [key]: value }));
+    if (extracted.has(key as string)) {
+      setExtracted(prev => {
+        const next = new Set(prev);
+        next.delete(key as string);
+        return next;
+      });
+    }
+  }
+
   function handleSkipToReview() {
     if (missingRequired.length > 0) {
       toast({ title: t("apply.uploadRequired", { docs: missingRequired.map(d => t(d.labelKey)).join(", ") }), variant: "destructive" });
@@ -964,181 +992,242 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.firstName")} <span className="text-destructive ml-0.5">*</span>
-                  {extracted.has("firstName") && <AiBadge />}
-                </Label>
-                <Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder={t("apply.firstNamePlaceholder")} className={`rounded-xl ${extracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.lastName")} <span className="text-destructive ml-0.5">*</span>
-                  {extracted.has("lastName") && <AiBadge />}
-                </Label>
-                <Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder={t("apply.lastNamePlaceholder")} className={`rounded-xl ${extracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-            </div>
+            {(() => {
+              const hasPassportDoc =
+                Object.values(docs).some(d => d.key === "passport") ||
+                Object.values(reusableForProgram).some(r => r.type === "passport") ||
+                existingDocs.some(d => d.type === "passport" && !replacedTypes.has("passport"));
+              const hasDiplomaDoc =
+                Object.values(docs).some(d => d.key === "hs_diploma" || d.key === "hs_transcript") ||
+                Object.values(reusableForProgram).some(r => r.type === "hs_diploma" || r.type === "hs_transcript") ||
+                existingDocs.some(d => (d.type === "hs_diploma" || d.type === "hs_transcript") && !replacedTypes.has(d.type));
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.motherName")} <span className="text-destructive ml-0.5">*</span>
-                  {extracted.has("motherName") && <AiBadge />}
-                </Label>
-                <Input value={form.motherName} onChange={(e) => setForm(f => ({ ...f, motherName: e.target.value }))}
-                  placeholder={t("apply.motherNamePlaceholder")} className={`rounded-xl ${extracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.fatherName")} <span className="text-destructive ml-0.5">*</span>
-                  {extracted.has("fatherName") && <AiBadge />}
-                </Label>
-                <Input value={form.fatherName} onChange={(e) => setForm(f => ({ ...f, fatherName: e.target.value }))}
-                  placeholder={t("apply.fatherNamePlaceholder")} className={`rounded-xl ${extracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-            </div>
+              const needsReview = (key: string): boolean => {
+                const val = (form as any)[key];
+                if (val) return false;
+                if (PASSPORT_EXTRACTED_FIELDS.has(key) && hasPassportDoc) return true;
+                if (DIPLOMA_EXTRACTED_FIELDS.has(key) && hasDiplomaDoc) return true;
+                return false;
+              };
 
-            <div className="space-y-1.5">
-              <Label className="text-sm font-semibold flex items-center">
-                {t("apply.email")} <span className="text-destructive ml-0.5">*</span>
-                {extracted.has("email") && <AiBadge />}
-              </Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => { if (isLoggedInStudent) return; setForm(f => ({ ...f, email: e.target.value })); setEmailError(null); }}
-                readOnly={isLoggedInStudent}
-                placeholder={t("apply.emailPlaceholder")}
-                className={`rounded-xl ${isLoggedInStudent ? "bg-muted cursor-not-allowed" : ""} ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`}
-              />
-              {emailError && <p className="text-xs text-destructive">{emailError}</p>}
-            </div>
+              const fieldClass = (key: string) =>
+                `rounded-xl ${extracted.has(key) ? "border-emerald-300 bg-emerald-50/40" : needsReview(key) ? "border-amber-300 bg-amber-50/40" : ""}`;
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.phone")} <span className="text-destructive ml-0.5">*</span>
-                  {extracted.has("phone") && <AiBadge />}
-                </Label>
-                <div className="flex gap-1.5">
-                  <PhoneCodePicker
-                    value={form.phoneCode}
-                    onChange={(code) => setForm(f => ({ ...f, phoneCode: code }))}
-                    className="w-[110px] shrink-0"
-                    triggerClassName={extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}
-                  />
-                  <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
-                    placeholder={t("apply.phonePlaceholder")} className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("contact.nationality")} <span className="text-destructive ml-0.5">*</span>
-                  {extracted.has("nationality") && <AiBadge />}
-                </Label>
-                <select value={form.nationality} onChange={(e) => setForm(f => ({ ...f, nationality: e.target.value }))}
-                  className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
-                  <option value="">{t("apply.selectNationality")}</option>
-                  {allCountries.length > 0
-                    ? allCountries.map(c => <option key={c.id} value={c.name}>{c.flagEmoji ? `${c.flagEmoji} ${c.name}` : c.name}</option>)
-                    : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
+              const labelExtras = (key: string) => (
+                <>
+                  {extracted.has(key) && <AiBadge />}
+                  {!extracted.has(key) && needsReview(key) && (
+                    <MissingHint label={t("apply.aiCouldNotExtract")} />
+                  )}
+                </>
+              );
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.dateOfBirth")}
-                  {extracted.has("dateOfBirth") && <AiBadge />}
-                </Label>
-                <Input type="date" value={form.dateOfBirth} onChange={(e) => setForm(f => ({ ...f, dateOfBirth: e.target.value }))}
-                  className={`rounded-xl ${extracted.has("dateOfBirth") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold">
-                  {t("apply.gender")} <span className="text-destructive ml-0.5">*</span>
-                </Label>
-                <select
-                  value={form.gender}
-                  onChange={(e) => setForm(f => ({ ...f, gender: e.target.value }))}
-                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">{t("apply.selectGender")}</option>
-                  <option value="female">{t("apply.genderFemale")}</option>
-                  <option value="male">{t("apply.genderMale")}</option>
-                </select>
-              </div>
-            </div>
+              const anyExtracted = ["motherName", "fatherName", "nationality", "dateOfBirth", "passportNumber",
+                "passportIssueDate", "passportExpiry", "address", "highSchool", "graduationYear", "gpa"]
+                .some(k => extracted.has(k));
+              const extractedSectionTitle = anyExtracted || hasPassportDoc || hasDiplomaDoc
+                ? t("apply.extractedSection")
+                : t("apply.additionalInfoSection");
+              const extractedSectionHint = anyExtracted || hasPassportDoc || hasDiplomaDoc
+                ? t("apply.extractedHint")
+                : t("apply.additionalInfoHint");
 
-            <div className="space-y-1.5">
-              <Label className="text-sm font-semibold flex items-center">
-                {t("apply.passportNumber")}
-                {extracted.has("passportNumber") && <AiBadge />}
-              </Label>
-              <Input value={form.passportNumber} onChange={(e) => setForm(f => ({ ...f, passportNumber: e.target.value }))}
-                placeholder={t("apply.passportPlaceholder")} className={`rounded-xl ${extracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-            </div>
+              return (
+                <>
+                  <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Users className="w-4 h-4 text-primary" />
+                      {t("apply.personalSection")}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold flex items-center">
+                          {t("apply.firstName")} <span className="text-destructive ml-0.5">*</span>
+                          {extracted.has("firstName") && <AiBadge />}
+                        </Label>
+                        <Input value={form.firstName} onChange={(e) => setField("firstName", e.target.value)}
+                          placeholder={t("apply.firstNamePlaceholder")} className={fieldClass("firstName")} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold flex items-center">
+                          {t("apply.lastName")} <span className="text-destructive ml-0.5">*</span>
+                          {extracted.has("lastName") && <AiBadge />}
+                        </Label>
+                        <Input value={form.lastName} onChange={(e) => setField("lastName", e.target.value)}
+                          placeholder={t("apply.lastNamePlaceholder")} className={fieldClass("lastName")} />
+                      </div>
+                    </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.passportIssueDate")}
-                  {extracted.has("passportIssueDate") && <AiBadge />}
-                </Label>
-                <Input type="date" value={form.passportIssueDate} onChange={(e) => setForm(f => ({ ...f, passportIssueDate: e.target.value }))}
-                  className={`rounded-xl ${extracted.has("passportIssueDate") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.passportExpiryDate")}
-                  {extracted.has("passportExpiry") && <AiBadge />}
-                </Label>
-                <Input type="date" value={form.passportExpiry} onChange={(e) => setForm(f => ({ ...f, passportExpiry: e.target.value }))}
-                  className={`rounded-xl ${extracted.has("passportExpiry") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-            </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold flex items-center">
+                        {t("apply.email")} <span className="text-destructive ml-0.5">*</span>
+                        {extracted.has("email") && <AiBadge />}
+                      </Label>
+                      <Input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => { if (isLoggedInStudent) return; setField("email", e.target.value); setEmailError(null); }}
+                        readOnly={isLoggedInStudent}
+                        placeholder={t("apply.emailPlaceholder")}
+                        className={`rounded-xl ${isLoggedInStudent ? "bg-muted cursor-not-allowed" : ""} ${emailError ? "border-destructive" : extracted.has("email") ? "border-emerald-300 bg-emerald-50/40" : ""}`}
+                      />
+                      {emailError && <p className="text-xs text-destructive">{emailError}</p>}
+                    </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-sm font-semibold flex items-center">
-                {t("apply.address")}
-                {extracted.has("address") && <AiBadge />}
-              </Label>
-              <Input value={form.address} onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
-                placeholder={t("apply.addressPlaceholder")} className={`rounded-xl ${extracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-            </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold flex items-center">
+                          {t("apply.phone")} <span className="text-destructive ml-0.5">*</span>
+                          {extracted.has("phone") && <AiBadge />}
+                        </Label>
+                        <div className="flex gap-1.5">
+                          <PhoneCodePicker
+                            value={form.phoneCode}
+                            onChange={(code) => setForm(f => ({ ...f, phoneCode: code }))}
+                            className="w-[110px] shrink-0"
+                            triggerClassName={extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}
+                          />
+                          <Input value={form.phone} onChange={(e) => setField("phone", e.target.value)}
+                            placeholder={t("apply.phonePlaceholder")} className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold">
+                          {t("apply.gender")} <span className="text-destructive ml-0.5">*</span>
+                        </Label>
+                        <select
+                          value={form.gender}
+                          onChange={(e) => setForm(f => ({ ...f, gender: e.target.value }))}
+                          className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">{t("apply.selectGender")}</option>
+                          <option value="female">{t("apply.genderFemale")}</option>
+                          <option value="male">{t("apply.genderMale")}</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.highSchool")}
-                  {extracted.has("highSchool") && <AiBadge />}
-                </Label>
-                <Input value={form.highSchool} onChange={(e) => setForm(f => ({ ...f, highSchool: e.target.value }))}
-                  placeholder={t("apply.highSchoolPlaceholder")} className={`rounded-xl ${extracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center">
-                  {t("apply.graduationYear")}
-                  {extracted.has("graduationYear") && <AiBadge />}
-                </Label>
-                <Input value={form.graduationYear} onChange={(e) => setForm(f => ({ ...f, graduationYear: e.target.value }))}
-                  placeholder={t("apply.gradYearPlaceholder")} className={`rounded-xl ${extracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-              </div>
-            </div>
+                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-950/20 p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-foreground">{extractedSectionTitle}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{extractedSectionHint}</div>
+                      </div>
+                    </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-sm font-semibold flex items-center">
-                {t("apply.gpa")}
-                {extracted.has("gpa") && <AiBadge />}
-              </Label>
-              <Input value={form.gpa} onChange={(e) => setForm(f => ({ ...f, gpa: e.target.value }))}
-                placeholder={t("apply.gpaPlaceholder")} className={`rounded-xl ${extracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-            </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.motherName")} <span className="text-destructive ml-0.5">*</span>
+                            {labelExtras("motherName")}
+                          </Label>
+                          <Input value={form.motherName} onChange={(e) => setField("motherName", e.target.value)}
+                            placeholder={t("apply.motherNamePlaceholder")} className={fieldClass("motherName")} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.fatherName")} <span className="text-destructive ml-0.5">*</span>
+                            {labelExtras("fatherName")}
+                          </Label>
+                          <Input value={form.fatherName} onChange={(e) => setField("fatherName", e.target.value)}
+                            placeholder={t("apply.fatherNamePlaceholder")} className={fieldClass("fatherName")} />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("contact.nationality")} <span className="text-destructive ml-0.5">*</span>
+                            {labelExtras("nationality")}
+                          </Label>
+                          <select value={form.nationality} onChange={(e) => setField("nationality", e.target.value)}
+                            className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : needsReview("nationality") ? "border-amber-300 bg-amber-50/40" : ""}`}>
+                            <option value="">{t("apply.selectNationality")}</option>
+                            {allCountries.length > 0
+                              ? allCountries.map(c => <option key={c.id} value={c.name}>{c.flagEmoji ? `${c.flagEmoji} ${c.name}` : c.name}</option>)
+                              : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.dateOfBirth")}
+                            {labelExtras("dateOfBirth")}
+                          </Label>
+                          <Input type="date" value={form.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)}
+                            className={fieldClass("dateOfBirth")} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold flex items-center">
+                          {t("apply.passportNumber")}
+                          {labelExtras("passportNumber")}
+                        </Label>
+                        <Input value={form.passportNumber} onChange={(e) => setField("passportNumber", e.target.value)}
+                          placeholder={t("apply.passportPlaceholder")} className={fieldClass("passportNumber")} />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.passportIssueDate")}
+                            {labelExtras("passportIssueDate")}
+                          </Label>
+                          <Input type="date" value={form.passportIssueDate} onChange={(e) => setField("passportIssueDate", e.target.value)}
+                            className={fieldClass("passportIssueDate")} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.passportExpiryDate")}
+                            {labelExtras("passportExpiry")}
+                          </Label>
+                          <Input type="date" value={form.passportExpiry} onChange={(e) => setField("passportExpiry", e.target.value)}
+                            className={fieldClass("passportExpiry")} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold flex items-center">
+                          {t("apply.address")}
+                          {labelExtras("address")}
+                        </Label>
+                        <Input value={form.address} onChange={(e) => setField("address", e.target.value)}
+                          placeholder={t("apply.addressPlaceholder")} className={fieldClass("address")} />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.highSchool")}
+                            {labelExtras("highSchool")}
+                          </Label>
+                          <Input value={form.highSchool} onChange={(e) => setField("highSchool", e.target.value)}
+                            placeholder={t("apply.highSchoolPlaceholder")} className={fieldClass("highSchool")} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold flex items-center">
+                            {t("apply.graduationYear")}
+                            {labelExtras("graduationYear")}
+                          </Label>
+                          <Input value={form.graduationYear} onChange={(e) => setField("graduationYear", e.target.value)}
+                            placeholder={t("apply.gradYearPlaceholder")} className={fieldClass("graduationYear")} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold flex items-center">
+                          {t("apply.gpa")}
+                          {labelExtras("gpa")}
+                        </Label>
+                        <Input value={form.gpa} onChange={(e) => setField("gpa", e.target.value)}
+                          placeholder={t("apply.gpaPlaceholder")} className={fieldClass("gpa")} />
+                      </div>
+                  </div>
+                </>
+              );
+            })()}
 
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold">
