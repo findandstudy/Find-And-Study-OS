@@ -2383,18 +2383,19 @@ function LeadAssignmentRulesTab() {
       return out;
     }
     try {
-      const [rulesRes, staffAll, countriesRes, citiesRes, sourcesRes, unisAll] = await Promise.all([
+      const [rulesRes, staffAll, countriesAll, citiesAll, sourcesRes, unisAll] = await Promise.all([
         customFetch("/api/settings/lead-assignment-rules") as Promise<{ data: AssignmentRule[] }>,
-        fetchAllPages<StaffOption>("/api/users", 200),
-        customFetch("/api/countries?limit=500") as Promise<{ data: CountryOption[] }>,
-        customFetch("/api/leads/distinct-cities") as Promise<{ data: string[] }>,
+        fetchAllPages<StaffOption>("/api/users", 100),
+        fetchAllPages<CountryOption>("/api/countries", 500),
+        fetchAllPages<{ id: number; name: string; countryId?: number }>("/api/cities", 1000),
         customFetch("/api/leads/distinct-sources") as Promise<{ data: string[] }>,
         fetchAllPages<UniversityOption>("/api/universities", 100),
       ]);
       setRules(rulesRes.data || []);
       setStaff(staffAll.filter(u => STAFF_FILTER_ROLES.includes(u.role)));
-      setCountries(countriesRes.data || []);
-      setCities(citiesRes.data || []);
+      setCountries(countriesAll);
+      const cityNames = Array.from(new Set(citiesAll.map(c => c.name).filter((n): n is string => Boolean(n)))).sort((a, b) => a.localeCompare(b));
+      setCities(cityNames);
       setSources(sourcesRes.data || []);
       setUniversities(unisAll);
     } catch (err: any) {
