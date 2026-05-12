@@ -5,6 +5,9 @@ type ThemeMode = "light" | "dark" | "system";
 interface ThemeSettings {
   logoUrl: string | null;
   logoDarkUrl: string | null;
+  logoSquareUrl: string | null;
+  faviconUrl: string | null;
+  appleTouchIconUrl: string | null;
   themePrimary: string | null;
   themeButton: string | null;
   themeHover: string | null;
@@ -77,7 +80,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   const SETTINGS_DEFAULTS: ThemeSettings = {
-    logoUrl: null, logoDarkUrl: null, themePrimary: null, themeButton: null, themeHover: null,
+    logoUrl: null, logoDarkUrl: null, logoSquareUrl: null, faviconUrl: null, appleTouchIconUrl: null,
+    themePrimary: null, themeButton: null, themeHover: null,
     companyName: null, publicBrandName: null, companyEmail: null, companyPhone: null,
     companyAddress: null, companyCity: null, companyCountry: null, companyWebsite: null,
     whatsappNumber: null, workingHours: null, footerDescription: null, footerCopyright: null,
@@ -157,6 +161,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const s: ThemeSettings = {
         logoUrl: data.logoUrl || null,
         logoDarkUrl: data.logoDarkUrl || null,
+        logoSquareUrl: data.logoSquareUrl || null,
+        faviconUrl: data.faviconUrl || null,
+        appleTouchIconUrl: data.appleTouchIconUrl || null,
         themePrimary: data.themePrimary || null,
         themeButton: data.themeButton || null,
         themeHover: data.themeHover || null,

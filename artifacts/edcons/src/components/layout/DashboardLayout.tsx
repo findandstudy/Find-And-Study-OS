@@ -423,6 +423,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     : themeSettings.logoUrl || null;
 
   const sidebarLogo = (isAgentRole && agentProfile?.logoUrl) ? agentProfile.logoUrl : systemLogo;
+  const sidebarSquareLogo = (isAgentRole && agentProfile?.logoUrl)
+    ? agentProfile.logoUrl
+    : (themeSettings.logoSquareUrl || systemLogo);
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
@@ -455,10 +458,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     </>
                   )}
                 </span>
-                {/* Collapsed: compact mark only */}
-                <span className="hidden group-data-[collapsible=icon]:flex w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
-                  <GraduationCap className="w-5 h-5" />
-                </span>
+                {/* Collapsed: compact mark only — uses Square Logo if configured */}
+                {sidebarSquareLogo ? (
+                  <span className="hidden group-data-[collapsible=icon]:flex w-9 h-9 rounded-xl overflow-hidden items-center justify-center bg-card group-hover/logo:scale-105 transition-transform">
+                    <img src={sidebarSquareLogo} alt="Logo" className="w-full h-full object-contain" />
+                  </span>
+                ) : (
+                  <span className="hidden group-data-[collapsible=icon]:flex w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
+                    <GraduationCap className="w-5 h-5" />
+                  </span>
+                )}
               </button>
             </div>
 

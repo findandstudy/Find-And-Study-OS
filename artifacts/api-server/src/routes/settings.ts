@@ -50,7 +50,9 @@ router.get("/settings/branding", async (req, res): Promise<void> => {
   const [settings] = await db.select({
     logoUrl: settingsTable.logoUrl,
     logoDarkUrl: settingsTable.logoDarkUrl,
+    logoSquareUrl: settingsTable.logoSquareUrl,
     faviconUrl: settingsTable.faviconUrl,
+    appleTouchIconUrl: settingsTable.appleTouchIconUrl,
     themePrimary: settingsTable.themePrimary,
     themeSecondary: settingsTable.themeSecondary,
     themeAccent: settingsTable.themeAccent,

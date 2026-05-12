@@ -62,10 +62,13 @@ export function useAgencyBranding() {
   useEffect(() => {
     // Tenant defaults — same for super_admin, admin, staff, student, public.
     const tenantTitle = (tenantBranding?.publicBrandName || tenantBranding?.companyName || "").trim() || STATIC_TITLE;
-    const tenantFaviconRaw = tenantBranding?.faviconUrl || tenantBranding?.logoUrl || "";
-    const tenantFavicon = tenantFaviconRaw
-      ? `${BASE_URL}/api/settings/branding/logo`
-      : STATIC_FAVICON;
+    const tenantFaviconRaw =
+      tenantBranding?.faviconUrl ||
+      tenantBranding?.logoSquareUrl ||
+      tenantBranding?.appleTouchIconUrl ||
+      tenantBranding?.logoUrl ||
+      "";
+    const tenantFavicon = tenantFaviconRaw || STATIC_FAVICON;
     const tenantFaviconType = tenantFaviconRaw ? undefined : "image/svg+xml";
 
     if (!isAgent) {
@@ -98,6 +101,8 @@ export function useAgencyBranding() {
     tenantBranding?.publicBrandName,
     tenantBranding?.companyName,
     tenantBranding?.faviconUrl,
+    tenantBranding?.logoSquareUrl,
+    tenantBranding?.appleTouchIconUrl,
     tenantBranding?.logoUrl,
   ]);
 
