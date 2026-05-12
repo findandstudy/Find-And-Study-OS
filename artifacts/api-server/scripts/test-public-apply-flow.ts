@@ -1,8 +1,9 @@
 /**
  * Public/Embed Apply flow regression test (Task #135).
  *
- * Verifies the lead-first + auto-convert behavior end-to-end against the
- * live api-server (default http://localhost:8080). Two flows tested:
+ * Verifies the lead-first + auto-convert behavior end-to-end against
+ * a running api-server (default http://localhost:8080). Four flows
+ * are exercised:
  *
  *   (a) Embed widget — POST /public/embed/:slug/lead then
  *       POST /public/embed/:slug/apply with the same email + leadId.
@@ -18,11 +19,22 @@
  *       POST /public/apply with the same email + leadId. Same auto-
  *       convert + persistence assertions as the embed flow.
  *
- * Self-seeds its own university/program/widget rows tagged with the
- * RUN_ID so reruns never collide. Cleans up at the end (best-effort).
+ *   (c) Gender normalization — embed /apply with several variants
+ *       (canonical, title-case, upper-case, unknown). Confirms
+ *       canonical persistence and NULL coercion for unknowns.
  *
- * Run with:
- *   pnpm --filter @workspace/api-server exec tsx ./scripts/test-public-apply-flow.ts
+ *   (d) Auto-convert disabled — flips settings.autoConvertLeadEnabled
+ *       to false, runs lead+apply, and asserts the lead stays at
+ *       status="new" with convertedStudentId=null even though the
+ *       student row is still created. Restores the original setting
+ *       on exit.
+ *
+ * Self-seeds its own university/program/widget rows tagged with the
+ * RUN_ID so reruns never collide. Cleans up at the end.
+ *
+ * NOT wired into the default `pnpm test` chain on purpose: it depends
+ * on a running api-server. Run explicitly with:
+ *   pnpm --filter @workspace/api-server test:public-apply-flow
  */
 import {
   db,
@@ -34,78 +46,88 @@ import {
   usersTable,
   applicationsTable,
   documentsTable,
+  settingsTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 const BASE = process.env.API_BASE_URL || "http://localhost:8080";
 const RUN_ID = `t135_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
 interface Section { name: string; ok: boolean; details: string[] }
+interface Fixtures { uniId: number; progId: number; widgetId: number; slug: string }
+interface JsonResponse { status: number; ok: boolean; data: Record<string, unknown> | null }
+
 function assert(cond: boolean, msg: string, details: string[]): boolean {
   details.push(`${cond ? "OK   " : "FAIL "} ${msg}`);
   return cond;
 }
 
-async function setupFixtures() {
+async function setupFixtures(): Promise<Fixtures> {
   const [uni] = await db.insert(universitiesTable).values({
     name: `T135 Test University ${RUN_ID}`,
     country: "Turkey",
     city: "Istanbul",
     isActive: true,
-  } as any).returning();
+  }).returning();
   const [prog] = await db.insert(programsTable).values({
     universityId: uni.id,
     name: `T135 Test Program ${RUN_ID}`,
     degree: "Bachelor",
     language: "English",
     isActive: true,
-  } as any).returning();
+  }).returning();
   const slug = `t135-widget-${RUN_ID}`;
   const [widget] = await db.insert(embedWidgetsTable).values({
     slug,
     name: `T135 Widget ${RUN_ID}`,
     isActive: true,
-    primaryColor: "#000000",
     mode: "combined",
     allowedDomains: [],
-  } as any).returning();
-  return { uni, prog, widget, slug };
+  }).returning();
+  return { uniId: uni.id, progId: prog.id, widgetId: widget.id, slug };
 }
 
-async function teardownFixtures(ids: { uniId: number; progId: number; widgetId: number; emails: string[] }) {
-  try {
-    for (const email of ids.emails) {
-      const lc = email.toLowerCase().trim();
-      const [u] = await db.select().from(usersTable).where(eq(usersTable.email, lc));
-      if (u) {
-        await db.delete(applicationsTable).where(eq(applicationsTable.studentId, -1)).catch(() => {});
-        const studs = await db.select().from(studentsTable).where(eq(studentsTable.userId, u.id));
-        for (const st of studs) {
-          await db.delete(documentsTable).where(eq(documentsTable.studentId, st.id)).catch(() => {});
-          await db.delete(applicationsTable).where(eq(applicationsTable.studentId, st.id)).catch(() => {});
-          await db.delete(studentsTable).where(eq(studentsTable.id, st.id)).catch(() => {});
-        }
-        await db.delete(usersTable).where(eq(usersTable.id, u.id)).catch(() => {});
+async function teardownFixtures(fx: Fixtures, emails: string[]): Promise<void> {
+  for (const email of emails) {
+    const lc = email.toLowerCase().trim();
+    const [u] = await db.select().from(usersTable).where(eq(usersTable.email, lc));
+    if (u) {
+      const studs = await db.select().from(studentsTable).where(eq(studentsTable.userId, u.id));
+      for (const st of studs) {
+        await db.delete(documentsTable).where(eq(documentsTable.studentId, st.id));
+        await db.delete(applicationsTable).where(eq(applicationsTable.studentId, st.id));
+        await db.delete(studentsTable).where(eq(studentsTable.id, st.id));
       }
-      await db.delete(leadsTable).where(eq(leadsTable.email, email)).catch(() => {});
+      await db.delete(usersTable).where(eq(usersTable.id, u.id));
     }
-    await db.delete(embedWidgetsTable).where(eq(embedWidgetsTable.id, ids.widgetId)).catch(() => {});
-    await db.delete(programsTable).where(eq(programsTable.id, ids.progId)).catch(() => {});
-    await db.delete(universitiesTable).where(eq(universitiesTable.id, ids.uniId)).catch(() => {});
-  } catch (e) {
-    console.warn(`[t135] teardown warning: ${(e as Error).message}`);
+    await db.delete(leadsTable).where(eq(leadsTable.email, email));
   }
+  await db.delete(embedWidgetsTable).where(eq(embedWidgetsTable.id, fx.widgetId));
+  await db.delete(programsTable).where(eq(programsTable.id, fx.progId));
+  await db.delete(universitiesTable).where(eq(universitiesTable.id, fx.uniId));
 }
 
-async function postJson(url: string, body: any) {
+async function postJson(url: string, body: Record<string, unknown>): Promise<JsonResponse> {
   const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  let data: any = null;
-  try { data = await r.json(); } catch {}
+  let data: Record<string, unknown> | null = null;
+  try {
+    data = await r.json() as Record<string, unknown>;
+  } catch {
+    // Non-JSON response (rare on these endpoints) — leave data null and
+    // let the caller assert on status. We don't need to mask anything
+    // beyond the parse itself.
+    data = null;
+  }
   return { status: r.status, ok: r.ok, data };
+}
+
+function readNumber(data: Record<string, unknown> | null, key: string): number | null {
+  const v = data?.[key];
+  return typeof v === "number" ? v : null;
 }
 
 function buildFullFields(suffix: string) {
@@ -129,10 +151,8 @@ async function runEmbedFlow(slug: string): Promise<Section> {
   const details: string[] = [];
   let ok = true;
   const email = `t135-embed-${RUN_ID}@test.local`;
-  const FULL_FIELDS = buildFullFields("E");
+  const FULL = buildFullFields("E");
 
-  // (1) Lead-only step. After this, lead must exist and status=new with
-  // NO student record for this email.
   const r1 = await postJson(`${BASE}/api/public/embed/${slug}/lead`, {
     firstName: "EmbedFirst",
     lastName: "EmbedLast",
@@ -142,18 +162,16 @@ async function runEmbedFlow(slug: string): Promise<Section> {
     programName: "T135 Test Program",
     universityName: "T135 Test University",
   });
-  ok = assert(r1.status === 201 && !!r1.data?.leadId, `embed /lead returns 201 with leadId (got ${r1.status})`, details) && ok;
-  const leadId: number | null = r1.data?.leadId ?? null;
+  const leadId = readNumber(r1.data, "leadId");
+  ok = assert(r1.status === 201 && leadId !== null, `embed /lead returns 201 with leadId (got ${r1.status})`, details) && ok;
 
-  if (leadId) {
+  if (leadId !== null) {
     const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
     ok = assert(!!lead && lead.status === "new", `lead-only row exists with status="new" (got ${lead?.status})`, details) && ok;
     const [usr] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
     ok = assert(!usr, `lead-only step did NOT create a user account`, details) && ok;
   }
 
-  // (2) Full apply with same email + leadId. Lead must be reused
-  // (not duplicated), converted, student created with all AI fields.
   const r2 = await postJson(`${BASE}/api/public/embed/${slug}/apply`, {
     firstName: "EmbedFirst",
     lastName: "EmbedLast",
@@ -163,11 +181,11 @@ async function runEmbedFlow(slug: string): Promise<Section> {
     nationality: "Turkey",
     desiredLevel: "Bachelor",
     leadId,
-    ...FULL_FIELDS,
+    ...FULL,
   });
-  ok = assert(r2.status === 201 && !!r2.data?.success, `embed /apply returns 201 success (got ${r2.status} ${JSON.stringify(r2.data)})`, details) && ok;
+  ok = assert(r2.status === 201 && r2.data?.success === true, `embed /apply returns 201 success (got ${r2.status})`, details) && ok;
 
-  if (leadId) {
+  if (leadId !== null) {
     const [leadAfter] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
     ok = assert(leadAfter?.status === "converted", `lead auto-converted to status="converted" (got ${leadAfter?.status})`, details) && ok;
     ok = assert(!!leadAfter?.convertedStudentId, `lead.convertedStudentId is set (got ${leadAfter?.convertedStudentId})`, details) && ok;
@@ -176,18 +194,18 @@ async function runEmbedFlow(slug: string): Promise<Section> {
       const [stu] = await db.select().from(studentsTable).where(eq(studentsTable.id, leadAfter.convertedStudentId));
       ok = assert(!!stu, `student row created`, details) && ok;
       if (stu) {
-        ok = assert(stu.motherName === FULL_FIELDS.motherName, `student.motherName persisted (got "${stu.motherName}")`, details) && ok;
-        ok = assert(stu.fatherName === FULL_FIELDS.fatherName, `student.fatherName persisted (got "${stu.fatherName}")`, details) && ok;
-        ok = assert(stu.gender === FULL_FIELDS.gender, `student.gender persisted (got "${stu.gender}")`, details) && ok;
-        ok = assert(stu.dateOfBirth === FULL_FIELDS.dateOfBirth, `student.dateOfBirth persisted (got "${stu.dateOfBirth}")`, details) && ok;
-        ok = assert(stu.passportNumber === FULL_FIELDS.passportNumber, `student.passportNumber persisted`, details) && ok;
-        ok = assert(stu.passportIssueDate === FULL_FIELDS.passportIssueDate, `student.passportIssueDate persisted`, details) && ok;
-        ok = assert(stu.passportExpiry === FULL_FIELDS.passportExpiry, `student.passportExpiry persisted`, details) && ok;
-        ok = assert(stu.address === FULL_FIELDS.address, `student.address persisted`, details) && ok;
-        ok = assert(stu.highSchool === FULL_FIELDS.highSchool, `student.highSchool persisted`, details) && ok;
-        ok = assert(stu.graduationYear === FULL_FIELDS.graduationYear, `student.graduationYear persisted (got ${stu.graduationYear})`, details) && ok;
-        ok = assert(stu.gpa === FULL_FIELDS.gpa, `student.gpa persisted (got "${stu.gpa}")`, details) && ok;
-        ok = assert(stu.languageScore === FULL_FIELDS.languageScore, `student.languageScore persisted (got "${stu.languageScore}")`, details) && ok;
+        ok = assert(stu.motherName === FULL.motherName, `student.motherName persisted (got "${stu.motherName}")`, details) && ok;
+        ok = assert(stu.fatherName === FULL.fatherName, `student.fatherName persisted (got "${stu.fatherName}")`, details) && ok;
+        ok = assert(stu.gender === FULL.gender, `student.gender persisted (got "${stu.gender}")`, details) && ok;
+        ok = assert(stu.dateOfBirth === FULL.dateOfBirth, `student.dateOfBirth persisted (got "${stu.dateOfBirth}")`, details) && ok;
+        ok = assert(stu.passportNumber === FULL.passportNumber, `student.passportNumber persisted`, details) && ok;
+        ok = assert(stu.passportIssueDate === FULL.passportIssueDate, `student.passportIssueDate persisted`, details) && ok;
+        ok = assert(stu.passportExpiry === FULL.passportExpiry, `student.passportExpiry persisted`, details) && ok;
+        ok = assert(stu.address === FULL.address, `student.address persisted`, details) && ok;
+        ok = assert(stu.highSchool === FULL.highSchool, `student.highSchool persisted`, details) && ok;
+        ok = assert(stu.graduationYear === FULL.graduationYear, `student.graduationYear persisted (got ${stu.graduationYear})`, details) && ok;
+        ok = assert(stu.gpa === FULL.gpa, `student.gpa persisted (got "${stu.gpa}")`, details) && ok;
+        ok = assert(stu.languageScore === FULL.languageScore, `student.languageScore persisted (got "${stu.languageScore}")`, details) && ok;
       }
     }
   }
@@ -199,9 +217,8 @@ async function runPublicApplyFlow(progId: number): Promise<Section> {
   const details: string[] = [];
   let ok = true;
   const email = `t135-pub-${RUN_ID}@test.local`;
-  const FULL_FIELDS = buildFullFields("P");
+  const FULL = buildFullFields("P");
 
-  // (1) Lead-only step.
   const r1 = await postJson(`${BASE}/api/public/lead`, {
     firstName: "PubFirst",
     lastName: "PubLast",
@@ -210,17 +227,16 @@ async function runPublicApplyFlow(progId: number): Promise<Section> {
     interestedProgram: "T135 Test Program",
     interestedCountry: "Turkey",
   });
-  ok = assert(r1.status === 201 && !!r1.data?.leadId, `public /lead returns 201 with leadId (got ${r1.status})`, details) && ok;
-  const leadId: number | null = r1.data?.leadId ?? null;
+  const leadId = readNumber(r1.data, "leadId");
+  ok = assert(r1.status === 201 && leadId !== null, `public /lead returns 201 with leadId (got ${r1.status})`, details) && ok;
 
-  if (leadId) {
+  if (leadId !== null) {
     const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
     ok = assert(!!lead && lead.status === "new", `lead-only row status="new" (got ${lead?.status})`, details) && ok;
     const [usr] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
     ok = assert(!usr, `lead-only step did NOT create user account`, details) && ok;
   }
 
-  // (2) Full apply.
   const r2 = await postJson(`${BASE}/api/public/apply`, {
     firstName: "PubFirst",
     lastName: "PubLast",
@@ -232,11 +248,11 @@ async function runPublicApplyFlow(progId: number): Promise<Section> {
     programName: "T135 Test Program",
     universityName: "T135 Test University",
     leadId,
-    ...FULL_FIELDS,
+    ...FULL,
   });
-  ok = assert(r2.status === 201 || r2.status === 200, `public /apply success (got ${r2.status} ${JSON.stringify(r2.data).slice(0,200)})`, details) && ok;
+  ok = assert(r2.status === 201 || r2.status === 200, `public /apply success (got ${r2.status})`, details) && ok;
 
-  if (leadId) {
+  if (leadId !== null) {
     const [leadAfter] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
     ok = assert(leadAfter?.status === "converted", `lead auto-converted to "converted" (got ${leadAfter?.status})`, details) && ok;
     ok = assert(!!leadAfter?.convertedStudentId, `lead.convertedStudentId set`, details) && ok;
@@ -245,18 +261,18 @@ async function runPublicApplyFlow(progId: number): Promise<Section> {
       const [stu] = await db.select().from(studentsTable).where(eq(studentsTable.id, leadAfter.convertedStudentId));
       ok = assert(!!stu, `student row created`, details) && ok;
       if (stu) {
-        ok = assert(stu.motherName === FULL_FIELDS.motherName, `student.motherName persisted (got "${stu.motherName}")`, details) && ok;
-        ok = assert(stu.fatherName === FULL_FIELDS.fatherName, `student.fatherName persisted (got "${stu.fatherName}")`, details) && ok;
-        ok = assert(stu.gender === FULL_FIELDS.gender, `student.gender persisted (got "${stu.gender}")`, details) && ok;
-        ok = assert(stu.dateOfBirth === FULL_FIELDS.dateOfBirth, `student.dateOfBirth persisted (got "${stu.dateOfBirth}")`, details) && ok;
-        ok = assert(stu.passportNumber === FULL_FIELDS.passportNumber, `student.passportNumber persisted`, details) && ok;
-        ok = assert(stu.passportIssueDate === FULL_FIELDS.passportIssueDate, `student.passportIssueDate persisted (got "${stu.passportIssueDate}")`, details) && ok;
-        ok = assert(stu.passportExpiry === FULL_FIELDS.passportExpiry, `student.passportExpiry persisted (got "${stu.passportExpiry}")`, details) && ok;
-        ok = assert(stu.address === FULL_FIELDS.address, `student.address persisted (got "${stu.address}")`, details) && ok;
-        ok = assert(stu.highSchool === FULL_FIELDS.highSchool, `student.highSchool persisted (got "${stu.highSchool}")`, details) && ok;
-        ok = assert(stu.graduationYear === FULL_FIELDS.graduationYear, `student.graduationYear persisted (got ${stu.graduationYear})`, details) && ok;
-        ok = assert(stu.gpa === FULL_FIELDS.gpa, `student.gpa persisted (got "${stu.gpa}")`, details) && ok;
-        ok = assert(stu.languageScore === FULL_FIELDS.languageScore, `student.languageScore persisted (got "${stu.languageScore}")`, details) && ok;
+        ok = assert(stu.motherName === FULL.motherName, `student.motherName persisted`, details) && ok;
+        ok = assert(stu.fatherName === FULL.fatherName, `student.fatherName persisted`, details) && ok;
+        ok = assert(stu.gender === FULL.gender, `student.gender persisted`, details) && ok;
+        ok = assert(stu.dateOfBirth === FULL.dateOfBirth, `student.dateOfBirth persisted`, details) && ok;
+        ok = assert(stu.passportNumber === FULL.passportNumber, `student.passportNumber persisted`, details) && ok;
+        ok = assert(stu.passportIssueDate === FULL.passportIssueDate, `student.passportIssueDate persisted`, details) && ok;
+        ok = assert(stu.passportExpiry === FULL.passportExpiry, `student.passportExpiry persisted`, details) && ok;
+        ok = assert(stu.address === FULL.address, `student.address persisted`, details) && ok;
+        ok = assert(stu.highSchool === FULL.highSchool, `student.highSchool persisted`, details) && ok;
+        ok = assert(stu.graduationYear === FULL.graduationYear, `student.graduationYear persisted`, details) && ok;
+        ok = assert(stu.gpa === FULL.gpa, `student.gpa persisted`, details) && ok;
+        ok = assert(stu.languageScore === FULL.languageScore, `student.languageScore persisted`, details) && ok;
       }
     }
   }
@@ -265,12 +281,13 @@ async function runPublicApplyFlow(progId: number): Promise<Section> {
 }
 
 /**
- * (c) Gender normalization: AI extraction can return "F", "Female",
- * "M", "Male", or stray values. embed.ts handleAnalyze + Programs.tsx
- * mergeAiData must normalize to the canonical "female"/"male" tokens
- * that students.gender accepts; unknown values must be dropped (i.e.
- * never leak through to the column). We exercise the embed /apply
- * route directly with each variant and verify the persisted column.
+ * The embed /apply route lowercases gender and only accepts the two
+ * canonical tokens; anything else is coerced to NULL on the student
+ * row (see embed.ts ~L645 normalizedGender / safeGender). Frontend
+ * mergeAiData layers do the same on the AI extraction path, so any
+ * stray AI variant either lands as canonical or doesn't pollute the
+ * column. We assert both halves: canonical/case variants persist
+ * exactly, unknown values surface as NULL (never silently mis-mapped).
  */
 async function runGenderNormalizationFlow(slug: string): Promise<Section> {
   const details: string[] = [];
@@ -282,13 +299,6 @@ async function runGenderNormalizationFlow(slug: string): Promise<Section> {
     { input: "Male",   expected: "male",   label: "Male title-case" },
     { input: "FEMALE", expected: "female", label: "uppercase FEMALE" },
   ];
-  // The embed /apply route lowercases gender and only accepts the two
-  // canonical tokens; anything else is coerced to NULL on the student
-  // row (see embed.ts ~L645 normalizedGender / safeGender). Frontend
-  // mergeAiData layers do the same on the AI extraction path, so any
-  // stray AI variant either lands as canonical or doesn't pollute the
-  // column. We assert both halves: canonical values persist exactly,
-  // unknown values surface as NULL (never silently mis-mapped).
   for (const v of variants) {
     const email = `t135-gn-${RUN_ID}-${v.input}@test.local`;
     const r = await postJson(`${BASE}/api/public/embed/${slug}/apply`, {
@@ -296,7 +306,7 @@ async function runGenderNormalizationFlow(slug: string): Promise<Section> {
       phone: "5550000000", countryCode: "+90",
       nationality: "Turkey", desiredLevel: "Bachelor",
       gender: v.input,
-      passportNumber: `T135GN${v.label.replace(/\s/g,"").toUpperCase()}${Date.now().toString(36).slice(-4)}`,
+      passportNumber: `T135GN${v.label.replace(/\s/g, "").toUpperCase()}${Date.now().toString(36).slice(-4)}`,
     });
     ok = assert(r.status === 201, `apply with gender="${v.input}" (${v.label}) -> 201 (got ${r.status})`, details) && ok;
     const [u] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
@@ -305,9 +315,7 @@ async function runGenderNormalizationFlow(slug: string): Promise<Section> {
       ok = assert(stu?.gender === v.expected, `gender "${v.input}" persisted as "${v.expected}" (got "${stu?.gender}")`, details) && ok;
     }
   }
-  // Unknown variant must be coerced to NULL on the student row, NOT
-  // mis-mapped to "female"/"male". Apply still succeeds (other fields
-  // are valid); we just verify the column ends up null.
+  // Unknown variant: backend coerces to NULL rather than rejecting.
   const badEmail = `t135-gn-${RUN_ID}-bad@test.local`;
   const rBad = await postJson(`${BASE}/api/public/embed/${slug}/apply`, {
     firstName: "GN", lastName: "Bad", email: badEmail,
@@ -326,19 +334,104 @@ async function runGenderNormalizationFlow(slug: string): Promise<Section> {
   return { name: "(c) Gender normalization variants", ok, details };
 }
 
-async function main() {
-  console.log(`[t135] starting run ${RUN_ID} against ${BASE}`);
-  // Wait briefly for api-server to be ready.
-  let ready = false;
+/**
+ * (d) Auto-convert disabled branch. Toggles
+ * settings.autoConvertLeadEnabled to false, runs the embed
+ * lead+apply pair, and asserts that the lead is NOT converted even
+ * though the student row is still created (separate-bucket behavior
+ * the task explicitly calls out). The setting is restored in the
+ * finally block so subsequent runs and other tests are unaffected.
+ */
+async function runAutoConvertDisabledFlow(slug: string): Promise<Section> {
+  const details: string[] = [];
+  let ok = true;
+  const email = `t135-noconv-${RUN_ID}@test.local`;
+
+  const [origSettings] = await db.select().from(settingsTable);
+  const original = origSettings?.autoConvertLeadEnabled;
+  if (origSettings) {
+    await db.update(settingsTable)
+      .set({ autoConvertLeadEnabled: false })
+      .where(eq(settingsTable.id, origSettings.id));
+  } else {
+    // No settings row exists yet — insert one with the toggle off so
+    // the route's `!== false` check picks it up.
+    await db.insert(settingsTable).values({ autoConvertLeadEnabled: false });
+  }
+
+  try {
+    const r1 = await postJson(`${BASE}/api/public/embed/${slug}/lead`, {
+      firstName: "NoConv",
+      lastName: "Test",
+      email,
+      phone: "5559998888",
+      countryCode: "+90",
+    });
+    const leadId = readNumber(r1.data, "leadId");
+    ok = assert(r1.status === 201 && leadId !== null, `embed /lead returns 201 (got ${r1.status})`, details) && ok;
+
+    const r2 = await postJson(`${BASE}/api/public/embed/${slug}/apply`, {
+      firstName: "NoConv",
+      lastName: "Test",
+      email,
+      phone: "5559998888",
+      countryCode: "+90",
+      nationality: "Turkey",
+      desiredLevel: "Bachelor",
+      leadId,
+      passportNumber: `T135NC${Date.now().toString(36).slice(-5).toUpperCase()}`,
+    });
+    ok = assert(r2.status === 201, `embed /apply succeeds (got ${r2.status})`, details) && ok;
+
+    if (leadId !== null) {
+      const [leadAfter] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
+      ok = assert(leadAfter?.status === "new", `auto-convert OFF: lead stays at status="new" (got ${leadAfter?.status})`, details) && ok;
+      ok = assert(!leadAfter?.convertedStudentId, `auto-convert OFF: lead.convertedStudentId remains null (got ${leadAfter?.convertedStudentId})`, details) && ok;
+    }
+
+    // Student row is still created independently — the toggle only
+    // controls the lead-side bucketing, not whether apply produces a
+    // student/application pair.
+    const [u] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
+    ok = assert(!!u, `student user account still created when auto-convert is off`, details) && ok;
+  } finally {
+    if (origSettings) {
+      await db.update(settingsTable)
+        .set({ autoConvertLeadEnabled: original ?? true })
+        .where(eq(settingsTable.id, origSettings.id));
+    } else {
+      // Best-effort restore: if we created the row, leave it at the
+      // schema default (true) so the system reads as if untouched.
+      const [seeded] = await db.select().from(settingsTable);
+      if (seeded) {
+        await db.update(settingsTable)
+          .set({ autoConvertLeadEnabled: true })
+          .where(eq(settingsTable.id, seeded.id));
+      }
+    }
+  }
+
+  return { name: "(d) Auto-convert disabled branch", ok, details };
+}
+
+async function waitForServer(): Promise<boolean> {
   for (let i = 0; i < 15; i++) {
     try {
       const r = await fetch(`${BASE}/api/public/embed/__nope__/config`);
-      if (r.status === 404 || r.status === 200) { ready = true; break; }
-    } catch {}
-    await new Promise(r => setTimeout(r, 500));
+      if (r.status === 404 || r.status === 200) return true;
+    } catch {
+      // Server still booting / unreachable — retry.
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
+  return false;
+}
+
+async function main() {
+  console.log(`[t135] starting run ${RUN_ID} against ${BASE}`);
+  const ready = await waitForServer();
   if (!ready) {
-    console.error(`[t135] api-server at ${BASE} did not respond — is the workflow running?`);
+    console.error(`[t135] api-server at ${BASE} did not respond — start it before running this script.`);
     process.exit(2);
   }
 
@@ -352,14 +445,16 @@ async function main() {
     `t135-gn-${RUN_ID}-Male@test.local`,
     `t135-gn-${RUN_ID}-FEMALE@test.local`,
     `t135-gn-${RUN_ID}-bad@test.local`,
+    `t135-noconv-${RUN_ID}@test.local`,
   ];
   const sections: Section[] = [];
   try {
     sections.push(await runEmbedFlow(fx.slug));
-    sections.push(await runPublicApplyFlow(fx.prog.id));
+    sections.push(await runPublicApplyFlow(fx.progId));
     sections.push(await runGenderNormalizationFlow(fx.slug));
+    sections.push(await runAutoConvertDisabledFlow(fx.slug));
   } finally {
-    await teardownFixtures({ uniId: fx.uni.id, progId: fx.prog.id, widgetId: fx.widget.id, emails: usedEmails });
+    await teardownFixtures(fx, usedEmails);
   }
 
   let allOk = true;
