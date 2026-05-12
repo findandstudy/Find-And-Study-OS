@@ -5,6 +5,7 @@ import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { or as orFn } from "drizzle-orm";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, getCancelledStageKey } from "../lib/stageFinance";
@@ -88,12 +89,17 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     // Non-admin staff: only see applications assigned to them or unassigned
     // (mirrors the leads / students lists). Admins see everything in scope.
     if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-      conditions.push(
-        orFn(
-          eq(applicationsTable.assignedToId, user.id),
-          isNull(applicationsTable.assignedToId),
-        )!,
-      );
+      // Task #128: also include applications for agencies where this
+      // staff is listed as agency-assigned staff (read-only visibility).
+      const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+      const orParts = [
+        eq(applicationsTable.assignedToId, user.id),
+        isNull(applicationsTable.assignedToId),
+      ];
+      if (agencyAgentIds.length > 0) {
+        orParts.push(inArray(applicationsTable.agentId, agencyAgentIds));
+      }
+      conditions.push(orFn(...orParts)!);
     }
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));

@@ -160,6 +160,24 @@ export async function getAgencyStaffMap(agentIds: number[]): Promise<Map<number,
   return map;
 }
 
+/**
+ * Return the agentIds for which the given user is listed in the agency's
+ * assigned-staff join table. Used to extend a non-admin staff member's
+ * read-only visibility into the students/applications belonging to the
+ * agencies they are assigned to (Task #128). Notification recipient
+ * resolution intentionally does NOT use this — agency membership grants
+ * visibility only, never notification fanout.
+ */
+export async function getAgencyMemberAgentIds(userId: number): Promise<number[]> {
+  if (!userId || isNaN(userId)) return [];
+  const rows = await db.select({ agentId: agencyAssignedStaffTable.agentId })
+    .from(agencyAssignedStaffTable)
+    .where(eq(agencyAssignedStaffTable.userId, userId));
+  const set = new Set<number>();
+  for (const r of rows) if (r.agentId != null) set.add(r.agentId);
+  return Array.from(set);
+}
+
 export function staffDisplayName(s: { firstName: string | null; lastName: string | null }): string {
   return [s.firstName, s.lastName].filter(Boolean).join(" ").trim();
 }

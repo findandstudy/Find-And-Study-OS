@@ -4,6 +4,7 @@ import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
@@ -127,12 +128,17 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   } else if (user.role === "student") {
     conditions.push(eq(studentsTable.userId, user.id));
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    conditions.push(
-      or(
-        eq(studentsTable.assignedToId, user.id),
-        isNull(studentsTable.assignedToId)
-      )
-    );
+    // Non-admin staff: assigned to me OR unassigned, OR (Task #128) the
+    // student belongs to an agency where I am listed as assigned staff.
+    const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+    const orParts = [
+      eq(studentsTable.assignedToId, user.id),
+      isNull(studentsTable.assignedToId),
+    ];
+    if (agencyAgentIds.length > 0) {
+      orParts.push(inArray(studentsTable.agentId, agencyAgentIds));
+    }
+    conditions.push(or(...orParts)!);
   }
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
   // Null-branch students (created via public apply popup, embed widgets) are
@@ -388,8 +394,28 @@ router.get("/students/:id", requireAuth, requireAgentStaffPermission("students")
     }
   } else if (isStaff && !isAdmin) {
     if (student.assignedToId !== null && student.assignedToId !== user.id) {
-      res.status(403).json({ error: "Access denied" });
-      return;
+      // Task #128: read-only visibility for staff assigned to the
+      // student's agency.
+      let allowed = false;
+      if (student.agentId) {
+        const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+        if (agencyAgentIds.includes(student.agentId)) {
+          // Enforce branch scope on the agency-membership path so detail
+          // visibility cannot exceed list visibility (Task #128).
+          const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+          if (
+            visibleBranchIds === null ||
+            student.branchId == null ||
+            visibleBranchIds.includes(student.branchId)
+          ) {
+            allowed = true;
+          }
+        }
+      }
+      if (!allowed) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
     }
   } else if (!isStaff && !isOwnProfile) {
     res.status(403).json({ error: "Access denied" });
