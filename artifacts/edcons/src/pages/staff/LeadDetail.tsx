@@ -16,7 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power, Trash2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power, Trash2, FileText, Download, Eye } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -107,6 +108,15 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
 
   const { data: lead, isLoading } = useGetLead(id) as { data: any; isLoading: boolean };
+  const [mainTab, setMainTab] = useState<"overview" | "documents">("overview");
+  const { data: leadDocs = [] } = useQuery<any[]>({
+    queryKey: [`/api/leads/${id}/documents`],
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/documents`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => Array.isArray(d) ? d : []),
+    enabled: !!id,
+  });
+  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
   const { data: generalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/leads/${id}/notes`, "general"],
     queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()),
@@ -402,6 +412,34 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           )}
         </div>
 
+        <div className="flex gap-1 border-b">
+          <button
+            type="button"
+            onClick={() => setMainTab("overview")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${mainTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            data-testid="lead-tab-overview"
+          >
+            Genel
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainTab("documents")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${mainTab === "documents" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            data-testid="lead-tab-documents"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Belgeler {leadDocs.length > 0 && <span className="text-xs">({leadDocs.length})</span>}
+          </button>
+        </div>
+
+        {mainTab === "documents" ? (
+          <LeadDocumentsTab
+            docs={leadDocs}
+            onPreview={(d) => setPreviewDoc(d)}
+            firstName={lead?.firstName || ""}
+            lastName={lead?.lastName || ""}
+          />
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
@@ -857,6 +895,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             </div>
           </div>
         </div>
+        )}
         <div className="space-y-3">
           <h2 className="font-semibold text-foreground flex items-center gap-2">
             <MessageSquare className="w-4 h-4" /> All Messaging
@@ -873,6 +912,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           leadId={id}
         />
       )}
+      <DocumentPreviewDialog doc={previewDoc} onClose={() => setPreviewDoc(null)} />
     </>
   );
 }
@@ -1155,5 +1195,151 @@ function InfoRow({
       </div>
     </div>
     </>
+  );
+}
+
+const LEAD_DOC_TYPE_LABELS: Record<string, string> = {
+  passport: "Pasaport",
+  photo: "Vesikalık Fotoğraf",
+  photograph: "Vesikalık Fotoğraf",
+  hs_diploma: "Lise Diploması",
+  hs_transcript: "Lise Transkripti",
+  bachelor_diploma: "Lisans Diploması",
+  bachelor_transcript: "Lisans Transkripti",
+  master_diploma: "Yüksek Lisans Diploması",
+  master_transcript: "Yüksek Lisans Transkripti",
+  language_proof: "Dil Belgesi",
+  equivalency_letter: "Denklik Belgesi",
+  cv: "CV",
+  motivation_letter: "Niyet Mektubu",
+  reference_letter: "Referans Mektubu",
+  other: "Diğer",
+};
+
+function formatBytes(n?: number | null): string {
+  if (!n || n <= 0) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function downloadLeadDoc(doc: any, firstName: string, lastName: string) {
+  const mimeType = doc.mimeType || "application/octet-stream";
+  const ext = mimeType === "application/pdf" ? ".pdf"
+    : mimeType.startsWith("image/") ? `.${mimeType.split("/")[1] || "img"}`
+    : "";
+  const label = LEAD_DOC_TYPE_LABELS[doc.type] || doc.type || "document";
+  const fullName = `${firstName} ${lastName}`.trim() || "lead";
+  const baseName = `${fullName} - ${label}`.replace(/[\\/:*?"<>|]/g, "_");
+  const filename = baseName.endsWith(ext) ? baseName : `${baseName}${ext}`;
+  if (doc.fileData) {
+    const link = document.createElement("a");
+    link.href = `data:${mimeType};base64,${doc.fileData}`;
+    link.download = filename;
+    link.click();
+  } else if (doc.fileUrl) {
+    const link = document.createElement("a");
+    link.href = doc.fileUrl;
+    link.download = filename;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.click();
+  }
+}
+
+function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
+  docs: any[];
+  onPreview: (d: any) => void;
+  firstName: string;
+  lastName: string;
+}) {
+  if (!docs || docs.length === 0) {
+    return (
+      <div className="bg-card rounded-2xl border shadow-sm p-12 text-center text-muted-foreground">
+        <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="font-medium">Henüz belge yok</p>
+        <p className="text-xs mt-1">Lead başvuru formundan belge gönderdiğinde burada görünecek.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-secondary/50">
+          <tr>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">Dosya</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">Tür</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">Boyut</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">Yüklenme</th>
+            <th className="text-right px-4 py-3 font-semibold text-foreground">Aksiyonlar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {docs.map((doc: any) => {
+            const canPreview = !!(doc.fileData || doc.fileUrl);
+            return (
+              <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors" data-testid={`lead-doc-row-${doc.id}`}>
+                <td className="px-4 py-3 font-medium">{doc.name}</td>
+                <td className="px-4 py-3 text-muted-foreground">{LEAD_DOC_TYPE_LABELS[doc.type] || doc.type}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatBytes(doc.sizeBytes)}</td>
+                <td className="px-4 py-3 text-muted-foreground">{new Date(doc.createdAt).toLocaleDateString("tr-TR")}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-2">
+                    {canPreview && (
+                      <button
+                        onClick={() => onPreview(doc)}
+                        className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
+                        data-testid={`lead-doc-preview-${doc.id}`}
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Önizle
+                      </button>
+                    )}
+                    {canPreview && (
+                      <button
+                        onClick={() => downloadLeadDoc(doc, firstName, lastName)}
+                        className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
+                        data-testid={`lead-doc-download-${doc.id}`}
+                      >
+                        <Download className="w-3.5 h-3.5" /> İndir
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DocumentPreviewDialog({ doc, onClose }: { doc: any | null; onClose: () => void }) {
+  if (!doc) return null;
+  const mime = doc.mimeType || "";
+  const src = doc.fileData ? `data:${mime};base64,${doc.fileData}` : doc.fileUrl;
+  const isImage = mime.startsWith("image/");
+  const isPdf = mime === "application/pdf";
+  return (
+    <Dialog open={!!doc} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle className="truncate">{doc.name}</DialogTitle>
+        </DialogHeader>
+        <div className="bg-secondary/30 rounded-lg overflow-hidden" style={{ minHeight: "60vh" }}>
+          {!src ? (
+            <div className="p-12 text-center text-muted-foreground">Dosya kaynağı bulunamadı.</div>
+          ) : isImage ? (
+            <img src={src} alt={doc.name} className="w-full h-auto max-h-[75vh] object-contain mx-auto" />
+          ) : isPdf ? (
+            <iframe src={src} title={doc.name} className="w-full" style={{ height: "75vh" }} />
+          ) : (
+            <div className="p-12 text-center text-muted-foreground">
+              Bu dosya türü tarayıcıda önizlenemez. Lütfen indirip görüntüleyin.
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

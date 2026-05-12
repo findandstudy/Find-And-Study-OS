@@ -301,7 +301,8 @@ export async function createApplicationForStudent(studentId: number, programId: 
 }
 
 router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, leadId, documents, reuseDocumentIds } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, leadId: incomingLeadId, documents, reuseDocumentIds } = req.body;
+  let leadId: number | null = null;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality || !gender) {
     res.status(400).json({ error: "firstName, lastName, email, phone, motherName, fatherName, nationality, and gender are required" });
@@ -323,6 +324,22 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
 
   const normalizedEmail = email.toLowerCase().trim();
+
+  // SECURITY: never trust client-supplied leadId blindly — that would allow
+  // any caller to attach uploaded documents to (or convert) an arbitrary
+  // lead row (IDOR). Only honour the leadId when the row exists, isn't
+  // soft-deleted, and its email matches the submitted email.
+  if (incomingLeadId) {
+    const incomingLeadIdNum = parseInt(String(incomingLeadId), 10);
+    if (Number.isFinite(incomingLeadIdNum) && incomingLeadIdNum > 0) {
+      const [foundLead] = await db.select().from(leadsTable).where(eq(leadsTable.id, incomingLeadIdNum));
+      if (foundLead && !foundLead.deletedAt && (foundLead.email || "").toLowerCase().trim() === normalizedEmail) {
+        leadId = foundLead.id;
+      } else {
+        console.warn(`[public/apply] Rejected leadId=${incomingLeadIdNum} reuse — not found or email mismatch`);
+      }
+    }
+  }
 
   const { getAppBaseUrl } = await import("../lib/email.js");
   const baseUrl = getAppBaseUrl();
@@ -520,6 +537,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           await db.insert(documentsTable).values({
             studentId: resultStudentId,
             applicationId: resultAppId,
+            leadId: leadId ? (parseInt(String(leadId), 10) || null) : null,
             name: descriptiveName,
             type: docType,
             status: "pending",
@@ -689,6 +707,7 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
           await db.insert(documentsTable).values({
             studentId: resultStudentId,
             applicationId: resultAppId,
+            leadId: leadId ? (parseInt(String(leadId), 10) || null) : null,
             name: src.name,
             type: srcType,
             status: src.status === "rejected" ? "pending" : (src.status || "pending"),

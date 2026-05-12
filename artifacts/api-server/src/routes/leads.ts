@@ -283,6 +283,55 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   res.json(lead);
 });
 
+// GET /api/leads/:id/documents — list documents tied to a lead.
+// Reuses lead authz (same rules as GET /leads/:id), then returns every active
+// document linked either directly to the lead (documents.leadId), or via the
+// converted student (lead.convertedStudentId → students/applications). This
+// lets staff see the documents a contact uploaded through public/apply or the
+// embed widget even before the lead is converted to a student.
+router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  }
+
+  const orConds: any[] = [eq(documentsTable.leadId, id)];
+  if (lead.convertedStudentId) {
+    orConds.push(eq(documentsTable.studentId, lead.convertedStudentId));
+  }
+  const docs = await db.select({
+    id: documentsTable.id,
+    name: documentsTable.name,
+    type: documentsTable.type,
+    status: documentsTable.status,
+    mimeType: documentsTable.mimeType,
+    sizeBytes: documentsTable.sizeBytes,
+    fileUrl: documentsTable.fileUrl,
+    fileData: documentsTable.fileData,
+    studentId: documentsTable.studentId,
+    applicationId: documentsTable.applicationId,
+    leadId: documentsTable.leadId,
+    createdAt: documentsTable.createdAt,
+  })
+    .from(documentsTable)
+    .where(and(isNull(documentsTable.deletedAt), or(...orConds)!))
+    .orderBy(desc(documentsTable.createdAt));
+  res.json(docs);
+});
+
 const AGENT_LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "interestedProgram", "interestedCountry", "source",
