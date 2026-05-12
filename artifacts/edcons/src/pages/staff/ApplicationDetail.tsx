@@ -79,7 +79,8 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
     queryKey: [`/api/applications/${id}/notes`, "general"],
     queryFn: async () => {
       const res = await apiFetch(`${BASE_URL}/api/applications/${id}/notes?internal=false`);
-      return res.json();
+      const body = await res.json().catch(() => []);
+      return Array.isArray(body) ? body : [];
     },
     enabled: !!id,
   });
@@ -87,12 +88,15 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
     queryKey: [`/api/applications/${id}/notes`, "internal"],
     queryFn: async () => {
       const res = await apiFetch(`${BASE_URL}/api/applications/${id}/notes?internal=true`);
-      return res.json();
+      const body = await res.json().catch(() => []);
+      return Array.isArray(body) ? body : [];
     },
     enabled: !!id && !!isStaffUser,
   });
 
-  const activeNotes = noteTab === "internal" ? internalNotes : generalNotes;
+  const activeNotes = Array.isArray(noteTab === "internal" ? internalNotes : generalNotes)
+    ? (noteTab === "internal" ? internalNotes : generalNotes)
+    : [];
   const { stages: pipelineStages } = usePipelineStages("application");
   const updateApp = useUpdateApplication();
   async function handleStageChange(stage: string) {
