@@ -24,7 +24,7 @@ router.get("/settings/lead-assignment-rules", requireAuth, requireRole(...MANAGE
 });
 
 router.post("/settings/lead-assignment-rules", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, priority, isActive, countries, universityIds, cities, sources, staffUserIds, strategy } = req.body;
+  const { name, priority, isActive, countries, universityIds, cities, phoneCodes, sources, staffUserIds, strategy } = req.body;
   if (!name || !String(name).trim()) { res.status(400).json({ error: "name is required" }); return; }
   const staff = sanitizeIntArray(staffUserIds);
   if (staff.length === 0) { res.status(400).json({ error: "At least one staff member is required" }); return; }
@@ -37,6 +37,7 @@ router.post("/settings/lead-assignment-rules", requireAuth, requireRole(...MANAG
     countries: sanitizeStringArray(countries),
     universityIds: sanitizeIntArray(universityIds),
     cities: sanitizeStringArray(cities),
+    phoneCodes: sanitizeStringArray(phoneCodes),
     sources: sanitizeStringArray(sources),
     staffUserIds: staff,
     strategy: strat,
@@ -57,6 +58,7 @@ router.patch("/settings/lead-assignment-rules/:id", requireAuth, requireRole(...
   if (b.countries !== undefined) updates.countries = sanitizeStringArray(b.countries);
   if (b.universityIds !== undefined) updates.universityIds = sanitizeIntArray(b.universityIds);
   if (b.cities !== undefined) updates.cities = sanitizeStringArray(b.cities);
+  if (b.phoneCodes !== undefined) updates.phoneCodes = sanitizeStringArray(b.phoneCodes);
   if (b.sources !== undefined) updates.sources = sanitizeStringArray(b.sources);
   if (b.staffUserIds !== undefined) {
     const staff = sanitizeIntArray(b.staffUserIds);

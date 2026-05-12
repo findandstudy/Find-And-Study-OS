@@ -10,6 +10,21 @@ interface LeadLike {
   interestedCountry?: string | null;
   interestedProgram?: string | null;
   notes?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * Normalize a phone number for prefix matching: strip everything except
+ * digits and the leading '+', collapse double '00' to '+'.
+ */
+function normalizePhoneForMatch(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+  s = s.replace(/[\s().-]/g, "");
+  if (s.startsWith("00")) s = "+" + s.slice(2);
+  if (!s.startsWith("+")) s = "+" + s.replace(/[^\d]/g, "");
+  return s;
 }
 
 function includesCI(haystacks: (string | null | undefined)[], needles: string[]): boolean {
@@ -30,6 +45,17 @@ async function ruleMatches(rule: LeadAssignmentRule, lead: LeadLike): Promise<bo
 
   const cities = rule.cities || [];
   if (cities.length > 0 && !includesCI(haystack, cities)) return false;
+
+  const phoneCodes: string[] = (rule as any).phoneCodes || [];
+  if (phoneCodes.length > 0) {
+    const normPhone = normalizePhoneForMatch(lead.phone);
+    if (!normPhone) return false;
+    const matched = phoneCodes
+      .map((c: string) => normalizePhoneForMatch(c))
+      .filter((c): c is string => !!c)
+      .some((prefix: string) => normPhone.startsWith(prefix));
+    if (!matched) return false;
+  }
 
   const sources = rule.sources || [];
   if (sources.length > 0) {

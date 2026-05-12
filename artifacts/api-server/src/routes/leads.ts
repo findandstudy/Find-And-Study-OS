@@ -21,6 +21,24 @@ const LEAD_PATCH_FIELDS = [
   "status", "assignedTo", "notes", "estimatedValue", "season", "agentId",
 ];
 
+router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
+  const rows = await db
+    .selectDistinct({ source: leadsTable.source })
+    .from(leadsTable)
+    .where(sql`${leadsTable.source} IS NOT NULL AND ${leadsTable.source} != ''`);
+  const sources = rows.map(r => r.source!).filter(Boolean).sort();
+  res.json({ data: sources });
+});
+
+router.get("/leads/distinct-cities", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
+  const ur = await db
+    .selectDistinct({ v: universitiesTable.city })
+    .from(universitiesTable)
+    .where(sql`${universitiesTable.city} IS NOT NULL AND ${universitiesTable.city} != ''`);
+  const all = new Set<string>(ur.map(r => r.v!).filter(Boolean));
+  res.json({ data: [...all].sort() });
+});
+
 router.get("/nationalities", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
   const leadNats = db
     .selectDistinct({ nationality: leadsTable.nationality })

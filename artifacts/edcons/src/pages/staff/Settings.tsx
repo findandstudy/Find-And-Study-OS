@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NotificationRulesManager } from "@/components/NotificationRulesManager";
 import { CountryFlag } from "@/components/CountryFlag";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { PHONE_CODES as PHONE_CODES_LIB } from "@/lib/nationalities";
 import { IntegrationsManager } from "@/components/IntegrationsManager";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { EditStagesDialog } from "@/components/EditStagesDialog";
@@ -2302,6 +2304,7 @@ interface AssignmentRule {
   countries: string[];
   universityIds: number[];
   cities: string[];
+  phoneCodes: string[];
   sources: string[];
   staffUserIds: number[];
   strategy: "first" | "round_robin";
@@ -2312,10 +2315,38 @@ interface StaffOption { id: number; firstName: string | null; lastName: string |
 
 const STAFF_FILTER_ROLES = ["super_admin", "admin", "manager", "staff", "consultant"];
 
+interface CountryOption { id: number; name: string; code: string; }
+interface CityOption { id: number; name: string; }
+interface UniversityOption { id: number; name: string; country?: string | null; }
+
+const regionDisplayNames = typeof Intl !== "undefined" && (Intl as any).DisplayNames
+  ? new (Intl as any).DisplayNames(["en"], { type: "region" })
+  : null;
+
+function isoToCountryName(iso: string): string {
+  try { return regionDisplayNames?.of(iso) || iso; } catch { return iso; }
+}
+
+const PHONE_CODE_OPTIONS = (() => {
+  const byCode = new Map<string, string[]>();
+  for (const p of PHONE_CODES_LIB) {
+    const arr = byCode.get(p.code) || [];
+    arr.push(isoToCountryName(p.country));
+    byCode.set(p.code, arr);
+  }
+  return [...byCode.entries()]
+    .map(([code, names]) => ({ value: code, label: `${code} (${names.sort().join(", ")})` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+})();
+
 function LeadAssignmentRulesTab() {
   const { toast } = useToast();
   const [rules, setRules] = useState<AssignmentRule[]>([]);
   const [staff, setStaff] = useState<StaffOption[]>([]);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [sources, setSources] = useState<string[]>([]);
+  const [universities, setUniversities] = useState<UniversityOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -2326,24 +2357,46 @@ function LeadAssignmentRulesTab() {
     name: "",
     priority: 0,
     isActive: true,
-    countriesText: "",
-    citiesText: "",
-    sourcesText: "",
-    universityIdsText: "",
+    countries: [] as string[],
+    cities: [] as string[],
+    phoneCodes: [] as string[],
+    sources: [] as string[],
+    universityIds: [] as number[],
     staffUserIds: [] as number[],
     strategy: "first" as "first" | "round_robin",
   };
   const [form, setForm] = useState(emptyForm);
 
   const fetchAll = useCallback(async () => {
+    async function fetchAllPages<T>(url: string, pageLimit = 100): Promise<T[]> {
+      const out: T[] = [];
+      let page = 1;
+      while (true) {
+        const sep = url.includes("?") ? "&" : "?";
+        const res = await customFetch(`${url}${sep}page=${page}&limit=${pageLimit}`) as { data: T[]; meta?: { totalPages?: number; total?: number } };
+        const batch = res.data || [];
+        out.push(...batch);
+        const totalPages = res.meta?.totalPages ?? (res.meta?.total ? Math.ceil(res.meta.total / pageLimit) : 1);
+        if (page >= totalPages || batch.length === 0 || page >= 50) break;
+        page += 1;
+      }
+      return out;
+    }
     try {
-      const [rulesRes, staffRes] = await Promise.all([
+      const [rulesRes, staffAll, countriesRes, citiesRes, sourcesRes, unisAll] = await Promise.all([
         customFetch("/api/settings/lead-assignment-rules") as Promise<{ data: AssignmentRule[] }>,
-        customFetch("/api/users?limit=100") as Promise<{ data: StaffOption[] }>,
+        fetchAllPages<StaffOption>("/api/users", 200),
+        customFetch("/api/countries?limit=500") as Promise<{ data: CountryOption[] }>,
+        customFetch("/api/leads/distinct-cities") as Promise<{ data: string[] }>,
+        customFetch("/api/leads/distinct-sources") as Promise<{ data: string[] }>,
+        fetchAllPages<UniversityOption>("/api/universities", 100),
       ]);
       setRules(rulesRes.data || []);
-      const filteredStaff = (staffRes.data || []).filter(u => STAFF_FILTER_ROLES.includes(u.role));
-      setStaff(filteredStaff);
+      setStaff(staffAll.filter(u => STAFF_FILTER_ROLES.includes(u.role)));
+      setCountries(countriesRes.data || []);
+      setCities(citiesRes.data || []);
+      setSources(sourcesRes.data || []);
+      setUniversities(unisAll);
     } catch (err: any) {
       toast({ title: "Yükleme başarısız", description: err.message, variant: "destructive" });
     } finally {
@@ -2359,6 +2412,16 @@ function LeadAssignmentRulesTab() {
     return `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
   }
 
+  function uniLabel(id: number) {
+    const u = universities.find(x => x.id === id);
+    return u ? `${u.name}${u.country ? ` (${u.country})` : ""}` : `#${id}`;
+  }
+
+  function phoneCodeLabel(code: string) {
+    const o = PHONE_CODE_OPTIONS.find(x => x.value === code);
+    return o ? o.label : code;
+  }
+
   function openNew() {
     setEditingId(null);
     setForm({ ...emptyForm, priority: rules.length });
@@ -2371,10 +2434,11 @@ function LeadAssignmentRulesTab() {
       name: rule.name,
       priority: rule.priority,
       isActive: rule.isActive,
-      countriesText: (rule.countries || []).join(", "),
-      citiesText: (rule.cities || []).join(", "),
-      sourcesText: (rule.sources || []).join(", "),
-      universityIdsText: (rule.universityIds || []).join(", "),
+      countries: rule.countries || [],
+      cities: rule.cities || [],
+      phoneCodes: rule.phoneCodes || [],
+      sources: rule.sources || [],
+      universityIds: rule.universityIds || [],
       staffUserIds: rule.staffUserIds || [],
       strategy: rule.strategy || "first",
     });
@@ -2396,10 +2460,11 @@ function LeadAssignmentRulesTab() {
         name: form.name.trim(),
         priority: form.priority,
         isActive: form.isActive,
-        countries: form.countriesText.split(",").map(s => s.trim()).filter(Boolean),
-        cities: form.citiesText.split(",").map(s => s.trim()).filter(Boolean),
-        sources: form.sourcesText.split(",").map(s => s.trim()).filter(Boolean),
-        universityIds: form.universityIdsText.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)),
+        countries: form.countries,
+        cities: form.cities,
+        phoneCodes: form.phoneCodes,
+        sources: form.sources,
+        universityIds: form.universityIds,
         staffUserIds: form.staffUserIds,
         strategy: form.strategy,
       };
@@ -2449,15 +2514,6 @@ function LeadAssignmentRulesTab() {
     }
   }
 
-  function toggleStaff(id: number) {
-    setForm(f => ({
-      ...f,
-      staffUserIds: f.staffUserIds.includes(id)
-        ? f.staffUserIds.filter(s => s !== id)
-        : [...f.staffUserIds, id],
-    }));
-  }
-
   return (
     <div className="space-y-6">
       <Card className="border-none shadow-lg shadow-black/5 p-6">
@@ -2486,20 +2542,49 @@ function LeadAssignmentRulesTab() {
                 <Input type="number" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: parseInt(e.target.value, 10) || 0 }))} />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Ülkeler (virgülle ayır, boş = tümü)</Label>
-                <Input value={form.countriesText} onChange={e => setForm(f => ({ ...f, countriesText: e.target.value }))} placeholder="Türkiye, Azerbaycan" />
+                <Label className="text-xs font-medium mb-1.5">Ülkeler (boş = tümü)</Label>
+                <MultiSelectFilter
+                  values={form.countries}
+                  onChange={v => setForm(f => ({ ...f, countries: v }))}
+                  options={countries.map(c => ({ value: c.name, label: c.name }))}
+                  placeholder="Tüm ülkeler"
+                />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Kaynaklar (virgülle ayır)</Label>
-                <Input value={form.sourcesText} onChange={e => setForm(f => ({ ...f, sourcesText: e.target.value }))} placeholder="website, embed:home" />
+                <Label className="text-xs font-medium mb-1.5">Kaynaklar (boş = tümü)</Label>
+                <MultiSelectFilter
+                  values={form.sources}
+                  onChange={v => setForm(f => ({ ...f, sources: v }))}
+                  options={sources.map(s => ({ value: s, label: s }))}
+                  placeholder={sources.length === 0 ? "(sistemde lead kaynağı yok)" : "Tüm kaynaklar"}
+                />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Şehirler (virgülle ayır)</Label>
-                <Input value={form.citiesText} onChange={e => setForm(f => ({ ...f, citiesText: e.target.value }))} placeholder="(opsiyonel)" />
+                <Label className="text-xs font-medium mb-1.5">Şehirler (boş = tümü)</Label>
+                <MultiSelectFilter
+                  values={form.cities}
+                  onChange={v => setForm(f => ({ ...f, cities: v }))}
+                  options={cities.map(c => ({ value: c, label: c }))}
+                  placeholder={cities.length === 0 ? "(sistemde şehir yok)" : "Tüm şehirler"}
+                />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Üniversite ID'leri (virgülle ayır)</Label>
-                <Input value={form.universityIdsText} onChange={e => setForm(f => ({ ...f, universityIdsText: e.target.value }))} placeholder="(opsiyonel)" />
+                <Label className="text-xs font-medium mb-1.5">Üniversiteler (boş = tümü)</Label>
+                <MultiSelectFilter
+                  values={form.universityIds.map(String)}
+                  onChange={v => setForm(f => ({ ...f, universityIds: v.map(x => parseInt(x, 10)).filter(n => !isNaN(n)) }))}
+                  options={universities.map(u => ({ value: String(u.id), label: u.country ? `${u.name} (${u.country})` : u.name }))}
+                  placeholder="Tüm üniversiteler"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-xs font-medium mb-1.5">Telefon Kodları (boş = tümü)</Label>
+                <MultiSelectFilter
+                  values={form.phoneCodes}
+                  onChange={v => setForm(f => ({ ...f, phoneCodes: v }))}
+                  options={PHONE_CODE_OPTIONS.map(p => ({ value: p.value, label: p.label }))}
+                  placeholder="Tüm telefon kodları"
+                />
               </div>
               <div>
                 <Label className="text-xs font-medium mb-1.5">Strateji</Label>
@@ -2516,20 +2601,20 @@ function LeadAssignmentRulesTab() {
 
             <div>
               <Label className="text-xs font-medium mb-1.5">Atanacak Personel</Label>
-              <div className="flex flex-wrap gap-2 mt-2 max-h-48 overflow-auto p-2 rounded-lg border border-border bg-background">
-                {staff.length === 0 && <p className="text-xs text-muted-foreground">Personel bulunamadı.</p>}
-                {staff.map(u => {
-                  const checked = form.staffUserIds.includes(u.id);
-                  const label = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
-                  return (
-                    <label key={u.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${checked ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleStaff(u.id)} className="sr-only" />
-                      {label}
-                      <span className="text-[10px] text-muted-foreground">({u.role})</span>
-                    </label>
-                  );
+              <MultiSelectFilter
+                values={form.staffUserIds.map(String)}
+                onChange={v => setForm(f => ({ ...f, staffUserIds: v.map(x => parseInt(x, 10)).filter(n => !isNaN(n)) }))}
+                options={staff.map(u => {
+                  const name = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
+                  return { value: String(u.id), label: `${name} (${u.role})` };
                 })}
-              </div>
+                placeholder={staff.length === 0 ? "(personel bulunamadı)" : "Personel seçin"}
+              />
+              {form.staffUserIds.length > 0 && (
+                <div className="text-[11px] text-muted-foreground mt-1.5">
+                  Seçili: {form.staffUserIds.map(staffLabel).join(", ")}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -2563,9 +2648,10 @@ function LeadAssignmentRulesTab() {
                   <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     {rule.countries.length > 0 && <div>Ülke: {rule.countries.join(", ")}</div>}
                     {rule.cities.length > 0 && <div>Şehir: {rule.cities.join(", ")}</div>}
+                    {(rule.phoneCodes?.length ?? 0) > 0 && <div>Tel kodu: {rule.phoneCodes.map(phoneCodeLabel).join(", ")}</div>}
                     {rule.sources.length > 0 && <div>Kaynak: {rule.sources.join(", ")}</div>}
-                    {rule.universityIds.length > 0 && <div>Üniversite ID: {rule.universityIds.join(", ")}</div>}
-                    {rule.countries.length === 0 && rule.cities.length === 0 && rule.sources.length === 0 && rule.universityIds.length === 0 && <div className="italic">Tüm leadlere uygulanır</div>}
+                    {rule.universityIds.length > 0 && <div>Üniversite: {rule.universityIds.map(uniLabel).join(", ")}</div>}
+                    {rule.countries.length === 0 && rule.cities.length === 0 && (rule.phoneCodes?.length ?? 0) === 0 && rule.sources.length === 0 && rule.universityIds.length === 0 && <div className="italic">Tüm leadlere uygulanır</div>}
                     <div>Personel: {rule.staffUserIds.map(staffLabel).join(", ")}</div>
                   </div>
                 </div>

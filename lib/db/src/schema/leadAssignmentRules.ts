@@ -8,6 +8,7 @@ export const leadAssignmentRulesTable = pgTable("lead_assignment_rules", {
   countries: jsonb("countries").$type<string[]>().notNull().default([]),
   universityIds: jsonb("university_ids").$type<number[]>().notNull().default([]),
   cities: jsonb("cities").$type<string[]>().notNull().default([]),
+  phoneCodes: jsonb("phone_codes").$type<string[]>().notNull().default([]),
   sources: jsonb("sources").$type<string[]>().notNull().default([]),
   staffUserIds: jsonb("staff_user_ids").$type<number[]>().notNull().default([]),
   strategy: text("strategy").notNull().default("first"),
