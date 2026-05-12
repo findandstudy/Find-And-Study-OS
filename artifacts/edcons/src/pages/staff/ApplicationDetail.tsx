@@ -541,7 +541,8 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
   open: boolean; onClose: () => void; app: any; stages: any[]; onSaved: () => void;
 }) {
   const { levels: studyLevels } = useStudyLevels();
-  const updateApp = useUpdateApplication();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     stage: app?.stage || "",
     country: app?.country || "",
@@ -561,12 +562,17 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
   async function handleSave() {
     const data: Record<string, any> = {};
     for (const [key, val] of Object.entries(form)) {
-      if (val !== (app?.[key] || "")) data[key] = val || null;
+      const current = app?.[key];
+      const currentNorm = current === null || current === undefined ? "" : String(current);
+      const valNorm = val === null || val === undefined ? "" : String(val);
+      if (valNorm !== currentNorm) data[key] = val === "" ? null : val;
     }
     if (Object.keys(data).length === 0) { onClose(); return; }
 
+    setSaving(true);
     try {
-      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
+      const csrfRaw = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1];
+      const csrfToken = csrfRaw ? decodeURIComponent(csrfRaw) : "";
       const res = await fetch(`${BASE_URL}/api/applications/${app.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
@@ -578,12 +584,25 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         onClose();
         return;
       }
-      const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => ({} as any));
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
         const stageLabel = stages.find((s: any) => s.key === data.stage)?.label ?? data.stage;
         setDocUploadDialog({ targetStage: data.stage, targetStageLabel: stageLabel });
+        return;
       }
-    } catch {
+      toast({
+        title: `Kaydedilemedi (${res.status})`,
+        description: body?.error || body?.message || res.statusText || "Bilinmeyen sunucu hatası",
+        variant: "destructive",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Ağ hatası",
+        description: err?.message || "İstek gönderilemedi",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -653,8 +672,8 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={updateApp.isPending}>
-            {updateApp.isPending ? "Saving..." : "Save Changes"}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
