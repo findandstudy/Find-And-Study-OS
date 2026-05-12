@@ -30,6 +30,7 @@ import {
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
+import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -553,6 +554,7 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
         status: initialStatus,
       }).returning();
       leadId = lead.id;
+      await applyLeadAssignmentRules(lead, req.ip);
     }
 
     const submissionData = { ...formData };

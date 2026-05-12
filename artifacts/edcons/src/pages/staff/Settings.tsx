@@ -185,7 +185,7 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
   );
 }
 
-type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "webtolead" | "advanced";
+type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "leadAssignment" | "webtolead" | "advanced";
 
 interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
 
@@ -203,6 +203,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "documents", label: "Documents / PDF", icon: FileText, group: "organization", managerOnly: true },
   { id: "integrations", label: "Integrations", icon: Plug, group: "organization", managerOnly: true },
   { id: "quicklinks", label: "Quick Links", icon: LinkIcon, group: "organization", managerOnly: true },
+  { id: "leadAssignment", label: "Lead Otomatik Atama", icon: GripVertical, group: "organization", managerOnly: true },
   { id: "webtolead", label: "Web to Lead", icon: ExternalLink, group: "organization", superAdminOnly: true },
   { id: "advanced", label: "Advanced", icon: Code, group: "organization", managerOnly: true },
 ];
@@ -430,6 +431,7 @@ export default function SettingsPage() {
       case "documents": return isManager ? DocumentsTab() : null;
       case "integrations": return isManager ? IntegrationsTab() : null;
       case "quicklinks": return isManager ? <QuickLinksTab /> : null;
+      case "leadAssignment": return isManager ? <LeadAssignmentRulesTab /> : null;
       case "webtolead": return isSuperAdmin ? <WebToLeadTab /> : null;
       case "advanced": return isManager ? AdvancedTab() : null;
       default: return null;
@@ -2281,5 +2283,307 @@ function ContractExpiryThresholdsCard() {
         </Button>
       </div>
     </Card>
+  );
+}
+
+interface AssignmentRule {
+  id: number;
+  name: string;
+  priority: number;
+  isActive: boolean;
+  countries: string[];
+  universityIds: number[];
+  cities: string[];
+  sources: string[];
+  staffUserIds: number[];
+  strategy: "first" | "round_robin";
+  lastAssignedIndex: number;
+}
+
+interface StaffOption { id: number; firstName: string | null; lastName: string | null; email: string; role: string; }
+
+const STAFF_FILTER_ROLES = ["super_admin", "admin", "manager", "staff", "consultant"];
+
+function LeadAssignmentRulesTab() {
+  const { toast } = useToast();
+  const [rules, setRules] = useState<AssignmentRule[]>([]);
+  const [staff, setStaff] = useState<StaffOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  const emptyForm = {
+    name: "",
+    priority: 0,
+    isActive: true,
+    countriesText: "",
+    citiesText: "",
+    sourcesText: "",
+    universityIdsText: "",
+    staffUserIds: [] as number[],
+    strategy: "first" as "first" | "round_robin",
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const [rulesRes, staffRes] = await Promise.all([
+        customFetch("/api/settings/lead-assignment-rules") as Promise<{ data: AssignmentRule[] }>,
+        customFetch("/api/users?limit=100") as Promise<{ data: StaffOption[] }>,
+      ]);
+      setRules(rulesRes.data || []);
+      const filteredStaff = (staffRes.data || []).filter(u => STAFF_FILTER_ROLES.includes(u.role));
+      setStaff(filteredStaff);
+    } catch (err: any) {
+      toast({ title: "Yükleme başarısız", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  function staffLabel(id: number) {
+    const u = staff.find(s => s.id === id);
+    if (!u) return `#${id}`;
+    return `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
+  }
+
+  function openNew() {
+    setEditingId(null);
+    setForm({ ...emptyForm, priority: rules.length });
+    setShowForm(true);
+  }
+
+  function openEdit(rule: AssignmentRule) {
+    setEditingId(rule.id);
+    setForm({
+      name: rule.name,
+      priority: rule.priority,
+      isActive: rule.isActive,
+      countriesText: (rule.countries || []).join(", "),
+      citiesText: (rule.cities || []).join(", "),
+      sourcesText: (rule.sources || []).join(", "),
+      universityIdsText: (rule.universityIds || []).join(", "),
+      staffUserIds: rule.staffUserIds || [],
+      strategy: rule.strategy || "first",
+    });
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) {
+      toast({ title: "İsim gerekli", variant: "destructive" });
+      return;
+    }
+    if (form.staffUserIds.length === 0) {
+      toast({ title: "En az bir personel seçin", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = {
+        name: form.name.trim(),
+        priority: form.priority,
+        isActive: form.isActive,
+        countries: form.countriesText.split(",").map(s => s.trim()).filter(Boolean),
+        cities: form.citiesText.split(",").map(s => s.trim()).filter(Boolean),
+        sources: form.sourcesText.split(",").map(s => s.trim()).filter(Boolean),
+        universityIds: form.universityIdsText.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)),
+        staffUserIds: form.staffUserIds,
+        strategy: form.strategy,
+      };
+      const url = editingId
+        ? `/api/settings/lead-assignment-rules/${editingId}`
+        : `/api/settings/lead-assignment-rules`;
+      const method = editingId ? "PATCH" : "POST";
+      await customFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast({ title: editingId ? "Kural güncellendi" : "Kural oluşturuldu" });
+      setShowForm(false);
+      setEditingId(null);
+      setForm(emptyForm);
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: "Kaydetme başarısız", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggle(rule: AssignmentRule) {
+    try {
+      await customFetch(`/api/settings/lead-assignment-rules/${rule.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !rule.isActive }),
+      });
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: "Hata", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      await customFetch(`/api/settings/lead-assignment-rules/${id}`, { method: "DELETE" });
+      toast({ title: "Kural silindi" });
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: "Silme başarısız", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleteConfirm(null);
+    }
+  }
+
+  function toggleStaff(id: number) {
+    setForm(f => ({
+      ...f,
+      staffUserIds: f.staffUserIds.includes(id)
+        ? f.staffUserIds.filter(s => s !== id)
+        : [...f.staffUserIds, id],
+    }));
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="font-display font-bold text-lg">Lead Otomatik Atama</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Yeni gelen leadler için ülke/şehir/kaynak filtreleriyle staff'a otomatik atama kuralları tanımlayın. Kurallar öncelik sırasına göre değerlendirilir; ilk eşleşen aktif kural uygulanır.
+            </p>
+          </div>
+          <Button onClick={openNew} className="gap-2">
+            <Plus className="w-4 h-4" /> Yeni Kural
+          </Button>
+        </div>
+
+        {showForm && (
+          <Card className="p-5 mb-6 border-2 border-primary/20 bg-primary/[0.02] space-y-4">
+            <h4 className="font-semibold text-sm">{editingId ? "Kuralı Düzenle" : "Yeni Kural"}</h4>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs font-medium mb-1.5">İsim</Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="örn. Türkiye leadleri → Ahmet" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Öncelik (küçük = önce)</Label>
+                <Input type="number" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: parseInt(e.target.value, 10) || 0 }))} />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Ülkeler (virgülle ayır, boş = tümü)</Label>
+                <Input value={form.countriesText} onChange={e => setForm(f => ({ ...f, countriesText: e.target.value }))} placeholder="Türkiye, Azerbaycan" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Kaynaklar (virgülle ayır)</Label>
+                <Input value={form.sourcesText} onChange={e => setForm(f => ({ ...f, sourcesText: e.target.value }))} placeholder="website, embed:home" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Şehirler (virgülle ayır)</Label>
+                <Input value={form.citiesText} onChange={e => setForm(f => ({ ...f, citiesText: e.target.value }))} placeholder="(opsiyonel)" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Üniversite ID'leri (virgülle ayır)</Label>
+                <Input value={form.universityIdsText} onChange={e => setForm(f => ({ ...f, universityIdsText: e.target.value }))} placeholder="(opsiyonel)" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium mb-1.5">Strateji</Label>
+                <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.strategy} onChange={e => setForm(f => ({ ...f, strategy: e.target.value as any }))}>
+                  <option value="first">İlk personele ata</option>
+                  <option value="round_robin">Sırayla dağıt (round-robin)</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 pt-5">
+                <Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
+                <Label className="text-sm">Aktif</Label>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium mb-1.5">Atanacak Personel</Label>
+              <div className="flex flex-wrap gap-2 mt-2 max-h-48 overflow-auto p-2 rounded-lg border border-border bg-background">
+                {staff.length === 0 && <p className="text-xs text-muted-foreground">Personel bulunamadı.</p>}
+                {staff.map(u => {
+                  const checked = form.staffUserIds.includes(u.id);
+                  const label = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
+                  return (
+                    <label key={u.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${checked ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-primary/40"}`}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleStaff(u.id)} className="sr-only" />
+                      {label}
+                      <span className="text-[10px] text-muted-foreground">({u.role})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); }}>İptal</Button>
+              <Button onClick={handleSave} disabled={saving} className="gap-2">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Kaydet
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : rules.length === 0 ? (
+          <div className="text-sm text-muted-foreground text-center py-10">
+            Henüz kural tanımlanmamış. "Yeni Kural" ile başlayın.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rules.map(rule => (
+              <div key={rule.id} className="flex items-start gap-3 p-4 rounded-xl border border-border hover-elevate">
+                <div className="text-xs font-mono text-muted-foreground shrink-0 mt-0.5 w-8">#{rule.priority}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">{rule.name}</span>
+                    {!rule.isActive && <Badge variant="secondary" className="text-[10px]">Pasif</Badge>}
+                    <Badge variant="outline" className="text-[10px]">
+                      {rule.strategy === "round_robin" ? "Round-robin" : "İlk personel"}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                    {rule.countries.length > 0 && <div>Ülke: {rule.countries.join(", ")}</div>}
+                    {rule.cities.length > 0 && <div>Şehir: {rule.cities.join(", ")}</div>}
+                    {rule.sources.length > 0 && <div>Kaynak: {rule.sources.join(", ")}</div>}
+                    {rule.universityIds.length > 0 && <div>Üniversite ID: {rule.universityIds.join(", ")}</div>}
+                    {rule.countries.length === 0 && rule.cities.length === 0 && rule.sources.length === 0 && rule.universityIds.length === 0 && <div className="italic">Tüm leadlere uygulanır</div>}
+                    <div>Personel: {rule.staffUserIds.map(staffLabel).join(", ")}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Switch checked={rule.isActive} onCheckedChange={() => handleToggle(rule)} />
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(rule)}><Pencil className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(rule.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {deleteConfirm !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
+            <Card className="p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+              <h4 className="font-semibold mb-2">Kuralı sil?</h4>
+              <p className="text-sm text-muted-foreground mb-4">Bu işlem geri alınamaz.</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button>
+                <Button variant="destructive" onClick={() => handleDelete(deleteConfirm)}>Sil</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }

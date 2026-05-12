@@ -6,6 +6,7 @@ import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable 
 import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
 import { directOrigin } from "../lib/originHelper";
+import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { toE164 } from "../lib/inbox/phone";
 import {
   clearSession,
@@ -330,7 +331,7 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
         .limit(1);
       if (!existingLead) {
         const phone = user.phone ? String(user.phone).slice(0, 30) : null;
-        await db.insert(leadsTable).values({
+        const [createdLead] = await db.insert(leadsTable).values({
           firstName: (user.firstName || "").trim().toUpperCase().slice(0, 100) || "STUDENT",
           lastName: (user.lastName || "").trim().toUpperCase().slice(0, 100) || "REGISTRATION",
           email: user.email.slice(0, 255),
@@ -339,7 +340,8 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
           source: "student_registration",
           status: "new",
           ...directOrigin(),
-        });
+        }).returning();
+        if (createdLead) await applyLeadAssignmentRules(createdLead, req.ip);
       }
     } catch (err) {
       console.error("[AUTH VERIFY-EMAIL] Failed to create lead for verified registration:", err);

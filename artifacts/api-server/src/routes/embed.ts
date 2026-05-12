@@ -11,6 +11,7 @@ import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { createApplicationForStudent } from "./public-apply";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
+import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 
 const router: IRouter = Router();
 
@@ -420,6 +421,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, async (req, res): Pr
       interestedProgram: s(programName, 255),
       interestedCountry: s(universityName, 255),
     }).returning();
+    await applyLeadAssignmentRules(lead, req.ip);
     res.status(201).json({ success: true, leadId: lead.id });
   } catch (err: any) {
     console.error("[embed/lead] failed:", err?.message || err);
@@ -538,6 +540,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
         notes: s(message, 2000),
       }).returning();
       lead = inserted;
+      if (lead) await applyLeadAssignmentRules(lead, req.ip);
     }
 
     const [submission] = await tx.insert(embedSubmissionsTable).values({

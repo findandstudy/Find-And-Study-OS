@@ -25,6 +25,7 @@ import {
 } from "../lib/inbox/channels/whatsapp";
 import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
 import { directOrigin } from "../lib/originHelper";
+import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { decryptConfig } from "../lib/encryption";
@@ -364,6 +365,7 @@ router.post(
       .returning();
     await db.update(externalContactsTable).set({ leadId: lead.id }).where(eq(externalContactsTable.id, contact.id));
     await db.update(conversationsTable).set({ unmatched: false }).where(eq(conversationsTable.id, id));
+    await applyLeadAssignmentRules(lead, req.ip);
     await logAudit(req.user!.id, "create_lead_from_inbox", "lead", lead.id, { conversationId: id }, req.ip);
     res.status(201).json({ ok: true, leadId: lead.id });
   },

@@ -1,0 +1,109 @@
+import { db, leadAssignmentRulesTable, leadsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
+import { asc, eq, inArray, sql } from "drizzle-orm";
+import { logAudit } from "./auth";
+
+interface LeadLike {
+  id: number;
+  source?: string | null;
+  nationality?: string | null;
+  country?: string | null;
+  interestedCountry?: string | null;
+  interestedProgram?: string | null;
+  notes?: string | null;
+}
+
+function includesCI(haystacks: (string | null | undefined)[], needles: string[]): boolean {
+  const hay = haystacks.filter((v): v is string => !!v).map(v => v.toLowerCase());
+  if (hay.length === 0) return false;
+  const wanted = needles.map(n => n.toLowerCase()).filter(Boolean);
+  return wanted.some(n => hay.some(h => h === n || h.includes(n)));
+}
+
+async function ruleMatches(rule: LeadAssignmentRule, lead: LeadLike): Promise<boolean> {
+  if (!rule.isActive) return false;
+  if (!rule.staffUserIds || rule.staffUserIds.length === 0) return false;
+
+  const haystack = [lead.interestedCountry, lead.nationality, lead.country, lead.interestedProgram, lead.notes];
+
+  const countries = rule.countries || [];
+  if (countries.length > 0 && !includesCI(haystack, countries)) return false;
+
+  const cities = rule.cities || [];
+  if (cities.length > 0 && !includesCI(haystack, cities)) return false;
+
+  const sources = rule.sources || [];
+  if (sources.length > 0) {
+    if (!lead.source) return false;
+    if (!sources.map(s => s.toLowerCase()).includes(lead.source.toLowerCase())) return false;
+  }
+
+  const universityIds = rule.universityIds || [];
+  if (universityIds.length > 0) {
+    // Resolve the university names and check whether any appears in the
+    // lead's text fields (interestedProgram / interestedCountry — embed
+    // widget stores university name in interestedCountry).
+    const unis = await db.select({ name: universitiesTable.name })
+      .from(universitiesTable)
+      .where(inArray(universitiesTable.id, universityIds));
+    const names = unis.map(u => u.name).filter(Boolean);
+    if (names.length === 0) return false;
+    if (!includesCI(haystack, names)) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Atomically pick the next staff member for a round-robin rule. Increments
+ * `last_assigned_index` in a single SQL statement and returns the freshly
+ * advanced value, so concurrent lead-creates can never collide on the same
+ * staff slot.
+ */
+async function pickStaffAtomic(rule: LeadAssignmentRule): Promise<number | null> {
+  const staff = rule.staffUserIds;
+  if (!staff || staff.length === 0) return null;
+  if (rule.strategy !== "round_robin") return staff[0];
+
+  const len = staff.length;
+  const [updated] = await db.update(leadAssignmentRulesTable)
+    .set({ lastAssignedIndex: sql`((${leadAssignmentRulesTable.lastAssignedIndex} + 1) % ${len})` })
+    .where(eq(leadAssignmentRulesTable.id, rule.id))
+    .returning({ lastAssignedIndex: leadAssignmentRulesTable.lastAssignedIndex });
+  if (!updated) return null;
+  // The returned value is the *next* index; the assigned slot is one before.
+  const nextIdx = updated.lastAssignedIndex;
+  const idx = ((nextIdx - 1) % len + len) % len;
+  return staff[idx] ?? null;
+}
+
+/**
+ * Apply lead auto-assignment rules to a freshly created lead. Walks active
+ * rules in priority order (lowest priority first, then by id) and applies the
+ * first matching one. If a match is found, updates `leads.assignedToId` and
+ * writes an audit log. Silent no-op when no rule matches or the lead already
+ * has an `assignedToId`. Errors are caught and logged so this helper never
+ * breaks the calling lead-create flow.
+ */
+export async function applyLeadAssignmentRules(lead: LeadLike & { assignedToId?: number | null }, ipAddress?: string): Promise<number | null> {
+  try {
+    if (lead.assignedToId) return null;
+
+    const rules = await db.select().from(leadAssignmentRulesTable)
+      .where(eq(leadAssignmentRulesTable.isActive, true))
+      .orderBy(asc(leadAssignmentRulesTable.priority), asc(leadAssignmentRulesTable.id));
+
+    for (const rule of rules) {
+      if (!(await ruleMatches(rule, lead))) continue;
+      const staffId = await pickStaffAtomic(rule);
+      if (!staffId) continue;
+
+      await db.update(leadsTable).set({ assignedToId: staffId }).where(eq(leadsTable.id, lead.id));
+      logAudit(null, "lead.auto_assigned", "lead", lead.id, { ruleId: rule.id, ruleName: rule.name, staffId }, ipAddress);
+      return staffId;
+    }
+    return null;
+  } catch (err: any) {
+    console.error("[applyLeadAssignmentRules] failed:", err?.message || err);
+    return null;
+  }
+}

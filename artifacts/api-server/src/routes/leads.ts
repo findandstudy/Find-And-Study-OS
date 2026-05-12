@@ -11,6 +11,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
+import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 
 const router: IRouter = Router();
 
@@ -63,6 +64,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     status: "new",
     ...origin,
   }).returning();
+  await applyLeadAssignmentRules(lead, req.ip);
   res.status(201).json({ success: true, message: "Inquiry submitted successfully", leadId: lead.id });
 });
 
@@ -91,7 +93,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   const origin = await inferOriginFromAgentId(agent.id);
 
   const phoneStr2 = String(phone).slice(0, 30);
-  await db.insert(leadsTable).values({
+  const [agentLead] = await db.insert(leadsTable).values({
     firstName: String(firstName).trim().toUpperCase().slice(0, 100),
     lastName: String(lastName).trim().toUpperCase().slice(0, 100),
     email: String(email).slice(0, 255),
@@ -101,7 +103,8 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     status: "new",
     agentId: agent.id,
     ...origin,
-  });
+  }).returning();
+  if (agentLead) await applyLeadAssignmentRules(agentLead, req.ip);
 
   const accept = req.headers.accept || "";
   if (accept.includes("application/json")) {
@@ -247,6 +250,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     season: season || currentYear,
     ...origin,
   }).returning();
+  await applyLeadAssignmentRules(lead, req.ip);
   await logAudit(user.id, "create_lead", "lead", lead.id, {}, req.ip);
 
   dispatchNotification({

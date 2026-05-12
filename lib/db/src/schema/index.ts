@@ -34,3 +34,4 @@ export * from "./popups";
 export * from "./branches";
 export * from "./contracts";
 export * from "./universityContracts";
+export * from "./leadAssignmentRules";

@@ -12,6 +12,7 @@ import { resolveIdentity } from "./identityResolver";
 import { toE164 } from "./phone";
 import { dispatchNotification } from "../notificationDispatcher";
 import { inboxBus } from "./eventBus";
+import { applyLeadAssignmentRules } from "../leadAssignment";
 
 export interface InboundContactInfo {
   externalId: string;
@@ -162,6 +163,13 @@ export async function processInboundMessage(opts: {
           })
           .returning({ id: leadsTable.id });
         if (createdLead) {
+          await applyLeadAssignmentRules({
+            id: createdLead.id,
+            source: `web_form:${agentRef}`,
+            phone: contact.phone || null,
+            country: null,
+            interestedCountry: null,
+          });
           await db
             .update(externalContactsTable)
             .set({ leadId: createdLead.id })
