@@ -584,7 +584,8 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         onClose();
         return;
       }
-      const body = await res.json().catch(() => ({} as any));
+      const body: { code?: string; error?: string; message?: string } =
+        await res.json().catch(() => ({}));
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
         const stageLabel = stages.find((s: any) => s.key === data.stage)?.label ?? data.stage;
         setDocUploadDialog({ targetStage: data.stage, targetStageLabel: stageLabel });
@@ -592,13 +593,14 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
       }
       toast({
         title: `Kaydedilemedi (${res.status})`,
-        description: body?.error || body?.message || res.statusText || "Bilinmeyen sunucu hatası",
+        description: body.error || body.message || res.statusText || "Bilinmeyen sunucu hatası",
         variant: "destructive",
       });
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "İstek gönderilemedi";
       toast({
         title: "Ağ hatası",
-        description: err?.message || "İstek gönderilemedi",
+        description: message,
         variant: "destructive",
       });
     } finally {
