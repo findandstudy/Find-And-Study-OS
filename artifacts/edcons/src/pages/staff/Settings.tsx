@@ -1350,8 +1350,16 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
           onClose={() => setEditingType(null)}
           stages={activePipeline.pipeline.stages}
           onSave={async (s) => {
-            await activePipeline.pipeline.saveStages(s);
+            const result = await activePipeline.pipeline.saveStages(s);
             qc.invalidateQueries({ queryKey: ["pipeline-stages"] });
+            const warnings = result.warnings;
+            if (warnings.length > 0) {
+              for (const w of warnings) {
+                toast({ title: "Pipeline warning", description: w, variant: "default" });
+              }
+            } else {
+              toast({ title: "Pipeline stages saved" });
+            }
           }}
           isSaving={activePipeline.pipeline.isSaving}
           entityLabel={activePipeline.label.replace(" Pipeline", "")}

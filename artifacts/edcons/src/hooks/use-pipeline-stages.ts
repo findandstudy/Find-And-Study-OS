@@ -20,6 +20,13 @@ export interface PipelineStage {
   isCaseClose?: boolean;
   countries?: string | null;
   mappedStudentStageKey?: string | null;
+  // Task #134 — dynamic stage behaviors:
+  uploadPermissionLevel?: string;
+  tracksOfferExpiry?: boolean;
+  requiresValidUntil?: boolean;
+  commissionFinanceStatus?: string | null;
+  serviceFeeFinanceStatus?: string | null;
+  autoCancelSiblingsOnWon?: boolean;
 }
 
 async function fetchStages(entityType: string): Promise<PipelineStage[]> {
@@ -37,7 +44,12 @@ function deduplicateStages(stages: PipelineStage[]): PipelineStage[] {
   });
 }
 
-async function saveStages(entityType: string, stages: PipelineStage[]): Promise<PipelineStage[]> {
+export interface SaveStagesResult {
+  stages: PipelineStage[];
+  warnings: string[];
+}
+
+async function saveStages(entityType: string, stages: PipelineStage[]): Promise<SaveStagesResult> {
   const r = await fetch(`${BASE_URL}/api/pipeline-stages/${entityType}`, {
     method: "PUT",
     credentials: "include",
@@ -45,7 +57,11 @@ async function saveStages(entityType: string, stages: PipelineStage[]): Promise<
     body: JSON.stringify({ stages }),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  const body = await r.json();
+  // Backwards-compat: server may return either an array of stages
+  // (legacy) or `{ stages, warnings }` (Task #134).
+  if (Array.isArray(body)) return { stages: body, warnings: [] };
+  return { stages: body.stages || [], warnings: Array.isArray(body.warnings) ? body.warnings : [] };
 }
 
 export function usePipelineStages(entityType: string) {
@@ -66,7 +82,7 @@ export function usePipelineStages(entityType: string) {
   const mutation = useMutation({
     mutationFn: (stages: PipelineStage[]) => saveStages(entityType, stages),
     onSuccess: (data) => {
-      queryClient.setQueryData(["pipeline-stages", entityType], data);
+      queryClient.setQueryData(["pipeline-stages", entityType], data.stages);
     },
   });
 

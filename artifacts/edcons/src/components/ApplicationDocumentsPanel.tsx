@@ -14,25 +14,17 @@ import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FI
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-const ADMIN_ONLY_UPLOAD_STAGES = [
-  "offer_received", "acceptance_letter", "final_acceptance",
-];
-
+// Backwards-compatible export consumed by student/Applications.tsx.
+// The set of doc-bearing stages is now driven entirely by pipeline_stages
+// (uploadPermissionLevel != 'none'); this constant remains as a safe fallback
+// for legacy default installations. The student page also derives the
+// runtime exclude list dynamically from the pipeline (any stage with an
+// upload permission level other than 'none') so custom doc-enabled
+// stages don't render in BOTH panels.
 export const APPLICATION_DOC_STAGES = [
   "app_fee_paid", "deposit_paid", "upload_payment",
   "offer_received", "acceptance_letter", "final_acceptance",
   "student_card", "visa_approved", "visa_reject",
-];
-
-const APPLICATION_DOC_CATEGORIES = [
-  "app_fee_paid",
-  "deposit_paid",
-  "offer_received",
-  "acceptance_letter",
-  "final_acceptance",
-  "student_card",
-  "visa_approved",
-  "visa_reject",
 ];
 
 const FALLBACK_LABELS: Record<string, string> = {
@@ -48,6 +40,7 @@ const FALLBACK_LABELS: Record<string, string> = {
 
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
+const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -81,12 +74,14 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
 
   const isAdmin = ADMIN_ROLES.includes(userRole);
   const isStaff = STAFF_ROLES.includes(userRole);
+  const isAgent = AGENT_ROLES.includes(userRole);
   const restrictFuture = !isStaff;
 
   // Determine future-stage gating using pipeline ordering.
   const { stages: pipelineStages } = usePipelineStages("application");
   const stageOrder = new Map<string, number>();
   pipelineStages.forEach((s, i) => stageOrder.set(s.key, s.sortOrder ?? i));
+  const stageByKey = new Map(pipelineStages.map(s => [s.key, s]));
   const currentOrder = currentStage && stageOrder.has(currentStage)
     ? (stageOrder.get(currentStage) as number)
     : Number.POSITIVE_INFINITY;
@@ -94,6 +89,12 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
     if (!stageOrder.has(category)) return false;
     return (stageOrder.get(category) as number) > currentOrder;
   }
+
+  // Categories shown are pipeline stages where uploadPermissionLevel != 'none'
+  // (excluding the missing_docs note-only stage), preserving pipeline order.
+  const docCategories = pipelineStages
+    .filter(s => (s.uploadPermissionLevel ?? "none") !== "none" && s.key !== "missing_docs" && s.key !== "upload_payment")
+    .map(s => s.key);
 
   function getCategoryLabel(category: string): string {
     const translated = t(`apply.appDocLabel_${category}`);
@@ -109,7 +110,7 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
       </h2>
 
       <div className="space-y-3">
-        {APPLICATION_DOC_CATEGORIES.map(category => {
+        {docCategories.map(category => {
           const docs = (allDocs as any[]).filter(
             (d: any) => (d.stage === category || (category === "deposit_paid" && d.stage === "upload_payment")) && !d.isMissingDocNote
           );
@@ -117,15 +118,20 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
           // Existing uploads stay visible at any stage.
           const isFuture = restrictFuture && isFutureCategory(category);
           if (isFuture && docs.length === 0) return null;
+          const stageMeta = stageByKey.get(category);
+          const uploadLevel = (stageMeta?.uploadPermissionLevel ?? "everyone") as string;
           return (
             <CategorySection
+              isAgent={isAgent}
               key={category}
               applicationId={applicationId}
               category={category}
               label={getCategoryLabel(category)}
+              uploadPermissionLevel={uploadLevel}
               docs={docs}
               userId={userId}
               isAdmin={isAdmin}
+              isStaff={isStaff}
               hideUpload={isFuture}
             />
           );
@@ -136,14 +142,17 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
 }
 
 function CategorySection({
-  applicationId, category, label, docs, userId, isAdmin, hideUpload,
+  applicationId, category, label, uploadPermissionLevel, docs, userId, isAdmin, isStaff, isAgent, hideUpload,
 }: {
   applicationId: number;
   category: string;
   label: string;
+  uploadPermissionLevel: string;
   docs: any[];
   userId?: number;
   isAdmin: boolean;
+  isStaff: boolean;
+  isAgent: boolean;
   hideUpload?: boolean;
 }) {
   const [expanded, setExpanded] = useState(docs.length > 0);
@@ -152,8 +161,22 @@ function CategorySection({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  const isAdminOnly = ADMIN_ONLY_UPLOAD_STAGES.includes(category);
-  const canUpload = hideUpload ? false : (isAdminOnly ? isAdmin : true);
+  // Permission matrix (Task #134):
+  //   admin_only         → admin / manager only (legacy default for offer stages)
+  //   staff_only         → all staff (admin + staff/consultant/editor/...)
+  //   staff_and_agent    → staff + agents (no students)
+  //   everyone           → staff + agents + students
+  const isAdminOnly = uploadPermissionLevel === "admin_only";
+  const isStaffOnly = uploadPermissionLevel === "staff_only";
+  const canUpload = (() => {
+    if (hideUpload) return false;
+    if (uploadPermissionLevel === "none") return false;
+    if (isAdminOnly) return isAdmin;
+    if (isStaffOnly) return isStaff;
+    if (uploadPermissionLevel === "staff_and_agent") return isStaff || isAgent;
+    if (uploadPermissionLevel === "everyone") return true;
+    return false;
+  })();
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -225,7 +248,10 @@ function CategorySection({
             <Badge variant="secondary" className="text-xs px-1.5 py-0">{docs.length}</Badge>
           )}
           {isAdminOnly && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">Admin Upload</Badge>
+            <Badge variant="outline" className="text-xs px-1.5 py-0 text-rose-600 border-rose-300">Admin Upload</Badge>
+          )}
+          {isStaffOnly && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">Staff Upload</Badge>
           )}
         </div>
       </button>

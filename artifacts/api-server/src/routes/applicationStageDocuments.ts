@@ -1,24 +1,38 @@
 import { Router, type IRouter } from "express";
-import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable } from "@workspace/db";
+import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable } from "@workspace/db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
+import { canUploadStageDocument } from "../lib/stagePermissions";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { validateUploadedFile, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 
 const router: IRouter = Router();
 
-const EVERYONE_UPLOAD_STAGES = [
-  "app_fee_paid", "missing_docs", "upload_payment", "deposit_paid",
-  "visa_approved", "student_card", "visa_reject",
-];
+interface StageBehavior {
+  uploadPermissionLevel: string;
+  tracksOfferExpiry: boolean;
+  requiresValidUntil: boolean;
+}
 
-const ADMIN_ONLY_UPLOAD_STAGES = [
-  "offer_received", "acceptance_letter", "final_acceptance",
-];
-
-const ALL_DOC_STAGES = [...EVERYONE_UPLOAD_STAGES, ...ADMIN_ONLY_UPLOAD_STAGES];
+async function getStageBehavior(stageKey: string): Promise<StageBehavior | null> {
+  const [row] = await db.select({
+    uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel,
+    tracksOfferExpiry: pipelineStagesTable.tracksOfferExpiry,
+    requiresValidUntil: pipelineStagesTable.requiresValidUntil,
+  }).from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.key, stageKey),
+    ));
+  if (!row) return null;
+  return {
+    uploadPermissionLevel: row.uploadPermissionLevel || "none",
+    tracksOfferExpiry: !!row.tracksOfferExpiry,
+    requiresValidUntil: !!row.requiresValidUntil,
+  };
+}
 
 async function verifyApplicationAccess(userId: number, role: string, applicationId: number): Promise<boolean> {
   const [app] = await db.select().from(applicationsTable).where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
@@ -89,6 +103,17 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
 
   const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes, validUntil } = req.body;
 
+  if (!stage || !fileName) {
+    res.status(400).json({ error: "stage and fileName are required" });
+    return;
+  }
+
+  const behavior = await getStageBehavior(stage);
+  if (!behavior || behavior.uploadPermissionLevel === "none") {
+    res.status(400).json({ error: "Document upload not allowed for this stage" });
+    return;
+  }
+
   let validUntilDate: Date | null = null;
   if (validUntil) {
     const parsed = new Date(validUntil);
@@ -98,19 +123,8 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     }
     validUntilDate = parsed;
   }
-  const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
-  if (stage === "offer_received" && !validUntilDate) {
-    res.status(400).json({ error: "validUntil is required for offer letters" });
-    return;
-  }
-
-  if (!stage || !fileName) {
-    res.status(400).json({ error: "stage and fileName are required" });
-    return;
-  }
-
-  if (!ALL_DOC_STAGES.includes(stage)) {
-    res.status(400).json({ error: "Document upload not allowed for this stage" });
+  if (behavior.requiresValidUntil && !validUntilDate) {
+    res.status(400).json({ error: "validUntil is required for this stage" });
     return;
   }
 
@@ -166,16 +180,9 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     return;
   }
 
-  const isStaff = STAFF_ROLES.includes(user.role as any);
-  const isAdmin = ADMIN_ROLES.includes(user.role as any);
-
-  if (ADMIN_ONLY_UPLOAD_STAGES.includes(stage) && !isAdmin) {
-    res.status(403).json({ error: "Only administrators can upload documents for this stage" });
-    return;
-  }
-
-  if (EVERYONE_UPLOAD_STAGES.includes(stage) && !isStaff && !isAgentRole(user.role) && user.role !== "student") {
-    res.status(403).json({ error: "You do not have permission to upload documents" });
+  const allowed = canUploadStageDocument(behavior.uploadPermissionLevel, user.role);
+  if (!allowed) {
+    res.status(403).json({ error: "You do not have permission to upload documents for this stage" });
     return;
   }
 
@@ -193,7 +200,7 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     uploadedByRole: user.role,
     uploadedByName: uploaderName,
     isMissingDocNote: false,
-    validUntil: OFFER_DOC_STAGES.includes(stage) ? validUntilDate : null,
+    validUntil: behavior.tracksOfferExpiry ? validUntilDate : null,
   }).returning();
 
   await logAudit(user.id, "upload_stage_document", "application", applicationId, { stage, fileName, docId: doc.id }, req.ip);

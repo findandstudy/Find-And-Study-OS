@@ -5,8 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Upload, FileCheck, Loader2, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -30,8 +29,10 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   const [validUntil, setValidUntil] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const requiresValidUntil = targetStage === "offer_received";
-  const supportsValidUntil = OFFER_DOC_STAGES.includes(targetStage);
+  const { stages: pipelineStages } = usePipelineStages("application");
+  const targetStageMeta = pipelineStages.find(s => s.key === targetStage);
+  const supportsValidUntil = targetStageMeta?.tracksOfferExpiry === true;
+  const requiresValidUntil = targetStageMeta?.requiresValidUntil === true;
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {

@@ -7,6 +7,10 @@ import { clearStageFinanceCache } from "../lib/stageFinance";
 
 const router: IRouter = Router();
 
+// One-shot startup tasks: dedup + ensure unique index. The behavior-flag
+// backfill (Task #134) is gated on a marker row in `pipeline_migrations`
+// so it runs exactly once per database — admin-configured behavior is
+// never overwritten on subsequent boots.
 (async () => {
   try {
     await db.execute(sql`
@@ -20,13 +24,101 @@ const router: IRouter = Router();
       ON pipeline_stages(entity_type, key)
     `);
   } catch {}
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS pipeline_migrations (
+        name text PRIMARY KEY,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    const claim = await db.execute<{ name: string }>(sql`
+      INSERT INTO pipeline_migrations (name) VALUES ('task_134_backfill_v3')
+      ON CONFLICT (name) DO NOTHING
+      RETURNING name
+    `);
+    // node-postgres returns { rows: [...] }; some drivers return the array
+    // directly. Handle both shapes without an `any` escape hatch.
+    const claimed = Array.isArray(claim)
+      ? claim.length > 0
+      : (claim.rows?.length ?? 0) > 0;
+    if (claimed) {
+      await db.execute(sql`
+        UPDATE pipeline_stages SET upload_permission_level = 'everyone'
+        WHERE entity_type = 'application'
+          AND upload_permission_level = 'none'
+          AND key IN ('app_fee_paid','missing_docs','upload_payment','deposit_paid','visa_approved','student_card','visa_reject')
+      `);
+      // Offer stages were historically gated by ADMIN_ROLES only — preserve
+      // that exact behavior using the dedicated 'admin_only' level.
+      await db.execute(sql`
+        UPDATE pipeline_stages SET upload_permission_level = 'admin_only', tracks_offer_expiry = true
+        WHERE entity_type = 'application'
+          AND key IN ('offer_received','acceptance_letter','final_acceptance')
+      `);
+      // Repair any rows that an earlier (v2) backfill broadened from
+      // admin_only to staff_only on the legacy default offer keys.
+      await db.execute(sql`
+        UPDATE pipeline_stages SET upload_permission_level = 'admin_only'
+        WHERE entity_type = 'application'
+          AND upload_permission_level = 'staff_only'
+          AND key IN ('offer_received','acceptance_letter','final_acceptance')
+      `);
+      await db.execute(sql`
+        UPDATE pipeline_stages SET requires_valid_until = true
+        WHERE entity_type = 'application' AND key = 'offer_received'
+      `);
+      await db.execute(sql`
+        UPDATE pipeline_stages SET is_file_upload_mandatory = true, can_attach_file = true
+        WHERE entity_type = 'application'
+          AND key IN ('app_fee_paid','offer_received','acceptance_letter','final_acceptance','upload_payment','deposit_paid','visa_approved','student_card')
+      `);
+      await db.execute(sql`
+        UPDATE pipeline_stages SET commission_finance_status = 'confirmed', service_fee_finance_status = 'confirmed', auto_cancel_siblings_on_won = true
+        WHERE entity_type = 'application' AND key = 'enrolled'
+      `);
+      await db.execute(sql`
+        UPDATE pipeline_stages SET commission_finance_status = 'excluded', service_fee_finance_status = 'confirmed'
+        WHERE entity_type = 'application' AND key IN ('100scholar','visa_reject')
+      `);
+      await db.execute(sql`
+        UPDATE pipeline_stages SET commission_finance_status = 'excluded', service_fee_finance_status = 'excluded'
+        WHERE entity_type = 'application' AND key IN ('rejected','all_registered','cancelled','refound')
+      `);
+      // Catch-up: any custom application stage whose variant is 'won' should
+      // also auto-cancel siblings by default (matches old hardcoded behavior
+      // for any won-variant stage, not just the built-in 'enrolled' key).
+      await db.execute(sql`
+        UPDATE pipeline_stages SET auto_cancel_siblings_on_won = true
+        WHERE entity_type = 'application'
+          AND variant = 'won'
+          AND auto_cancel_siblings_on_won = false
+      `);
+      clearStageFinanceCache();
+      console.log("[PIPELINE] Task #134 backfill v3 applied (one-shot).");
+    }
+  } catch (err) {
+    console.error("[PIPELINE] Backfill failed:", err);
+  }
 })();
 
 const MANAGER_ROLES = ["super_admin", "admin", "manager"] as const;
 
 const ENTITY_TYPES = ["lead", "application", "student"];
 
-const DEFAULT_STAGES: Record<string, Array<{ key: string; label: string; sortOrder: number; variant?: string }>> = {
+type DefaultStage = {
+  key: string; label: string; sortOrder: number; variant?: string;
+  uploadPermissionLevel?: string;
+  tracksOfferExpiry?: boolean;
+  requiresValidUntil?: boolean;
+  isFileUploadMandatory?: boolean;
+  canAttachFile?: boolean;
+  commissionFinanceStatus?: string | null;
+  serviceFeeFinanceStatus?: string | null;
+  autoCancelSiblingsOnWon?: boolean;
+};
+
+const DEFAULT_STAGES: Record<string, DefaultStage[]> = {
   lead: [
     { key: "new", label: "New", sortOrder: 0 },
     { key: "contacted", label: "Contacted", sortOrder: 1 },
@@ -39,11 +131,25 @@ const DEFAULT_STAGES: Record<string, Array<{ key: string; label: string; sortOrd
     { key: "inquiry", label: "Inquiry", sortOrder: 0 },
     { key: "documents_collected", label: "Documents", sortOrder: 1 },
     { key: "submitted", label: "Submitted", sortOrder: 2 },
-    { key: "offer_received", label: "Offer", sortOrder: 3 },
+    {
+      key: "offer_received", label: "Offer", sortOrder: 3,
+      uploadPermissionLevel: "admin_only", tracksOfferExpiry: true,
+      requiresValidUntil: true, isFileUploadMandatory: true, canAttachFile: true,
+    },
     { key: "visa_applied", label: "Visa Applied", sortOrder: 4 },
-    { key: "visa_approved", label: "Visa OK", sortOrder: 5 },
-    { key: "enrolled", label: "Enrolled", sortOrder: 6, variant: "won" },
-    { key: "rejected", label: "Rejected", sortOrder: 7, variant: "lost" },
+    {
+      key: "visa_approved", label: "Visa OK", sortOrder: 5,
+      uploadPermissionLevel: "everyone", isFileUploadMandatory: true, canAttachFile: true,
+    },
+    {
+      key: "enrolled", label: "Enrolled", sortOrder: 6, variant: "won",
+      commissionFinanceStatus: "confirmed", serviceFeeFinanceStatus: "confirmed",
+      autoCancelSiblingsOnWon: true,
+    },
+    {
+      key: "rejected", label: "Rejected", sortOrder: 7, variant: "lost",
+      commissionFinanceStatus: "excluded", serviceFeeFinanceStatus: "excluded",
+    },
   ],
   student: [
     { key: "active", label: "Active", sortOrder: 0 },
@@ -52,6 +158,9 @@ const DEFAULT_STAGES: Record<string, Array<{ key: string; label: string; sortOrd
     { key: "suspended", label: "Suspended", sortOrder: 3, variant: "lost" },
   ],
 };
+
+const ALLOWED_PERMISSION_LEVELS = new Set(["none", "admin_only", "staff_only", "staff_and_agent", "everyone"]);
+const ALLOWED_FINANCE_STATUS = new Set(["potential", "confirmed", "excluded"]);
 
 router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const { entityType } = req.params;
@@ -110,6 +219,16 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     return;
   }
 
+  function normPermission(v: any): string {
+    const s = typeof v === "string" ? v : "none";
+    return ALLOWED_PERMISSION_LEVELS.has(s) ? s : "none";
+  }
+  function normFinance(v: any): string | null {
+    if (v === null || v === undefined || v === "" || v === "auto") return null;
+    const s = String(v);
+    return ALLOWED_FINANCE_STATUS.has(s) ? s : null;
+  }
+
   try {
     const inserted = await db.transaction(async (tx) => {
       await tx.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
@@ -131,6 +250,12 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           isCaseClose: !!s.isCaseClose,
           countries: s.countries || null,
           mappedStudentStageKey: entityType === "application" && s.mappedStudentStageKey ? String(s.mappedStudentStageKey) : null,
+          uploadPermissionLevel: entityType === "application" ? normPermission(s.uploadPermissionLevel) : "none",
+          tracksOfferExpiry: entityType === "application" && !!s.tracksOfferExpiry,
+          requiresValidUntil: entityType === "application" && !!s.tracksOfferExpiry && !!s.requiresValidUntil,
+          commissionFinanceStatus: entityType === "application" ? normFinance(s.commissionFinanceStatus) : null,
+          serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
+          autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,
         })))
         .returning();
 
@@ -138,7 +263,26 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     });
 
     clearStageFinanceCache();
-    res.json(inserted.sort((a, b) => a.sortOrder - b.sortOrder));
+
+    // Non-blocking warnings — surfaced to admin UI as toasts but do not
+    // prevent the save (admins can intentionally run pipelines without
+    // these features).
+    const warnings: string[] = [];
+    if (entityType === "application") {
+      const hasOfferTracking = inserted.some(s => s.tracksOfferExpiry);
+      if (!hasOfferTracking) {
+        warnings.push("No stage tracks offer expiry. Offer-letter deadlines and expiry reminders will not run until at least one stage has 'Track offer expiry' enabled.");
+      }
+      const hasConfirmedCommission = inserted.some(s => s.commissionFinanceStatus === "confirmed" || (s.commissionFinanceStatus === null && s.variant === "won"));
+      if (!hasConfirmedCommission) {
+        warnings.push("No stage marks commission as confirmed. Commission finance entries will never move to confirmed without a stage configured for it.");
+      }
+    }
+
+    res.json({
+      stages: inserted.sort((a, b) => a.sortOrder - b.sortOrder),
+      warnings,
+    });
   } catch (err: any) {
     console.error("Failed to save pipeline stages:", err);
     res.status(500).json({ error: "Failed to save pipeline stages" });

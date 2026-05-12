@@ -1,15 +1,8 @@
-import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, agentsTable, settingsTable } from "@workspace/db";
+import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, agentsTable, settingsTable, pipelineStagesTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
-const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
-
-const STAGE_LABELS: Record<string, string> = {
-  offer_received: "Offer",
-  acceptance_letter: "Acceptance Letter",
-  final_acceptance: "Final Acceptance Letter",
-};
 
 function parseThresholds(csv: string | null | undefined): number[] {
   const raw = (csv || "30,14,7,1").split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
@@ -26,6 +19,18 @@ export async function checkOfferLetterExpiries(): Promise<void> {
     const thresholds = parseThresholds(settings?.offerExpiryWarningDays);
     if (thresholds.length === 0) return;
 
+    const expiryStages = await db.select({
+      key: pipelineStagesTable.key,
+      label: pipelineStagesTable.label,
+    }).from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.entityType, "application"),
+        eq(pipelineStagesTable.tracksOfferExpiry, true),
+      ));
+    if (expiryStages.length === 0) return;
+    const stageLabels = new Map(expiryStages.map(s => [s.key, s.label]));
+    const expiryStageKeys = expiryStages.map(s => s.key);
+
     const now = new Date();
     const docs = await db.select({
       id: applicationStageDocumentsTable.id,
@@ -38,7 +43,7 @@ export async function checkOfferLetterExpiries(): Promise<void> {
       .from(applicationStageDocumentsTable)
       .where(and(
         isNotNull(applicationStageDocumentsTable.validUntil),
-        inArray(applicationStageDocumentsTable.stage, OFFER_DOC_STAGES),
+        inArray(applicationStageDocumentsTable.stage, expiryStageKeys),
       ));
 
     if (docs.length === 0) return;
@@ -103,7 +108,7 @@ export async function checkOfferLetterExpiries(): Promise<void> {
 
       if (recipientUserIds.size === 0) continue;
 
-      const stageLabel = STAGE_LABELS[doc.stage] || doc.stage;
+      const stageLabel = stageLabels.get(doc.stage) || doc.stage;
       const validUntilStr = validUntil.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
       const title = `${stageLabel} ${daysLeft} gün içinde geçerliliğini yitiriyor`;
       const body = `${studentName ? studentName + " — " : ""}${app.universityName || ""}${app.programName ? " / " + app.programName : ""} için yüklenen ${stageLabel.toLowerCase()} belgesinin son geçerlilik tarihi: ${validUntilStr} (${daysLeft} gün kaldı).`;

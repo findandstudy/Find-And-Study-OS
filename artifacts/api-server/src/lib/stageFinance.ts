@@ -1,53 +1,63 @@
 import { db, pipelineStagesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
-const LEGACY_EXCLUDED_COMMISSION = new Set([
-  "rejected", "all_registered", "cancelled", "visa_reject", "refound", "100scholar",
-]);
-const LEGACY_CONFIRMED_COMMISSION = new Set(["enrolled"]);
+type FinanceStatus = "potential" | "confirmed" | "excluded";
 
-const LEGACY_EXCLUDED_SERVICE_FEE = new Set([
-  "rejected", "all_registered", "cancelled", "refound",
-]);
-const LEGACY_CONFIRMED_SERVICE_FEE = new Set(["enrolled", "100scholar", "visa_reject"]);
+interface StageFlags {
+  variant: string | null;
+  commissionFinanceStatus: string | null;
+  serviceFeeFinanceStatus: string | null;
+  autoCancelSiblingsOnWon: boolean;
+}
 
-let stageVariantCache: Map<string, string | null> = new Map();
+let stageCache: Map<string, StageFlags> = new Map();
 let cacheTimestamp = 0;
 const CACHE_TTL = 60_000;
 
-async function loadStageVariants(): Promise<Map<string, string | null>> {
+async function loadStages(): Promise<Map<string, StageFlags>> {
   const now = Date.now();
-  if (now - cacheTimestamp < CACHE_TTL && stageVariantCache.size > 0) {
-    return stageVariantCache;
+  if (now - cacheTimestamp < CACHE_TTL && stageCache.size > 0) {
+    return stageCache;
   }
 
   try {
     const stages = await db
-      .select({ key: pipelineStagesTable.key, variant: pipelineStagesTable.variant })
+      .select({
+        key: pipelineStagesTable.key,
+        variant: pipelineStagesTable.variant,
+        commissionFinanceStatus: pipelineStagesTable.commissionFinanceStatus,
+        serviceFeeFinanceStatus: pipelineStagesTable.serviceFeeFinanceStatus,
+        autoCancelSiblingsOnWon: pipelineStagesTable.autoCancelSiblingsOnWon,
+      })
       .from(pipelineStagesTable)
       .where(eq(pipelineStagesTable.entityType, "application"));
 
-    const map = new Map<string, string | null>();
+    const map = new Map<string, StageFlags>();
     for (const s of stages) {
-      map.set(s.key, s.variant);
+      map.set(s.key, {
+        variant: s.variant,
+        commissionFinanceStatus: s.commissionFinanceStatus,
+        serviceFeeFinanceStatus: s.serviceFeeFinanceStatus,
+        autoCancelSiblingsOnWon: !!s.autoCancelSiblingsOnWon,
+      });
     }
 
     if (map.size > 0) {
-      stageVariantCache = map;
+      stageCache = map;
       cacheTimestamp = now;
     }
     return map;
   } catch {
-    return stageVariantCache;
+    return stageCache;
   }
 }
 
 export function clearStageFinanceCache() {
   cacheTimestamp = 0;
-  stageVariantCache.clear();
+  stageCache.clear();
 }
 
-function resolveFromVariant(variant: string | null | undefined): "potential" | "confirmed" | "excluded" | null {
+function resolveFromVariant(variant: string | null | undefined): FinanceStatus | null {
   if (variant === "won") return "confirmed";
   if (variant === "partial_won") return "potential";
   if (variant === "lost") return "excluded";
@@ -55,49 +65,48 @@ function resolveFromVariant(variant: string | null | undefined): "potential" | "
   return null;
 }
 
-export async function getCommissionFinanceStatus(stage: string): Promise<"potential" | "confirmed" | "excluded"> {
-  const variants = await loadStageVariants();
+function isValidStatus(v: any): v is FinanceStatus {
+  return v === "potential" || v === "confirmed" || v === "excluded";
+}
 
-  if (variants.size > 0) {
-    const variant = variants.get(stage);
-    const result = resolveFromVariant(variant);
-    if (result !== null) return result;
-    if (variants.has(stage)) return "potential";
+export async function getCommissionFinanceStatus(stage: string): Promise<FinanceStatus> {
+  const stages = await loadStages();
+  const flags = stages.get(stage);
+  if (flags) {
+    if (isValidStatus(flags.commissionFinanceStatus)) return flags.commissionFinanceStatus;
+    const variantResult = resolveFromVariant(flags.variant);
+    if (variantResult !== null) return variantResult;
+    return "potential";
   }
-
-  if (LEGACY_CONFIRMED_COMMISSION.has(stage)) return "confirmed";
-  if (LEGACY_EXCLUDED_COMMISSION.has(stage)) return "excluded";
+  // Unknown stage (not yet seeded): treat as potential.
   return "potential";
 }
 
-export async function getServiceFeeFinanceStatus(stage: string): Promise<"potential" | "confirmed" | "excluded"> {
-  const variants = await loadStageVariants();
-
-  if (variants.size > 0) {
-    const variant = variants.get(stage);
-    const result = resolveFromVariant(variant);
-    if (result !== null) return result;
-    if (variants.has(stage)) return "potential";
+export async function getServiceFeeFinanceStatus(stage: string): Promise<FinanceStatus> {
+  const stages = await loadStages();
+  const flags = stages.get(stage);
+  if (flags) {
+    if (isValidStatus(flags.serviceFeeFinanceStatus)) return flags.serviceFeeFinanceStatus;
+    const variantResult = resolveFromVariant(flags.variant);
+    if (variantResult !== null) return variantResult;
+    return "potential";
   }
-
-  if (LEGACY_CONFIRMED_SERVICE_FEE.has(stage)) return "confirmed";
-  if (LEGACY_EXCLUDED_SERVICE_FEE.has(stage)) return "excluded";
   return "potential";
 }
 
-export async function isWonStage(stage: string): Promise<boolean> {
-  const variants = await loadStageVariants();
-  if (variants.size > 0) {
-    return variants.get(stage) === "won";
-  }
-  return LEGACY_CONFIRMED_COMMISSION.has(stage);
+/**
+ * Whether transitioning into this stage should auto-cancel sibling
+ * applications for the same student. Driven entirely by the
+ * `auto_cancel_siblings_on_won` flag on the pipeline stage.
+ */
+export async function shouldAutoCancelSiblings(stage: string): Promise<boolean> {
+  const stages = await loadStages();
+  return !!stages.get(stage)?.autoCancelSiblingsOnWon;
 }
 
 export async function getCancelledStageKey(): Promise<string> {
-  const variants = await loadStageVariants();
-  for (const [key, variant] of variants) {
-    if (key === "cancelled") return key;
-  }
+  const stages = await loadStages();
+  if (stages.has("cancelled")) return "cancelled";
   return "cancelled";
 }
 

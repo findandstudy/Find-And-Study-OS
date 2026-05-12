@@ -8,7 +8,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { or as orFn } from "drizzle-orm";
-import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, isWonStage, getCancelledStageKey } from "../lib/stageFinance";
+import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, shouldAutoCancelSiblings, getCancelledStageKey } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
@@ -18,11 +18,15 @@ import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
 
-const DOC_REQUIRED_STAGES = [
-  "app_fee_paid", "offer_received", "acceptance_letter",
-  "final_acceptance", "upload_payment", "deposit_paid", "visa_approved",
-  "student_card",
-];
+async function isStageFileUploadMandatory(stageKey: string): Promise<boolean> {
+  const [row] = await db.select({ isFileUploadMandatory: pipelineStagesTable.isFileUploadMandatory })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.key, stageKey),
+    ));
+  return !!row?.isFileUploadMandatory;
+}
 
 const APP_PATCH_FIELDS = [
   "stage", "universityId", "programId", "agentId", "assignedToId",
@@ -42,8 +46,8 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
     .where(and(eq(applicationsTable.studentId, studentId), sql`${applicationsTable.id} != ${wonAppId}`));
 
   for (const sib of siblings) {
-    const sibWon = await isWonStage(sib.stage);
-    if (sibWon) continue;
+    const sibTriggers = await shouldAutoCancelSiblings(sib.stage);
+    if (sibTriggers) continue;
     const alreadyCancelled = sib.stage === cancelledKey;
     if (alreadyCancelled) continue;
 
@@ -198,8 +202,14 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   });
 });
 
-router.get("/applications/doc-required-stages", requireAuth, (_req, res) => {
-  res.json(DOC_REQUIRED_STAGES);
+router.get("/applications/doc-required-stages", requireAuth, async (_req, res) => {
+  const rows = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.isFileUploadMandatory, true),
+    ));
+  res.json(rows.map(r => r.key));
 });
 
 router.get("/applications/offer-letter-deadlines", requireAuth, async (req, res): Promise<void> => {
@@ -211,13 +221,24 @@ router.get("/applications/offer-letter-deadlines", requireAuth, async (req, res)
     return;
   }
 
-  const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
+  const expiryStageRows = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.tracksOfferExpiry, true),
+    ));
+  const expiryStageKeys = expiryStageRows.map(r => r.key);
+  if (expiryStageKeys.length === 0) {
+    res.json({ data: [] });
+    return;
+  }
+
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
   const conditions = [
     isNull(applicationsTable.deletedAt),
     isNotNull(applicationStageDocumentsTable.validUntil),
-    inArray(applicationStageDocumentsTable.stage, OFFER_DOC_STAGES),
+    inArray(applicationStageDocumentsTable.stage, expiryStageKeys),
   ];
 
   if (user.role === "student") {
@@ -707,7 +728,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     return;
   }
 
-  if (updates.stage && DOC_REQUIRED_STAGES.includes(updates.stage as string)) {
+  if (updates.stage && (await isStageFileUploadMandatory(updates.stage as string))) {
     const targetStage = updates.stage as string;
     const existingDocs = await db.select({ id: applicationStageDocumentsTable.id })
       .from(applicationStageDocumentsTable)
@@ -866,8 +887,8 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   if (updates.stage !== undefined) {
-    const wonNow = await isWonStage(String(updates.stage));
-    if (wonNow) {
+    const cancelSiblings = await shouldAutoCancelSiblings(String(updates.stage));
+    if (cancelSiblings) {
       await autoCancelSiblingApplications(id, app.studentId);
     }
 
@@ -1056,8 +1077,8 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
           }
         }
       }
-      const wonNow = await isWonStage(stage);
-      if (wonNow) {
+      const cancelSiblings = await shouldAutoCancelSiblings(stage);
+      if (cancelSiblings) {
         await autoCancelSiblingApplications(app.id, app.studentId);
       }
 

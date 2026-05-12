@@ -14,32 +14,9 @@ import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FI
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-const EVERYONE_UPLOAD_STAGES = [
-  "app_fee_paid", "missing_docs", "upload_payment", "deposit_paid",
-  "visa_approved", "student_card", "visa_reject",
-];
-
-const ADMIN_ONLY_UPLOAD_STAGES = [
-  "offer_received", "acceptance_letter", "final_acceptance",
-];
-
-const ALL_DOC_STAGES = [...EVERYONE_UPLOAD_STAGES, ...ADMIN_ONLY_UPLOAD_STAGES];
-
-const STAGE_LABELS: Record<string, string> = {
-  app_fee_paid: "Application Fee Paid",
-  missing_docs: "Missing Documents",
-  upload_payment: "Upload Payment",
-  deposit_paid: "Deposit Paid Receipt",
-  visa_approved: "Visa OK",
-  student_card: "Student Card Upload",
-  visa_reject: "Visa Reject",
-  offer_received: "Offer",
-  acceptance_letter: "Acceptance Letter",
-  final_acceptance: "Final Acceptance Letter",
-};
-
 const ADMIN_ROLES = ["super_admin", "admin", "manager"];
 const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
+const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -79,6 +56,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
 
   const isAdmin = ADMIN_ROLES.includes(userRole);
   const isStaff = STAFF_ROLES.includes(userRole);
+  const isAgent = AGENT_ROLES.includes(userRole);
   // Students and agents must NOT see future-stage upload zones.
   // Existing uploaded docs (or notes) for any stage stay visible.
   const restrictFuture = !isStaff;
@@ -86,6 +64,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
   const { stages: pipelineStages } = usePipelineStages("application");
   const stageOrder = new Map<string, number>();
   pipelineStages.forEach((s, i) => stageOrder.set(s.key, s.sortOrder ?? i));
+  const stageByKey = new Map(pipelineStages.map(s => [s.key, s]));
   const currentOrder = stageOrder.has(currentStage)
     ? (stageOrder.get(currentStage) as number)
     : Number.POSITIVE_INFINITY;
@@ -94,7 +73,11 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
     return (stageOrder.get(stage) as number) > currentOrder;
   }
 
-  const relevantStages = ALL_DOC_STAGES.filter(stage => {
+  const docStages = pipelineStages
+    .filter(s => (s.uploadPermissionLevel ?? "none") !== "none")
+    .map(s => s.key);
+
+  const relevantStages = docStages.filter(stage => {
     if (excludeStages?.includes(stage)) return false;
     const docs = (allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote);
     const notes = stage === "missing_docs" ? (missingNotes as any[]) : [];
@@ -114,37 +97,51 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
       </h2>
 
       <div className="space-y-3">
-        {relevantStages.map(stage => (
-          <StageSection
-            key={stage}
-            applicationId={applicationId}
-            stage={stage}
-            docs={(allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote)}
-            missingNotes={stage === "missing_docs" ? (missingNotes as any[]) : []}
-            userRole={userRole}
-            userId={userId}
-            isAdmin={isAdmin}
-            isStaff={isStaff}
-            isCurrent={stage === currentStage}
-            hideUpload={restrictFuture && isFutureStage(stage)}
-          />
-        ))}
+        {relevantStages.map(stage => {
+          const stageMeta = stageByKey.get(stage);
+          return (
+            <StageSection
+              isAgent={isAgent}
+              key={stage}
+              applicationId={applicationId}
+              stage={stage}
+              stageLabel={stageMeta?.label || stage}
+              uploadPermissionLevel={(stageMeta?.uploadPermissionLevel ?? "everyone") as string}
+              tracksOfferExpiry={stageMeta?.tracksOfferExpiry === true}
+              requiresValidUntilFlag={stageMeta?.requiresValidUntil === true}
+              docs={(allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote)}
+              missingNotes={stage === "missing_docs" ? (missingNotes as any[]) : []}
+              userRole={userRole}
+              userId={userId}
+              isAdmin={isAdmin}
+              isStaff={isStaff}
+              isCurrent={stage === currentStage}
+              hideUpload={restrictFuture && isFutureStage(stage)}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function StageSection({
-  applicationId, stage, docs, missingNotes, userRole, userId, isAdmin, isStaff, isCurrent, hideUpload,
+  applicationId, stage, stageLabel, uploadPermissionLevel, tracksOfferExpiry, requiresValidUntilFlag,
+  docs, missingNotes, userRole, userId, isAdmin, isStaff, isAgent, isCurrent, hideUpload,
 }: {
   applicationId: number;
   stage: string;
+  stageLabel: string;
+  uploadPermissionLevel: string;
+  tracksOfferExpiry: boolean;
+  requiresValidUntilFlag: boolean;
   docs: any[];
   missingNotes: any[];
   userRole: string;
   userId?: number;
   isAdmin: boolean;
   isStaff: boolean;
+  isAgent: boolean;
   isCurrent: boolean;
   hideUpload?: boolean;
 }) {
@@ -157,14 +154,23 @@ function StageSection({
   const [editingDocId, setEditingDocId] = useState<number | null>(null);
   const [editValidUntil, setEditValidUntil] = useState<string>("");
 
-  const requiresValidUntil = stage === "offer_received";
-  const supportsValidUntil = ADMIN_ONLY_UPLOAD_STAGES.includes(stage);
+  const requiresValidUntil = requiresValidUntilFlag;
+  const supportsValidUntil = tracksOfferExpiry;
 
-  const canUpload = hideUpload
-    ? false
-    : ADMIN_ONLY_UPLOAD_STAGES.includes(stage)
-      ? isAdmin
-      : true;
+  // Permission matrix (Task #134):
+  //   admin_only         → admin / manager only (legacy default for offer stages)
+  //   staff_only         → all staff (admin + staff/consultant/editor/...)
+  //   staff_and_agent    → staff + agents (no students)
+  //   everyone           → staff + agents + students
+  const canUpload = (() => {
+    if (hideUpload) return false;
+    if (uploadPermissionLevel === "none") return false;
+    if (uploadPermissionLevel === "admin_only") return isAdmin;
+    if (uploadPermissionLevel === "staff_only") return isStaff;
+    if (uploadPermissionLevel === "staff_and_agent") return isStaff || isAgent;
+    if (uploadPermissionLevel === "everyone") return true;
+    return false;
+  })();
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -249,8 +255,8 @@ function StageSection({
     a.click();
   }
 
-  const isAdminOnlyStage = ADMIN_ONLY_UPLOAD_STAGES.includes(stage);
-  const stageLabel = STAGE_LABELS[stage] || stage;
+  const isAdminOnlyStage = uploadPermissionLevel === "admin_only";
+  const isStaffOnlyStage = uploadPermissionLevel === "staff_only";
 
   return (
     <div className="border rounded-xl overflow-hidden">
@@ -268,7 +274,10 @@ function StageSection({
             <Badge className="text-xs px-1.5 py-0 bg-primary/10 text-primary border-0">Current</Badge>
           )}
           {isAdminOnlyStage && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">Admin Upload</Badge>
+            <Badge variant="outline" className="text-xs px-1.5 py-0 text-rose-600 border-rose-300">Admin Upload</Badge>
+          )}
+          {isStaffOnlyStage && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">Staff Upload</Badge>
           )}
         </div>
       </button>

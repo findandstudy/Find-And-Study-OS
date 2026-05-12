@@ -72,7 +72,23 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
   );
 }
 
+const UPLOAD_PERMISSION_OPTIONS = [
+  { value: "none", label: "None — no uploads allowed" },
+  { value: "admin_only", label: "Admin only (admin / manager)" },
+  { value: "staff_only", label: "All staff" },
+  { value: "staff_and_agent", label: "Staff + Agents" },
+  { value: "everyone", label: "Everyone (Staff + Agents + Students)" },
+];
+
+const FINANCE_STATUS_OPTIONS = [
+  { value: "auto", label: "Auto (use Finance Category)" },
+  { value: "potential", label: "Potential" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "excluded", label: "Excluded" },
+];
+
 function StageEditForm({ stage, onChange }: { stage: PipelineStage; onChange: (s: PipelineStage) => void }) {
+  const isApplicationStage = stage.entityType === "application";
   return (
     <div className="space-y-5">
       <div className="space-y-1.5">
@@ -199,6 +215,85 @@ function StageEditForm({ stage, onChange }: { stage: PipelineStage; onChange: (s
           Won = confirmed commission/service fee. Partial Won = potential commission/service fee. None = excluded from finance.
         </p>
       </div>
+
+      {isApplicationStage && (
+        <>
+          <div className="pt-2 border-t" />
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Document upload permission</Label>
+            <Select
+              value={stage.uploadPermissionLevel || "none"}
+              onValueChange={v => onChange({ ...stage, uploadPermissionLevel: v })}
+            >
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {UPLOAD_PERMISSION_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Who can upload documents to this stage. "None" hides this stage from the documents panel entirely.
+            </p>
+          </div>
+
+          <RadioGroup
+            label="Track offer expiry (valid-until date)?"
+            value={!!stage.tracksOfferExpiry}
+            onChange={v => onChange({ ...stage, tracksOfferExpiry: v, ...(v ? {} : { requiresValidUntil: false }) })}
+          />
+
+          {stage.tracksOfferExpiry && (
+            <div className="ml-4 border-l-2 border-muted pl-4">
+              <RadioGroup
+                label="Valid-until date is mandatory?"
+                value={!!stage.requiresValidUntil}
+                onChange={v => onChange({ ...stage, requiresValidUntil: v })}
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Commission finance status when reached</Label>
+            <Select
+              value={stage.commissionFinanceStatus || "auto"}
+              onValueChange={v => onChange({ ...stage, commissionFinanceStatus: v === "auto" ? null : v })}
+            >
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {FINANCE_STATUS_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Service fee finance status when reached</Label>
+            <Select
+              value={stage.serviceFeeFinanceStatus || "auto"}
+              onValueChange={v => onChange({ ...stage, serviceFeeFinanceStatus: v === "auto" ? null : v })}
+            >
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {FINANCE_STATUS_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Override the finance status applied to commissions and service fees when an application reaches this stage. "Auto" derives the status from the Finance Category above.
+            </p>
+          </div>
+
+          <RadioGroup
+            label="Auto-cancel sibling applications when reaching this stage?"
+            value={!!stage.autoCancelSiblingsOnWon}
+            onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -235,6 +330,12 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       canGoBack: true,
       isCaseClose: false,
       countries: null,
+      uploadPermissionLevel: "none",
+      tracksOfferExpiry: false,
+      requiresValidUntil: false,
+      commissionFinanceStatus: null,
+      serviceFeeFinanceStatus: null,
+      autoCancelSiblingsOnWon: false,
     }]);
     setEditIndex(localStages.length);
   }
