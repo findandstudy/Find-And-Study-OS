@@ -2,8 +2,11 @@ import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Upload, FileCheck, Loader2, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+const OFFER_DOC_STAGES = ["offer_received", "acceptance_letter", "final_acceptance"];
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -24,8 +27,11 @@ interface StageDocUploadDialogProps {
 export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded }: StageDocUploadDialogProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [validUntil, setValidUntil] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const requiresValidUntil = targetStage === "offer_received";
+  const supportsValidUntil = OFFER_DOC_STAGES.includes(targetStage);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
@@ -41,6 +47,10 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   async function handleUploadAndMove() {
     if (files.length === 0) {
       toast({ title: "Please select at least one document to upload", variant: "destructive" });
+      return;
+    }
+    if (requiresValidUntil && !validUntil) {
+      toast({ title: "Son geçerlilik tarihi zorunlu", description: "Offer letter için lütfen geçerlilik tarihi seçin.", variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -69,6 +79,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
             fileData: base64,
             mimeType: file.type,
             sizeBytes: file.size,
+            ...(supportsValidUntil && validUntil ? { validUntil } : {}),
           }),
         });
         if (!res.ok) {
@@ -94,6 +105,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
 
       toast({ title: `Documents uploaded and moved to ${targetStageLabel}` });
       setFiles([]);
+      setValidUntil("");
       onUploaded();
       onClose();
     } catch (err: any) {
@@ -106,6 +118,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   function handleClose() {
     if (!uploading) {
       setFiles([]);
+      setValidUntil("");
       onClose();
     }
   }
@@ -143,6 +156,23 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
               className="hidden"
             />
           </div>
+
+          {supportsValidUntil && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">
+                Son Geçerlilik Tarihi {requiresValidUntil && <span className="text-destructive">*</span>}
+              </Label>
+              <Input
+                type="date"
+                value={validUntil}
+                onChange={e => setValidUntil(e.target.value)}
+                disabled={uploading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Offer letter'ın geçerli olduğu son tarih. Yaklaştığında bildirim gönderilir.
+              </p>
+            </div>
+          )}
 
           {files.length > 0 && (
             <div className="space-y-2">
