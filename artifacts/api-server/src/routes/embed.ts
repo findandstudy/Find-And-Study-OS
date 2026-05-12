@@ -1650,6 +1650,30 @@ function renderFormContent(prog){
       h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv2.preferredUniversity||'')+'"></div>';
       h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv2.desiredProgram||'')+'"></div>';
     }
+    // Personal details (most often AI-extracted from passport / transcripts).
+    aiField('dateOfBirth','Date of Birth','date',false,true);
+    // Gender — render as a select since aiField only supports input types.
+    var gVal=savedFormData.gender||'';
+    var gIsAi=!!extractedFields.gender;
+    var gStyle=gIsAi?'border-color:#22c55e;background:#f0fdf4':'';
+    var gLow=String(gVal).toLowerCase();
+    h+='<div class="ew-form-group"><label>Gender'+(gIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><select name="gender" style="'+gStyle+'"><option value="">Select...</option><option value="female"'+(gLow==='female'?' selected':'')+'>Female</option><option value="male"'+(gLow==='male'?' selected':'')+'>Male</option></select></div>';
+    aiField('motherName','Mother Name','text',false,true);
+    aiField('fatherName','Father Name','text',false,true);
+    // Passport details.
+    aiField('passportNumber','Passport Number','text',false,true);
+    aiField('passportIssueDate','Passport Issue Date','date',false,true);
+    aiField('passportExpiry','Passport Expiry','date',false,true);
+    // Address — textarea (longer free-form), rendered inline.
+    var adVal=savedFormData.address||'';
+    var adIsAi=!!extractedFields.address;
+    var adStyle=adIsAi?'border-color:#22c55e;background:#f0fdf4':'';
+    h+='<div class="ew-form-group full"><label>Address'+(adIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><textarea name="address" rows="2" style="'+adStyle+'">'+esc(adVal)+'</textarea></div>';
+    // Education.
+    aiField('highSchool','High School','text',false,true);
+    aiField('graduationYear','Graduation Year','number',false,true);
+    aiField('gpa','GPA','text',false,true);
+    aiField('languageScore','Language Score','text',false,true);
     h+='<div class="ew-form-group full"><label>Message</label><textarea name="message" rows="3">'+esc(fv2.message||'')+'</textarea></div>';
     h+='</div>';
     var docCount=Object.keys(uploadedDocs).length;
@@ -1997,14 +2021,25 @@ function handleAnalyze(){
         return;
       }
       extractedFields={};
-      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth',motherName:'motherName',fatherName:'fatherName',passportNumber:'passportNumber',passportIssueDate:'passportIssueDate',passportExpiry:'passportExpiry',address:'address',highSchool:'highSchool',graduationYear:'graduationYear',gpa:'gpa',languageScore:'languageScore'};
+      var mapping={firstName:'firstName',lastName:'lastName',email:'email',phone:'phone',nationality:'nationality',dateOfBirth:'dateOfBirth',gender:'gender',motherName:'motherName',fatherName:'fatherName',passportNumber:'passportNumber',passportIssueDate:'passportIssueDate',passportExpiry:'passportExpiry',address:'address',highSchool:'highSchool',graduationYear:'graduationYear',gpa:'gpa',languageScore:'languageScore'};
       var mKeys=Object.keys(mapping);
       for(var i=0;i<mKeys.length;i++){
         var ek=mKeys[i];
         var fk=mapping[ek];
         var val=aiResult[ek];
         if(val&&val!=='null'&&val!=='N/A'&&val!==''){
-          savedFormData[fk]=String(val);
+          var sval=String(val);
+          // Normalize gender variants (Female/F/M/MALE -> female|male) so the
+          // <select name="gender"> in the review step actually shows the
+          // option as selected. Anything else is dropped to avoid a stale,
+          // non-matching value lurking in savedFormData.
+          if(fk==='gender'){
+            var gl=sval.trim().toLowerCase();
+            if(gl==='f'||gl==='female')sval='female';
+            else if(gl==='m'||gl==='male')sval='male';
+            else continue;
+          }
+          savedFormData[fk]=sval;
           extractedFields[fk]=true;
         }
       }
