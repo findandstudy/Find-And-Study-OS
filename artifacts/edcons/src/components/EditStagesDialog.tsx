@@ -15,6 +15,16 @@ interface EditStagesDialogProps {
   onSave: (stages: PipelineStage[]) => Promise<void>;
   isSaving: boolean;
   entityLabel: string;
+  /**
+   * Available student-pipeline stage keys/labels. When provided AND the
+   * pipeline being edited is the application pipeline, each row gets an
+   * extra "→ Student stage" picker that maps the application stage to a
+   * student status. Selecting a value causes the backend to automatically
+   * update the linked student's status when the application reaches that
+   * stage. Pass `null`/`undefined` to disable the mapping UI (e.g. when
+   * editing the lead or student pipeline themselves).
+   */
+  studentStages?: PipelineStage[];
 }
 
 const VARIANT_OPTIONS = [
@@ -193,7 +203,8 @@ function StageEditForm({ stage, onChange }: { stage: PipelineStage; onChange: (s
   );
 }
 
-export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, entityLabel }: EditStagesDialogProps) {
+export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, entityLabel, studentStages }: EditStagesDialogProps) {
+  const showStudentMapping = !!studentStages && (stages[0]?.entityType === "application");
   const [localStages, setLocalStages] = useState<PipelineStage[]>([]);
   const [error, setError] = useState("");
   const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -364,6 +375,29 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                     ))}
                   </SelectContent>
                 </Select>
+                {showStudentMapping && (
+                  <Select
+                    value={stage.mappedStudentStageKey || "__none__"}
+                    onValueChange={v => updateStageAtIndex(idx, { ...stage, mappedStudentStageKey: v === "__none__" ? null : v })}
+                  >
+                    <SelectTrigger
+                      className="h-8 w-32 text-xs shrink-0"
+                      title="When the application reaches this stage, the linked student's status is set to this value"
+                    >
+                      <SelectValue placeholder="→ Student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">
+                        <span className="text-xs text-muted-foreground">— No mapping —</span>
+                      </SelectItem>
+                      {(studentStages || []).map(ss => (
+                        <SelectItem key={ss.key} value={ss.key}>
+                          <span className="text-xs">→ {ss.label}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <button
                   type="button"
                   onClick={() => setEditIndex(idx)}

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
 import { eq, and, isNotNull, inArray, isNull, sql } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
@@ -733,18 +733,29 @@ router.post("/public/apply", applyLimiter, async (req: Request, res: Response): 
     // ─────────────────────────────────────────────────────────────────────
     if (resultStudentId && resultAppId) {
       try {
-        await db.update(studentsTable)
-          .set({ status: "active" })
-          .where(eq(studentsTable.id, resultStudentId));
+        const [settingsRow] = await db.select({
+          autoConvertLeadEnabled: settingsTable.autoConvertLeadEnabled,
+          autoConvertStudentStageKey: settingsTable.autoConvertStudentStageKey,
+        }).from(settingsTable);
+        const autoConvertEnabled = settingsRow?.autoConvertLeadEnabled !== false;
+        const studentStageKey = settingsRow?.autoConvertStudentStageKey || "active";
 
-        if (leadId) {
-          const leadIdNum = parseInt(String(leadId), 10);
-          if (Number.isFinite(leadIdNum) && leadIdNum > 0) {
-            await db.update(leadsTable)
-              .set({ status: "converted", convertedStudentId: resultStudentId })
-              .where(eq(leadsTable.id, leadIdNum));
-            console.log(`[PUBLIC-APPLY] Auto-converted lead #${leadIdNum} → student #${resultStudentId}`);
+        if (autoConvertEnabled) {
+          await db.update(studentsTable)
+            .set({ status: studentStageKey })
+            .where(eq(studentsTable.id, resultStudentId));
+
+          if (leadId) {
+            const leadIdNum = parseInt(String(leadId), 10);
+            if (Number.isFinite(leadIdNum) && leadIdNum > 0) {
+              await db.update(leadsTable)
+                .set({ status: "converted", convertedStudentId: resultStudentId })
+                .where(eq(leadsTable.id, leadIdNum));
+              console.log(`[PUBLIC-APPLY] Auto-converted lead #${leadIdNum} → student #${resultStudentId} (stage=${studentStageKey})`);
+            }
           }
+        } else {
+          console.log(`[PUBLIC-APPLY] Auto-convert disabled by settings; lead/student left untouched (student #${resultStudentId})`);
         }
       } catch (convertErr) {
         console.error("[PUBLIC-APPLY] Failed to auto-convert lead/student:", convertErr);

@@ -16,6 +16,7 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   canGoBack: boolean("can_go_back").notNull().default(true),
   isCaseClose: boolean("is_case_close").notNull().default(false),
   countries: text("countries"),
+  mappedStudentStageKey: text("mapped_student_stage_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

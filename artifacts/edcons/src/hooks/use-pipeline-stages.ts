@@ -19,6 +19,7 @@ export interface PipelineStage {
   canGoBack?: boolean;
   isCaseClose?: boolean;
   countries?: string | null;
+  mappedStudentStageKey?: string | null;
 }
 
 async function fetchStages(entityType: string): Promise<PipelineStage[]> {

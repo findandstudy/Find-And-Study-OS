@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -1229,6 +1230,38 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   const applicationPipeline = usePipelineStages("application");
   const studentPipeline = usePipelineStages("student");
   const [editingType, setEditingType] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const [autoConvert, setAutoConvert] = useState<{ enabled: boolean; stageKey: string }>({ enabled: true, stageKey: "active" });
+  const [autoConvertLoaded, setAutoConvertLoaded] = useState(false);
+  const [savingAutoConvert, setSavingAutoConvert] = useState(false);
+
+  useEffect(() => {
+    customFetch("/api/settings").then((data: any) => {
+      setAutoConvert({
+        enabled: data?.autoConvertLeadEnabled !== false,
+        stageKey: data?.autoConvertStudentStageKey || "active",
+      });
+      setAutoConvertLoaded(true);
+    }).catch(() => setAutoConvertLoaded(true));
+  }, []);
+
+  async function saveAutoConvert(next: { enabled: boolean; stageKey: string }) {
+    setSavingAutoConvert(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          autoConvertLeadEnabled: next.enabled,
+          autoConvertStudentStageKey: next.stageKey,
+        }),
+      });
+      setAutoConvert(next);
+      toast({ title: "Auto-convert settings saved" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally { setSavingAutoConvert(false); }
+  }
 
   const pipelines = [
     { type: "lead", label: "Lead Pipeline", description: "Stages for tracking prospective student leads from initial contact to conversion.", pipeline: leadPipeline },
@@ -1241,7 +1274,45 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   return (
     <div className="space-y-6">
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title="Pipeline Stages" description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents." />
+        <SectionHeader
+          title="Lead → Student Auto-Convert"
+          description="Control what happens when an applicant completes the public Apply form or the embed widget. When enabled, the lead is moved to 'converted' and the linked student's status is set to the stage you choose."
+        />
+        <div className="grid gap-5 sm:grid-cols-[1fr_240px] items-start">
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-border/50">
+            <Switch
+              checked={autoConvert.enabled}
+              onCheckedChange={(v) => saveAutoConvert({ ...autoConvert, enabled: !!v })}
+              disabled={!autoConvertLoaded || savingAutoConvert}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">Auto-convert on full submit</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Public Apply and Embed widget submissions automatically convert the lead and create an active student. Disable to keep new submissions in the leads pipeline for manual review.
+              </p>
+            </div>
+          </div>
+          <FieldGroup label="Initial student stage" description="Used as the student's status when auto-convert fires.">
+            <Select
+              value={autoConvert.stageKey}
+              onValueChange={(v) => saveAutoConvert({ ...autoConvert, stageKey: v })}
+              disabled={!autoConvertLoaded || savingAutoConvert || !autoConvert.enabled || studentPipeline.stages.length === 0}
+            >
+              <SelectTrigger className="rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {studentPipeline.stages.map(s => (
+                  <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldGroup>
+        </div>
+      </Card>
+
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <SectionHeader title="Pipeline Stages" description="Configure the pipeline stages for leads, applications, and students. Changes here apply to all users — staff, agents, and sub-agents. On the Application pipeline you can also map each stage to a student status — when the application reaches that stage, the linked student's status is updated automatically." />
         <div className="space-y-4">
           {pipelines.map(({ type, label, description, pipeline }) => (
             <div key={type} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/20 transition-colors">
@@ -1282,6 +1353,7 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
           }}
           isSaving={activePipeline.pipeline.isSaving}
           entityLabel={activePipeline.label.replace(" Pipeline", "")}
+          studentStages={activePipeline.type === "application" ? studentPipeline.stages : undefined}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
-import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable } from "@workspace/db";
+import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
@@ -720,13 +720,24 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     // from the leads kanban "new" column.
     if (resultStudentId && resultAppId) {
       try {
-        await db.update(studentsTable)
-          .set({ status: "active" })
-          .where(eq(studentsTable.id, resultStudentId));
-        await db.update(leadsTable)
-          .set({ status: "converted", convertedStudentId: resultStudentId })
-          .where(eq(leadsTable.id, result.leadId));
-        console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug})`);
+        const [settingsRow] = await db.select({
+          autoConvertLeadEnabled: settingsTable.autoConvertLeadEnabled,
+          autoConvertStudentStageKey: settingsTable.autoConvertStudentStageKey,
+        }).from(settingsTable);
+        const autoConvertEnabled = settingsRow?.autoConvertLeadEnabled !== false;
+        const studentStageKey = settingsRow?.autoConvertStudentStageKey || "active";
+
+        if (autoConvertEnabled) {
+          await db.update(studentsTable)
+            .set({ status: studentStageKey })
+            .where(eq(studentsTable.id, resultStudentId));
+          await db.update(leadsTable)
+            .set({ status: "converted", convertedStudentId: resultStudentId })
+            .where(eq(leadsTable.id, result.leadId));
+          console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug}, stage=${studentStageKey})`);
+        } else {
+          console.log(`[EMBED-APPLY] Auto-convert disabled by settings; lead #${result.leadId} left untouched (slug=${widget.slug})`);
+        }
       } catch (convertErr) {
         console.error("[EMBED-APPLY] Failed to auto-convert lead/student:", convertErr);
       }

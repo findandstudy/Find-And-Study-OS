@@ -132,6 +132,10 @@ export const settingsTable = pgTable("settings", {
   // Configurable 1-365. After this deadline, the session is "expired" and the
   // agent is locked out until an admin resends the link.
   defaultSigningDeadlineDays: integer("default_signing_deadline_days").notNull().default(14),
+
+  // Auto-convert lead → student on /public/apply + /public/embed full submit
+  autoConvertLeadEnabled: boolean("auto_convert_lead_enabled").notNull().default(true),
+  autoConvertStudentStageKey: text("auto_convert_student_stage_key").notNull().default("active"),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

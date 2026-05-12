@@ -864,6 +864,28 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     if (wonNow) {
       await autoCancelSiblingApplications(id, app.studentId);
     }
+
+    // If the new application stage has a configured student stage mapping
+    // (set in Settings → Pipeline Stages), propagate it to the linked
+    // student's status so the student lifecycle stays in sync with the
+    // application progress (e.g. enrolled → graduated).
+    try {
+      const [stageRow] = await db.select({ mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey })
+        .from(pipelineStagesTable)
+        .where(and(
+          eq(pipelineStagesTable.entityType, "application"),
+          eq(pipelineStagesTable.key, String(updates.stage)),
+        ));
+      const mapped = stageRow?.mappedStudentStageKey;
+      if (mapped && app.studentId) {
+        await db.update(studentsTable)
+          .set({ status: mapped })
+          .where(eq(studentsTable.id, app.studentId));
+        console.log(`[APPLICATIONS] Stage '${updates.stage}' mapped student #${app.studentId} → status='${mapped}'`);
+      }
+    } catch (mapErr) {
+      console.error("[APPLICATIONS] Failed to apply student stage mapping:", mapErr);
+    }
   }
 
   await logAudit(req.user!.id, "update_application", "application", id, updates, req.ip);
@@ -1032,6 +1054,27 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
       if (wonNow) {
         await autoCancelSiblingApplications(app.id, app.studentId);
       }
+
+      // Apply student-stage mapping for the new stage to keep the linked
+      // student's status in sync with the application progress (mirrors
+      // the per-app PATCH behaviour above).
+      try {
+        const [stageRow] = await db.select({ mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey })
+          .from(pipelineStagesTable)
+          .where(and(
+            eq(pipelineStagesTable.entityType, "application"),
+            eq(pipelineStagesTable.key, String(stage)),
+          ));
+        const mapped = stageRow?.mappedStudentStageKey;
+        if (mapped && app.studentId) {
+          await db.update(studentsTable)
+            .set({ status: mapped })
+            .where(eq(studentsTable.id, app.studentId));
+        }
+      } catch (mapErr) {
+        console.error("[APPLICATIONS] Bulk-move student stage mapping failed:", mapErr);
+      }
+
       await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);
       updated++;
     }

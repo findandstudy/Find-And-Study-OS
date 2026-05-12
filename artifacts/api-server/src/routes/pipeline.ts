@@ -130,6 +130,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           canGoBack: s.canGoBack !== false,
           isCaseClose: !!s.isCaseClose,
           countries: s.countries || null,
+          mappedStudentStageKey: entityType === "application" && s.mappedStudentStageKey ? String(s.mappedStudentStageKey) : null,
         })))
         .returning();
 

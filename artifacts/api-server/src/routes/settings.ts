@@ -39,6 +39,8 @@ const SETTINGS_PATCH_FIELDS = [
   "offerExpiryWarningDays",
   "contractExpiryReminderDays",
   "defaultSigningDeadlineDays",
+  "autoConvertLeadEnabled",
+  "autoConvertStudentStageKey",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
