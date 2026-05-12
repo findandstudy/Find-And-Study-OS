@@ -110,6 +110,7 @@ type Agent = {
   createdAt: string;
   assignedStaffId: number | null;
   assignedStaffName: string | null;
+  assignedStaffList?: Array<{ userId: number; isPrimary: boolean; firstName: string | null; lastName: string | null; role: string | null }>;
 };
 
 const emptyForm = {
@@ -120,7 +121,7 @@ const emptyForm = {
   contractStartDate: "", contractEndDate: "",
   branch: "", notes: "",
   parentAgentId: "", subAgentCommissionRate: "", hideServiceFees: false,
-  assignedStaffId: "",
+  assignedStaff: [] as Array<{ userId: number; isPrimary: boolean }>,
   branchIds: [] as number[],
   entityType: "company", taxNumber: "", preferredContractLanguage: "",
   assignedContractTemplateId: "",
@@ -301,10 +302,13 @@ export default function AgentsPage() {
       parentAgentId: agent.parentAgentId?.toString() || "",
       subAgentCommissionRate: agent.subAgentCommissionRate?.toString() || "",
       hideServiceFees: agent.hideServiceFees,
-      assignedStaffId: (agent as any).assignedStaffId?.toString() || "",
+      assignedStaff: Array.isArray((agent as any).assignedStaffList) && (agent as any).assignedStaffList.length > 0
+        ? (agent as any).assignedStaffList.map((s: any) => ({ userId: s.userId, isPrimary: !!s.isPrimary }))
+        : (agent.assignedStaffId ? [{ userId: agent.assignedStaffId, isPrimary: true }] : []),
       entityType: (agent as any).entityType || "company",
       taxNumber: (agent as any).taxNumber || "",
       preferredContractLanguage: (agent as any).preferredContractLanguage || "",
+      assignedContractTemplateId: (agent as any).assignedContractTemplateId?.toString() || "",
     });
     if (agent.country) {
       const c = countries.find(ct => ct.name === agent.country);
@@ -397,7 +401,7 @@ export default function AgentsPage() {
       parentAgentId: isSubAgent && form.parentAgentId ? parseInt(form.parentAgentId) : null,
       subAgentCommissionRate: form.subAgentCommissionRate ? parseFloat(form.subAgentCommissionRate) : null,
       hideServiceFees: form.hideServiceFees,
-      assignedStaffId: !isSubAgent && form.assignedStaffId ? parseInt(form.assignedStaffId) : null,
+      assignedStaff: !isSubAgent ? form.assignedStaff : [],
       entityType: form.entityType || "company",
       taxNumber: form.taxNumber.trim() || null,
       preferredContractLanguage: form.preferredContractLanguage || null,
@@ -832,6 +836,17 @@ export default function AgentsPage() {
                     </Select>
                   ) : (
                     <span className="text-xs">{a.assignedStaffName || "-"}</span>
+                  )}
+                  {Array.isArray(a.assignedStaffList) && a.assignedStaffList.length > 1 && (
+                    <span
+                      className="ml-1 text-[10px] text-muted-foreground"
+                      title={a.assignedStaffList
+                        .filter(s => !s.isPrimary)
+                        .map(s => `${s.firstName || ""} ${s.lastName || ""}`.trim())
+                        .join(", ")}
+                    >
+                      +{a.assignedStaffList.length - 1}
+                    </span>
                   )}
                 </td>
                 <td className="py-3 px-3">
@@ -1276,24 +1291,91 @@ export default function AgentsPage() {
                 )}
               </div>
 
-              {/* Assigned Staff */}
+              {/* Assigned Staff (multi + primary) */}
               {!isSubAgent && (
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Assigned Staff</Label>
-                  <Select value={form.assignedStaffId} onValueChange={v => setForm(f => ({ ...f, assignedStaffId: v === "__none__" ? "" : v }))}>
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Select staff member" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      <SelectItem value="__none__">No staff assigned</SelectItem>
-                      {staffMembers.map(s => (
-                        <SelectItem key={s.id} value={s.id.toString()}>
-                          {s.firstName} {s.lastName} ({s.role.replace(/_/g, " ")})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Staff member responsible for this agent</p>
+                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Atanmış Staff</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full justify-between rounded-xl">
+                        <span className="text-xs truncate">
+                          {form.assignedStaff.length === 0
+                            ? "Staff seçin..."
+                            : `${form.assignedStaff.length} staff seçili`}
+                        </span>
+                        <ChevronRight className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[320px] p-2 max-h-72 overflow-auto">
+                      {staffMembers.length === 0 && <p className="text-xs text-muted-foreground p-2">Staff bulunamadı</p>}
+                      {staffMembers.map(s => {
+                        const entry = form.assignedStaff.find(e => e.userId === s.id);
+                        const checked = !!entry;
+                        const isPrimary = entry?.isPrimary || false;
+                        return (
+                          <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={v => {
+                                setForm(f => {
+                                  const list = [...f.assignedStaff];
+                                  if (v) {
+                                    if (!list.find(e => e.userId === s.id)) {
+                                      list.push({ userId: s.id, isPrimary: list.length === 0 });
+                                    }
+                                  } else {
+                                    const idx = list.findIndex(e => e.userId === s.id);
+                                    if (idx >= 0) {
+                                      const wasPrimary = list[idx].isPrimary;
+                                      list.splice(idx, 1);
+                                      if (wasPrimary && list.length > 0) list[0].isPrimary = true;
+                                    }
+                                  }
+                                  return { ...f, assignedStaff: list };
+                                });
+                              }}
+                            />
+                            <div className="flex-1 text-xs">
+                              {s.firstName} {s.lastName}
+                              <span className="text-muted-foreground ml-1">({s.role.replace(/_/g, " ")})</span>
+                            </div>
+                            {checked && (
+                              <button
+                                type="button"
+                                title={isPrimary ? "Ana iletişim sorumlusu" : "Ana iletişim olarak işaretle"}
+                                onClick={() => {
+                                  setForm(f => ({
+                                    ...f,
+                                    assignedStaff: f.assignedStaff.map(e => ({ ...e, isPrimary: e.userId === s.id })),
+                                  }));
+                                }}
+                                className={`text-lg leading-none ${isPrimary ? "text-amber-500" : "text-muted-foreground hover:text-amber-400"}`}
+                              >
+                                {isPrimary ? "★" : "☆"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Yıldız ile işaretli staff "Ana iletişim sorumlusu" olarak görünür. En az bir staff seçildiğinde tam olarak bir tanesi primary olmalıdır.
+                  </p>
+                  {form.assignedStaff.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {form.assignedStaff.map(e => {
+                        const s = staffMembers.find(m => m.id === e.userId);
+                        if (!s) return null;
+                        return (
+                          <Badge key={e.userId} variant={e.isPrimary ? "default" : "secondary"} className="text-xs">
+                            {e.isPrimary && <span className="mr-1">★</span>}
+                            {s.firstName} {s.lastName}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 

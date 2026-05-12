@@ -15,6 +15,7 @@ import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
+import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
 
 const router: IRouter = Router();
 
@@ -77,19 +78,17 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   }
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
-  let assignedStaff = null;
-  if (agent.assignedStaffId) {
-    const [staff] = await db.select({
-      id: usersTable.id,
-      firstName: usersTable.firstName,
-      lastName: usersTable.lastName,
-      email: usersTable.email,
-      phone: usersTable.phone,
-      avatarUrl: usersTable.avatarUrl,
-      role: usersTable.role,
-    }).from(usersTable).where(eq(usersTable.id, agent.assignedStaffId));
-    assignedStaff = staff || null;
-  }
+  const assignedStaffList = await getAgencyStaffWithLegacy(agent.id, agent.assignedStaffId ?? null);
+  const primaryEntry = assignedStaffList.find(s => s.isPrimary) || assignedStaffList[0] || null;
+  const assignedStaff = primaryEntry ? {
+    id: primaryEntry.userId,
+    firstName: primaryEntry.firstName,
+    lastName: primaryEntry.lastName,
+    email: primaryEntry.email,
+    phone: primaryEntry.phone,
+    avatarUrl: primaryEntry.avatarUrl,
+    role: primaryEntry.role,
+  } : null;
 
   let parentAgent = null;
   if (userRole === "sub_agent" && agent.parentAgentId) {
@@ -114,7 +113,7 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  res.json({ ...agent, assignedStaff, parentAgent });
+  res.json({ ...agent, assignedStaff, assignedStaffList, parentAgent });
 });
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
@@ -679,22 +678,16 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(agentsTable).where(whereClause);
 
-  const staffAlias = usersTable;
   const rows = await db
-    .select({
-      agent: agentsTable,
-      staffFirstName: staffAlias.firstName,
-      staffLastName: staffAlias.lastName,
-    })
+    .select()
     .from(agentsTable)
-    .leftJoin(staffAlias, eq(agentsTable.assignedStaffId, staffAlias.id))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
     .orderBy(desc(agentsTable.createdAt));
 
-  // Pull branch links for the current page in one query.
-  const agentIds = rows.map(r => r.agent.id);
+  // Pull branch links and assigned-staff for the current page in one query each.
+  const agentIds = rows.map(r => r.id);
   const branchLinks = agentIds.length > 0
     ? await db.select({ agentId: agentBranchesTable.agentId, branchId: agentBranchesTable.branchId })
         .from(agentBranchesTable).where(inArray(agentBranchesTable.agentId, agentIds))
@@ -705,14 +698,48 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
     arr.push(l.branchId);
     branchesByAgent.set(l.agentId, arr);
   }
+  const staffByAgent = await getAgencyStaffMap(agentIds);
 
-  const data = rows.map(r => ({
-    ...r.agent,
-    branchIds: branchesByAgent.get(r.agent.id) || [],
-    assignedStaffName: r.staffFirstName && r.staffLastName
-      ? `${r.staffFirstName} ${r.staffLastName}`.trim()
-      : r.staffFirstName || r.staffLastName || null,
-  }));
+  // Back-compat: agents whose join rows haven't been backfilled yet — resolve
+  // legacy scalar to a synthetic primary entry in one batched user query.
+  const legacyOnlyIds = new Map<number, number>();
+  for (const r of rows) {
+    if ((staffByAgent.get(r.id)?.length ?? 0) === 0 && r.assignedStaffId) {
+      legacyOnlyIds.set(r.id, r.assignedStaffId);
+    }
+  }
+  if (legacyOnlyIds.size > 0) {
+    const legacyUsers = await db.select({
+      id: usersTable.id,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      avatarUrl: usersTable.avatarUrl,
+      role: usersTable.role,
+    }).from(usersTable).where(inArray(usersTable.id, Array.from(new Set(legacyOnlyIds.values()))));
+    const userMap = new Map(legacyUsers.map(u => [u.id, u]));
+    for (const [agentId, uid] of legacyOnlyIds) {
+      const u = userMap.get(uid);
+      if (u) staffByAgent.set(agentId, [{
+        userId: u.id, isPrimary: true,
+        firstName: u.firstName, lastName: u.lastName, email: u.email,
+        phone: u.phone, avatarUrl: u.avatarUrl, role: u.role,
+      }]);
+    }
+  }
+
+  const data = rows.map(r => {
+    const list = staffByAgent.get(r.id) || [];
+    const primary = list.find(s => s.isPrimary) || list[0] || null;
+    return {
+      ...r,
+      branchIds: branchesByAgent.get(r.id) || [],
+      assignedStaffId: primary ? primary.userId : r.assignedStaffId,
+      assignedStaffName: primary ? staffDisplayName(primary) : null,
+      assignedStaffList: list,
+    };
+  });
 
   res.json({
     data,
@@ -840,12 +867,22 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     contractEndDate: parseDate(contractEndDate),
     notes: notes || null,
     branch: branch || null,
-    assignedStaffId: assignedStaffId ? parseInt(assignedStaffId, 10) : null,
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,
     subAgentCommissionRate: subAgentCommissionRate ? parseFloat(subAgentCommissionRate) : null,
     hideServiceFees: hideServiceFees === true || hideServiceFees === "true" ? true : false,
     embedToken: crypto.randomUUID(),
   }).returning();
+
+  // Persist agency-assigned staff (multi). Accepts either the new
+  // `assignedStaff: [{userId, isPrimary}]` array or the legacy single
+  // `assignedStaffId` (treated as the primary contact).
+  {
+    const staff = parseStaffInput(
+      req.body.assignedStaff,
+      assignedStaffId ? parseInt(String(assignedStaffId), 10) : null,
+    );
+    if (staff.length > 0) await setAgencyStaff(agent.id, staff);
+  }
 
   // Branch links: explicit list, else inherit creator's first visible branch.
   let finalBranchIds: number[] = Array.isArray(branchIds)
@@ -948,7 +985,14 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
     return;
   }
   const links = await db.select({ branchId: agentBranchesTable.branchId }).from(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
-  res.json({ ...agent, branchIds: links.map(l => l.branchId) });
+  const assignedStaffList = await getAgencyStaffWithLegacy(id, agent.assignedStaffId ?? null);
+  const primary = assignedStaffList.find(s => s.isPrimary) || assignedStaffList[0] || null;
+  res.json({
+    ...agent,
+    branchIds: links.map(l => l.branchId),
+    assignedStaffList,
+    assignedStaffName: primary ? staffDisplayName(primary) : null,
+  });
 });
 
 router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -964,8 +1008,11 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
         updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
       } else if (key === "hideServiceFees" || key === "canManageStaff") {
         updates[key] = req.body[key] === true || req.body[key] === "true";
-      } else if (key === "parentAgentId" || key === "assignedStaffId") {
+      } else if (key === "parentAgentId") {
         updates[key] = req.body[key] ? parseInt(req.body[key], 10) : null;
+      } else if (key === "assignedStaffId") {
+        // Handled out-of-band by setAgencyStaff below to keep the
+        // agency_assigned_staff join table in sync.
       } else if (key === "contractStartDate" || key === "contractEndDate") {
         const v = req.body[key];
         if (v === null || v === "" || v === undefined) {
@@ -981,7 +1028,8 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
       }
     }
   }
-  if (Object.keys(updates).length === 0 && req.body.branchIds === undefined) {
+  const hasStaffUpdate = req.body.assignedStaff !== undefined || req.body.assignedStaffId !== undefined;
+  if (Object.keys(updates).length === 0 && req.body.branchIds === undefined && !hasStaffUpdate) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
   }
@@ -1018,6 +1066,16 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   let agent = oldAgent;
   if (Object.keys(updates).length > 0) {
     [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+  }
+  if (hasStaffUpdate) {
+    const staff = parseStaffInput(
+      req.body.assignedStaff,
+      req.body.assignedStaffId === null || req.body.assignedStaffId === undefined || req.body.assignedStaffId === ""
+        ? null
+        : parseInt(String(req.body.assignedStaffId), 10),
+    );
+    await setAgencyStaff(id, staff);
+    [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   }
   if (oldAgent.userId && Object.prototype.hasOwnProperty.call(updates, "phone")) {
     await db.update(usersTable).set({
@@ -1107,8 +1165,14 @@ router.post("/agents/bulk-assign", requireAuth, requireRole(...MANAGER_ROLES), a
     return;
   }
   const staffVal = assignedStaffId === null || assignedStaffId === undefined ? null : parseInt(assignedStaffId, 10);
-  const updated = await db.update(agentsTable).set({ assignedStaffId: staffVal }).where(inArray(agentsTable.id, numIds)).returning();
-  res.json({ success: true, count: updated.length });
+  const newStaff = staffVal && !isNaN(staffVal) ? [{ userId: staffVal, isPrimary: true }] : [];
+  // Branch-scope enforcement: silently skip out-of-scope agent IDs.
+  const scoped: number[] = [];
+  for (const aid of numIds) {
+    if (await isAgentInScope(req.user!.id, req.user!.role, aid)) scoped.push(aid);
+  }
+  for (const aid of scoped) await setAgencyStaff(aid, newStaff);
+  res.json({ success: true, count: scoped.length, skipped: numIds.length - scoped.length });
 });
 
 router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
