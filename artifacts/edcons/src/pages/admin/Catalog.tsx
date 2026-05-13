@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { apiFetch } from "@/lib/apiFetch";
+import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
 
 /* ─── helpers ──────────────────────────────────────────────── */
