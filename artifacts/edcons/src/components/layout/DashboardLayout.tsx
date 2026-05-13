@@ -283,6 +283,18 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [navPending, startNavTransition] = useTransition();
   const navigate = (url: string) => startNavTransition(() => setLocation(url));
+  const navigateAndRefresh = (url: string) => {
+    startNavTransition(() => setLocation(url));
+    // Refresh data in the destination section without a full page reload.
+    // Invalidate all server queries so the new section pulls fresh content.
+    queryClient.invalidateQueries();
+  };
+  const handleNavClick = (url: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Allow native middle-click / ctrl+click / cmd+click / shift / alt to open in new tab/window.
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    navigateAndRefresh(url);
+  };
   const { t, localePath } = useI18n();
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
@@ -481,11 +493,20 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   return (
                           <SidebarMenuItem key={`${keyPrefix}${item.title}`}>
                             <SidebarMenuButton
+                              asChild
                               data-active={isActive}
                               tooltip={item.title}
                               className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!rounded-xl group-data-[collapsible=icon]:!gap-0 relative"
-                              onClick={() => navigate(item.url)}
                             >
+                              <a
+                                href={item.url}
+                                onClick={handleNavClick(item.url)}
+                                onAuxClick={(e) => {
+                                  // Middle-click (button=1): let the browser open in a new tab natively.
+                                  // Default <a> behavior already handles this; nothing to do.
+                                  if (e.button === 1) e.stopPropagation();
+                                }}
+                              >
                               <item.icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-primary' : ''}`} />
                               <span className="flex-1 group-data-[collapsible=icon]:hidden">{item.title}</span>
                               {item.url.endsWith("/messages") && totalUnreadMessages > 0 && (
@@ -561,6 +582,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                   <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
                                 </>
                               )}
+                              </a>
                             </SidebarMenuButton>
                             <SidebarMenuAction
                               onClick={(e) => { e.stopPropagation(); e.preventDefault(); togglePin(item.url); }}
