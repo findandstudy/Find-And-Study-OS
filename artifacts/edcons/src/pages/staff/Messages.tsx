@@ -134,30 +134,31 @@ function LiveStatusIndicator({
   now: number;
   onReconnect: () => void;
 }) {
+  const { t } = useI18n();
   const config = {
     open: {
-      label: "Live",
+      label: t("messagesPage.live"),
       dotClass: "bg-emerald-500",
       ringClass: "bg-emerald-500/30",
       textClass: "text-emerald-700",
       animate: false,
     },
     connecting: {
-      label: "Reconnecting",
+      label: t("messagesPage.reconnecting"),
       dotClass: "bg-amber-500",
       ringClass: "bg-amber-500/40",
       textClass: "text-amber-700",
       animate: true,
     },
     stale: {
-      label: "Stalled",
+      label: t("messagesPage.stalled"),
       dotClass: "bg-amber-500",
       ringClass: "bg-amber-500/40",
       textClass: "text-amber-700",
       animate: true,
     },
     offline: {
-      label: "Offline",
+      label: t("messagesPage.offline"),
       dotClass: "bg-red-500",
       ringClass: "bg-red-500/30",
       textClass: "text-red-700",
@@ -209,6 +210,7 @@ function LiveStatusIndicator({
 }
 
 function InboxTab() {
+  const { t } = useI18n();
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -364,7 +366,7 @@ function InboxTab() {
       setMatchSuggestions(r);
       setMatchOpen(true);
     } catch {
-      toast({ title: "Failed to load suggestions", variant: "destructive" });
+      toast({ title: t("messagesPage.failedToLoadSuggestions"), variant: "destructive" });
     }
   }
 
@@ -376,12 +378,12 @@ function InboxTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, entityId }),
       });
-      toast({ title: "Linked" });
+      toast({ title: t("messagesPage.linked") });
       setMatchOpen(false);
       fetchInbox();
       fetchDetail(selectedId);
     } catch {
-      toast({ title: "Failed to link", variant: "destructive" });
+      toast({ title: t("messagesPage.failedToLink"), variant: "destructive" });
     }
   }
 
@@ -389,12 +391,12 @@ function InboxTab() {
     if (!selectedId) return;
     try {
       await customFetch(`/api/inbox/conversations/${selectedId}/match/new-lead`, { method: "POST" });
-      toast({ title: "New lead created" });
+      toast({ title: t("messagesPage.newLeadCreated") });
       setMatchOpen(false);
       fetchInbox();
       fetchDetail(selectedId);
     } catch {
-      toast({ title: "Failed to create lead", variant: "destructive" });
+      toast({ title: t("messagesPage.failedToCreateLead"), variant: "destructive" });
     }
   }
 
@@ -411,7 +413,7 @@ function InboxTab() {
       fetchInbox();
       fetchDetail(selectedId);
     } catch {
-      toast({ title: "Failed to assign", variant: "destructive" });
+      toast({ title: t("messagesPage.failedToAssign"), variant: "destructive" });
     }
   }
 
@@ -424,14 +426,14 @@ function InboxTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: reply.trim() }),
       });
-      if (res?.simulated) toast({ title: "Sent (simulated)", description: "Outbound is simulated outside production" });
-      else toast({ title: "Sent" });
+      if (res?.simulated) toast({ title: t("messagesPage.sentSimulated"), description: t("messagesPage.outboundSimulated") });
+      else toast({ title: t("messagesPage.sent") });
       setReply("");
       fetchDetail(selectedId);
     } catch (err: any) {
       const body = err?.body;
       if (body?.error === "outside_24h_window") {
-        toast({ title: "Outside 24h window", description: "Use a template instead.", variant: "destructive" });
+        toast({ title: t("messagesPage.outsideWindow"), description: t("messagesPage.useTemplateInstead"), variant: "destructive" });
         await openTemplateDialog();
       } else {
         toast({ title: body?.error || "Failed to send", variant: "destructive" });
@@ -447,7 +449,7 @@ function InboxTab() {
       setTemplates((r as any)?.data || []);
       setTplOpen(true);
     } catch {
-      toast({ title: "Failed to load templates", variant: "destructive" });
+      toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });
     }
   }
 
@@ -460,8 +462,8 @@ function InboxTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId: parseInt(tplId, 10), parameters: params }),
       });
-      if (res?.simulated) toast({ title: "Template sent (simulated)" });
-      else toast({ title: "Template sent" });
+      if (res?.simulated) toast({ title: t("messagesPage.templateSentSimulated") });
+      else toast({ title: t("messagesPage.templateSent") });
       setTplOpen(false);
       setTplId("");
       setTplParams("");
@@ -473,10 +475,10 @@ function InboxTab() {
 
   const channelOptions = ["all", "whatsapp", "web_form", "email", "sms", "telegram"];
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
-    { key: "mine", label: "Mine", icon: UserCheck },
-    { key: "unassigned", label: "Unassigned", icon: InboxIcon },
-    { key: "unmatched", label: "Unmatched", icon: AlertTriangle },
-    { key: "all", label: "All", icon: Hash },
+    { key: "mine", label: t("messagesPage.mine"), icon: UserCheck },
+    { key: "unassigned", label: t("messagesPage.unassigned"), icon: InboxIcon },
+    { key: "unmatched", label: t("messagesPage.unmatched"), icon: AlertTriangle },
+    { key: "all", label: t("messagesPage.all"), icon: Hash },
   ];
 
   const conv = detail?.conversation;
@@ -540,7 +542,7 @@ function InboxTab() {
             ) : convs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <InboxIcon className="w-10 h-10 mb-2 opacity-30" />
-                <p className="text-sm">No conversations</p>
+                <p className="text-sm">{t("messagesPage.noConversations")}</p>
               </div>
             ) : convs.map((c) => {
               const Icon = channelIcon[c.channel] || MessageCircle;
@@ -574,7 +576,7 @@ function InboxTab() {
           {!selectedId ? (
             <div className="text-center text-muted-foreground">
               <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">Select a conversation</p>
+              <p className="font-medium">{t("messagesPage.selectConversation")}</p>
             </div>
           ) : !detail ? (
             <div className="flex items-center justify-center w-full h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
@@ -627,7 +629,7 @@ function InboxTab() {
                     </Button>
                   )}
                   {assignedNotice && (
-                    <span className="text-xs text-green-600 font-medium">Assigned to you</span>
+                    <span className="text-xs text-green-600 font-medium">{t("messagesPage.assignedToYou")}</span>
                   )}
                 </div>
               </div>
@@ -636,8 +638,8 @@ function InboxTab() {
                 <div className="m-3 p-3 rounded-lg border border-amber-300 bg-amber-50 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5" />
                   <div className="flex-1 text-xs text-amber-900">
-                    <p className="font-semibold">Unmatched contact</p>
-                    <p>This conversation isn't linked to a lead/student/agent yet.</p>
+                    <p className="font-semibold">{t("messagesPage.unmatchedContact")}</p>
+                    <p>{t("messagesPage.notLinkedYet")}</p>
                   </div>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={loadSuggestions}>
                     Match
@@ -648,8 +650,8 @@ function InboxTab() {
               {conv.channel === "whatsapp" && !detail.withinWindow && (
                 <div className="m-3 p-3 rounded-lg border border-orange-300 bg-orange-50 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-orange-700" />
-                  <p className="text-xs text-orange-900 flex-1">Outside the 24h reply window. Use a template.</p>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openTemplateDialog}>Use template</Button>
+                  <p className="text-xs text-orange-900 flex-1">{t("messagesPage.outside24hReplyWindow")}</p>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openTemplateDialog}>{t("messagesPage.useTemplate")}</Button>
                 </div>
               )}
 
@@ -682,7 +684,7 @@ function InboxTab() {
                 />
                 {conv.channel === "whatsapp" && (
                   <Button size="sm" variant="outline" onClick={openTemplateDialog} className="h-9 gap-1">
-                    <FileText className="w-3 h-3" /> Template
+                    <FileText className="w-3 h-3" /> {t("messagesPage.template")}
                   </Button>
                 )}
                 <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || (conv.channel === "whatsapp" && !detail.withinWindow)} className="h-9 gap-1">
@@ -697,17 +699,17 @@ function InboxTab() {
       <Dialog open={matchOpen} onOpenChange={setMatchOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Link2 className="w-4 h-4" /> Match contact</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Link2 className="w-4 h-4" /> {t("messagesPage.matchContact")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             {matchSuggestions?.outcome === "strong" && (
-              <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded">Strong match found — confirm to link.</p>
+              <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded">{t("messagesPage.strongMatchConfirmLink")}</p>
             )}
             {matchSuggestions?.outcome === "ambiguous" && (
-              <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">Multiple candidates — pick one.</p>
+              <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">{t("messagesPage.multipleCandidatesPickOne")}</p>
             )}
             {matchSuggestions?.outcome === "none" && (
-              <p className="text-xs text-muted-foreground bg-secondary p-2 rounded">No matches — create a new lead.</p>
+              <p className="text-xs text-muted-foreground bg-secondary p-2 rounded">{t("messagesPage.noMatchesCreateLead")}</p>
             )}
             {(matchSuggestions?.candidates || []).map((c: any, i: number) => (
               <div key={`${c.type}-${c.id}-${i}`} className="flex items-center justify-between p-2 border rounded-lg">
@@ -715,13 +717,13 @@ function InboxTab() {
                   <p className="text-sm font-medium">{c.displayName || `${c.firstName || ""} ${c.lastName || ""}`.trim() || "(unnamed)"} <Badge variant="outline" className="text-[9px] ml-1">{c.type}</Badge></p>
                   <p className="text-[11px] text-muted-foreground">{c.email || c.phone || ""}</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => applyMatch(c.type, c.id)}>Link</Button>
+                <Button size="sm" variant="outline" onClick={() => applyMatch(c.type, c.id)}>{t("messagesPage.link")}</Button>
               </div>
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMatchOpen(false)}>Cancel</Button>
-            <Button onClick={createNewLead} className="gap-1"><Plus className="w-3 h-3" /> Create new lead</Button>
+            <Button variant="outline" onClick={() => setMatchOpen(false)}>{t("messagesPage.cancel")}</Button>
+            <Button onClick={createNewLead} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.createNewLead")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -729,13 +731,13 @@ function InboxTab() {
       <Dialog open={tplOpen} onOpenChange={setTplOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><FileText className="w-4 h-4" /> WhatsApp Template</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><FileText className="w-4 h-4" /> {t("messagesPage.whatsappTemplate")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label className="text-xs">Template</Label>
+              <Label className="text-xs">{t("messagesPage.template")}</Label>
               <Select value={tplId} onValueChange={setTplId}>
-                <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder="Select template" /></SelectTrigger>
+                <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder={t("messagesPage.selectTemplate")} /></SelectTrigger>
                 <SelectContent>
                   {templates
                     .filter((t) => t.externalTemplateName)
@@ -746,12 +748,12 @@ function InboxTab() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Parameters (pipe-separated)</Label>
-              <Input value={tplParams} onChange={(e) => setTplParams(e.target.value)} placeholder="param1|param2|..." className="h-9 rounded-lg" />
+              <Label className="text-xs">{t("messagesPage.parametersPipeSeparated")}</Label>
+              <Input value={tplParams} onChange={(e) => setTplParams(e.target.value)} placeholder={t("messagesPage.paramExample")} className="h-9 rounded-lg" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTplOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setTplOpen(false)}>{t("messagesPage.cancel")}</Button>
             <Button onClick={sendTemplate} disabled={!tplId} className="gap-1"><Send className="w-3 h-3" /> Send</Button>
           </DialogFooter>
         </DialogContent>
@@ -772,13 +774,14 @@ function ConversationList({
   setSearch: (s: string) => void;
 }) {
   const { user } = useAuth();
+  const { t } = useI18n();
 
   return (
     <>
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border/50 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-foreground">Messages</h2>
+          <h2 className="font-semibold text-foreground">{t("messagesPage.messages")}</h2>
           <Button size="sm" variant="outline" onClick={onNewConversation} className="h-8 gap-1.5 rounded-lg">
             <Plus className="w-3.5 h-3.5" /> New
           </Button>
@@ -786,14 +789,14 @@ function ConversationList({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search conversations..." className="pl-9 h-8 text-sm rounded-lg" />
+            placeholder={t("messagesPage.searchConversations")} className="pl-9 h-8 text-sm rounded-lg" />
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
         {conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <MessageCircle className="w-10 h-10 mb-2 opacity-30" />
-            <p className="text-sm">No conversations yet</p>
+            <p className="text-sm">{t("messagesPage.noConversationsYet")}</p>
           </div>
         ) : (
           conversations.map(conv => {
@@ -843,6 +846,7 @@ function MessageThread({
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
@@ -897,7 +901,7 @@ function MessageThread({
         fileSize: file.size,
       };
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("messagesPage.uploadFailed"), description: err.message, variant: "destructive" });
       return null;
     } finally {
       setUploading(false);
@@ -925,7 +929,7 @@ function MessageThread({
       if (fileInputRef.current) fileInputRef.current.value = "";
       fetchMessages();
     } catch (err: any) {
-      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+      toast({ title: t("messagesPage.failedToSend"), description: err.message, variant: "destructive" });
     } finally {
       setSending(false);
     }
@@ -935,7 +939,7 @@ function MessageThread({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum file size is 25MB", variant: "destructive" });
+      toast({ title: t("messagesPage.fileTooLarge"), description: t("messagesPage.maxFileSize25mb"), variant: "destructive" });
       return;
     }
     setPendingFile(file);
@@ -965,7 +969,7 @@ function MessageThread({
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      toast({ title: "Download failed", description: "Could not download the file.", variant: "destructive" });
+      toast({ title: t("messagesPage.downloadFailed"), description: t("messagesPage.couldNotDownloadFile"), variant: "destructive" });
     }
   };
 
@@ -999,7 +1003,7 @@ function MessageThread({
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <MessageSquare className="w-10 h-10 mb-2 opacity-30" />
-            <p className="text-sm">No messages yet. Start the conversation!</p>
+            <p className="text-sm">{t("messagesPage.noMessagesYet")}</p>
           </div>
         ) : (
           messages.map(msg => {
@@ -1029,7 +1033,7 @@ function MessageThread({
                         <button
                           onClick={() => handleDownload(att.fileUrl, att.fileName)}
                           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity hover:bg-black/70"
-                          title="Download"
+                          title={t("messagesPage.download")}
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
@@ -1106,7 +1110,7 @@ function MessageThread({
           <Input
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
+            placeholder={t("messagesPage.typeMessage")}
             className="flex-1 rounded-xl"
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
           />
@@ -1122,6 +1126,7 @@ function MessageThread({
 }
 
 function BroadcastTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -1148,7 +1153,7 @@ function BroadcastTab() {
 
   const sendBroadcast = async () => {
     if (!title.trim() || !content.trim()) {
-      toast({ title: "Title and message are required", variant: "destructive" });
+      toast({ title: t("messagesPage.titleAndMessageRequired"), variant: "destructive" });
       return;
     }
     setSending(true);
@@ -1169,7 +1174,7 @@ function BroadcastTab() {
       setContent("");
       setBroadcasts(prev => [res as any, ...prev]);
     } catch (err: any) {
-      toast({ title: "Failed to send broadcast", description: err.message, variant: "destructive" });
+      toast({ title: t("messagesPage.failedToSendBroadcast"), description: err.message, variant: "destructive" });
     } finally {
       setSending(false);
     }
@@ -1188,41 +1193,41 @@ function BroadcastTab() {
         </h3>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Title</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Broadcast title..." className="rounded-xl" />
+            <Label>{t("messagesPage.title")}</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder={t("messagesPage.broadcastTitle")} className="rounded-xl" />
           </div>
           <div className="space-y-2">
-            <Label>Message</Label>
-            <Textarea value={content} onChange={e => setContent(e.target.value)} placeholder="Write your broadcast message..." rows={4} className="rounded-xl" />
+            <Label>{t("messagesPage.message")}</Label>
+            <Textarea value={content} onChange={e => setContent(e.target.value)} placeholder={t("messagesPage.writeBroadcastMessage")} rows={4} className="rounded-xl" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Channel</Label>
+              <Label>{t("messagesPage.channel")}</Label>
               <Select value={channel} onValueChange={setChannel}>
                 <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="internal">Internal (In-App)</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="telegram">Telegram</SelectItem>
-                  <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="internal">{t("messagesPage.internalInApp")}</SelectItem>
+                  <SelectItem value="email">{t("messagesPage.email")}</SelectItem>
+                  <SelectItem value="whatsapp">{t("messagesPage.whatsapp")}</SelectItem>
+                  <SelectItem value="telegram">{t("messagesPage.telegram")}</SelectItem>
+                  <SelectItem value="sms">{t("messagesPage.sms")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Target Audience</Label>
+              <Label>{t("messagesPage.targetAudience")}</Label>
               <Select value={targetAudience} onValueChange={setTargetAudience}>
                 <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Active Users</SelectItem>
-                  <SelectItem value="role">Specific Roles</SelectItem>
+                  <SelectItem value="all">{t("messagesPage.allActiveUsers")}</SelectItem>
+                  <SelectItem value="role">{t("messagesPage.specificRoles")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           {targetAudience === "role" && (
             <div className="space-y-2">
-              <Label>Select Roles</Label>
+              <Label>{t("messagesPage.selectRoles")}</Label>
               <div className="flex flex-wrap gap-2">
                 {availableRoles.map(r => (
                   <button key={r.value} onClick={() => toggleRole(r.value)}
@@ -1241,12 +1246,12 @@ function BroadcastTab() {
 
       <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
         <div className="px-6 py-4 border-b border-border/50">
-          <h3 className="font-semibold text-foreground">Broadcast History</h3>
+          <h3 className="font-semibold text-foreground">{t("messagesPage.broadcastHistory")}</h3>
         </div>
         {loading ? (
           <div className="p-8 text-center"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" /></div>
         ) : broadcasts.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">No broadcasts sent yet</div>
+          <div className="p-8 text-center text-muted-foreground text-sm">{t("messagesPage.noBroadcastsYet")}</div>
         ) : (
           <div className="divide-y divide-border/50">
             {broadcasts.map((b: any) => {
@@ -1332,6 +1337,7 @@ interface Template {
 }
 
 function TemplatesTab() {
+  const { t: tx } = useI18n();
   const { toast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1355,7 +1361,7 @@ function TemplatesTab() {
       const res = await customFetch("/api/message-templates");
       setTemplates((res as any)?.data || []);
     } catch {
-      toast({ title: "Failed to load templates", variant: "destructive" });
+      toast({ title: tx("messagesPage.failedToLoadTemplates"), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -1387,7 +1393,7 @@ function TemplatesTab() {
 
   async function saveTemplate() {
     if (!formName.trim() || !formContent.trim()) {
-      toast({ title: "Name and content are required", variant: "destructive" });
+      toast({ title: tx("messagesPage.nameAndContentRequired"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -1408,7 +1414,7 @@ function TemplatesTab() {
           body: JSON.stringify(payload),
         });
         setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, ...(res as any) } : t));
-        toast({ title: "Template updated" });
+        toast({ title: tx("messagesPage.templateUpdated") });
       } else {
         const res = await customFetch("/api/message-templates", {
           method: "POST",
@@ -1416,11 +1422,11 @@ function TemplatesTab() {
           body: JSON.stringify(payload),
         });
         fetchTemplates();
-        toast({ title: "Template created" });
+        toast({ title: tx("messagesPage.templateCreated") });
       }
       setEditOpen(false);
     } catch (err: any) {
-      toast({ title: "Failed to save template", description: err.message, variant: "destructive" });
+      toast({ title: tx("messagesPage.failedToSaveTemplate"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1430,9 +1436,9 @@ function TemplatesTab() {
     try {
       await customFetch(`/api/message-templates/${id}`, { method: "DELETE" });
       setTemplates(prev => prev.filter(t => t.id !== id));
-      toast({ title: "Template deleted" });
+      toast({ title: tx("messagesPage.templateDeleted") });
     } catch (err: any) {
-      toast({ title: "Failed to delete", description: err.message, variant: "destructive" });
+      toast({ title: tx("messagesPage.failedToDelete"), description: err.message, variant: "destructive" });
     }
     setDeleteConfirm(null);
   }
@@ -1446,13 +1452,13 @@ function TemplatesTab() {
       });
       setTemplates(prev => prev.map(x => x.id === t.id ? { ...x, isActive: !x.isActive } : x));
     } catch {
-      toast({ title: "Failed to update template", variant: "destructive" });
+      toast({ title: tx("messagesPage.failedToUpdateTemplate"), variant: "destructive" });
     }
   }
 
   function copyContent(content: string) {
     navigator.clipboard.writeText(content);
-    toast({ title: "Template content copied to clipboard" });
+    toast({ title: tx("messagesPage.templateContentCopied") });
   }
 
   const filtered = templates.filter(t => {
@@ -1502,16 +1508,16 @@ function TemplatesTab() {
             <Input
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Search templates..."
+              placeholder={tx("messagesPage.searchTemplates")}
               className="pl-9 rounded-xl"
             />
           </div>
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-full sm:w-48 rounded-xl">
-              <SelectValue placeholder="Category" />
+              <SelectValue placeholder={tx("messagesPage.category")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{tx("messagesPage.allCategories")}</SelectItem>
               {TEMPLATE_CATEGORIES.map(c => (
                 <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
               ))}
@@ -1526,8 +1532,8 @@ function TemplatesTab() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <FileText className="w-12 h-12 mb-3 opacity-20" />
-            <p className="font-medium">No templates found</p>
-            <p className="text-sm mt-1">Create your first template to get started</p>
+            <p className="font-medium">{tx("messagesPage.noTemplatesFound")}</p>
+            <p className="text-sm mt-1">{tx("messagesPage.createFirstTemplate")}</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -1589,14 +1595,14 @@ function TemplatesTab() {
                             <button
                               onClick={() => copyContent(t.content)}
                               className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
-                              title="Copy content"
+                              title={tx("messagesPage.copyContent")}
                             >
                               <Copy className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => openEdit(t)}
                               className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
-                              title="Edit"
+                              title={tx("messagesPage.edit")}
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
@@ -1609,10 +1615,10 @@ function TemplatesTab() {
                             </button>
                             {deleteConfirm === t.id ? (
                               <div className="flex items-center gap-1">
-                                <button onClick={() => deleteTemplate(t.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors" title="Confirm delete">
+                                <button onClick={() => deleteTemplate(t.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors" title={tx("messagesPage.confirmDelete")}>
                                   <Check className="w-3.5 h-3.5" />
                                 </button>
-                                <button onClick={() => setDeleteConfirm(null)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground" title="Cancel">
+                                <button onClick={() => setDeleteConfirm(null)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground" title={tx("messagesPage.cancel")}>
                                   <X className="w-3.5 h-3.5" />
                                 </button>
                               </div>
@@ -1620,7 +1626,7 @@ function TemplatesTab() {
                               <button
                                 onClick={() => setDeleteConfirm(t.id)}
                                 className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-600"
-                                title="Delete"
+                                title={tx("messagesPage.delete")}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1647,13 +1653,13 @@ function TemplatesTab() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Template Name *</Label>
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Welcome Email" className="rounded-xl" />
+              <Label>{tx("messagesPage.templateNameRequired")}</Label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder={tx("messagesPage.egWelcomeEmail")} className="rounded-xl" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Category</Label>
+                <Label>{tx("messagesPage.category")}</Label>
                 <Select value={formCategory} onValueChange={setFormCategory}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1664,7 +1670,7 @@ function TemplatesTab() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Channel</Label>
+                <Label>{tx("messagesPage.channel")}</Label>
                 <Select value={formChannel} onValueChange={setFormChannel}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1675,7 +1681,7 @@ function TemplatesTab() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Language</Label>
+                <Label>{tx("messagesPage.language")}</Label>
                 <Select value={formLanguage} onValueChange={setFormLanguage}>
                   <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1689,14 +1695,14 @@ function TemplatesTab() {
 
             {(formChannel === "email" || formChannel === "all") && (
               <div className="space-y-2">
-                <Label>Subject Line</Label>
-                <Input value={formSubject} onChange={e => setFormSubject(e.target.value)} placeholder="Email subject..." className="rounded-xl" />
+                <Label>{tx("messagesPage.subjectLine")}</Label>
+                <Input value={formSubject} onChange={e => setFormSubject(e.target.value)} placeholder={tx("messagesPage.emailSubject")} className="rounded-xl" />
               </div>
             )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Content *</Label>
+                <Label>{tx("messagesPage.contentRequired")}</Label>
                 <p className="text-[10px] text-muted-foreground">
                   Use {"{{variable}}"} for dynamic placeholders, e.g. {"{{studentName}}"}, {"{{programName}}"}
                 </p>
@@ -1704,7 +1710,7 @@ function TemplatesTab() {
               <Textarea
                 value={formContent}
                 onChange={e => setFormContent(e.target.value)}
-                placeholder="Write your template content here..."
+                placeholder={tx("messagesPage.writeTemplateContent")}
                 rows={8}
                 className="rounded-xl font-mono text-sm"
               />
@@ -1712,7 +1718,7 @@ function TemplatesTab() {
 
             {formContent && (
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Preview</Label>
+                <Label className="text-xs text-muted-foreground">{tx("messagesPage.preview")}</Label>
                 <div className="bg-secondary/50 rounded-xl p-4 text-sm whitespace-pre-wrap border border-border/50">
                   {formContent}
                 </div>
@@ -1720,7 +1726,7 @@ function TemplatesTab() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl">{tx("messagesPage.cancel")}</Button>
             <Button onClick={saveTemplate} disabled={saving} className="rounded-xl gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               {saving ? "Saving..." : editingTemplate ? "Update Template" : "Create Template"}
@@ -1776,7 +1782,7 @@ export default function MessagesPage() {
 
   const createConversation = async () => {
     if (selectedUsers.length === 0) {
-      toast({ title: "Select at least one user", variant: "destructive" });
+      toast({ title: t("messagesPage.selectAtLeastOneUser"), variant: "destructive" });
       return;
     }
     setCreating(true);
@@ -1797,7 +1803,7 @@ export default function MessagesPage() {
       fetchConversations();
       setSelectedConv((res as any).id);
     } catch (err: any) {
-      toast({ title: "Failed to create conversation", description: err.message, variant: "destructive" });
+      toast({ title: t("messagesPage.failedToCreateConversation"), description: err.message, variant: "destructive" });
     } finally {
       setCreating(false);
     }
@@ -1855,8 +1861,8 @@ export default function MessagesPage() {
                   {selectedConv === null ? (
                     <div className="text-center text-muted-foreground">
                       <MessageCircle className="w-16 h-16 mx-auto mb-3 opacity-20" />
-                      <p className="font-medium">Select a conversation</p>
-                      <p className="text-sm mt-1">Or start a new one</p>
+                      <p className="font-medium">{t("messagesPage.selectConversation")}</p>
+                      <p className="text-sm mt-1">{t("messagesPage.orStartNewOne")}</p>
                     </div>
                   ) : (
                     <MessageThread conversationId={selectedConv} onBack={() => setSelectedConv(null)} />
@@ -1887,9 +1893,9 @@ export default function MessagesPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Search Users</Label>
+              <Label>{t("messagesPage.searchUsers")}</Label>
               <Input value={userSearch} onChange={e => setUserSearch(e.target.value)}
-                placeholder="Type to search..." className="rounded-xl" />
+                placeholder={t("messagesPage.typeToSearch")} className="rounded-xl" />
             </div>
             {userResults.length > 0 && (
               <div className="max-h-48 overflow-y-auto space-y-1 border rounded-xl p-2">
@@ -1905,7 +1911,7 @@ export default function MessagesPage() {
                         <p className="text-sm font-medium truncate">{u.firstName} {u.lastName}</p>
                         <p className="text-xs text-muted-foreground">{u.email} • {u.role}</p>
                       </div>
-                      {selected && <Badge className="bg-primary text-white text-[10px] h-5">Selected</Badge>}
+                      {selected && <Badge className="bg-primary text-white text-[10px] h-5">{t("messagesPage.selected")}</Badge>}
                     </div>
                   );
                 })}
@@ -1925,7 +1931,7 @@ export default function MessagesPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewConvOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setNewConvOpen(false)}>{t("messagesPage.cancel")}</Button>
             <Button onClick={createConversation} disabled={creating || selectedUsers.length === 0}>
               {creating ? "Creating..." : "Start Conversation"}
             </Button>
