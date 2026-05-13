@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { getClientIp } from "../lib/clientIp";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
@@ -82,7 +83,7 @@ function generateVerificationCode(): string {
 }
 
 function buildVerificationCodeEmail(firstName: string, code: string): { subject: string; html: string; text: string } {
-  const subject = "Your Verification Code — Find And Study OS";
+  const subject = "Your Verification Code ��� Find And Study OS";
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -140,7 +141,7 @@ router.get("/auth/me", async (req: Request, res: Response) => {
 router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Request, res: Response) => {
   try {
     const { email: normalizedEmail, password } = getValidated<{ body: typeof loginBodySchema }>(req).body;
-    const ip = req.ip || "unknown";
+    const ip = getClientIp(req);
     const ipKey = `ip:${ip}`;
     const emailKey = `email:${normalizedEmail}`;
 
@@ -214,7 +215,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   try {
     await rateLimiter.consume(`register:${ip}`);
   } catch {
@@ -310,7 +311,7 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   try {
     await rateLimiter.consume(`verify:${ip}`);
     await rateLimiter.consume(`verify:${normalizedEmail}`);
@@ -402,7 +403,7 @@ router.post("/auth/resend-code", async (req: Request, res: Response) => {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   try {
     await rateLimiter.consume(`resend:${ip}`);
     await rateLimiter.consume(`resend:${normalizedEmail}`);
@@ -455,7 +456,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   try {
     await rateLimiter.consume(`forgot:${ip}`);
     await rateLimiter.consume(`forgot:${normalizedEmail}`);
@@ -509,7 +510,7 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
     return;
   }
 
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   try {
     await rateLimiter.consume(`set-password:${ip}`);
   } catch {
@@ -550,7 +551,7 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
 });
 
 router.get("/auth/verify-email-token/:token", async (req: Request, res: Response) => {
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   try {
     await rateLimiter.consume(`verify-token:${ip}`);
   } catch {
@@ -595,7 +596,7 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
     return;
   }
 
-  const ip = req.ip || "unknown";
+  const ip = getClientIp(req);
   const rateLimitKey = req.user ? `resend-verify:${req.user.id}` : `resend-verify:${emailParam}`;
   try {
     await rateLimiter.consume(`resend-verify:${ip}`);
