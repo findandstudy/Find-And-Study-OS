@@ -189,30 +189,30 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
 
 type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "leadAssignment" | "webtolead" | "advanced";
 
-interface NavItem { id: SettingsTab; label: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
+interface NavItem { id: SettingsTab; label: string; navKey: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "profile", label: "Profile", icon: User, group: "personal" },
-  { id: "language", label: "Language & Region", icon: Globe, group: "personal" },
-  { id: "notifications", label: "Notifications", icon: Bell, group: "personal" },
-  { id: "security", label: "Security", icon: Shield, group: "personal" },
-  { id: "pipeline", label: "Pipeline Stages", icon: Kanban, group: "organization", managerOnly: true },
-  { id: "seasons", label: "Academic Years", icon: CalendarDays, group: "organization", managerOnly: true },
-  { id: "branding", label: "Branding & Appearance", icon: Palette, group: "organization", managerOnly: true },
-  { id: "company", label: "Company & Contact", icon: Building2, group: "organization", managerOnly: true },
-  { id: "seo", label: "SEO & Social", icon: SearchIcon, group: "organization", managerOnly: true },
-  { id: "email", label: "Email Branding", icon: Mail, group: "organization", managerOnly: true },
-  { id: "documents", label: "Documents / PDF", icon: FileText, group: "organization", managerOnly: true },
-  { id: "integrations", label: "Integrations", icon: Plug, group: "organization", managerOnly: true },
-  { id: "quicklinks", label: "Quick Links", icon: LinkIcon, group: "organization", managerOnly: true },
-  { id: "leadAssignment", label: "Lead Otomatik Atama", icon: GripVertical, group: "organization", managerOnly: true },
-  { id: "webtolead", label: "Web to Lead", icon: ExternalLink, group: "organization", superAdminOnly: true },
-  { id: "advanced", label: "Advanced", icon: Code, group: "organization", managerOnly: true },
+  { id: "profile", label: "Profile", navKey: "navProfile", icon: User, group: "personal" },
+  { id: "language", label: "Language & Region", navKey: "navLanguage", icon: Globe, group: "personal" },
+  { id: "notifications", label: "Notifications", navKey: "navNotifications", icon: Bell, group: "personal" },
+  { id: "security", label: "Security", navKey: "navSecurity", icon: Shield, group: "personal" },
+  { id: "pipeline", label: "Pipeline Stages", navKey: "navPipeline", icon: Kanban, group: "organization", managerOnly: true },
+  { id: "seasons", label: "Academic Years", navKey: "navSeasons", icon: CalendarDays, group: "organization", managerOnly: true },
+  { id: "branding", label: "Branding & Appearance", navKey: "navBranding", icon: Palette, group: "organization", managerOnly: true },
+  { id: "company", label: "Company & Contact", navKey: "navCompany", icon: Building2, group: "organization", managerOnly: true },
+  { id: "seo", label: "SEO & Social", navKey: "navSeo", icon: SearchIcon, group: "organization", managerOnly: true },
+  { id: "email", label: "Email Branding", navKey: "navEmail", icon: Mail, group: "organization", managerOnly: true },
+  { id: "documents", label: "Documents / PDF", navKey: "navDocuments", icon: FileText, group: "organization", managerOnly: true },
+  { id: "integrations", label: "Integrations", navKey: "navIntegrations", icon: Plug, group: "organization", managerOnly: true },
+  { id: "quicklinks", label: "Quick Links", navKey: "navQuickLinks", icon: LinkIcon, group: "organization", managerOnly: true },
+  { id: "leadAssignment", label: "Lead Otomatik Atama", navKey: "navLeadAssignment", icon: GripVertical, group: "organization", managerOnly: true },
+  { id: "webtolead", label: "Web to Lead", navKey: "navWebToLead", icon: ExternalLink, group: "organization", superAdminOnly: true },
+  { id: "advanced", label: "Advanced", navKey: "navAdvanced", icon: Code, group: "organization", managerOnly: true },
 ];
 
 export default function SettingsPage() {
   const { user } = useAuth(true);
-  const { lang, setLang } = useI18n();
+  const { lang, setLang, t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { mode, setMode, resolvedTheme, settings: themeSettings, refreshSettings } = useTheme();
@@ -443,7 +443,7 @@ export default function SettingsPage() {
   function ProfileTab() {
     return (<>
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title="Personal Information" description="Update your profile details and contact information." />
+        <SectionHeader title={t("settingsPage.personalInformation")} description={t("settingsPage.personalInformationDesc")} />
         <div className="flex items-center gap-5 mb-8 p-5 rounded-2xl bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10">
           <div className="relative group shrink-0">
             {form.avatarUrl ? (
@@ -502,7 +502,7 @@ export default function SettingsPage() {
         </div>
       </Card>
       <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
-        <SectionHeader title="Work & Identity" description="Employment details, address, and identity documents." />
+        <SectionHeader title={t("settingsPage.workIdentity")} description={t("settingsPage.workIdentityDesc")} />
         <div className="grid sm:grid-cols-2 gap-5">
           <FieldGroup label="Start Date">
             <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="rounded-xl" />
@@ -555,7 +555,7 @@ export default function SettingsPage() {
         <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
       </Card>
       <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
-        <SectionHeader title="Emergency Contact" description="Contact information for a relative or emergency contact person." />
+        <SectionHeader title={t("settingsPage.emergencyContact")} description={t("settingsPage.emergencyContactDesc")} />
         <div className="grid sm:grid-cols-3 gap-5">
           <FieldGroup label="Full Name" className="sm:col-span-2">
             <Input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Enter emergency contact name" className="rounded-xl" />
@@ -585,7 +585,7 @@ export default function SettingsPage() {
         <div className="mt-6"><SaveButton onClick={handleSaveProfile} saving={saving} /></div>
       </Card>
       <Card className="border-none shadow-lg shadow-black/5 p-6 mt-6">
-        <SectionHeader title="Change Password" description="Update your account password. You'll need your current password to make changes." />
+        <SectionHeader title={t("settingsPage.changePassword")} description={t("settingsPage.changePasswordDesc")} />
         <div className="space-y-4 max-w-md">
           <FieldGroup label="Current Password">
             <Input type="password" value={pwForm.currentPassword} onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="Enter current password" className="rounded-xl" />
@@ -610,7 +610,7 @@ export default function SettingsPage() {
   function LanguageTab() {
     return (
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title="Language & Region" description="Choose your preferred interface language." />
+        <SectionHeader title={t("settingsPage.languageRegion")} description={t("settingsPage.languageRegionDesc")} />
         <div className="grid sm:grid-cols-2 gap-3">
           {LANGUAGES.map(l => (
             <button key={l.code} onClick={() => handleSaveLang(l.code)}
@@ -645,7 +645,7 @@ export default function SettingsPage() {
   function SecurityTab() {
     return (
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title="Security & Access" description="Manage your authentication and active sessions." />
+        <SectionHeader title={t("settingsPage.securityAccess")} description={t("settingsPage.securityAccessDesc")} />
         <div className="space-y-4">
           <div className="p-5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
             <p className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2"><Shield className="w-5 h-5" /> Secure Authentication</p>
@@ -657,14 +657,14 @@ export default function SettingsPage() {
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Account ID</span><span className="font-mono text-foreground">#{user?.id}</span></div>
           </div>
           <div className="p-5 rounded-xl border border-border/50">
-            <p className="font-semibold text-foreground mb-3">Active Sessions</p>
+            <p className="font-semibold text-foreground mb-3">{t("settingsPage.activeSessions")}</p>
             <div className="flex items-center justify-between">
-              <div><p className="text-sm text-foreground">Current session</p><p className="text-xs text-muted-foreground">This device</p></div>
-              <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">Active</Badge>
+              <div><p className="text-sm text-foreground">{t("settingsPage.currentSession")}</p><p className="text-xs text-muted-foreground">{t("settingsPage.thisDevice")}</p></div>
+              <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">{t("settingsPage.active")}</Badge>
             </div>
           </div>
           <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>
-            <a href="/api/auth/logout">Sign Out</a>
+            <a href="/api/auth/logout">{t("settingsPage.signOut")}</a>
           </Button>
         </div>
       </Card>
@@ -688,12 +688,12 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Appearance Mode" description="Choose between light, dark, or system-following theme." />
+          <SectionHeader title={t("settingsPage.appearanceMode")} description={t("settingsPage.appearanceModeDesc")} />
           <div className="grid grid-cols-3 gap-3">
             {([
-              { value: "light" as const, label: "Light", icon: Sun, desc: "Light background" },
-              { value: "dark" as const, label: "Dark", icon: Moon, desc: "Dark background" },
-              { value: "system" as const, label: "System", icon: Monitor, desc: "Follows device" },
+              { value: "light" as const, label: t("settingsPage.themeLight"), icon: Sun, desc: t("settingsPage.themeLightDesc") },
+              { value: "dark" as const, label: t("settingsPage.themeDark"), icon: Moon, desc: t("settingsPage.themeDarkDesc") },
+              { value: "system" as const, label: t("settingsPage.themeSystem"), icon: Monitor, desc: t("settingsPage.themeSystemDesc") },
             ]).map(opt => (
               <button key={opt.value} onClick={() => setMode(opt.value)}
                 className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all hover:border-primary/50
@@ -707,7 +707,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="System Logos" description="Upload your company logos for different contexts. Use PNG or SVG with transparent backgrounds." />
+          <SectionHeader title={t("settingsPage.systemLogos")} description={t("settingsPage.systemLogosDesc")} />
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <LogoUploader label="Light Mode Logo" dims="300x80px, PNG/SVG" value={s.logoUrl || ""} onChange={v => updateSettings({ logoUrl: v })} bgClass="bg-white" />
             <LogoUploader label="Dark Mode Logo" dims="300x80px, PNG/SVG" value={s.logoDarkUrl || ""} onChange={v => updateSettings({ logoDarkUrl: v })} bgClass="bg-gray-900" />
@@ -719,7 +719,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Theme Colors" description="Customize the color palette. Leave empty to use system defaults." />
+          <SectionHeader title={t("settingsPage.themeColors")} description={t("settingsPage.themeColorsDesc")} />
           <div className="space-y-3">
             <ColorField label="Primary Color" description="Navigation, links, and accents" value={s.themePrimary || ""} onChange={v => updateSettings({ themePrimary: v })} defaultColor="#3B82F6" />
             <ColorField label="Secondary Color" description="Secondary elements and backgrounds" value={s.themeSecondary || ""} onChange={v => updateSettings({ themeSecondary: v })} defaultColor="#6B7280" />
@@ -734,7 +734,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Brand Preview" description="See how your branding appears across the system." />
+          <SectionHeader title={t("settingsPage.brandPreview")} description={t("settingsPage.brandPreviewDesc")} />
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border border-border/50 bg-background">
               <p className="text-xs font-semibold text-muted-foreground mb-3">Sidebar Logo</p>
@@ -778,7 +778,7 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Company Information" description="Core business details used across the platform, emails, PDFs, and public pages." />
+          <SectionHeader title={t("settingsPage.companyInformation")} description={t("settingsPage.companyInformationDesc")} />
           <div className="grid sm:grid-cols-2 gap-5">
             <FieldGroup label="Legal Company Name" description="Official registered company name"><Input value={s.legalCompanyName || ""} onChange={e => updateSettings({ legalCompanyName: e.target.value })} className="rounded-xl" /></FieldGroup>
             <FieldGroup label="Public Brand Name" description="The name shown to clients and on the website"><Input value={s.publicBrandName || ""} onChange={e => updateSettings({ publicBrandName: e.target.value })} className="rounded-xl" /></FieldGroup>
@@ -796,7 +796,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Footer & Public Content" description="Texts displayed on the website footer and contact pages." />
+          <SectionHeader title={t("settingsPage.footerPublicContent")} description={t("settingsPage.footerPublicContentDesc")} />
           <div className="space-y-5">
             <FieldGroup label="Footer Description" description="Short company description for the website footer">
               <Textarea value={s.footerDescription || ""} onChange={e => updateSettings({ footerDescription: e.target.value })} className="rounded-xl min-h-[70px]" />
@@ -811,7 +811,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-none shadow-lg shadow-black/5 p-6">
-          <SectionHeader title="Social Media Links" description="Your social media profile URLs." />
+          <SectionHeader title={t("settingsPage.socialMediaLinks")} description={t("settingsPage.socialMediaLinksDesc")} />
           <div className="grid sm:grid-cols-2 gap-5">
             {[
               { key: "socialInstagram", label: "Instagram", icon: Instagram, placeholder: "https://instagram.com/..." },
@@ -1175,7 +1175,7 @@ export default function SettingsPage() {
   return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
+          <h1 className="text-2xl font-display font-bold text-foreground">{t("settingsPage.settings")}</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage your profile, organization settings, and system configuration.</p>
         </div>
 
@@ -1186,7 +1186,7 @@ export default function SettingsPage() {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
                   ${activeTab === n.id ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                 <n.icon className="w-3.5 h-3.5" />
-                {n.label}
+                {t(`settingsPage.${n.navKey}`)}
               </button>
             ))}
           </div>
@@ -1201,7 +1201,7 @@ export default function SettingsPage() {
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left
                     ${activeTab === n.id ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}>
                   <n.icon className="w-4 h-4 shrink-0" />
-                  {n.label}
+                  {t(`settingsPage.${n.navKey}`)}
                 </button>
               ))}
               {isManager && (
@@ -1213,7 +1213,7 @@ export default function SettingsPage() {
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left
                         ${activeTab === n.id ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}>
                       <n.icon className="w-4 h-4 shrink-0" />
-                      {n.label}
+                      {t(`settingsPage.${n.navKey}`)}
                     </button>
                   ))}
                 </>
@@ -1585,6 +1585,7 @@ const PRESET_COLORS = [
 ];
 
 function QuickLinksTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1711,7 +1712,7 @@ function QuickLinksTab() {
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="font-display font-bold text-lg">Quick Links</h3>
+            <h3 className="font-display font-bold text-lg">{t("settingsPage.quickLinks")}</h3>
             <p className="text-sm text-muted-foreground mt-1">
               Manage custom shortcut buttons that appear on user dashboards.
             </p>
@@ -1726,7 +1727,7 @@ function QuickLinksTab() {
             <h4 className="font-semibold text-sm mb-4">{editingId ? "Edit Quick Link" : "New Quick Link"}</h4>
             <div className="grid sm:grid-cols-2 gap-4 mb-4">
               <div>
-                <Label className="text-xs font-medium mb-1.5">Title</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("settingsPage.title")}</Label>
                 <Input
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -1734,7 +1735,7 @@ function QuickLinksTab() {
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">URL</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("settingsPage.url")}</Label>
                 <Input
                   value={form.url}
                   onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
@@ -1742,7 +1743,7 @@ function QuickLinksTab() {
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Logo</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("settingsPage.logo")}</Label>
                 <div className="relative w-full h-[72px] rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                   {form.logoUrl ? (
                     <>
@@ -1764,13 +1765,13 @@ function QuickLinksTab() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }} />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Target</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("settingsPage.target")}</Label>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {[
-                    { value: "agent", label: "Agent" },
-                    { value: "sub_agent", label: "Sub Agent" },
-                    { value: "staff", label: "Staff" },
-                    { value: "student", label: "Student" },
+                    { value: "agent", label: t("settingsPage.roleAgent") },
+                    { value: "sub_agent", label: t("settingsPage.roleSubAgent") },
+                    { value: "staff", label: t("settingsPage.roleStaff") },
+                    { value: "student", label: t("settingsPage.roleStudent") },
                   ].map(opt => {
                     const targets = form.target.split(",").filter(Boolean);
                     const checked = targets.includes(opt.value);
@@ -1790,7 +1791,7 @@ function QuickLinksTab() {
                 </div>
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Sort Order</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("settingsPage.sortOrder")}</Label>
                 <Input
                   type="number"
                   value={form.sortOrder}
@@ -1798,7 +1799,7 @@ function QuickLinksTab() {
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Color</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("settingsPage.color")}</Label>
                 <div className="flex items-center gap-2 flex-wrap">
                   {PRESET_COLORS.map(c => (
                     <button
@@ -1926,6 +1927,7 @@ function QuickLinksTab() {
 
 
 function WebToLeadTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [copied, setCopied] = useState(false);
@@ -1994,7 +1996,7 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
             <Code className="w-4 h-4 text-blue-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">Web to Lead Form</h3>
+          <h3 className="font-display font-semibold text-base">{t("settingsPage.webToLeadForm")}</h3>
         </div>
         <p className="text-sm text-muted-foreground mb-5">
           Customize the lead capture form for your company website. The generated HTML code can be copied and pasted into any website.
@@ -2002,37 +2004,37 @@ function WebToLeadTab() {
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Form Title</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.formTitle")}</Label>
             <Input value={formTitle} onChange={e => { setFormTitle(e.target.value); setCopied(false); }} className="rounded-xl" />
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Subtitle</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.subtitle")}</Label>
             <Input value={formSubtitle} onChange={e => { setFormSubtitle(e.target.value); setCopied(false); }} className="rounded-xl" />
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Button Text</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.buttonText")}</Label>
             <Input value={btnText} onChange={e => { setBtnText(e.target.value); setCopied(false); }} className="rounded-xl" />
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Footer Text</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.footerText")}</Label>
             <Input value={footerText} onChange={e => { setFooterText(e.target.value); setCopied(false); }} className="rounded-xl" />
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Button Color</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.buttonColor")}</Label>
             <div className="flex items-center gap-2">
               <input type="color" value={btnColor} onChange={e => { setBtnColor(e.target.value); setCopied(false); }} className="w-9 h-9 rounded-lg border cursor-pointer" />
               <Input value={btnColor} onChange={e => { setBtnColor(e.target.value); setCopied(false); }} className="rounded-xl font-mono text-xs flex-1" />
             </div>
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Background Color</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.backgroundColor")}</Label>
             <div className="flex items-center gap-2">
               <input type="color" value={bgColor} onChange={e => { setBgColor(e.target.value); setCopied(false); }} className="w-9 h-9 rounded-lg border cursor-pointer" />
               <Input value={bgColor} onChange={e => { setBgColor(e.target.value); setCopied(false); }} className="rounded-xl font-mono text-xs flex-1" />
             </div>
           </div>
           <div>
-            <Label className="text-xs font-semibold mb-1.5 block">Border Color</Label>
+            <Label className="text-xs font-semibold mb-1.5 block">{t("settingsPage.borderColor")}</Label>
             <div className="flex items-center gap-2">
               <input type="color" value={borderColor} onChange={e => { setBorderColor(e.target.value); setCopied(false); }} className="w-9 h-9 rounded-lg border cursor-pointer" />
               <Input value={borderColor} onChange={e => { setBorderColor(e.target.value); setCopied(false); }} className="rounded-xl font-mono text-xs flex-1" />
@@ -2046,7 +2048,7 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
             <Eye className="w-4 h-4 text-green-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">Form Preview</h3>
+          <h3 className="font-display font-semibold text-base">{t("settingsPage.formPreview")}</h3>
         </div>
         <div className="bg-secondary/30 rounded-xl p-8 flex justify-center">
           <div dangerouslySetInnerHTML={{ __html: formCode }} />
@@ -2058,7 +2060,7 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
             <Code className="w-4 h-4 text-blue-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">Generated Code</h3>
+          <h3 className="font-display font-semibold text-base">{t("settingsPage.generatedCode")}</h3>
         </div>
         <div className="relative">
           <div className="absolute top-3 right-3 z-10">
@@ -2078,15 +2080,15 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
             <ExternalLink className="w-4 h-4 text-amber-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">How to Use</h3>
+          <h3 className="font-display font-semibold text-base">{t("settingsPage.howToUse")}</h3>
         </div>
         <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-          <li>Customize the form title, subtitle, colors, and button text above</li>
-          <li>Preview the form to see your changes in real time</li>
-          <li>Click <strong>"Copy Code"</strong> to copy the generated HTML</li>
-          <li>Open your website's HTML editor or CMS</li>
-          <li>Paste the code where you want the lead form to appear</li>
-          <li>Save and publish — submitted leads will appear in your <strong>Leads</strong> page automatically</li>
+          <li>{t("settingsPage.htuStep1")}</li>
+          <li>{t("settingsPage.htuStep2")}</li>
+          <li>{t("settingsPage.htuStep3")}</li>
+          <li>{t("settingsPage.htuStep4")}</li>
+          <li>{t("settingsPage.htuStep5")}</li>
+          <li>{t("settingsPage.htuStep6")}</li>
         </ol>
       </Card>
     </div>
