@@ -28,7 +28,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const logoUrl = hasLogo
     ? `${BASE_URL}/api/settings/branding/logo${resolvedTheme === "dark" && settings.logoDarkUrl ? "?variant=dark" : ""}`
     : null;
-  const companyName = settings.companyName || "EduCons";
+  const companyName = settings.companyName || "Find And Study OS";
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -80,9 +80,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                   <GraduationCap className="w-6 h-6" />
                 </div>
                 <span className="font-display font-bold text-2xl tracking-tight text-foreground">
-                  {companyName.includes("Cons") ? (
-                    <>{companyName.replace("Cons", "")}<span className="text-primary">Cons</span></>
-                  ) : companyName}
+                  {companyName}
                 </span>
               </>
             )}

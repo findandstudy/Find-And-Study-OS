@@ -75,14 +75,14 @@ function generateVerificationCode(): string {
 }
 
 function buildVerificationCodeEmail(firstName: string, code: string): { subject: string; html: string; text: string } {
-  const subject = "Your Verification Code — Find & Study";
+  const subject = "Your Verification Code — Find And Study OS";
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
     <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:24px;">Find & Study</h1>
+      <h1 style="margin:0;color:#fff;font-size:24px;">Find And Study OS</h1>
       <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Email Verification</p>
     </div>
     <div style="padding:32px;">

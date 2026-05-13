@@ -44,7 +44,7 @@ async function getSenderDefaults(): Promise<{ senderName: string; senderEmail: s
   }).from(settingsTable);
 
   return {
-    senderName: settings?.emailSenderName || "Find & Study",
+    senderName: settings?.emailSenderName || "Find And Study OS",
     senderEmail: settings?.emailSenderEmail || "",
     replyTo: settings?.emailReplyTo || undefined,
   };
@@ -80,7 +80,7 @@ async function getTransporter(): Promise<{ transporter: Transporter; fromEmail: 
     return {
       transporter: cachedTransporter,
       fromEmail: defaults.senderEmail || smtpConfig.fromEmail || smtpConfig.username,
-      fromName: defaults.senderName || smtpConfig.fromName || "Find & Study",
+      fromName: defaults.senderName || smtpConfig.fromName || "Find And Study OS",
       replyTo: defaults.replyTo,
     };
   }
@@ -91,7 +91,7 @@ async function getTransporter(): Promise<{ transporter: Transporter; fromEmail: 
   return {
     transporter: cachedTransporter,
     fromEmail: defaults.senderEmail || smtpConfig.fromEmail || smtpConfig.username,
-    fromName: defaults.senderName || smtpConfig.fromName || "Find & Study",
+    fromName: defaults.senderName || smtpConfig.fromName || "Find And Study OS",
     replyTo: defaults.replyTo,
   };
 }
@@ -176,13 +176,13 @@ export async function getEmailBranding(): Promise<EmailBranding> {
       logoUrl,
       primaryColor: settings?.emailButtonColor || settings?.themePrimary || "#1e3a5f",
       buttonColor: settings?.emailButtonColor || settings?.themePrimary || "#1e3a5f",
-      companyName: settings?.companyName || "Find & Study",
+      companyName: settings?.companyName || "Find And Study OS",
     };
     brandingCache = { data, fetchedAt: Date.now() };
     return data;
   } catch (err) {
     console.error("[EMAIL] Failed to load branding:", err);
-    return { logoUrl: null, primaryColor: "#1e3a5f", buttonColor: "#1e3a5f", companyName: "Find & Study" };
+    return { logoUrl: null, primaryColor: "#1e3a5f", buttonColor: "#1e3a5f", companyName: "Find And Study OS" };
   }
 }
 

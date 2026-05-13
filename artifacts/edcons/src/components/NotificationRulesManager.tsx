@@ -454,7 +454,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                 return (
                   <div className="border border-border/50 rounded-xl overflow-hidden">
                     <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center">
-                      <h3 className="text-white font-bold text-xl">Find & Study</h3>
+                      <h3 className="text-white font-bold text-xl">Find And Study OS</h3>
                       <p className="text-white/70 text-sm mt-1">Notification</p>
                     </div>
                     <div className="p-6 bg-white dark:bg-background">
@@ -469,7 +469,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                       </div>
                       <hr className="my-4 border-border/30" />
                       <p className="text-[11px] text-muted-foreground text-center">
-                        This is an automated notification from Find & Study.
+                        This is an automated notification from Find And Study OS.
                       </p>
                     </div>
                   </div>

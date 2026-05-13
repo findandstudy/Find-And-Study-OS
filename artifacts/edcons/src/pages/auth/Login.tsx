@@ -98,7 +98,7 @@ export default function Login() {
   const logoSrc = hasLogo
     ? `${BASE_URL}/api/settings/branding/logo${resolvedTheme === "dark" && settings.logoDarkUrl ? "?variant=dark" : ""}`
     : null;
-  const companyName = settings.companyName || "Find & Study";
+  const companyName = settings.companyName || "Find And Study OS";
 
   useEffect(() => {
     if (!isLoading && user) {

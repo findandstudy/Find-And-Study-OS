@@ -1,6 +1,6 @@
 {
-  "name": "Find & Study",
-  "short_name": "Find & Study",
+  "name": "Find And Study OS",
+  "short_name": "Find And Study OS",
   "description": "Expert guidance for university admissions, visa processing, and scholarships worldwide.",
   "start_url": "/",
   "display": "standalone",

@@ -35,7 +35,7 @@ const LANGUAGES = [
 ];
 
 const STARTER_BODY = `<h1>Service Agreement</h1>
-<p>This Service Agreement is made on {{contract.date}} between Find &amp; Study and {{agent.businessName}}.</p>
+<p>This Service Agreement is made on {{contract.date}} between Find And Study OS and {{agent.businessName}}.</p>
 <h2>1. Parties</h2>
 <p><strong>Agent:</strong> {{agent.firstName}} {{agent.lastName}} — {{agent.businessName}}</p>
 <p><strong>Email:</strong> {{agent.email}}</p>

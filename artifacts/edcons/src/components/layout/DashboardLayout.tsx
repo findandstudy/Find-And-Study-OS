@@ -466,7 +466,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
                         <GraduationCap className="w-5 h-5" />
                       </span>
-                      <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">EduCons</span>
+                      <span className="font-display font-bold text-lg tracking-tight text-foreground leading-none">{themeSettings.companyName || "Find And Study OS"}</span>
                     </>
                   )}
                 </span>

@@ -55,7 +55,7 @@ function buildEmail(subject: string, body: string, actionUrl: string): { subject
   const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
     <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:22px;">Find &amp; Study</h1>
+      <h1 style="margin:0;color:#fff;font-size:22px;">Find And Study OS</h1>
       <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:13px;">University Contract Notification</p>
     </div>
     <div style="padding:28px;">
@@ -65,7 +65,7 @@ function buildEmail(subject: string, body: string, actionUrl: string): { subject
         <a href="${actionUrl}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Open contract</a>
       </div>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
-      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">Automated notification from Find &amp; Study.</p>
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">Automated notification from Find And Study OS.</p>
     </div>
   </div></body></html>`;
   return { subject, html, text: body };
@@ -139,7 +139,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
         if (recipientIds.length === 0) continue;
 
         const subject = `[FindAndStudy] University contract expired: ${uniName} (${destLabel})`;
-        const body = `University: ${uniName}\nDestination: ${destLabel}\nEffective date: ${effectiveStr}\nExpiry date: ${expiryStr}\n\nThe agreement with ${uniName} expired on ${expiryStr}. Please renew the contract or upload an updated version in EduConsult OS.\n\nOpen contract: ${actionUrl}`;
+        const body = `University: ${uniName}\nDestination: ${destLabel}\nEffective date: ${effectiveStr}\nExpiry date: ${expiryStr}\n\nThe agreement with ${uniName} expired on ${expiryStr}. Please renew the contract or upload an updated version in Find And Study OS.\n\nOpen contract: ${actionUrl}`;
         await dispatchNotification({
           event: "university_contract.expired",
           title: `Üniversite sözleşmesi sona erdi — ${uniName}`,

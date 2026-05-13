@@ -164,7 +164,7 @@ export default function WebsiteSeoOverrides() {
   }
 
   const baseUrl = globalSeo?.canonicalBaseUrl || "https://findandstudy.com";
-  const siteName = globalSeo?.siteName || "Find & Study";
+  const siteName = globalSeo?.siteName || "Find And Study OS";
 
   return (
     <>
