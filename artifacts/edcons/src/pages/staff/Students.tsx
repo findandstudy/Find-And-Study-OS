@@ -91,14 +91,27 @@ function getStuStageColor(stage: PipelineStage, index: number): string {
 }
 
 type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
-type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
+type AppLevel = string;
 
-const LEVELS: { key: AppLevel; label: string; badge: string; color: string; dbLevel: string }[] = [
-  { key: "pathway",      label: "Language / Prep",    badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",   dbLevel: "Associate" },
-  { key: "undergraduate",label: "Bachelor / Associate",badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",   dbLevel: "Bachelor" },
-  { key: "graduate",     label: "Master's Degree",    badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "Master" },
-  { key: "doctorate",    label: "Doctorate (PhD)",    badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",  dbLevel: "Ph.D" },
+const LEVEL_BADGE_COLORS = [
+  "bg-blue-100 text-blue-700 border-blue-200",
+  "bg-violet-100 text-violet-700 border-violet-200",
+  "bg-amber-100 text-amber-700 border-amber-200",
+  "bg-teal-100 text-teal-700 border-teal-200",
+  "bg-rose-100 text-rose-700 border-rose-200",
+  "bg-emerald-100 text-emerald-700 border-emerald-200",
 ];
+function levelBadgeColor(idx: number): string {
+  return LEVEL_BADGE_COLORS[idx % LEVEL_BADGE_COLORS.length];
+}
+function isMasterOrHigher(level: string): boolean {
+  const v = level.toLowerCase();
+  return v.includes("master") || v.includes("ph") || v.includes("doctor");
+}
+function isDoctorate(level: string): boolean {
+  const v = level.toLowerCase();
+  return v.includes("ph") || v.includes("doctor");
+}
 
 const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: string }> = {
   high_school_diploma_translation:    { label: "HS Diploma",           icon: "🎓", accept: "image/*,.pdf" },
@@ -495,22 +508,39 @@ function AddStudentModal({
   const [extractedFields, setExtractedFields] = useState<Set<string>>(new Set());
   const [form, setForm] = useState(EMPTY_FORM);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [applicationLevel, setApplicationLevel] = useState<AppLevel>("undergraduate");
+  const [applicationLevel, setApplicationLevel] = useState<AppLevel>("");
 
-  // Degree-level requirements have been retired — at the new-student
-  // intake step a program isn't selected yet, so we show a generic list
-  // of all known doc types for upload (none are marked required here;
-  // mandatory enforcement now lives on the per-application program
-  // requirements).
+  // Initialize default application level once study levels load
+  useEffect(() => {
+    if (!applicationLevel && studyLevels.length > 0) {
+      const bach = studyLevels.find(l => l.key.toLowerCase().includes("bachelor")) ?? studyLevels[0];
+      setApplicationLevel(bach.key);
+    }
+  }, [studyLevels, applicationLevel]);
+
+  // Degree-level required documents are managed in Catalog > Degree > Documents.
+  // When a level is selected we fetch its configured document requirements.
+  // Falls back to a generic list of all known doc types if no requirements are set.
+  const { data: degreeDocReqs } = useQuery<{ documentType: string; mandatory: boolean; sortOrder: number }[]>({
+    queryKey: ["degree-doc-reqs", applicationLevel],
+    queryFn: () => fetch(`${BASE_URL}/api/degrees/by-value/${encodeURIComponent(applicationLevel)}/document-requirements`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
+    enabled: !!applicationLevel,
+    staleTime: 30_000,
+  });
+
   const currentDocs = useMemo<LevelDoc[]>(() => {
+    if (degreeDocReqs && degreeDocReqs.length > 0) {
+      return [...degreeDocReqs]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(r => {
+          const meta = DOC_TYPE_META[r.documentType] ?? { label: r.documentType, icon: "📄", accept: "image/*,.pdf" };
+          return { key: r.documentType, label: meta.label, icon: meta.icon, accept: meta.accept, required: r.mandatory };
+        });
+    }
     return Object.entries(DOC_TYPE_META).map(([key, meta]) => ({
-      key,
-      label: meta.label,
-      icon: meta.icon,
-      accept: meta.accept,
-      required: false,
+      key, label: meta.label, icon: meta.icon, accept: meta.accept, required: false,
     }));
-  }, []);
+  }, [degreeDocReqs]);
 
   function handleClose() {
     setStep("upload");
@@ -518,7 +548,7 @@ function AddStudentModal({
     setExtractedFields(new Set());
     setForm(EMPTY_FORM);
     setAnalysisError(null);
-    setApplicationLevel("undergraduate");
+    setApplicationLevel(studyLevels[0]?.key ?? "");
     onClose();
   }
 
@@ -834,8 +864,11 @@ function AddStudentModal({
               {/* Level Selector */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Application Level</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {LEVELS.map(lv => (
+                <div className={cn(
+                  "grid gap-2",
+                  studyLevels.length <= 4 ? "grid-cols-4" : studyLevels.length <= 6 ? "grid-cols-3" : "grid-cols-3"
+                )}>
+                  {studyLevels.map((lv, idx) => (
                     <button
                       key={lv.key}
                       type="button"
@@ -847,8 +880,7 @@ function AddStudentModal({
                           : "border-border hover:border-primary/40 hover:bg-secondary/40"
                       )}
                     >
-                      <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md border", lv.color)}>{lv.badge}</span>
-                      <p className="text-xs text-foreground font-medium mt-1.5 leading-tight">{lv.label}</p>
+                      <span className={cn("text-[11px] font-bold px-1.5 py-0.5 rounded-md border", levelBadgeColor(idx))}>{lv.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1043,12 +1075,12 @@ function AddStudentModal({
                   <div className="col-span-2">
                     <FormField label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" aiExtracted={ef.has("highSchool")} />
                   </div>
-                  {(applicationLevel === "graduate" || applicationLevel === "doctorate") && (
+                  {isMasterOrHigher(applicationLevel) && (
                     <div className="col-span-2">
                       <FormField label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" aiExtracted={ef.has("universityBachelor")} />
                     </div>
                   )}
-                  {applicationLevel === "doctorate" && (
+                  {isDoctorate(applicationLevel) && (
                     <div className="col-span-2">
                       <FormField label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" aiExtracted={ef.has("universityMaster")} />
                     </div>

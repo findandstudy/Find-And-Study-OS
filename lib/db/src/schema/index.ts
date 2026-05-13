@@ -24,6 +24,7 @@ export * from "./destinations";
 export * from "./emailQueue";
 export * from "./quickLinks";
 export * from "./programDocumentRequirements";
+export * from "./degreeDocumentRequirements";
 export * from "./website";
 export * from "./tasks";
 export * from "./campaigns";
