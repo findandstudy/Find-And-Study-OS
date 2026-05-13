@@ -169,6 +169,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       studentPhone: studentsTable.phone,
       commissionAmount: commissionsTable.universityCommissionAmount,
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
+      subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,
       universityType: universitiesTable.universityType,
       agentName: agentsTable.companyName,
     })
@@ -183,13 +184,23 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .orderBy(desc(applicationsTable.updatedAt), desc(applicationsTable.createdAt));
 
   const isAgentUser = req.user && isAgentRole(req.user.role);
+  let isSubAgentUser = false;
+  if (isAgentUser) {
+    const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
+    isSubAgentUser = req.user!.role === "sub_agent" || !!agentRec?.parentAgentId;
+  }
   const mappedRows = rows.map(r => {
-    const { agentCommissionAmount, commissionAmount: uniAmt, ...rest } = r;
-    if (isAgentUser) {
-      return { ...rest, commissionAmount: agentCommissionAmount };
-    }
+    const { agentCommissionAmount, subAgentCommissionAmount, commissionAmount: uniAmt, ...rest } = r;
     const uniNum = parseFloat(String(uniAmt ?? "0")) || 0;
     const agentNum = parseFloat(String(agentCommissionAmount ?? "0")) || 0;
+    const subNum = parseFloat(String(subAgentCommissionAmount ?? "0")) || 0;
+    if (isAgentUser) {
+      if (isSubAgentUser) {
+        return { ...rest, commissionAmount: subAgentCommissionAmount };
+      }
+      const parentNet = agentCommissionAmount == null ? null : String(agentNum - subNum);
+      return { ...rest, commissionAmount: parentNet };
+    }
     const netAgency = uniAmt == null ? null : String(uniNum - agentNum);
     return { ...rest, commissionAmount: netAgency };
   });
@@ -657,6 +668,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       studentPhone: studentsTable.phone,
       commissionAmount: commissionsTable.universityCommissionAmount,
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
+      subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,
       commissionStatus: commissionsTable.status,
     })
     .from(applicationsTable)
@@ -668,13 +680,22 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   if (isAgentRole(user.role)) {
-    (row as any).commissionAmount = row.agentCommissionAmount;
+    const agentRec = await getAgentRecord(user.id, user.role);
+    const isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
+    const agentNum = parseFloat(String((row as any).agentCommissionAmount ?? "0")) || 0;
+    const subNum = parseFloat(String((row as any).subAgentCommissionAmount ?? "0")) || 0;
+    if (isSubAgentUser) {
+      (row as any).commissionAmount = (row as any).subAgentCommissionAmount;
+    } else {
+      (row as any).commissionAmount = (row as any).agentCommissionAmount == null ? null : String(agentNum - subNum);
+    }
   } else {
     const uniNum = parseFloat(String(row.commissionAmount ?? "0")) || 0;
     const agentNum = parseFloat(String(row.agentCommissionAmount ?? "0")) || 0;
     (row as any).commissionAmount = row.commissionAmount == null ? null : String(uniNum - agentNum);
   }
   delete (row as any).agentCommissionAmount;
+  delete (row as any).subAgentCommissionAmount;
   if (!isStaff) {
     if (user.role === "student") {
       const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));

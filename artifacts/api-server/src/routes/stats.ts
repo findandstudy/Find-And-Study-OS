@@ -4,7 +4,7 @@ import { sql, eq, and, isNull, inArray, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { isAgentRole } from "../lib/roles";
-import { getAgentVisibleIds } from "../lib/agentVisibility";
+import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 
 const router: IRouter = Router();
 
@@ -104,14 +104,23 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
+  let isSubAgentUser = false;
+  if (isAgent) {
+    const agentRec = await getAgentRecord(user.id, user.role);
+    isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
+  }
+
   let revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd}`;
   if (isAgent) {
     const agentIds = await getAgentVisibleIds(user.id, user.role);
-    revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd} AND agent_id IN (${sql.join(agentIds.map(id => sql`${id}`), sql`, `)})`;
+    const idCol = isSubAgentUser ? sql`sub_agent_id` : sql`agent_id`;
+    revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd} AND ${idCol} IN (${sql.join(agentIds.map(id => sql`${id}`), sql`, `)})`;
   }
 
   const revenueExpr = isAgent
-    ? sql<number>`coalesce(sum(CAST(agent_commission_amount AS numeric)), 0)`
+    ? (isSubAgentUser
+        ? sql<number>`coalesce(sum(CAST(sub_agent_commission_amount AS numeric)), 0)`
+        : sql<number>`coalesce(sum(CAST(agent_commission_amount AS numeric) - coalesce(CAST(sub_agent_commission_amount AS numeric), 0)), 0)`)
     : sql<number>`coalesce(sum(CAST(university_commission_amount AS numeric) - coalesce(CAST(agent_commission_amount AS numeric), 0)), 0)`;
   const [{ monthlyRevenue }] = await db
     .select({ monthlyRevenue: revenueExpr })
