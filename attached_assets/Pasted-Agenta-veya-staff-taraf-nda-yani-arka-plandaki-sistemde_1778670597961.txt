@@ -1,0 +1,44 @@
+Agenta veya staff tarafında, yani arka plandaki sistemde öğrenci ekleme sırasında açılan formda aşağıdaki geliştirmelerin yapılmasını istiyorum:
+
+1) Required Documents alanı dinamik olmalı
+
+Öğrenci ekleme formunda yer alan “Required Documents” alanı, aynı formdaki “Application Level” seçimine göre dinamik olarak yönetilebilmelidir.
+
+Beklentim şu şekildedir:
+
+“Required Documents” alanında hangi belgelerin gösterileceği,
+bu belgelerin hangi sırayla listeleneceği,
+hangi seviyede hangi belgelerin zorunlu olacağı
+
+tamamen Application Level seçimine bağlı olarak sistem tarafından belirlenmelidir.
+
+Buradaki yapı hardcode olmamalı. Yani kullanıcı veya yönetici tarafında bir değişiklik yapıldığında sistemde manuel geliştirici müdahalesi gerekmemeli. Mevcut mantık korunarak, bu alan dinamik ve yönetilebilir bir yapıya taşınmalıdır.
+
+2) Sistemde zaten bulunan belgeler tekrar istenmemeli
+
+Şu anda kullanıcı, sisteme daha önce belge yüklemiş olsa bile başvuru sırasında sistem aynı belgeleri yeniden talep edebiliyor.
+
+Bunun yerine sistem şunu kontrol etmelidir:
+
+Eğer öğrencinin sistemde daha önce yüklenmiş ve ilgili program / başvuru için geçerli olan zorunlu belgeleri zaten varsa,
+başvuru sırasında bu belgeler kullanıcıdan tekrar istenmemelidir.
+
+Yani kullanıcı, hali hazırda sistemde bulunan ve geçerliliği uygun olan belgeleri yeniden yüklemek zorunda kalmamalıdır.
+
+3) Belge ve seviye yönetimi Catalog içinden gelmeli
+
+Zaten belge seçenekleriyle ilgili yapı, kullanıcı Catalog içinde program tanımlarken yönetiliyor. Burada:
+
+sistemde hangi belge türlerinin bulunduğu,
+hangi belgelerin hangi programa özel olduğu,
+hangi belgelerin gerekli olduğu
+
+gibi bilgiler seçilebiliyor.
+
+Bu nedenle öğrenci ekleme formundaki yapı da buraya bağlı çalışmalıdır.
+
+Özellikle:
+
+Add Student formundaki Application Level alanı,
+Catalog > Options tabındaki Degree alanındaki seçenekleri kullanmalıdır.
+Application Level seçildiğinde gelen Required Documents alanı da yine buradaki degree / seviye tanımına göre yönetilmelidir.
