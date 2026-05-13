@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull, isNotNull } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -1018,9 +1018,14 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
-    const result = await db.update(applicationsTable).set({ deletedAt: new Date() }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
-    updated = result.rowCount ?? numericIds.length;
-    for (const id of numericIds) logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
+    const existing = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    const liveIds = existing.map(r => r.id);
+    updated = await softDelete(applicationsTable, liveIds, { actorUserId: req.user!.id });
+    if (liveIds.length > 0) {
+      // documents lacks deletedBy; cascade soft-delete with deletedAt only.
+      await db.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.applicationId, liveIds), isNull(documentsTable.deletedAt)));
+    }
+    for (const id of liveIds) logAudit(req.user!.id, "delete_application", "application", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(applicationsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
@@ -1143,16 +1148,37 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
 
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [existing] = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(eq(applicationsTable.id, id));
+  const [existing] = await db
+    .select({ id: applicationsTable.id })
+    .from(applicationsTable)
+    .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
+  // Soft-delete the application; cascade soft-delete on documents (which has
+  // its own deletedAt). Notes and application_stage_documents are hidden via
+  // the parent.deletedAt filter on listing endpoints (no orphan exposure).
+  await db.transaction(async (tx) => {
+    await softDelete(applicationsTable, [id], { actorUserId: req.user!.id, tx });
+    await tx.update(documentsTable)
+      .set({ deletedAt: sql`now()` })
+      .where(and(eq(documentsTable.applicationId, id), isNull(documentsTable.deletedAt)));
+  });
+  await logAudit(req.user!.id, "delete_application", "application", id, { soft: true }, req.ip);
+  res.sendStatus(204);
+});
+
+// Hard-delete (purge) — super_admin only. Permanently removes the row and all
+// child rows. Use only when retention is no longer required.
+router.post("/applications/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.transaction(async (tx) => {
     await tx.delete(notesTable).where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")));
     await tx.delete(documentsTable).where(eq(documentsTable.applicationId, id));
     await tx.delete(applicationStageDocumentsTable).where(eq(applicationStageDocumentsTable.applicationId, id));
     await tx.delete(applicationsTable).where(eq(applicationsTable.id, id));
   });
-  await logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
-  res.sendStatus(204);
+  await logAudit(req.user!.id, "purge_application", "application", id, { hard: true }, req.ip);
+  res.json({ success: true });
 });
 
 router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {

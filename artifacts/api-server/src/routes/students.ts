@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -570,14 +570,14 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
-    const studentsToDelete = await db.select({ id: studentsTable.id, userId: studentsTable.userId }).from(studentsTable).where(inArray(studentsTable.id, numericIds));
+    const studentsToDelete = await db.select({ id: studentsTable.id, userId: studentsTable.userId }).from(studentsTable).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     const deleteIds = studentsToDelete.map(s => s.id);
     if (deleteIds.length > 0) {
       const userIds = studentsToDelete.filter(s => s.userId).map(s => s.userId!);
-      await hardDeleteStudents(deleteIds, userIds);
+      await softDeleteStudents(deleteIds, userIds, req.user!.id);
       updated = deleteIds.length;
     }
-    for (const id of deleteIds) await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
+    for (const id of deleteIds) await logAudit(req.user!.id, "delete_student", "student", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(studentsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
@@ -594,36 +594,66 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
 
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
-  await hardDeleteStudents([id], [student.userId].filter(Boolean) as number[]);
+  await softDeleteStudents([id], [student.userId].filter(Boolean) as number[], req.user!.id);
 
-  await logAudit(req.user!.id, "delete_student", "student", id, null, req.ip);
+  await logAudit(req.user!.id, "delete_student", "student", id, { soft: true }, req.ip);
   res.status(204).end();
 });
 
-async function hardDeleteStudents(studentIds: number[], userIds: number[]): Promise<void> {
+// Cascade soft-delete: student row, its applications, and its documents (all
+// have deletedAt). Linked auth user is deactivated rather than soft-deleted —
+// keeps login records and historical author refs valid. Notes / invoices /
+// follow_ups don't have deletedAt; they're hidden via the parent.deletedAt
+// filter on listing endpoints.
+async function softDeleteStudents(studentIds: number[], userIds: number[], actorUserId: number): Promise<void> {
   if (studentIds.length === 0) return;
   await db.transaction(async (tx) => {
-    const apps = await tx.select({ id: applicationsTable.id }).from(applicationsTable).where(inArray(applicationsTable.studentId, studentIds));
+    const apps = await tx.select({ id: applicationsTable.id })
+      .from(applicationsTable)
+      .where(and(inArray(applicationsTable.studentId, studentIds), isNull(applicationsTable.deletedAt)));
+    const appIds = apps.map(a => a.id);
+    if (appIds.length > 0) {
+      await softDelete(applicationsTable, appIds, { actorUserId, tx });
+      await tx.update(documentsTable)
+        .set({ deletedAt: sql`now()` })
+        .where(and(inArray(documentsTable.applicationId, appIds), isNull(documentsTable.deletedAt)));
+    }
+    await tx.update(documentsTable)
+      .set({ deletedAt: sql`now()` })
+      .where(and(inArray(documentsTable.studentId, studentIds), isNull(documentsTable.deletedAt)));
+    await softDelete(studentsTable, studentIds, { actorUserId, tx });
+    if (userIds.length > 0) {
+      await tx.update(usersTable).set({ isActive: false }).where(inArray(usersTable.id, userIds));
+    }
+  });
+}
+
+// Hard-delete (purge) — super_admin only. Permanently removes student and all
+// associated rows; loses audit/finance history. Use for GDPR-style purges.
+router.post("/students/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
+  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+  await db.transaction(async (tx) => {
+    const apps = await tx.select({ id: applicationsTable.id }).from(applicationsTable).where(eq(applicationsTable.studentId, id));
     const appIds = apps.map(a => a.id);
     if (appIds.length > 0) {
       await tx.delete(notesTable).where(and(inArray(notesTable.resourceId, appIds), eq(notesTable.resourceType, "application")));
       await tx.delete(applicationStageDocumentsTable).where(inArray(applicationStageDocumentsTable.applicationId, appIds));
     }
-    await tx.delete(notesTable).where(and(inArray(notesTable.resourceId, studentIds), eq(notesTable.resourceType, "student")));
-    await tx.delete(documentsTable).where(inArray(documentsTable.studentId, studentIds));
-    await tx.delete(invoicesTable).where(inArray(invoicesTable.studentId, studentIds));
-    await tx.delete(followUpsTable).where(inArray(followUpsTable.studentId, studentIds));
-    await tx.delete(studentsTable).where(inArray(studentsTable.id, studentIds));
-    if (userIds.length > 0) {
-      await tx.delete(notesTable).where(inArray(notesTable.authorId, userIds));
-      await tx.delete(applicationStageDocumentsTable).where(inArray(applicationStageDocumentsTable.uploadedBy, userIds));
-      await tx.delete(usersTable).where(inArray(usersTable.id, userIds));
-    }
+    await tx.delete(notesTable).where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "student")));
+    await tx.delete(documentsTable).where(eq(documentsTable.studentId, id));
+    await tx.delete(invoicesTable).where(eq(invoicesTable.studentId, id));
+    await tx.delete(followUpsTable).where(eq(followUpsTable.studentId, id));
+    await tx.delete(studentsTable).where(eq(studentsTable.id, id));
   });
-}
+  await logAudit(req.user!.id, "purge_student", "student", id, { hard: true }, req.ip);
+  res.json({ success: true });
+});
 
 router.patch("/students/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);

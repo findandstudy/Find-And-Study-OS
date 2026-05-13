@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, rolesTable, studentsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
+import { db, usersTable, rolesTable, studentsTable, softDelete } from "@workspace/db";
+import { eq, ilike, or, sql, and, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -19,7 +19,7 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions = [];
+  const conditions = [isNull(usersTable.deletedAt)];
   if (role) conditions.push(eq(usersTable.role, role));
   if (search) {
     conditions.push(
@@ -79,7 +79,7 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  const [existingUser] = await db.select().from(usersTable).where(and(eq(usersTable.email, normalizedEmail), isNull(usersTable.deletedAt)));
   if (existingUser) {
     if (existingUser.role !== role) {
       res.status(409).json({ error: `This email is already in use by a ${existingUser.role} account. Same email cannot be used across different roles.` });
@@ -172,9 +172,39 @@ router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
     res.status(400).json({ error: "Cannot delete your own account" });
     return;
   }
-  await db.delete(usersTable).where(eq(usersTable.id, id));
-  await logAudit(req.user!.id, "delete_user", "user", id, {}, req.ip);
+  const [existing] = await db.select({ id: usersTable.id, email: usersTable.email })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, id), isNull(usersTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Soft-delete: set deletedAt/deletedBy, deactivate, and free the email so
+  // a fresh account can reuse the same address. Original is preserved with a
+  // `<id>__deleted_<email>` prefix for forensic reference and to keep the
+  // unique index satisfied.
+  const renamedEmail = existing.email
+    ? `${id}__deleted_${existing.email}`.slice(0, 255)
+    : null;
+  await db.update(usersTable).set({
+    deletedAt: sql`now()`,
+    deletedBy: req.user!.id,
+    isActive: false,
+    email: renamedEmail,
+  }).where(eq(usersTable.id, id));
+  await logAudit(req.user!.id, "delete_user", "user", id, { soft: true }, req.ip);
   res.sendStatus(204);
+});
+
+// Hard-delete (purge) — super_admin only. Drops the row entirely; only run
+// after audit / commission references have been re-attributed.
+router.post("/users/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (req.user!.id === id) {
+    res.status(400).json({ error: "Cannot purge your own account" });
+    return;
+  }
+  const result = await db.delete(usersTable).where(eq(usersTable.id, id));
+  await logAudit(req.user!.id, "purge_user", "user", id, { hard: true }, req.ip);
+  res.json({ success: true, deleted: result.rowCount ?? 0 });
 });
 
 router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {

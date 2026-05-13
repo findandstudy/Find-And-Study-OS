@@ -44,6 +44,7 @@ export const studentsTable = pgTable("students", {
   originLocked: boolean("origin_locked").notNull().default(false),
   originLeadId: integer("origin_lead_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: integer("deleted_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

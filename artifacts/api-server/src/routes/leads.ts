@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -139,7 +139,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions = [];
+  const conditions = [isNull(leadsTable.deletedAt)];
   if (season) conditions.push(eq(leadsTable.season, season));
   if (status) conditions.push(eq(leadsTable.status, status));
   if (agentIdFilter) conditions.push(eq(leadsTable.agentId, parseInt(agentIdFilter, 10)));
@@ -287,7 +287,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
 router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   const user = req.user!;
   if (isAgentRole(user.role)) {
@@ -314,7 +314,7 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   const user = req.user!;
   if (isAgentRole(user.role)) {
@@ -367,7 +367,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const user = req.user!;
   const isAgent = isAgentRole(user.role);
 
-  const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
 
   if (isAgent) {
@@ -516,9 +516,20 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  await db.delete(leadsTable).where(eq(leadsTable.id, id));
-  await logAudit(req.user!.id, "delete_lead", "lead", id, {}, req.ip);
+  const [existing] = await db.select({ id: leadsTable.id }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
+  await softDelete(leadsTable, [id], { actorUserId: req.user!.id });
+  await logAudit(req.user!.id, "delete_lead", "lead", id, { soft: true }, req.ip);
   res.sendStatus(204);
+});
+
+// Hard-delete (purge) — super_admin only. Permanently removes the row.
+router.post("/leads/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const result = await db.delete(leadsTable).where(eq(leadsTable.id, id));
+  await logAudit(req.user!.id, "purge_lead", "lead", id, { hard: true }, req.ip);
+  res.json({ success: true, deleted: result.rowCount ?? 0 });
 });
 
 router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -528,9 +539,8 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
-    const result = await db.delete(leadsTable).where(inArray(leadsTable.id, numericIds));
-    updated = result.rowCount ?? numericIds.length;
-    for (const id of numericIds) logAudit(req.user!.id, "delete_lead", "lead", id, {}, req.ip);
+    updated = await softDelete(leadsTable, numericIds, { actorUserId: req.user!.id });
+    for (const id of numericIds) logAudit(req.user!.id, "delete_lead", "lead", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(leadsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
@@ -549,7 +559,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const user = req.user!;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
 
   if (isAgentRole(user.role)) {
@@ -785,7 +795,7 @@ router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
     agentId: leadsTable.agentId,
     firstName: leadsTable.firstName,
     lastName: leadsTable.lastName,
-  }).from(leadsTable).where(eq(leadsTable.id, id));
+  }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
 
   if (lead) {
     const recipientIds: number[] = [];
@@ -1063,7 +1073,7 @@ router.patch("/leads/:id/origin", requireAuth, requireRole("super_admin", "admin
     res.status(400).json({ error: "originType must be direct, agent, or sub_agent" });
     return;
   }
-  const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
 
   const oldOrigin = { originType: existing.originType, originEntityType: existing.originEntityType, originEntityId: existing.originEntityId, originDisplayName: existing.originDisplayName };

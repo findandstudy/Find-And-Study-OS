@@ -146,3 +146,4 @@ const originalQuery = pool.query.bind(pool) as (...args: unknown[]) => Promise<u
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+export * from "./softDelete";
