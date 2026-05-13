@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
-import { requireAuth, requireRole, requireAgentStaffPermission, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { sendEmail } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
@@ -16,6 +16,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
+import { validatePassword } from "../lib/passwordPolicy";
 
 const router: IRouter = Router();
 
@@ -232,8 +233,10 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
       return;
     }
     const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null, phoneE164: toE164(phone || null) };
-    if (password && password.length >= 6) {
-      userValues.passwordHash = await bcrypt.hash(password, 10);
+    if (password) {
+      const pwd = validatePassword(password);
+      if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
+      userValues.passwordHash = await bcrypt.hash(pwd.value, 10);
     }
     const [newUser] = await db.insert(usersTable).values(userValues).returning();
     newUserId = newUser.id;
@@ -346,11 +349,9 @@ router.post("/agents/me/sub-agents/:id/set-password", requireAuth, requireRole("
   if (!subAgent.userId) { res.status(400).json({ error: "Sub-agent has no login account" }); return; }
 
   const { password } = req.body;
-  if (!password || password.length < 6) {
-    res.status(400).json({ error: "Password must be at least 6 characters" });
-    return;
-  }
-  const hash = await bcrypt.hash(password, 10);
+  const pwd = validatePassword(password);
+  if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
+  const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, subAgent.userId));
   res.json({ success: true });
 });
@@ -405,13 +406,15 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
       avatarUrl: targetUser.avatarUrl,
       language: targetUser.language,
       isActive: targetUser.isActive,
+      emailVerified: targetUser.emailVerified,
     },
     access_token: `agent-impersonation-${Date.now()}`,
     originalSid: currentSid,
-  } as any;
+  };
 
   const sid = await createSession(sessionData);
-  res.cookie("sid", sid, getSessionCookieOptions(req, SESSION_TTL));
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
+  logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents/sub-agents" }, req.ip);
   res.json({ success: true, redirectTo: "/agent" });
 });
 
@@ -422,7 +425,7 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
   const sessionData = await getSession(currentSid);
   if (!sessionData) { res.status(400).json({ error: "Invalid session" }); return; }
 
-  const originalSid = (sessionData as any).originalSid;
+  const originalSid = sessionData.originalSid;
   if (!originalSid) { res.status(400).json({ error: "No parent session to return to" }); return; }
 
   const originalSession = await getSession(originalSid);
@@ -430,7 +433,10 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
 
   await deleteSession(currentSid);
 
-  res.cookie("sid", originalSid, getSessionCookieOptions(req, SESSION_TTL));
+  res.cookie(SESSION_COOKIE, originalSid, getSessionCookieOptions(req, SESSION_TTL));
+  const originalUserId = originalSession.user?.id ?? null;
+  const impersonatedUserId = req.user?.id;
+  logAudit(originalUserId, "auth.impersonate.end", "user", impersonatedUserId, {}, req.ip);
   res.json({ success: true, redirectTo: "/" });
 });
 
@@ -515,10 +521,8 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
     res.status(400).json({ error: "First name, last name, and email are required" });
     return;
   }
-  if (!password || password.length < 6) {
-    res.status(400).json({ error: "Password must be at least 6 characters" });
-    return;
-  }
+  const pwdNew = validatePassword(password);
+  if (!pwdNew.ok) { res.status(400).json({ error: pwdNew.message }); return; }
 
   const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (existingUser) {
@@ -582,8 +586,10 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
       : [];
     updates.agentStaffPermissions = validPerms;
   }
-  if (req.body.password && req.body.password.length >= 6) {
-    updates.passwordHash = await bcrypt.hash(req.body.password, 10);
+  if (req.body.password) {
+    const pwd = validatePassword(req.body.password);
+    if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
+    updates.passwordHash = await bcrypt.hash(pwd.value, 10);
   }
 
   if (Object.keys(updates).length === 0) {
@@ -1190,10 +1196,8 @@ router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), a
 router.post("/agents/:id/set-password", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { password } = req.body;
-  if (!password || password.length < 6) {
-    res.status(400).json({ error: "Password must be at least 6 characters" });
-    return;
-  }
+  const pwd = validatePassword(password);
+  if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   if (!agent.userId) {
@@ -1220,6 +1224,9 @@ router.post("/agents/:id/impersonate", requireAuth, requireRole(...MANAGER_ROLES
     return;
   }
 
+  const currentSid = req.cookies[SESSION_COOKIE];
+  if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
+
   const sessionData: SessionData = {
     user: {
       id: targetUser.id,
@@ -1231,12 +1238,15 @@ router.post("/agents/:id/impersonate", requireAuth, requireRole(...MANAGER_ROLES
       avatarUrl: targetUser.avatarUrl,
       language: targetUser.language,
       isActive: targetUser.isActive,
+      emailVerified: targetUser.emailVerified,
     },
     access_token: `impersonation-${Date.now()}`,
+    originalSid: currentSid,
   };
 
   const sid = await createSession(sessionData);
-  res.cookie("sid", sid, getSessionCookieOptions(req, SESSION_TTL));
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
+  logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents" }, req.ip);
   res.json({ success: true, redirectTo: "/agent" });
 });
 

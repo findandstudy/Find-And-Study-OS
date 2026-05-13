@@ -5,7 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
-import { validateUploadedFile, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
+import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
@@ -151,11 +151,22 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
           const syntheticExt = isPdf(mimeType) ? ".pdf" : mimeType === "image/png" ? ".png" : ".jpg";
           return `document${syntheticExt}`;
         })();
-    const validationError = validateUploadedFile(validationFileName, mimeType, fileSizeBytes);
+    let buffer: Buffer | null = null;
+    try {
+      buffer = Buffer.from(fileData, "base64");
+    } catch {
+      res.status(400).json({ error: "Invalid base64 file data" });
+      return;
+    }
+    const validationError = await validateUploadedFileBuffer(validationFileName, mimeType, buffer);
     if (validationError) {
       const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: validationError.message });
       return;
+    }
+    if (!sizeBytes) {
+      // ensure size matches actual decoded bytes for downstream consumers
+      (req.body as any).sizeBytes = buffer.byteLength;
     }
   }
 

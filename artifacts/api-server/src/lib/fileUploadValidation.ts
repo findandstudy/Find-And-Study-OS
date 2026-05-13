@@ -16,10 +16,12 @@ export {
   getMaxSizeLabelForType,
   sanitizeFileName,
   validateUploadedFile,
+  validateUploadedFileBuffer,
   validateFile,
 } from "@workspace/file-upload-validation";
 
 export type {
   FileValidationError,
+  BufferValidationError,
   FileValidationResult,
 } from "@workspace/file-upload-validation";

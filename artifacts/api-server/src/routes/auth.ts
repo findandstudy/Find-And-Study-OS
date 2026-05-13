@@ -19,12 +19,8 @@ import {
   type SessionUser,
 } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
-
-const PasswordSchema = z
-  .string()
-  .min(8, "Password must be at least 8 characters")
-  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-  .regex(/[0-9]/, "Password must contain at least one number");
+import { PasswordSchema } from "../lib/passwordPolicy";
+import { logAudit } from "../lib/auth";
 
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -126,14 +122,20 @@ router.get("/auth/me", async (req: Request, res: Response) => {
 
   const sid = req.cookies?.sid;
   let isImpersonating = false;
+  let originalUserId: number | null = null;
   if (sid) {
     const sess = await getSession(sid);
-    if (sess && (sess as any).originalSid) {
+    const origSid = sess?.originalSid;
+    if (origSid) {
       isImpersonating = true;
+      try {
+        const origSess = await getSession(origSid);
+        if (origSess?.user?.id) originalUserId = origSess.user.id;
+      } catch {}
     }
   }
 
-  res.json({ ...userData, isImpersonating });
+  res.json({ ...userData, isImpersonating, originalUserId });
 });
 
 router.post("/auth/login", async (req: Request, res: Response) => {
@@ -157,14 +159,17 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       return;
     }
 
+    const maskedEmail = normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2");
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
     if (!user || !user.passwordHash) {
+      logAudit(null, "auth.login.failure", "user", undefined, { email: maskedEmail, reason: "no_user_or_no_password" }, ip);
       res.status(401).json({ error: "Invalid email or password" });
       return;
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
+      logAudit(user.id, "auth.login.failure", "user", user.id, { email: maskedEmail, reason: "bad_password" }, ip);
       res.status(401).json({ error: "Invalid email or password" });
       return;
     }
@@ -172,6 +177,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     if (!user.isActive) {
       const isPublicApplyPendingVerification = user.createdFromSource === "public_apply" && !user.emailVerified && user.passwordHash;
       if (!isPublicApplyPendingVerification) {
+        logAudit(user.id, "auth.login.failure", "user", user.id, { email: maskedEmail, reason: "deactivated" }, ip);
         res.status(403).json({ error: "Your account has been deactivated. Please contact an administrator." });
         return;
       }
@@ -195,6 +201,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     } catch (err) {
       console.error("[auth/login] failed to reset rate-limit buckets:", err);
     }
+    logAudit(user.id, "auth.login.success", "user", user.id, { email: maskedEmail }, ip);
     res.json({ user: sessionUser });
   } catch (err) {
     console.error("[auth/login] error:", err);
@@ -389,6 +396,7 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
 
   const sid = await createSession(sessionData, user.id);
   setSessionCookie(req, res, sid);
+  logAudit(user.id, "auth.email_verify", "user", user.id, {}, req.ip);
   res.json({ user: sessionUser, verified: true });
 });
 
@@ -491,6 +499,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
 
   console.log(`[PASSWORD RESET] Reset email sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
 
+  logAudit(user.id, "auth.password_reset.request", "user", user.id, { email: normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2") }, req.ip);
   res.json({ message: "If an account with that email exists, a password reset link has been sent." });
 });
 
@@ -542,6 +551,8 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
     })
     .where(eq(usersTable.id, user.id));
 
+  logAudit(user.id, "auth.set_password", "user", user.id, {}, req.ip);
+  logAudit(user.id, "auth.password_reset.complete", "user", user.id, {}, req.ip);
   res.json({ success: true, message: user.emailVerified ? "Password has been set. You can now log in." : "Password has been set. Please verify your email to activate your account." });
 });
 
@@ -579,6 +590,7 @@ router.get("/auth/verify-email-token/:token", async (req: Request, res: Response
     })
     .where(eq(usersTable.id, user.id));
 
+  logAudit(user.id, "auth.email_verify", "user", user.id, { method: "token" }, req.ip);
   res.redirect("/login?verified=true");
 });
 
@@ -630,6 +642,9 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
 
 async function handleLogout(req: Request, res: Response) {
   const sid = getSessionId(req);
+  if (req.user) {
+    logAudit(req.user.id, "auth.logout", "user", req.user.id, {}, req.ip);
+  }
   await clearSession(res, sid, req);
   res.redirect("/login");
 }

@@ -51,6 +51,11 @@ export interface SessionData {
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
+  /**
+   * If this session was created via impersonation, this points to the
+   * original (admin) session id so the user can return to it.
+   */
+  originalSid?: string;
 }
 
 /**

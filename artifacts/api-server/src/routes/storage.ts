@@ -5,6 +5,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage"
 import { ObjectPermission } from "../lib/objectAcl";
 import { requireAuth } from "../lib/auth";
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
+import { validateUploadedFile } from "../lib/fileUploadValidation";
 
 const RequestUploadUrlBody = z.object({
   name: z.string(),
@@ -44,6 +45,13 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 
   try {
     const { name, size, contentType } = parsed.data;
+
+    const validationError = validateUploadedFile(name, contentType, size);
+    if (validationError) {
+      const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
+      res.status(httpStatus).json({ error: validationError.message });
+      return;
+    }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);

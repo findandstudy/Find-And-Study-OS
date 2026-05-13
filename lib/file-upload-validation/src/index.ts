@@ -131,6 +131,47 @@ export type FileValidationResult = {
   valid: true;
 };
 
+export type BufferValidationError = FileValidationError | {
+  type: "magic_byte_mismatch" | "magic_byte_unknown";
+  message: string;
+};
+
+export async function validateUploadedFileBuffer(
+  fileName: string,
+  declaredMimeType: string,
+  buffer: Buffer | Uint8Array,
+): Promise<BufferValidationError | null> {
+  const baseError = validateUploadedFile(fileName, declaredMimeType, buffer.byteLength);
+  if (baseError) return baseError;
+
+  const { fileTypeFromBuffer } = await import("file-type");
+  const detected = await fileTypeFromBuffer(buffer);
+
+  if (!detected) {
+    return {
+      type: "magic_byte_unknown",
+      message: "Dosya i\u00e7eri\u011fi tan\u0131namad\u0131. L\u00fctfen ge\u00e7erli bir PDF, JPG veya PNG dosyas\u0131 y\u00fckleyin.",
+    };
+  }
+
+  const allowedDetectedMimes = new Set<string>(["application/pdf", "image/jpeg", "image/png"]);
+  if (!allowedDetectedMimes.has(detected.mime)) {
+    return {
+      type: "magic_byte_mismatch",
+      message: `Dosya i\u00e7eri\u011fi izin verilen bir t\u00fcr de\u011fil (alg\u0131lanan: ${detected.mime}).`,
+    };
+  }
+
+  if (detected.mime !== declaredMimeType) {
+    return {
+      type: "magic_byte_mismatch",
+      message: `Dosya i\u00e7eri\u011fi belirtilen tip ile uyu\u015fmuyor (belirtilen: ${declaredMimeType}, alg\u0131lanan: ${detected.mime}).`,
+    };
+  }
+
+  return null;
+}
+
 export function validateFile(fileName: string, mimeType: string, sizeBytes: number): FileValidationResult {
   if (!isAllowedMimeType(mimeType) || !isAllowedExtension(fileName)) {
     return {

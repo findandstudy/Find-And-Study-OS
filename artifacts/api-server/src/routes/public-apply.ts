@@ -8,7 +8,7 @@ import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
-import { isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
+import { isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
@@ -861,8 +861,14 @@ router.post("/public/ai/extract-document", aiExtractLimiter, async (req: Request
       }
       const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
       const syntheticFileName = `document${syntheticExt}`;
-      const estimatedSize = doc.data ? Math.ceil((doc.data.length * 3) / 4) : 0;
-      const validationError = validateUploadedFile(syntheticFileName, mime, estimatedSize);
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(doc.data || "", "base64");
+      } catch {
+        res.status(400).json({ error: "Invalid base64 file data" });
+        return;
+      }
+      const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
       if (validationError) {
         const statusCode = validationError.type === "size_exceeded" ? 413 : 400;
         res.status(statusCode).json({ error: validationError.message });

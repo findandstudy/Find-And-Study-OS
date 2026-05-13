@@ -4,8 +4,9 @@ import { eq, ilike, or, sql, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
-import { createSession, SESSION_TTL, type SessionData } from "../lib/replitAuth";
+import { createSession, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
+import { validatePassword } from "../lib/passwordPolicy";
 
 const router: IRouter = Router();
 
@@ -90,11 +91,12 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
 
   let passwordHash: string | undefined;
   if (password) {
-    if (password.length < 6) {
-      res.status(400).json({ error: "Password must be at least 6 characters" });
+    const pwd = validatePassword(password);
+    if (!pwd.ok) {
+      res.status(400).json({ error: pwd.message });
       return;
     }
-    passwordHash = await bcrypt.hash(password, 10);
+    passwordHash = await bcrypt.hash(pwd.value, 10);
   }
 
   const [user] = await db
@@ -178,15 +180,16 @@ router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
 router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { password } = req.body;
-  if (!password || password.length < 6) {
-    res.status(400).json({ error: "Password must be at least 6 characters" });
+  const pwd = validatePassword(password);
+  if (!pwd.ok) {
+    res.status(400).json({ error: pwd.message });
     return;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, id));
-  await logAudit(req.user!.id, "set_password", "user", id, {}, req.ip);
+  await logAudit(req.user!.id, "auth.set_password", "user", id, { adminInitiated: true }, req.ip);
   res.json({ success: true });
 });
 
@@ -196,8 +199,9 @@ router.post("/users/me/change-password", requireAuth, async (req, res): Promise<
     res.status(400).json({ error: "Current and new password are required" });
     return;
   }
-  if (newPassword.length < 6) {
-    res.status(400).json({ error: "New password must be at least 6 characters" });
+  const pwd = validatePassword(newPassword);
+  if (!pwd.ok) {
+    res.status(400).json({ error: pwd.message });
     return;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
@@ -210,9 +214,9 @@ router.post("/users/me/change-password", requireAuth, async (req, res): Promise<
     res.status(400).json({ error: "Current password is incorrect" });
     return;
   }
-  const hash = await bcrypt.hash(newPassword, 10);
+  const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, req.user!.id));
-  await logAudit(req.user!.id, "change_password", "user", req.user!.id, {}, req.ip);
+  await logAudit(req.user!.id, "auth.change_password", "user", req.user!.id, {}, req.ip);
   res.json({ success: true });
 });
 
@@ -224,6 +228,9 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
   }
   const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
+
+  const currentSid = req.cookies[SESSION_COOKIE];
+  if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
 
   const sessionData: SessionData = {
     user: {
@@ -239,11 +246,12 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
       emailVerified: targetUser.emailVerified,
     },
     access_token: `impersonation-${Date.now()}`,
+    originalSid: currentSid,
   };
 
   const sid = await createSession(sessionData);
-  res.cookie("sid", sid, getSessionCookieOptions(req, SESSION_TTL));
-  await logAudit(req.user!.id, "impersonate_user", "user", id, { targetRole: targetUser.role }, req.ip);
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
+  await logAudit(req.user!.id, "auth.impersonate.start", "user", id, { targetRole: targetUser.role }, req.ip);
   let redirectTo = "/staff";
   if (ADMIN_ROLES.includes(targetUser.role as any)) redirectTo = "/admin";
   else if (targetUser.role === "student") redirectTo = "/student";

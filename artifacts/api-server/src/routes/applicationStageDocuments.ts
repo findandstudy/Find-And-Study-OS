@@ -5,7 +5,7 @@ import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth"
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { canUploadStageDocument } from "../lib/stagePermissions";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
-import { validateUploadedFile, sanitizeFileName } from "../lib/fileUploadValidation";
+import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 
 const router: IRouter = Router();
@@ -153,8 +153,14 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
       res.status(400).json({ error: "mimeType is required for file uploads" });
       return;
     }
-    const fileSizeBytes = sizeBytes ? Number(sizeBytes) : Math.ceil((fileData.length * 3) / 4);
-    const validationError = validateUploadedFile(safeName, mimeType, fileSizeBytes);
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(fileData, "base64");
+    } catch {
+      res.status(400).json({ error: "Invalid base64 file data" });
+      return;
+    }
+    const validationError = await validateUploadedFileBuffer(safeName, mimeType, buffer);
     if (validationError) {
       const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: validationError.message });

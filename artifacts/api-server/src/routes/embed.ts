@@ -5,7 +5,7 @@ import { eq, ilike, sql, and, desc, inArray, isNotNull, isNull } from "drizzle-o
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
-import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile } from "../lib/fileUploadValidation";
+import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { createApplicationForStudent } from "./public-apply";
@@ -472,8 +472,14 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): P
     }
     const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
     const syntheticFileName = `document${syntheticExt}`;
-    const estimatedSize = doc.sizeBytes ? Number(doc.sizeBytes) : Math.ceil((doc.data.length * 3) / 4);
-    const validationError = validateUploadedFile(syntheticFileName, mime, estimatedSize);
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(doc.data || "", "base64");
+    } catch {
+      res.status(400).json({ error: "Invalid base64 file data" });
+      return;
+    }
+    const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
     if (validationError) {
       const statusCode = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(statusCode).json({ error: validationError.message });
