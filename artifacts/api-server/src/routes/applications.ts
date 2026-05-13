@@ -184,11 +184,14 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   const isAgentUser = req.user && isAgentRole(req.user.role);
   const mappedRows = rows.map(r => {
-    const { agentCommissionAmount, ...rest } = r;
+    const { agentCommissionAmount, commissionAmount: uniAmt, ...rest } = r;
     if (isAgentUser) {
       return { ...rest, commissionAmount: agentCommissionAmount };
     }
-    return rest;
+    const uniNum = parseFloat(String(uniAmt ?? "0")) || 0;
+    const agentNum = parseFloat(String(agentCommissionAmount ?? "0")) || 0;
+    const netAgency = uniAmt == null ? null : String(uniNum - agentNum);
+    return { ...rest, commissionAmount: netAgency };
   });
 
   res.json({
@@ -666,6 +669,10 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
   const isStaff = STAFF_ROLES.includes(user.role as any);
   if (isAgentRole(user.role)) {
     (row as any).commissionAmount = row.agentCommissionAmount;
+  } else {
+    const uniNum = parseFloat(String(row.commissionAmount ?? "0")) || 0;
+    const agentNum = parseFloat(String(row.agentCommissionAmount ?? "0")) || 0;
+    (row as any).commissionAmount = row.commissionAmount == null ? null : String(uniNum - agentNum);
   }
   delete (row as any).agentCommissionAmount;
   if (!isStaff) {

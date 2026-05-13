@@ -110,8 +110,11 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
     revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd} AND agent_id IN (${sql.join(agentIds.map(id => sql`${id}`), sql`, `)})`;
   }
 
+  const revenueExpr = isAgent
+    ? sql<number>`coalesce(sum(CAST(agent_commission_amount AS numeric)), 0)`
+    : sql<number>`coalesce(sum(CAST(university_commission_amount AS numeric) - coalesce(CAST(agent_commission_amount AS numeric), 0)), 0)`;
   const [{ monthlyRevenue }] = await db
-    .select({ monthlyRevenue: sql<number>`coalesce(sum(CAST(university_commission_amount AS numeric)), 0)` })
+    .select({ monthlyRevenue: revenueExpr })
     .from(commissionsTable)
     .where(revenueFilter);
 
