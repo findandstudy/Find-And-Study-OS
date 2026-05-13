@@ -31,15 +31,21 @@ const router: IRouter = Router();
 /**
  * Mounted before express.json() so the raw body is available for HMAC.
  * After verification, payload is parsed inside each handler.
+ *
+ * Limit matches the global parser cap (1 MB) so unauthenticated webhook
+ * routes don't widen the DoS surface beyond the rest of the API
+ * (Sprint 1 / C3 — body-size hardening).
  */
-const rawJson = express.raw({ type: "application/json", limit: "5mb" });
+const rawJson = express.raw({ type: "application/json", limit: "1mb" });
 
 /**
  * Captures the raw body for ANY content-type (json, x-www-form-urlencoded, multipart, text)
  * so HMAC can be verified, then parses based on Content-Type into req.body.
  * Used by the public web-form webhook which is typically posted from an HTML form.
+ *
+ * Same 1 MB cap as rawJson (Sprint 1 / C3).
  */
-const rawAny = express.raw({ type: () => true, limit: "5mb" });
+const rawAny = express.raw({ type: () => true, limit: "1mb" });
 
 interface RequestWithRawBody extends Request {
   rawBody?: Buffer;

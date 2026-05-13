@@ -62,8 +62,13 @@ async function fetchTestProgram(request: APIRequestContext): Promise<{ id: numbe
 
 /** Programmatic login that drops a session cookie on the request context. */
 async function loginAs(request: APIRequestContext, email: string, password: string): Promise<void> {
+  // /api/auth/* now requires a CSRF token (Sprint 1 / C4). Seed the cookie
+  // with a safe GET, then echo the token back in the x-csrf-token header.
+  await request.get(`${BASE_URL}/api/auth/me`);
+  const cookies = await request.storageState();
+  const csrfToken = cookies.cookies.find(c => c.name === "csrf_token")?.value ?? "";
   const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
     data: { email, password },
   });
   expect(res.ok(), `login failed for ${email}: ${res.status()} ${await res.text()}`).toBeTruthy();

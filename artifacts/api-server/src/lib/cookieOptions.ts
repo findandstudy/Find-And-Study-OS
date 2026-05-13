@@ -13,7 +13,7 @@ export function getSessionCookieOptions(req: Request, maxAgeMs: number): CookieO
   return {
     httpOnly: true,
     secure,
-    sameSite: secure ? "none" : "lax",
+    sameSite: "lax",
     path: "/",
     maxAge: maxAgeMs,
   };
@@ -24,7 +24,7 @@ export function getCsrfCookieOptions(req: Request, maxAgeMs: number): CookieOpti
   return {
     httpOnly: false,
     secure,
-    sameSite: secure ? "none" : "lax",
+    sameSite: "lax",
     path: "/",
     maxAge: maxAgeMs,
   };
@@ -35,6 +35,22 @@ export function getClearCookieOptions(req: Request): CookieOptions {
   return {
     path: "/",
     secure,
+    sameSite: "lax",
+  };
+}
+
+/**
+ * For widget/embed cookies that genuinely need to be sent in cross-origin
+ * (third-party) contexts. Browsers require SameSite=None to also be Secure,
+ * so this helper only returns `none` when the request is over HTTPS.
+ */
+export function getCrossOriginCookieOptions(req: Request, maxAgeMs: number): CookieOptions {
+  const secure = isSecureRequest(req);
+  return {
+    httpOnly: true,
+    secure,
     sameSite: secure ? "none" : "lax",
+    path: "/",
+    maxAge: maxAgeMs,
   };
 }

@@ -1,8 +1,14 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, json } from "express";
 import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, ilike, sql, and, asc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
+
+// Catalog bulk-import endpoints accept JSON arrays of thousands of rows
+// (Excel imports). The global body limit is intentionally small (1mb) for
+// DoS hardening, so these specific authenticated routes opt-in to a larger
+// limit. They are already gated by requireAuth + MANAGER_ROLES.
+const bulkJson = json({ limit: "20mb" });
 
 const PROGRAM_DOC_TYPES = [
   "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
@@ -93,7 +99,7 @@ router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req
   } catch { res.status(409).json({ error: "Country code or name already exists" }); }
 });
 
-router.post("/countries/bulk", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const rows: { name: string; code: string; flagEmoji?: string }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
   const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, isActive: true }));
@@ -149,7 +155,7 @@ router.post("/cities", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   res.status(201).json(city);
 });
 
-router.post("/cities/bulk", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const rows: { name: string; countryId?: number; countryCode?: string }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
@@ -188,7 +194,7 @@ router.delete("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (
 
 /* ─── UNIVERSITIES BULK ──────────────────────────────────────── */
 
-router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const rows: {
     name: string; country: string; city?: string; website?: string;
     description?: string; ranking?: number; logoUrl?: string;
@@ -235,7 +241,7 @@ router.post("/universities/bulk", requireAuth, requireRole(...MANAGER_ROLES), as
 
 /* ─── PROGRAMS BULK ──────────────────────────────────────────── */
 
-router.post("/programs/bulk", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   try {
   const rows: ({
     universityId?: number; universityName?: string; name: string;

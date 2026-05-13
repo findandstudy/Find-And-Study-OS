@@ -39,6 +39,18 @@ const rateLimiter = new RateLimiterPostgres({
   duration: 900,
 });
 
+// Login brute-force protection: 5 failed attempts per 15 minutes per IP and
+// per email. Successful logins reset both counters so a legitimate user is
+// never locked out of their own account by their own activity.
+const loginRateLimiter = new RateLimiterPostgres({
+  storeClient: pool,
+  storeType: "pool",
+  tableName: "rate_limits",
+  keyPrefix: "login",
+  points: 5,
+  duration: 900,
+});
+
 function setSessionCookie(req: Request, res: Response, sid: string) {
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
 }
@@ -133,6 +145,17 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const ip = req.ip || "unknown";
+    const ipKey = `ip:${ip}`;
+    const emailKey = `email:${normalizedEmail}`;
+
+    try {
+      await loginRateLimiter.consume(ipKey);
+      await loginRateLimiter.consume(emailKey);
+    } catch {
+      res.status(429).json({ error: "Too many login attempts. Please try again in a few minutes." });
+      return;
+    }
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
     if (!user || !user.passwordHash) {
@@ -162,6 +185,16 @@ router.post("/auth/login", async (req: Request, res: Response) => {
 
     const sid = await createSession(sessionData, user.id);
     setSessionCookie(req, res, sid);
+    // Reset both buckets on successful login so legitimate users are never
+    // locked out by their own past failed attempts.
+    try {
+      await Promise.all([
+        loginRateLimiter.delete(ipKey),
+        loginRateLimiter.delete(emailKey),
+      ]);
+    } catch (err) {
+      console.error("[auth/login] failed to reset rate-limit buckets:", err);
+    }
     res.json({ user: sessionUser });
   } catch (err) {
     console.error("[auth/login] error:", err);

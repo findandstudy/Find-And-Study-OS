@@ -96,11 +96,35 @@ app.use(cookieParser());
 // for HMAC signature verification. These endpoints do not require auth or CSRF.
 app.use("/api", webhooksRouter);
 
-// Bulk-import endpoints (e.g. /catalog/programs/bulk with 7000+ rows × 50+
-// columns) can produce ~15-20 MB JSON payloads, so the limit needs to be
-// generous. These endpoints are already protected by auth + manager roles.
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+// Default body limit is intentionally small to reduce DoS surface on
+// unauthenticated public/embed/webhook routes. Bulk-import endpoints that
+// genuinely need larger payloads (e.g. /api/programs/bulk with 7000+ rows ×
+// 50+ columns) opt-in to a higher local limit by attaching their own
+// express.json({ limit: "20mb" }) middleware at the route level — we must
+// skip the global parser for those paths so the route-level parser is the
+// one that actually reads the body.
+const LARGE_BODY_PATHS = [
+  "/api/countries/bulk",
+  "/api/cities/bulk",
+  "/api/universities/bulk",
+  "/api/programs/bulk",
+];
+function isLargeBodyPath(path: string): boolean {
+  for (const p of LARGE_BODY_PATHS) {
+    if (path === p || path.startsWith(p + "/")) return true;
+  }
+  return false;
+}
+const globalJson = express.json({ limit: "1mb" });
+const globalUrlencoded = express.urlencoded({ extended: true, limit: "1mb" });
+app.use((req, res, next) => {
+  if (isLargeBodyPath(req.path)) return next();
+  globalJson(req, res, next);
+});
+app.use((req, res, next) => {
+  if (isLargeBodyPath(req.path)) return next();
+  globalUrlencoded(req, res, next);
+});
 app.use(authMiddleware);
 
 const CSRF_COOKIE = "csrf_token";
@@ -111,7 +135,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (
     req.path.startsWith("/api/public/") ||
     req.path.startsWith("/api/course-finder") ||
-    req.path.startsWith("/api/auth/") ||
     req.path.startsWith("/api/webhooks/")
   ) {
     return next();

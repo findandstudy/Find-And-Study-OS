@@ -6,6 +6,7 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
+import { assertCanAccessStudent } from "../lib/studentAccess";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -89,6 +90,8 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
 
 router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> => {
   const studentId = parseInt(req.params.id, 10);
+  const access = await assertCanAccessStudent(req, studentId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const [photoDoc] = await db.select({ fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
     .from(documentsTable)
     .where(and(eq(documentsTable.studentId, studentId), eq(documentsTable.type, "photo"), isNull(documentsTable.deletedAt)))
@@ -97,7 +100,9 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
   if (!photoDoc?.fileData) { res.status(404).json({ error: "No photo" }); return; }
   const buffer = Buffer.from(photoDoc.fileData, "base64");
   res.set("Content-Type", photoDoc.mimeType || "image/jpeg");
-  res.set("Cache-Control", "public, max-age=300");
+  // Use private caching so a shared proxy cannot serve one user's photo to
+  // another user who happens to request the same URL.
+  res.set("Cache-Control", "private, max-age=300");
   res.send(buffer);
 });
 
@@ -376,53 +381,9 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
 
 router.get("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const user = req.user!;
-
-  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
-  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
-
-  const isStaff = STAFF_ROLES.includes(user.role as any);
-  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
-  const isOwnProfile = student.userId === user.id;
-  const isAgent = isAgentRole(user.role);
-
-  if (isAgent) {
-    const visibleIds = await getAgentVisibleIds(user.id, user.role);
-    if (!student.agentId || !visibleIds.includes(student.agentId)) {
-      res.status(403).json({ error: "Access denied" });
-      return;
-    }
-  } else if (isStaff && !isAdmin) {
-    if (student.assignedToId !== null && student.assignedToId !== user.id) {
-      // Task #128: read-only visibility for staff assigned to the
-      // student's agency.
-      let allowed = false;
-      if (student.agentId) {
-        const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
-        if (agencyAgentIds.includes(student.agentId)) {
-          // Enforce branch scope on the agency-membership path so detail
-          // visibility cannot exceed list visibility (Task #128).
-          const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
-          if (
-            visibleBranchIds === null ||
-            student.branchId == null ||
-            visibleBranchIds.includes(student.branchId)
-          ) {
-            allowed = true;
-          }
-        }
-      }
-      if (!allowed) {
-        res.status(403).json({ error: "Access denied" });
-        return;
-      }
-    }
-  } else if (!isStaff && !isOwnProfile) {
-    res.status(403).json({ error: "Access denied" });
-    return;
-  }
-
-  res.json(student);
+  const access = await assertCanAccessStudent(req, id);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  res.json(access.student);
 });
 
 router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
