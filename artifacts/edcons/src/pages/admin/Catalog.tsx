@@ -2041,6 +2041,7 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
   const { toast } = useToast();
   const qc = useQueryClient();
   const [docReqs, setDocReqs] = useState<Record<string, "none" | "optional" | "mandatory">>({});
+  const [order, setOrder] = useState<string[]>([]);
   const [docSearch, setDocSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -2052,17 +2053,38 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
   useEffect(() => {
     if (!existing) return;
     const next: Record<string, "none" | "optional" | "mandatory"> = {};
-    for (const r of existing) next[r.documentType] = r.mandatory ? "mandatory" : "optional";
+    const sorted = [...existing].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const r of sorted) next[r.documentType] = r.mandatory ? "mandatory" : "optional";
     setDocReqs(next);
+    setOrder(sorted.map(r => r.documentType));
   }, [existing]);
+
+  function setLevel(dt: string, opt: "none" | "optional" | "mandatory") {
+    setDocReqs(prev => ({ ...prev, [dt]: opt }));
+    setOrder(prev => {
+      const inList = prev.includes(dt);
+      if (opt === "none") return inList ? prev.filter(x => x !== dt) : prev;
+      return inList ? prev : [...prev, dt];
+    });
+  }
+
+  function move(dt: string, dir: -1 | 1) {
+    setOrder(prev => {
+      const i = prev.indexOf(dt);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const ordered = PROGRAM_DOC_TYPE_KEYS
-        .map((dt, idx) => ({ dt, level: docReqs[dt] ?? "none", idx }))
-        .filter(x => x.level !== "none")
-        .map(x => ({ documentType: x.dt, mandatory: x.level === "mandatory", sortOrder: x.idx }));
+      const ordered = order
+        .filter(dt => (docReqs[dt] ?? "none") !== "none")
+        .map((dt, idx) => ({ documentType: dt, mandatory: docReqs[dt] === "mandatory", sortOrder: idx }));
       await api(`/api/catalog-options/${option.id}/document-requirements`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -2078,12 +2100,65 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
     setSaving(false);
   }
 
-  const filtered = docSearch.trim()
-    ? PROGRAM_DOC_TYPE_KEYS.filter(dt =>
-        dt.toLowerCase().includes(docSearch.toLowerCase()) ||
-        (DEGREE_DOC_TYPE_LABELS[dt] ?? "").toLowerCase().includes(docSearch.toLowerCase()),
-      )
-    : PROGRAM_DOC_TYPE_KEYS;
+  const matchesSearch = (dt: string) => {
+    if (!docSearch.trim()) return true;
+    const q = docSearch.toLowerCase();
+    return dt.toLowerCase().includes(q) || (DEGREE_DOC_TYPE_LABELS[dt] ?? "").toLowerCase().includes(q);
+  };
+
+  const selectedKeys = order.filter(dt => (docReqs[dt] ?? "none") !== "none" && matchesSearch(dt));
+  const selectedSet = new Set(order.filter(dt => (docReqs[dt] ?? "none") !== "none"));
+  const availableKeys = PROGRAM_DOC_TYPE_KEYS.filter(dt => !selectedSet.has(dt) && matchesSearch(dt));
+
+  function renderRow(dt: string, isSelected: boolean, idx: number, total: number) {
+    const v = docReqs[dt] ?? "none";
+    return (
+      <tr key={dt} className="hover:bg-muted/30">
+        {isSelected && (
+          <td className="pl-2 py-1.5 w-[60px]">
+            <div className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                onClick={() => move(dt, -1)}
+                disabled={idx === 0}
+                className="h-4 w-5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                title="Move up"
+              ><ChevronUp className="h-3 w-3" /></button>
+              <button
+                type="button"
+                onClick={() => move(dt, 1)}
+                disabled={idx === total - 1}
+                className="h-4 w-5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                title="Move down"
+              ><ChevronDown className="h-3 w-3" /></button>
+            </div>
+          </td>
+        )}
+        <td className="px-2 py-1.5 break-words">
+          {isSelected && <span className="inline-block w-5 text-muted-foreground tabular-nums">{idx + 1}.</span>}
+          {DEGREE_DOC_TYPE_LABELS[dt] ?? dt}
+        </td>
+        <td className="px-2 py-1.5 w-[210px] text-right whitespace-nowrap">
+          <div className="inline-flex rounded-md border overflow-hidden">
+            {(["none", "optional", "mandatory"] as const).map(opt => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setLevel(dt, opt)}
+                className={`px-2 py-0.5 text-[11px] transition-colors ${
+                  v === opt
+                    ? opt === "mandatory" ? "bg-red-600 text-white"
+                      : opt === "optional" ? "bg-blue-600 text-white"
+                      : "bg-muted text-foreground"
+                    : "bg-background hover:bg-muted/50 text-muted-foreground"
+                }`}
+              >{opt === "none" ? "None" : opt === "optional" ? "Optional" : "Mandatory"}</button>
+            ))}
+          </div>
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
@@ -2092,7 +2167,7 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
           <DialogTitle>Required Documents — {option.value}</DialogTitle>
           <p className="text-xs text-muted-foreground">
             These documents will be requested in the Add Student form when a student picks this Application Level.
-            Program-level requirements always override these once a specific program is selected.
+            The order below is the order they appear in the form. Program-level requirements override these once a specific program is selected.
           </p>
         </DialogHeader>
         {isLoading ? (
@@ -2101,7 +2176,7 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
           <div className="flex-1 overflow-hidden flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">
-                {Object.values(docReqs).filter(v => v !== "none").length} selected · {Object.values(docReqs).filter(v => v === "mandatory").length} mandatory
+                {selectedSet.size} selected · {Object.values(docReqs).filter(v => v === "mandatory").length} mandatory
               </span>
             </div>
             <Input
@@ -2113,34 +2188,25 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
             <div className="flex-1 overflow-y-auto rounded border bg-background">
               <table className="w-full text-xs">
                 <tbody className="divide-y">
-                  {filtered.length === 0 ? (
+                  {selectedKeys.length > 0 && (
+                    <tr className="bg-muted/40">
+                      <td colSpan={3} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Selected — drag order shown in form
+                      </td>
+                    </tr>
+                  )}
+                  {selectedKeys.map((dt, i) => renderRow(dt, true, i, selectedKeys.length))}
+                  {availableKeys.length > 0 && (
+                    <tr className="bg-muted/40">
+                      <td colSpan={3} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Available
+                      </td>
+                    </tr>
+                  )}
+                  {availableKeys.map(dt => renderRow(dt, false, 0, 0))}
+                  {selectedKeys.length === 0 && availableKeys.length === 0 && (
                     <tr><td className="px-2 py-3 text-center text-muted-foreground">No documents match "{docSearch}"</td></tr>
-                  ) : filtered.map(dt => {
-                    const v = docReqs[dt] ?? "none";
-                    return (
-                      <tr key={dt} className="hover:bg-muted/30">
-                        <td className="px-2 py-1.5 break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</td>
-                        <td className="px-2 py-1.5 w-[210px] text-right whitespace-nowrap">
-                          <div className="inline-flex rounded-md border overflow-hidden">
-                            {(["none", "optional", "mandatory"] as const).map(opt => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => setDocReqs(prev => ({ ...prev, [dt]: opt }))}
-                                className={`px-2 py-0.5 text-[11px] transition-colors ${
-                                  v === opt
-                                    ? opt === "mandatory" ? "bg-red-600 text-white"
-                                      : opt === "optional" ? "bg-blue-600 text-white"
-                                      : "bg-muted text-foreground"
-                                    : "bg-background hover:bg-muted/50 text-muted-foreground"
-                                }`}
-                              >{opt === "none" ? "None" : opt === "optional" ? "Optional" : "Mandatory"}</button>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  )}
                 </tbody>
               </table>
             </div>
