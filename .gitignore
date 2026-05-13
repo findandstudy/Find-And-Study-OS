@@ -52,3 +52,6 @@ e2e-db-state.json
 # Replit
 .cache/
 .local/
+
+# User-uploaded chat attachments — never commit, can grow to hundreds of MB
+attached_assets/
