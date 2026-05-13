@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
+import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -91,7 +92,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
   const photoDoc = useMemo(() => {
-    const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && d.fileData);
+    const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && (d.fileKey || d.fileData));
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents]);
@@ -434,7 +435,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     if (!uploadFile) return;
     setUploading(true);
     try {
-      const base64 = await fileToBase64(uploadFile);
+      const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(uploadFile);
       const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
       const first = (student?.firstName ?? "").toLowerCase();
       const last = (student?.lastName ?? "").toLowerCase();
@@ -448,9 +449,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           type: uploadType,
           status: "pending",
           studentId: id,
-          fileData: base64,
-          mimeType: uploadFile.type,
-          sizeBytes: uploadFile.size,
+          fileKey,
+          mimeType,
+          sizeBytes,
+          originalFileName: uploadFile.name,
         }),
       });
 
@@ -471,7 +473,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     if (!file.type.startsWith("image/")) return;
     setPhotoUploading(true);
     try {
-      const base64 = await fileToBase64(file);
+      const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(file);
       const first = (student?.firstName ?? "").toLowerCase();
       const last = (student?.lastName ?? "").toLowerCase();
 
@@ -483,9 +485,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           type: "photo",
           status: "approved",
           studentId: id,
-          fileData: base64,
-          mimeType: file.type,
-          sizeBytes: file.size,
+          fileKey,
+          mimeType,
+          sizeBytes,
+          originalFileName: file.name,
         }),
       });
 
@@ -506,7 +509,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     const mime = photoDoc.mimeType || "image/jpeg";
     const filename = buildDownloadFilename("photo", student?.firstName ?? "", student?.lastName ?? "", mime);
     const link = document.createElement("a");
-    link.href = `data:${mime};base64,${photoDoc.fileData}`;
+    link.href = `${BASE_URL}/api/documents/${photoDoc.id}/download`;
     link.download = filename;
     link.click();
   }
@@ -523,7 +526,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               <Skeleton className="w-20 h-20 rounded-full" />
             ) : photoDoc ? (
               <img
-                src={`data:${photoDoc.mimeType || "image/jpeg"};base64,${photoDoc.fileData}`}
+                src={`${BASE_URL}/api/students/${id}/photo`}
                 alt={`${student?.firstName} ${student?.lastName}`}
                 className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
               />
@@ -1612,18 +1615,6 @@ function InfoRow({
   );
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const result = e.target?.result as string;
-      resolve(result.split(",")[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 const DETAIL_DOC_TYPE_LABELS: Record<string, string> = {
   high_school_diploma_translation: "High School Diploma (Translation)",
   class_10th_ssc_marks_sheet: "Class 10th/SSC Marks Sheet",
@@ -1730,7 +1721,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
     );
   };
 
-  const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf" && (d.fileData || d.fileUrl));
+  const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf" && (d.fileKey || d.fileData || d.fileUrl));
 
   return (
     <>
@@ -1789,7 +1780,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                 <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors">
                   {pdfDocs.length >= 2 && (
                     <td className="px-2 py-3 text-center">
-                      {(doc.mimeType === "application/pdf" && (doc.fileData || doc.fileUrl)) && (
+                      {(doc.mimeType === "application/pdf" && (doc.fileKey || doc.fileData || doc.fileUrl)) && (
                         <input
                           type="checkbox"
                           checked={selectedForMerge.includes(doc.id)}
@@ -1810,13 +1801,13 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                     {new Date(doc.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    {doc.fileData && (
+                    {(doc.fileKey || doc.fileData) && (
                       <button
                         onClick={() => {
                           const mimeType = doc.mimeType || "application/octet-stream";
                           const filename = buildDownloadFilename(doc.type, student?.firstName ?? "", student?.lastName ?? "", mimeType);
                           const link = document.createElement("a");
-                          link.href = `data:${mimeType};base64,${doc.fileData}`;
+                          link.href = `${BASE_URL}/api/documents/${doc.id}/download`;
                           link.download = filename;
                           link.click();
                         }}
@@ -1826,7 +1817,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                         Download
                       </button>
                     )}
-                    {doc.fileUrl && !doc.fileData && (
+                    {doc.fileUrl && !doc.fileKey && !doc.fileData && (
                       <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
                         View
                       </a>

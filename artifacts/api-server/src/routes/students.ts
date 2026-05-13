@@ -7,6 +7,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
+import { streamDocumentToResponse } from "../lib/documentBytes";
 import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -92,18 +93,28 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
   const studentId = parseInt(req.params.id, 10);
   const access = await assertCanAccessStudent(req, studentId);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
-  const [photoDoc] = await db.select({ fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
+  const [photoDoc] = await db.select({
+      fileKey: documentsTable.fileKey,
+      fileData: documentsTable.fileData,
+      mimeType: documentsTable.mimeType,
+    })
     .from(documentsTable)
-    .where(and(eq(documentsTable.studentId, studentId), eq(documentsTable.type, "photo"), isNull(documentsTable.deletedAt)))
+    .where(and(eq(documentsTable.studentId, studentId), or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")), isNull(documentsTable.deletedAt)))
     .orderBy(desc(documentsTable.createdAt))
     .limit(1);
-  if (!photoDoc?.fileData) { res.status(404).json({ error: "No photo" }); return; }
-  const buffer = Buffer.from(photoDoc.fileData, "base64");
-  res.set("Content-Type", photoDoc.mimeType || "image/jpeg");
+  if (!photoDoc || (!photoDoc.fileKey && !photoDoc.fileData)) {
+    res.status(404).json({ error: "No photo" }); return;
+  }
   // Use private caching so a shared proxy cannot serve one user's photo to
   // another user who happens to request the same URL.
   res.set("Cache-Control", "private, max-age=300");
-  res.send(buffer);
+  try {
+    const sent = await streamDocumentToResponse(photoDoc, res);
+    if (!sent && !res.headersSent) res.status(404).json({ error: "No photo" });
+  } catch (err) {
+    console.error(`[STUDENTS] photo stream for #${studentId} failed:`, err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to load photo" });
+  }
 });
 
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {

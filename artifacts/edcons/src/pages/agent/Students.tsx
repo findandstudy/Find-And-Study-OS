@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
+import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -142,7 +143,6 @@ type UploadedDoc = {
   key: string;
   label: string;
   file: File;
-  base64: string;
   mediaType: string;
   isImage: boolean;
 };
@@ -232,7 +232,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<string> {
+function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<File> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -248,8 +248,11 @@ function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<str
         canvas.height = height;
         const ctx = canvas.getContext("2d")!;
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
-        resolve(dataUrl.split(",")[1]);
+        canvas.toBlob((blob) => {
+          if (!blob) { reject(new Error("compress failed")); return; }
+          const newName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+          resolve(new File([blob], newName, { type: "image/jpeg" }));
+        }, "image/jpeg", quality);
       };
       img.onerror = reject;
       img.src = e.target?.result as string;
@@ -259,14 +262,13 @@ function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<str
   });
 }
 
-async function prepareDocumentBase64(file: File): Promise<{ base64: string; mediaType: string; isImage: boolean }> {
+async function prepareDocumentFile(file: File): Promise<{ file: File; mediaType: string; isImage: boolean }> {
   const isImage = file.type.startsWith("image/");
   if (isImage) {
-    const base64 = await compressImage(file);
-    return { base64, mediaType: "image/jpeg", isImage: true };
+    const compressed = await compressImage(file);
+    return { file: compressed, mediaType: "image/jpeg", isImage: true };
   }
-  const base64 = await fileToBase64(file);
-  return { base64, mediaType: file.type || "application/pdf", isImage: false };
+  return { file, mediaType: file.type || "application/pdf", isImage: false };
 }
 
 function DropZone({
@@ -291,8 +293,8 @@ function DropZone({
       return;
     }
     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
-    const { base64, mediaType, isImage } = await prepareDocumentBase64(safeFile);
-    onUpload({ key: docType.key, label: docType.label, file: safeFile, base64, mediaType, isImage });
+    const { file: prepared, mediaType, isImage } = await prepareDocumentFile(safeFile);
+    onUpload({ key: docType.key, label: docType.label, file: prepared, mediaType, isImage });
   }
 
   const handleDrop = useCallback(
@@ -519,12 +521,12 @@ function AddStudentModal({
     setAnalysisError(null);
 
     try {
-      const docPayload = uploadedDocs.map((d) => ({
+      const docPayload = await Promise.all(uploadedDocs.map(async (d) => ({
         type: d.isImage ? "image" : "pdf",
-        data: d.base64,
+        data: await fileToBase64(d.file),
         mediaType: d.mediaType,
         label: d.label,
-      }));
+      })));
 
       const res = await fetch(`${BASE_URL}/api/ai/extract-document`, {
         method: "POST",
@@ -684,24 +686,29 @@ function AddStudentModal({
     };
 
     await Promise.allSettled(
-      uploadedDocs.map((d) => {
+      uploadedDocs.map(async (d) => {
         const label = docTypeLabel[d.label?.toLowerCase()] ?? d.label ?? "Document";
         const docName = `${firstName}-${lastName}-${label}`;
-        return fetch(`${BASE_URL}/api/documents`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            name: docName,
-            type: d.label?.toLowerCase() ?? "other",
-            status: "pending",
-            studentId,
-            fileData: d.base64,
-            mimeType: d.mediaType,
-            sizeBytes: d.file?.size ?? null,
-            originalFileName: d.file?.name ?? null,
-          }),
-        });
+        try {
+          const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
+          return fetch(`${BASE_URL}/api/documents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              name: docName,
+              type: d.label?.toLowerCase() ?? "other",
+              status: "pending",
+              studentId,
+              fileKey,
+              mimeType,
+              sizeBytes,
+              originalFileName: d.file?.name ?? null,
+            }),
+          });
+        } catch (err) {
+          console.error(`[AGENT_STUDENTS] upload failed for ${label}:`, err);
+        }
       })
     );
   }

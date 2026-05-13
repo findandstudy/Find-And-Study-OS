@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -531,12 +532,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
     if (!uploadFile) return;
     setUploading(true);
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(uploadFile);
-      });
+      const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(uploadFile);
       const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
       const first = (user?.firstName ?? "").toLowerCase();
       const last = (user?.lastName ?? "").toLowerCase();
@@ -549,9 +545,9 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
           name: docName,
           type: uploadType,
           studentId: studentProfile?.id || null,
-          fileData: base64,
-          mimeType: uploadFile.type,
-          sizeBytes: uploadFile.size,
+          fileKey,
+          mimeType,
+          sizeBytes,
           originalFileName: uploadFile.name,
         }),
       });
@@ -643,24 +639,20 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
                     {new Date(doc.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    {(doc.fileData || doc.fileUrl) && (
+                    {(doc.fileKey || doc.fileData || doc.fileUrl) && (
                       <button
                         onClick={() => {
-                          if (doc.fileUrl) {
-                            window.open(doc.fileUrl, "_blank");
-                          } else {
-                            const mimeType = doc.mimeType || "application/octet-stream";
-                            const filename = buildDownloadFilename(doc.type, user?.firstName ?? "", user?.lastName ?? "", mimeType);
-                            const link = document.createElement("a");
-                            link.href = `data:${mimeType};base64,${doc.fileData}`;
-                            link.download = filename;
-                            link.click();
-                          }
+                          const mimeType = doc.mimeType || "application/octet-stream";
+                          const filename = buildDownloadFilename(doc.type, user?.firstName ?? "", user?.lastName ?? "", mimeType);
+                          const link = document.createElement("a");
+                          link.href = `${BASE_URL}/api/documents/${doc.id}/download`;
+                          link.download = filename;
+                          link.click();
                         }}
                         className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        {doc.fileUrl ? "Open" : "Download"}
+                        Download
                       </button>
                     )}
                   </td>

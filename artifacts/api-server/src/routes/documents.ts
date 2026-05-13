@@ -7,6 +7,7 @@ import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
+import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
 
@@ -71,7 +72,11 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
 router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileData, mimeType, sizeBytes, notes, originalFileName } = req.body;
+  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, mimeType, sizeBytes, notes, originalFileName } = req.body;
+  if (req.body.fileData) {
+    res.status(400).json({ error: "fileData uploads are no longer accepted. Upload via /storage/uploads/request-url and pass fileKey." });
+    return;
+  }
 
   if (!isStaff) {
     if (user.role === "student") {
@@ -139,34 +144,23 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     ? descriptiveName
     : (name ? sanitizeFileName(name) : name);
 
-  if (fileData) {
+  if (fileKey) {
     if (!mimeType) {
       res.status(400).json({ error: "mimeType is required for file uploads" });
       return;
     }
-    const fileSizeBytes = sizeBytes ? Number(sizeBytes) : Math.ceil((fileData.length * 3) / 4);
     const validationFileName = originalFileName
       ? sanitizeFileName(originalFileName)
       : (() => {
           const syntheticExt = isPdf(mimeType) ? ".pdf" : mimeType === "image/png" ? ".png" : ".jpg";
           return `document${syntheticExt}`;
         })();
-    let buffer: Buffer | null = null;
-    try {
-      buffer = Buffer.from(fileData, "base64");
-    } catch {
-      res.status(400).json({ error: "Invalid base64 file data" });
-      return;
-    }
-    const validationError = await validateUploadedFileBuffer(validationFileName, mimeType, buffer);
+    const declaredSize = sizeBytes ? Number(sizeBytes) : 0;
+    const validationError = validateUploadedFile(validationFileName, mimeType, declaredSize || 1);
     if (validationError) {
       const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: validationError.message });
       return;
-    }
-    if (!sizeBytes) {
-      // ensure size matches actual decoded bytes for downstream consumers
-      (req.body as any).sizeBytes = buffer.byteLength;
     }
   }
 
@@ -192,19 +186,18 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     studentId: studentId || null,
     applicationId: isStaff ? (applicationId || null) : null,
     fileUrl: fileUrl || null,
-    fileData: fileData || null,
+    fileKey: fileKey || null,
     mimeType: mimeType || null,
     sizeBytes: sizeBytes ? Number(sizeBytes) : null,
     notes: notes || null,
   }).returning();
   await logAudit(user.id, "create_document", "document", doc.id, { name, type }, req.ip);
 
-  if (doc.studentId && (type === "photo" || type === "photograph") && fileData) {
+  if (doc.studentId && (type === "photo" || type === "photograph") && fileKey) {
     try {
-      const photoMime = mimeType || "image/jpeg";
-      const photoUrl = `data:${photoMime};base64,${fileData}`;
-      // Keep students.has_photo denormalized so the listing query no longer
-      // needs an extra SELECT against documents per page load.
+      // Stable URL served from object storage via /students/:id/photo.
+      // No more inline base64 data-URLs polluting the students row.
+      const photoUrl = `/api/students/${doc.studentId}/photo`;
       await db.update(studentsTable).set({ photoUrl, hasPhoto: true }).where(eq(studentsTable.id, doc.studentId));
     } catch (err) {
       console.error("[DOCUMENTS] Failed to set student photo from document:", err);
@@ -228,6 +221,52 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   }
 
   res.status(201).json(doc);
+});
+
+router.get("/documents/:id/download", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
+  if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const user = req.user!;
+  const isStaff = STAFF_ROLES.includes(user.role as any);
+  if (!isStaff) {
+    if (user.role === "student") {
+      const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
+      if (!studentRec || studentRec.id !== doc.studentId) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+    } else if (isAgentRole(user.role)) {
+      if (!doc.studentId) { res.status(403).json({ error: "Access denied" }); return; }
+      const visibleIds = await getAgentVisibleIds(user.id, user.role);
+      const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+      if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+    } else {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  }
+
+  const wantsAttachment = req.query.disposition !== "inline";
+  const downloadName = (req.query.filename as string | undefined) || doc.name;
+  res.setHeader("Cache-Control", "private, max-age=300");
+  if (wantsAttachment) {
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
+  } else {
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(downloadName)}"`);
+  }
+  try {
+    const sent = await streamDocumentToResponse(doc, res);
+    if (!sent) {
+      if (doc.fileUrl) { res.redirect(doc.fileUrl); return; }
+      res.status(404).json({ error: "No file content available" });
+    }
+  } catch (err) {
+    console.error(`[DOCUMENTS] download #${id} failed:`, err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download document" });
+  }
 });
 
 router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
@@ -428,7 +467,11 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
   // "FIRSTNAME LASTNAME - DocLabel.ext". Dedupe collisions with " (id)".
   const seenNames = new Set<string>();
   for (const doc of docs) {
-    if (doc.fileData) {
+    const loaded = await loadDocumentBytes(doc).catch((e) => {
+      console.error(`[DOCUMENTS] zip: failed to load doc #${doc.id}:`, e);
+      return null;
+    });
+    if (loaded) {
       let name = buildDocNameFromParts(student.firstName, student.lastName, doc.type, doc.mimeType);
       if (seenNames.has(name)) {
         const dotIdx = name.lastIndexOf(".");
@@ -437,7 +480,7 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
           : `${name} (${doc.id})`;
       }
       seenNames.add(name);
-      archive.append(Buffer.from(doc.fileData, "base64"), { name });
+      archive.append(loaded.buffer, { name });
     }
   }
 
@@ -457,7 +500,7 @@ router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...
     and(inArray(documentsTable.id, numericIds), isNull(documentsTable.deletedAt))
   );
 
-  const pdfDocs = docs.filter(d => d.fileData && d.mimeType === "application/pdf");
+  const pdfDocs = docs.filter(d => (d.fileData || d.fileKey) && d.mimeType === "application/pdf");
   if (pdfDocs.length < 2) {
     res.status(400).json({ error: "At least 2 PDF documents are required for merge" });
     return;
@@ -475,8 +518,9 @@ router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...
     const mergedPdf = await PDFDocument.create();
 
     for (const doc of pdfDocs) {
-      const pdfBytes = Buffer.from(doc.fileData!, "base64");
-      const sourcePdf = await PDFDocument.load(pdfBytes);
+      const loaded = await loadDocumentBytes(doc);
+      if (!loaded) continue;
+      const sourcePdf = await PDFDocument.load(loaded.buffer);
       const pages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
       for (const page of pages) {
         mergedPdf.addPage(page);

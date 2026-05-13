@@ -675,15 +675,19 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   const photoDocs = await db.select().from(documentsTable).where(and(eq(documentsTable.leadId, lead.id), eq(documentsTable.type, "photo")));
-  if (photoDocs.length > 0 && photoDocs[0].fileData) {
-    const photoDoc = photoDocs[0];
-    const mimeType = photoDoc.mimeType || "image/jpeg";
-    studentValues.photoUrl = `data:${mimeType};base64,${photoDoc.fileData}`;
-  }
+  const hasPhotoBlob = photoDocs.length > 0 && (photoDocs[0].fileKey || photoDocs[0].fileData);
 
   const [student] = await db.insert(studentsTable).values(studentValues).returning();
 
   await db.update(documentsTable).set({ studentId: student.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
+
+  if (hasPhotoBlob) {
+    // Now that the student row exists, point photoUrl at the stable
+    // /students/:id/photo endpoint instead of inlining base64.
+    await db.update(studentsTable)
+      .set({ photoUrl: `/api/students/${student.id}/photo`, hasPhoto: true })
+      .where(eq(studentsTable.id, student.id));
+  }
 
   if (submission?.programId) {
     await createApplicationFromSubmission(student.id, submission);

@@ -127,8 +127,11 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
       for (const s of studentRows) if (s.userId) studentIdMap[s.userId] = s.id;
       const sIds = studentRows.map(s => s.id);
       if (sIds.length > 0) {
+        // Use the /students/:id/photo endpoint as a stable URL — it streams
+        // from object storage (or legacy fileData) without bloating the JSON
+        // payload with megabytes of base64 content per conversation list.
         const photoDocs = await db
-          .select({ studentId: documentsTable.studentId, fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
+          .select({ studentId: documentsTable.studentId, fileKey: documentsTable.fileKey, fileData: documentsTable.fileData })
           .from(documentsTable)
           .where(and(
             inArray(documentsTable.studentId, sIds),
@@ -138,10 +141,9 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
           .orderBy(desc(documentsTable.createdAt));
         const seen = new Set<number>();
         for (const pd of photoDocs) {
-          if (pd.studentId && !seen.has(pd.studentId) && pd.fileData) {
+          if (pd.studentId && !seen.has(pd.studentId) && (pd.fileKey || pd.fileData)) {
             seen.add(pd.studentId);
-            const mime = pd.mimeType || "image/jpeg";
-            photoMap[pd.studentId] = `data:${mime};base64,${pd.fileData}`;
+            photoMap[pd.studentId] = `/api/students/${pd.studentId}/photo`;
           }
         }
       }
@@ -335,7 +337,7 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
     const sIds = Object.values(sidMap);
     if (sIds.length > 0) {
       const photoDocs = await db
-        .select({ studentId: documentsTable.studentId, fileData: documentsTable.fileData, mimeType: documentsTable.mimeType })
+        .select({ studentId: documentsTable.studentId, fileKey: documentsTable.fileKey, fileData: documentsTable.fileData })
         .from(documentsTable)
         .where(and(
           inArray(documentsTable.studentId, sIds),
@@ -346,9 +348,9 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
       const pMap: Record<number, string> = {};
       const seen = new Set<number>();
       for (const pd of photoDocs) {
-        if (pd.studentId && !seen.has(pd.studentId) && pd.fileData) {
+        if (pd.studentId && !seen.has(pd.studentId) && (pd.fileKey || pd.fileData)) {
           seen.add(pd.studentId);
-          pMap[pd.studentId] = `data:${pd.mimeType || "image/jpeg"};base64,${pd.fileData}`;
+          pMap[pd.studentId] = `/api/students/${pd.studentId}/photo`;
         }
       }
       for (const m of reversed) {

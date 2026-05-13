@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
+import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
 import { useI18n } from "@/hooks/use-i18n";
@@ -1646,7 +1647,7 @@ type StudentOption = {
 
 type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
-type UploadedDoc = { key: string; label: string; file: File; base64: string; mediaType: string; isImage: boolean };
+type UploadedDoc = { key: string; label: string; file: File; mediaType: string; isImage: boolean };
 
 const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
   pathway: [
@@ -1704,7 +1705,7 @@ function fileToBase64CF(file: File): Promise<string> {
   });
 }
 
-function compressImageCF(file: File, maxWidth = 1600, quality = 0.78): Promise<string> {
+function compressImageCF(file: File, maxWidth = 1600, quality = 0.78): Promise<File> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -1715,7 +1716,11 @@ function compressImageCF(file: File, maxWidth = 1600, quality = 0.78): Promise<s
         if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
         canvas.width = width; canvas.height = height;
         canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality).split(",")[1]);
+        canvas.toBlob((blob) => {
+          if (!blob) { reject(new Error("compress failed")); return; }
+          const newName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+          resolve(new File([blob], newName, { type: "image/jpeg" }));
+        }, "image/jpeg", quality);
       };
       img.onerror = reject;
       img.src = e.target?.result as string;
@@ -1725,10 +1730,13 @@ function compressImageCF(file: File, maxWidth = 1600, quality = 0.78): Promise<s
   });
 }
 
-async function prepareDocBase64(file: File): Promise<{ base64: string; mediaType: string; isImage: boolean }> {
+async function prepareDocFile(file: File): Promise<{ file: File; mediaType: string; isImage: boolean }> {
   const isImage = file.type.startsWith("image/");
-  if (isImage) return { base64: await compressImageCF(file), mediaType: "image/jpeg", isImage: true };
-  return { base64: await fileToBase64CF(file), mediaType: file.type || "application/pdf", isImage: false };
+  if (isImage) {
+    const compressed = await compressImageCF(file);
+    return { file: compressed, mediaType: "image/jpeg", isImage: true };
+  }
+  return { file, mediaType: file.type || "application/pdf", isImage: false };
 }
 
 function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
@@ -1739,8 +1747,8 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
   const [dragging, setDragging] = useState(false);
 
   async function handleFile(file: File) {
-    const { base64, mediaType, isImage } = await prepareDocBase64(file);
-    onUpload({ key: docType.key, label: docType.label, file, base64, mediaType, isImage });
+    const { file: prepared, mediaType, isImage } = await prepareDocFile(file);
+    onUpload({ key: docType.key, label: docType.label, file: prepared, mediaType, isImage });
   }
 
   if (uploaded) {
@@ -1935,12 +1943,12 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
     }
     setStep("analyzing");
     try {
-      const docPayload = uploadedDocs.map((d) => ({
+      const docPayload = await Promise.all(uploadedDocs.map(async (d) => ({
         type: d.isImage ? "image" : "pdf",
-        data: d.base64,
+        data: await fileToBase64CF(d.file),
         mediaType: d.mediaType,
         label: d.label,
-      }));
+      })));
       const res = await fetch(`${BASE_URL}/api/ai/extract-document`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1974,6 +1982,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
         let docType = d.key
           || (d.label ? d.label.toLowerCase().replace(/\s+/g, "_") : "other");
         if (docType === "photograph") docType = "photo";
+        const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
         const res = await fetch(`${BASE_URL}/api/documents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1984,9 +1993,10 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
             status: "pending",
             studentId,
             applicationId,
-            fileData: d.base64,
-            mimeType: d.mediaType,
-            sizeBytes: d.file?.size ?? null,
+            fileKey,
+            mimeType,
+            sizeBytes,
+            originalFileName: d.file?.name ?? null,
           }),
         });
         if (res.ok) {
