@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
+import { formatDate } from "@workspace/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1065,7 +1066,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             <span className={`text-xs ${
                               fu.completed ? "text-muted-foreground" : isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"
                             }`}>
-                              {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              {formatDate(fu.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                               {" "}
                               {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                               {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
@@ -1078,14 +1079,14 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             )}
                             {fu.createdAt && (
                               <span className="text-xs text-muted-foreground/50">
-                                {new Date(fu.createdAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                {formatDate(fu.createdAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                                 {" "}
                                 {new Date(fu.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
                               <span className="text-xs text-amber-500/70" data-testid="fu-edited-by">
-                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                                 {" "}
                                 {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
                               </span>

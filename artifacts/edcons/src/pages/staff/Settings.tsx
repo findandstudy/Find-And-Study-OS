@@ -86,7 +86,8 @@ const ROLE_LABELS: Record<string, string> = {
   student: "Student", agent: "Agent", sub_agent: "Sub Agent",
 };
 
-const MANAGER_ROLES = ["super_admin", "admin", "manager"];
+import { MANAGER_ROLES as _MANAGER_ROLES } from "@workspace/roles";
+const MANAGER_ROLES = _MANAGER_ROLES;
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -233,11 +234,32 @@ export default function SettingsPage() {
   const isManager = MANAGER_ROLES.includes(user?.role || "");
 
   useEffect(() => {
-    if (user) {
-      const parsed = parsePhoneCode((user as any).phone || "");
-      const emergencyParsed = parsePhoneCode((user as any).emergencyContactPhone || "");
-      setForm({ firstName: user.firstName || "", lastName: user.lastName || "", phoneCode: parsed.phoneCode, phone: parsed.phone, avatarUrl: user.avatarUrl || "", email: user.email || "", startDate: (user as any).startDate || "", homeAddress: (user as any).homeAddress || "", passportNumber: (user as any).passportNumber || "", contractUrl: (user as any).contractUrl || "", passportUrl: (user as any).passportUrl || "", emergencyContactName: (user as any).emergencyContactName || "", emergencyPhoneCode: emergencyParsed.phoneCode, emergencyPhone: emergencyParsed.phone });
-    }
+    if (!user) return;
+    const parsed = parsePhoneCode((user as any).phone || "");
+    setForm(f => ({
+      ...f,
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      phoneCode: parsed.phoneCode,
+      phone: parsed.phone,
+      avatarUrl: user.avatarUrl || "",
+      email: user.email || "",
+    }));
+    customFetch("/api/users/me/profile").then((p: any) => {
+      if (!p) return;
+      const eParsed = parsePhoneCode(p.emergencyContactPhone || "");
+      setForm(f => ({
+        ...f,
+        startDate: p.startDate || "",
+        homeAddress: p.homeAddress || "",
+        passportNumber: p.passportNumber || "",
+        contractUrl: p.contractUrl || "",
+        passportUrl: p.passportUrl || "",
+        emergencyContactName: p.emergencyContactName || "",
+        emergencyPhoneCode: eParsed.phoneCode,
+        emergencyPhone: eParsed.phone,
+      }));
+    }).catch(() => {});
   }, [user]);
 
   useEffect(() => {

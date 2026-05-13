@@ -6,7 +6,8 @@ import VerifyEmail from "@/pages/agent/VerifyEmail";
 import SignContract from "@/pages/agent/SignContract";
 import ContractExpired from "@/pages/agent/ContractExpired";
 
-const AGENT_ROLES = new Set(["agent", "sub_agent", "agent_staff"]);
+import { AGENT_ROLES as _AGENT_ROLES_ARR } from "@workspace/roles";
+const AGENT_ROLES = new Set<string>(_AGENT_ROLES_ARR);
 
 type Status = {
   requiresOnboarding: boolean;

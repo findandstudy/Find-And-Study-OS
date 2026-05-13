@@ -22,7 +22,8 @@ async function apiFetch(url: string) {
   return res.json();
 }
 
-const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
+import { STAFF_ROLES as _STAFF_ROLES } from "@workspace/roles";
+const STAFF_ROLES = _STAFF_ROLES;
 
 export default function AgentDetailPage() {
   const { t } = useI18n();

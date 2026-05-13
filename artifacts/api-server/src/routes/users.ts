@@ -7,6 +7,19 @@ import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { createSession, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { validatePassword } from "../lib/passwordPolicy";
+import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
+import { z } from "zod";
+import { validate, getValidated } from "../middlewares/validate";
+
+const createUserBodySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
+  role: z.string().min(1),
+  phone: z.string().trim().optional().nullable(),
+  language: z.string().trim().optional(),
+  password: z.string().optional(),
+});
 
 const router: IRouter = Router();
 
@@ -14,10 +27,8 @@ const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "langua
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive"];
 
 router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { role, search, page = "1", limit = "50" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-  const offset = (pageNum - 1) * limitNum;
+  const { role, search } = req.query as Record<string, string>;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 50, maxLimit: "small" });
 
   const conditions = [isNull(usersTable.deletedAt)];
   if (role) conditions.push(eq(usersTable.role, role));
@@ -49,26 +60,15 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
     })
     .from(usersTable)
     .where(whereClause)
-    .limit(limitNum)
-    .offset(offset);
+    .limit(pageParams.limit)
+    .offset(pageParams.offset);
 
-  res.json({
-    data,
-    meta: {
-      total: Number(count),
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(Number(count) / limitNum),
-    },
-  });
+  res.json({ data, meta: buildPageMeta(Number(count), pageParams) });
 });
 
-router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { email, firstName, lastName, role, phone, language, password } = req.body;
-  if (!email || !firstName || !lastName || !role) {
-    res.status(400).json({ error: "Missing required fields" });
-    return;
-  }
+router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: createUserBodySchema }), async (req, res): Promise<void> => {
+  const { email: normalizedEmail, firstName, lastName, role, phone, language, password } =
+    getValidated<{ body: typeof createUserBodySchema }>(req).body;
 
   const BUILTIN_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant", "student", "agent", "sub_agent", "pending"];
   const dbRoles = await db.select({ name: rolesTable.name }).from(rolesTable);
@@ -78,7 +78,6 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     return;
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
   const [existingUser] = await db.select().from(usersTable).where(and(eq(usersTable.email, normalizedEmail), isNull(usersTable.deletedAt)));
   if (existingUser) {
     if (existingUser.role !== role) {
@@ -221,6 +220,13 @@ router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES),
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, id));
   await logAudit(req.user!.id, "auth.set_password", "user", id, { adminInitiated: true }, req.ip);
   res.json({ success: true });
+});
+
+router.get("/users/me/profile", requireAuth, async (req, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  const { passwordHash: _ph, replitId: _rid, ...safe } = user as Record<string, unknown>;
+  res.json(safe);
 });
 
 router.post("/users/me/change-password", requireAuth, async (req, res): Promise<void> => {

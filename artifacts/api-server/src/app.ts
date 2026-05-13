@@ -32,8 +32,9 @@ function getAllowedOrigins(): string[] {
 
 const cspDirectives = {
   defaultSrc: ["'self'"],
-  scriptSrc: ["'self'", "'unsafe-inline'"],
-  styleSrc: ["'self'", "'unsafe-inline'"],
+  // TODO: switch scriptSrc/styleSrc to nonce-based CSP once template/SSR pipeline emits per-request nonces.
+  scriptSrc: ["'self'"],
+  styleSrc: ["'self'"],
   imgSrc: ["'self'", "data:", "https:"],
   fontSrc: ["'self'", "data:"],
   connectSrc: ["'self'", "https:"],

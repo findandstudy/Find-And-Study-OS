@@ -17,7 +17,8 @@ import {
   AlertTriangle, CalendarClock,
 } from "lucide-react";
 
-const ADMIN_ROLES = ["super_admin", "admin", "manager"] as const;
+import { ADMIN_ROLES as _ADMIN_ROLES } from "@workspace/roles";
+const ADMIN_ROLES = _ADMIN_ROLES;
 const MANAGE_ROLES = [...ADMIN_ROLES, "staff", "consultant", "editor", "accountant"] as const;
 
 type TaskNote = { id: string; text: string; createdAt: string; authorName: string; mentions?: number[] };

@@ -12,6 +12,7 @@ import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginM
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
+import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 
 const router: IRouter = Router();
 
@@ -134,10 +135,11 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { status, search, season, page = "1", limit = "20", agentId: agentIdFilter, originType: originFilter } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
-  const offset = (pageNum - 1) * limitNum;
+  const { status, search, season, agentId: agentIdFilter, originType: originFilter } = req.query as Record<string, string>;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "large" });
+  const pageNum = pageParams.page;
+  const limitNum = pageParams.limit;
+  const offset = pageParams.offset;
 
   const conditions = [isNull(leadsTable.deletedAt)];
   if (season) conditions.push(eq(leadsTable.season, season));

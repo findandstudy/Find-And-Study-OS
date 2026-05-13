@@ -119,11 +119,12 @@ const AgentSubAgents = lazyRetry(() => import("@/pages/agent/SubAgents"));
 const AgentMessages = lazyRetry(() => import("@/pages/agent/Messages"));
 const AgentTeam = lazyRetry(() => import("@/pages/agent/Team"));
 
-const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
-const ADMIN_ROLES = ["super_admin", "admin", "manager"];
-const WEBSITE_ADMIN_ROLES = ["super_admin", "admin"];
-const STUDENT_ROLES = ["student"];
-const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
+import { STAFF_ROLES as _SHARED_STAFF_ROLES, ADMIN_ROLES as _SHARED_ADMIN_ROLES, AGENT_ROLES as _SHARED_AGENT_ROLES, STUDENT_ROLES as _SHARED_STUDENT_ROLES } from "@workspace/roles";
+const STAFF_ROLES = _SHARED_STAFF_ROLES;
+const ADMIN_ROLES = _SHARED_ADMIN_ROLES;
+const WEBSITE_ADMIN_ROLES: string[] = ["super_admin", "admin"];
+const STUDENT_ROLES = _SHARED_STUDENT_ROLES;
+const AGENT_ROLES = _SHARED_AGENT_ROLES;
 
 function ShellLoader() {
   return <div className="flex-1 min-h-0 bg-secondary/20" />;

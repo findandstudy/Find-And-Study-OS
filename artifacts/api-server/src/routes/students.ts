@@ -13,6 +13,7 @@ import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
+import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import bcrypt from "bcryptjs";
 import { getCurrentSeason } from "../lib/season";
 
@@ -119,10 +120,11 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
 
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { agentId, status, search, season, page = "1", limit = "20", originType: originFilter } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
-  const offset = (pageNum - 1) * limitNum;
+  const { agentId, status, search, season, originType: originFilter } = req.query as Record<string, string>;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "large" });
+  const pageNum = pageParams.page;
+  const limitNum = pageParams.limit;
+  const offset = pageParams.offset;
 
   const conditions = [isNull(studentsTable.deletedAt)];
 

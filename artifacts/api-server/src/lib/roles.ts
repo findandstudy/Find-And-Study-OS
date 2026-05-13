@@ -1,14 +1,22 @@
-export const ADMIN_ROLES = ["super_admin", "admin", "manager"] as const;
-export const MANAGER_ROLES = ["super_admin", "admin", "manager"] as const;
-export const STAFF_ROLES = [
-  "super_admin", "admin", "manager",
-  "staff", "consultant", "editor", "accountant",
-] as const;
-export const FINANCE_ROLES = ["super_admin", "admin", "accountant"] as const;
-export const CONTENT_ROLES = ["super_admin", "admin", "manager", "editor"] as const;
-export const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"] as const;
-export const STUDENT_ROLES = ["student"] as const;
-
-export function isAgentRole(role: string): role is (typeof AGENT_ROLES)[number] {
-  return (AGENT_ROLES as readonly string[]).includes(role);
-}
+/**
+ * Backwards-compatible thin re-export of the shared `@workspace/roles`
+ * package. Existing route imports (`import { STAFF_ROLES } from
+ * "../lib/roles"`) keep working; new code should import from
+ * `@workspace/roles` directly.
+ */
+export {
+  ADMIN_ROLES,
+  MANAGER_ROLES,
+  STAFF_ROLES,
+  FINANCE_ROLES,
+  CONTENT_ROLES,
+  AGENT_ROLES,
+  STUDENT_ROLES,
+  isAgentRole,
+  isStaffRole,
+  isAdminRole,
+  isManagerRole,
+  isFinanceRole,
+  isContentRole,
+  isStudentRole,
+} from "@workspace/roles";

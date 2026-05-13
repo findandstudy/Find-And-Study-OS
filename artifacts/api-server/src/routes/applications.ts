@@ -13,6 +13,7 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
 import { findActiveCampaign, applyCampaignToFees } from "../lib/campaigns";
+import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { getCurrentSeason } from "../lib/season";
 
@@ -71,10 +72,11 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
 }
 
 router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const { studentId, agentId, stage, season, page = "1", limit = "20", originType: originFilter } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
-  const offset = (pageNum - 1) * limitNum;
+  const { studentId, agentId, stage, season, originType: originFilter } = req.query as Record<string, string>;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "large" });
+  const pageNum = pageParams.page;
+  const limitNum = pageParams.limit;
+  const offset = pageParams.offset;
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);

@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { formatDate } from "@workspace/i18n";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,10 @@ import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FI
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-const ADMIN_ROLES = ["super_admin", "admin", "manager"];
-const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
-const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
+import { ADMIN_ROLES as _A, STAFF_ROLES as _S, AGENT_ROLES as _AG } from "@workspace/roles";
+const ADMIN_ROLES = _A;
+const STAFF_ROLES = _S;
+const AGENT_ROLES = _AG;
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -313,7 +315,7 @@ function StageSection({
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
                           <Calendar className="w-3 h-3" />
-                          Son geçerlilik: {validUntil.toLocaleDateString("tr-TR")}
+                          Son geçerlilik: {formatDate(validUntil, "tr", "dateShort")}
                         </Badge>
                         {daysLeft !== null && (
                           <Badge

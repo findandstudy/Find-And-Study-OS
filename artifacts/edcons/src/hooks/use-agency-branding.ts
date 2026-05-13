@@ -4,7 +4,8 @@ import { customFetch } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { setActiveAgencyBusinessName } from "@/lib/agency-branding-store";
 
-const AGENT_ROLES = new Set(["agent", "sub_agent", "agent_staff"]);
+import { AGENT_ROLES as _AGENT_ROLES_ARR } from "@workspace/roles";
+const AGENT_ROLES = new Set<string>(_AGENT_ROLES_ARR);
 const STATIC_FAVICON = "/favicon.svg";
 const STATIC_TITLE = "Find And Study";
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");

@@ -38,9 +38,10 @@ const FALLBACK_LABELS: Record<string, string> = {
   visa_reject: "Visa Reject",
 };
 
-const ADMIN_ROLES = ["super_admin", "admin", "manager"];
-const STAFF_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"];
-const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
+import { ADMIN_ROLES as _A, STAFF_ROLES as _S, AGENT_ROLES as _AG } from "@workspace/roles";
+const ADMIN_ROLES = _A;
+const STAFF_ROLES = _S;
+const AGENT_ROLES = _AG;
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

@@ -1,4 +1,5 @@
 import { useGetOverviewStats } from "@workspace/api-client-react";
+import { formatDate } from "@workspace/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
@@ -406,7 +407,7 @@ export default function AdminDashboard() {
                       </div>
                       {fu.leadName && <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>}
                       <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                        {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {formatDate(fu.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                         {" "}
                         {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                         {isOverdue(fu.scheduledAt) && " — Overdue"}

@@ -36,13 +36,6 @@ export interface SessionUser {
   isActive: boolean;
   emailVerified: boolean;
   phone?: string | null;
-  startDate?: string | null;
-  homeAddress?: string | null;
-  passportNumber?: string | null;
-  contractUrl?: string | null;
-  passportUrl?: string | null;
-  emergencyContactName?: string | null;
-  emergencyContactPhone?: string | null;
   agentStaffPermissions?: string[];
 }
 

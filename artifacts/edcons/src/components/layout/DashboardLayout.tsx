@@ -8,6 +8,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearAuthCache } from "@/lib/auth-cache";
 import { customFetch } from "@workspace/api-client-react";
+import { FINANCE_ROLES } from "@workspace/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   SidebarProvider, 
@@ -79,8 +80,7 @@ type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; grou
 type TFunc = (key: string, params?: Record<string, string | number>) => string;
 
 function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { groups: { label: string; items: MenuItem[] }[] } {
-  const FINANCE_ROLES = ['super_admin', 'admin', 'accountant'];
-  const showFinance = FINANCE_ROLES.includes(role);
+  const showFinance = (FINANCE_ROLES as readonly string[]).includes(role);
 
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
     const opsItems: MenuItem[] = [

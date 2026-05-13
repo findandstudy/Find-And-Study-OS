@@ -43,13 +43,6 @@ function buildSessionUser(dbUser: typeof usersTable.$inferSelect): SessionUser {
     isActive: dbUser.isActive,
     emailVerified: dbUser.emailVerified,
     phone: dbUser.phone,
-    startDate: dbUser.startDate,
-    homeAddress: dbUser.homeAddress,
-    passportNumber: dbUser.passportNumber,
-    contractUrl: dbUser.contractUrl,
-    passportUrl: dbUser.passportUrl,
-    emergencyContactName: dbUser.emergencyContactName,
-    emergencyContactPhone: dbUser.emergencyContactPhone,
   };
   if (dbUser.role === "agent_staff" && dbUser.agentStaffPermissions) {
     result.agentStaffPermissions = dbUser.agentStaffPermissions as string[];

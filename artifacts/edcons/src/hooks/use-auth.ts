@@ -3,7 +3,7 @@ import { useEffect, useMemo, startTransition } from "react";
 import { useLocation } from "wouter";
 import { getAuthCache, getStickyUser, setStickyUser } from "@/lib/auth-cache";
 
-export function useAuth(requireAuth = false, allowedRoles?: string[]) {
+export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
   const initialUser = useMemo(() => getStickyUser() ?? getAuthCache(), []);
 
   const { data: liveUser, isLoading, error } = useGetMe({

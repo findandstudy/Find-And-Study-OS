@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { formatDate } from "@workspace/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ChevronDown,
@@ -175,7 +176,7 @@ function fmtDate(v: any): string {
   if (v === null || v === undefined || v === "") return "—";
   const d = new Date(v);
   if (isNaN(d.getTime())) return String(v);
-  return `${d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })} ${d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
+  return `${formatDate(d, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })} ${formatDate(d, "tr", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function isDiff(v: any): v is { from?: any; to?: any; fromName?: string; toName?: string } {
@@ -452,7 +453,7 @@ export function AuditLogSection({ resource, resourceId }: Props) {
                             </span>
                           </div>
                           <span className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(log.createdAt).toLocaleString("tr-TR")}>
-                            {new Date(log.createdAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            {formatDate(log.createdAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                             {" "}
                             {new Date(log.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                             {rel && <span className="text-muted-foreground/60"> · {rel}</span>}

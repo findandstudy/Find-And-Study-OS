@@ -28,7 +28,8 @@ interface Popup {
   expiresAt: string | null;
 }
 
-const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
+import { AGENT_ROLES as _AG } from "@workspace/roles";
+const AGENT_ROLES = _AG;
 const SESSION_KEY = "popups_seen_session";
 const LOGIN_KEY = "popups_seen_login";
 

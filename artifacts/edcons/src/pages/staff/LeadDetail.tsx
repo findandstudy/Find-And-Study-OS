@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
+import { formatDate } from "@workspace/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -611,7 +612,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                           <span className={`text-xs ${
                             fu.completed ? "text-muted-foreground" : isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"
                           }`}>
-                            {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            {formatDate(fu.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                             {" "}
                             {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                             {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
@@ -624,14 +625,14 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                           )}
                           {fu.createdAt && (
                             <span className="text-xs text-muted-foreground/50">
-                              {new Date(fu.createdAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              {formatDate(fu.createdAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                               {" "}
                               {new Date(fu.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                             </span>
                           )}
                           {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
                             <span className="text-xs text-amber-500/70">
-                              (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {new Date(fu.updatedAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                               {" "}
                               {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
                             </span>
@@ -886,7 +887,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <div>
                     <p className="text-sm font-medium">{next.title}</p>
                     <p className={`text-xs mt-1 ${isOverdue(next.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                      {new Date(next.scheduledAt).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      {formatDate(next.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
                       {" "}
                       {new Date(next.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                       {isOverdue(next.scheduledAt) && " — Overdue!"}
@@ -1285,7 +1286,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
                 <td className="px-4 py-3 font-medium">{doc.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{LEAD_DOC_TYPE_LABELS[doc.type] || doc.type}</td>
                 <td className="px-4 py-3 text-muted-foreground">{formatBytes(doc.sizeBytes)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{new Date(doc.createdAt).toLocaleDateString("tr-TR")}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatDate(doc.createdAt, "tr", "dateShort")}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
                     {canPreview && (

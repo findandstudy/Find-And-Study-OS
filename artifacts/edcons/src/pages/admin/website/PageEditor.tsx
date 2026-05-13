@@ -22,36 +22,19 @@ import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { useLocation } from "wouter";
 import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type BlockFieldDef } from "@/lib/website/blockTypes";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
+import DOMPurify from "isomorphic-dompurify";
 
-const ALLOWED_TAGS = new Set(["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"]);
-const ALLOWED_ATTRS = new Set(["href", "target", "rel", "src", "alt", "class", "style"]);
+const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
+const ALLOWED_ATTRS = ["href", "target", "rel", "src", "alt", "class", "style"];
 
 function sanitizeHtml(html: string): string {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  function clean(node: Node): void {
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        const el = child as Element;
-        if (!ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
-          el.replaceWith(...Array.from(el.childNodes));
-          continue;
-        }
-        const attrs = Array.from(el.attributes);
-        for (const attr of attrs) {
-          if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
-            el.removeAttribute(attr.name);
-          }
-        }
-        if (el.tagName.toLowerCase() === "a") {
-          el.setAttribute("rel", "noopener noreferrer");
-        }
-        clean(el);
-      }
-    }
-  }
-  clean(doc.body);
-  return doc.body.innerHTML;
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR: ALLOWED_ATTRS,
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#)/i,
+    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur"],
+    ADD_ATTR: ["target"],
+  });
 }
 
 interface WebsitePage {

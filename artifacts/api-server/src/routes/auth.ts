@@ -21,6 +21,12 @@ import {
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { PasswordSchema } from "../lib/passwordPolicy";
 import { logAudit } from "../lib/auth";
+import { validate, getValidated } from "../middlewares/validate";
+
+const loginBodySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1),
+});
 
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -64,13 +70,6 @@ function buildSessionUser(user: Record<string, unknown>): SessionUser {
     isActive: user.isActive as boolean,
     emailVerified: user.emailVerified as boolean,
     phone: user.phone as string | null,
-    startDate: user.startDate as string | null,
-    homeAddress: user.homeAddress as string | null,
-    passportNumber: user.passportNumber as string | null,
-    contractUrl: user.contractUrl as string | null,
-    passportUrl: user.passportUrl as string | null,
-    emergencyContactName: user.emergencyContactName as string | null,
-    emergencyContactPhone: user.emergencyContactPhone as string | null,
   };
   if (user.role === "agent_staff" && user.agentStaffPermissions) {
     result.agentStaffPermissions = user.agentStaffPermissions as string[];
@@ -138,15 +137,9 @@ router.get("/auth/me", async (req: Request, res: Response) => {
   res.json({ ...userData, isImpersonating, originalUserId });
 });
 
-router.post("/auth/login", async (req: Request, res: Response) => {
+router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body || {};
-    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
-      res.status(400).json({ error: "Email and password are required" });
-      return;
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
+    const { email: normalizedEmail, password } = getValidated<{ body: typeof loginBodySchema }>(req).body;
     const ip = req.ip || "unknown";
     const ipKey = `ip:${ip}`;
     const emailKey = `email:${normalizedEmail}`;

@@ -32,7 +32,8 @@ function fixStorageUrl(url: string | null | undefined): string | null {
   return url.replace(/\/api\/storage\/objects\/objects\//, "/api/storage/objects/");
 }
 
-const MANAGER_ROLES = ["super_admin", "admin", "manager"];
+import { MANAGER_ROLES as _MANAGER_ROLES } from "@workspace/roles";
+const MANAGER_ROLES = _MANAGER_ROLES;
 const CATEGORIES = ["Big", "Medium", "Small"];
 
 const PHONE_CODES = [
