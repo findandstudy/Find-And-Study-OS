@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, Save } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, Save, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -2110,54 +2110,18 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
   const selectedSet = new Set(order.filter(dt => (docReqs[dt] ?? "none") !== "none"));
   const availableKeys = PROGRAM_DOC_TYPE_KEYS.filter(dt => !selectedSet.has(dt) && matchesSearch(dt));
 
-  function renderRow(dt: string, isSelected: boolean, idx: number, total: number) {
-    const v = docReqs[dt] ?? "none";
-    return (
-      <tr key={dt} className="hover:bg-muted/30">
-        {isSelected && (
-          <td className="pl-2 py-1.5 w-[60px]">
-            <div className="flex flex-col gap-0.5">
-              <button
-                type="button"
-                onClick={() => move(dt, -1)}
-                disabled={idx === 0}
-                className="h-4 w-5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                title="Move up"
-              ><ChevronUp className="h-3 w-3" /></button>
-              <button
-                type="button"
-                onClick={() => move(dt, 1)}
-                disabled={idx === total - 1}
-                className="h-4 w-5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                title="Move down"
-              ><ChevronDown className="h-3 w-3" /></button>
-            </div>
-          </td>
-        )}
-        <td className="px-2 py-1.5 break-words">
-          {isSelected && <span className="inline-block w-5 text-muted-foreground tabular-nums">{idx + 1}.</span>}
-          {DEGREE_DOC_TYPE_LABELS[dt] ?? dt}
-        </td>
-        <td className="px-2 py-1.5 w-[210px] text-right whitespace-nowrap">
-          <div className="inline-flex rounded-md border overflow-hidden">
-            {(["none", "optional", "mandatory"] as const).map(opt => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setLevel(dt, opt)}
-                className={`px-2 py-0.5 text-[11px] transition-colors ${
-                  v === opt
-                    ? opt === "mandatory" ? "bg-red-600 text-white"
-                      : opt === "optional" ? "bg-blue-600 text-white"
-                      : "bg-muted text-foreground"
-                    : "bg-background hover:bg-muted/50 text-muted-foreground"
-                }`}
-              >{opt === "none" ? "None" : opt === "optional" ? "Optional" : "Mandatory"}</button>
-            ))}
-          </div>
-        </td>
-      </tr>
-    );
+  const [dragKey, setDragKey] = useState<string | null>(null);
+
+  function moveTo(dt: string, targetDt: string) {
+    setOrder(prev => {
+      const from = prev.indexOf(dt);
+      const to = prev.indexOf(targetDt);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...prev];
+      const [removed] = next.splice(from, 1);
+      next.splice(to, 0, removed);
+      return next;
+    });
   }
 
   return (
@@ -2166,17 +2130,16 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
         <DialogHeader>
           <DialogTitle>Required Documents — {option.value}</DialogTitle>
           <p className="text-xs text-muted-foreground">
-            These documents will be requested in the Add Student form when a student picks this Application Level.
-            The order below is the order they appear in the form. Program-level requirements override these once a specific program is selected.
+            Set documents to <strong>Optional</strong> or <strong>Mandatory</strong> to add them. Drag the handle or use the arrows to reorder — that order is exactly how the documents appear in the Add Student form.
           </p>
         </DialogHeader>
         {isLoading ? (
           <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : (
-          <div className="flex-1 overflow-hidden flex flex-col gap-2">
+          <div className="flex-1 overflow-hidden flex flex-col gap-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">
-                {selectedSet.size} selected · {Object.values(docReqs).filter(v => v === "mandatory").length} mandatory
+                <strong className="text-foreground">{selectedSet.size}</strong> selected · <strong className="text-foreground">{Object.values(docReqs).filter(v => v === "mandatory").length}</strong> mandatory
               </span>
             </div>
             <Input
@@ -2185,30 +2148,113 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
               placeholder="Search documents…"
               className="h-8 text-xs"
             />
-            <div className="flex-1 overflow-y-auto rounded border bg-background">
-              <table className="w-full text-xs">
-                <tbody className="divide-y">
-                  {selectedKeys.length > 0 && (
-                    <tr className="bg-muted/40">
-                      <td colSpan={3} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Selected — drag order shown in form
-                      </td>
-                    </tr>
-                  )}
-                  {selectedKeys.map((dt, i) => renderRow(dt, true, i, selectedKeys.length))}
-                  {availableKeys.length > 0 && (
-                    <tr className="bg-muted/40">
-                      <td colSpan={3} className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Available
-                      </td>
-                    </tr>
-                  )}
-                  {availableKeys.map(dt => renderRow(dt, false, 0, 0))}
-                  {selectedKeys.length === 0 && availableKeys.length === 0 && (
-                    <tr><td className="px-2 py-3 text-center text-muted-foreground">No documents match "{docSearch}"</td></tr>
-                  )}
-                </tbody>
-              </table>
+
+            <div className="flex-1 overflow-y-auto flex flex-col gap-3">
+              {/* Selected (ordered) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                    In Form — Order ({selectedKeys.length})
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Drag <GripVertical className="inline h-3 w-3" /> or use arrows</p>
+                </div>
+                <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 min-h-[60px] divide-y divide-border">
+                  {selectedKeys.length === 0 ? (
+                    <div className="text-[11px] text-muted-foreground text-center py-4 px-3">
+                      No documents added yet. Mark a document below as <span className="text-blue-600 font-semibold">Optional</span> or <span className="text-red-600 font-semibold">Mandatory</span> to add it here.
+                    </div>
+                  ) : selectedKeys.map((dt, i) => {
+                    const v = docReqs[dt] ?? "none";
+                    return (
+                      <div
+                        key={dt}
+                        draggable
+                        onDragStart={() => setDragKey(dt)}
+                        onDragOver={(e) => { e.preventDefault(); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragKey && dragKey !== dt) moveTo(dragKey, dt);
+                          setDragKey(null);
+                        }}
+                        onDragEnd={() => setDragKey(null)}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-1.5 bg-background hover:bg-muted/30 transition-colors",
+                          dragKey === dt && "opacity-40"
+                        )}
+                      >
+                        <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
+                        <span className="inline-block w-6 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">{i + 1}.</span>
+                        <span className="flex-1 text-xs break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => move(dt, -1)}
+                            disabled={i === 0}
+                            className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
+                            title="Move up"
+                          ><ArrowUp className="h-3 w-3" /></button>
+                          <button
+                            type="button"
+                            onClick={() => move(dt, 1)}
+                            disabled={i === selectedKeys.length - 1}
+                            className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
+                            title="Move down"
+                          ><ArrowDown className="h-3 w-3" /></button>
+                        </div>
+                        <div className="inline-flex rounded-md border overflow-hidden shrink-0">
+                          {(["none", "optional", "mandatory"] as const).map(opt => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setLevel(dt, opt)}
+                              className={cn(
+                                "px-2 py-0.5 text-[11px] transition-colors",
+                                v === opt
+                                  ? opt === "mandatory" ? "bg-red-600 text-white"
+                                    : opt === "optional" ? "bg-blue-600 text-white"
+                                    : "bg-muted text-foreground"
+                                  : "bg-background hover:bg-muted/50 text-muted-foreground"
+                              )}
+                            >{opt === "none" ? "Remove" : opt === "optional" ? "Optional" : "Mandatory"}</button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Available */}
+              {availableKeys.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Available ({availableKeys.length})
+                  </p>
+                  <div className="rounded-lg border bg-background divide-y divide-border">
+                    {availableKeys.map(dt => (
+                      <div key={dt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/30">
+                        <span className="flex-1 text-xs text-muted-foreground break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
+                        <div className="inline-flex rounded-md border overflow-hidden shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setLevel(dt, "optional")}
+                            className="px-2 py-0.5 text-[11px] bg-background hover:bg-blue-50 hover:text-blue-700 text-muted-foreground transition-colors"
+                          >+ Optional</button>
+                          <button
+                            type="button"
+                            onClick={() => setLevel(dt, "mandatory")}
+                            className="px-2 py-0.5 text-[11px] bg-background hover:bg-red-50 hover:text-red-700 text-muted-foreground transition-colors border-l"
+                          >+ Mandatory</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedKeys.length === 0 && availableKeys.length === 0 && (
+                <div className="text-center text-muted-foreground py-6 text-xs">No documents match "{docSearch}"</div>
+              )}
             </div>
           </div>
         )}
