@@ -1,6 +1,5 @@
 packages:
   "framer-motion": "For page transitions and smooth micro-interactions"
-  "@hello-pangea/dnd": "For the drag-and-drop Lead Kanban board"
   "recharts": "For staff dashboard analytics and finance charts"
   "date-fns": "For human-readable date formatting"
   "react-hook-form": "For robust form state management"

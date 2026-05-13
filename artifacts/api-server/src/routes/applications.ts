@@ -1020,13 +1020,15 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
   if (action === "delete") {
     const result = await db.update(applicationsTable).set({ deletedAt: new Date() }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
-    for (const id of numericIds) await logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
+    for (const id of numericIds) logAudit(req.user!.id, "delete_application", "application", id, {}, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(applicationsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_applications", "application", null, { ids: numericIds, assignedToId }, req.ip);
   } else if (action === "move" && stage) {
     const apps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    // Hoisted out of the per-app loop: one DB roundtrip vs N when bulk-moving.
+    const fallbackSeason = await getCurrentSeason();
     for (const app of apps) {
       await db.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
       const [commStatus, sfStatus] = await Promise.all([
@@ -1047,7 +1049,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
         await db.insert(commissionsTable).values({
           applicationId: app.id, studentId: app.studentId, agentId: agentComm.agentId,
           studentName: sName, universityName: app.universityName || null,
-          programName: app.programName || null, season: app.season || (await getCurrentSeason()),
+          programName: app.programName || null, season: app.season || fallbackSeason,
           currency: app.currency || "USD", status: commStatus,
           programFee: baseFee ? String(baseFee) : null,
           universityCommissionRate: app.commissionRate ? String(app.commissionRate) : null,
@@ -1086,7 +1088,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
         await db.insert(serviceFeesTable).values({
           applicationId: app.id, studentId: app.studentId, agentId: app.agentId,
           studentName: sName2, universityName: app.universityName || null,
-          season: app.season || (await getCurrentSeason()),
+          season: app.season || fallbackSeason,
           currency: app.currency || "USD",
           totalAmount: sfAmt,
           firstInstallmentAmount: sfHalf, secondInstallmentAmount: sfHalf,

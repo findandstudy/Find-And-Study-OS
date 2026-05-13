@@ -101,11 +101,55 @@ export function NotificationCenter() {
     }
   }, []);
 
+  // Track `open` via ref so the SSE handler always reads the latest value
+  // without re-subscribing the EventSource every time the panel toggles.
+  const openRef = useRef(open);
+  useEffect(() => { openRef.current = open; }, [open]);
+
+  // Push-based updates via SSE. Initial fetch + window-focus refetch are kept
+  // as belt-and-braces for the case where the EventSource silently drops.
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 15000);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+
+    const onFocus = () => fetchUnreadCount();
+    window.addEventListener("focus", onFocus);
+
+    let es: EventSource | null = null;
+    let reconnectTimer: number | undefined;
+
+    const connect = () => {
+      try {
+        es = new EventSource("/api/notifications/events", { withCredentials: true });
+        es.addEventListener("notification", (ev) => {
+          fetchUnreadCount();
+          if (openRef.current) fetchNotifications();
+          // Surface a toast so the user sees the new notification even when
+          // the bell panel is closed. Throttled by the toast hook itself.
+          try {
+            const data = JSON.parse((ev as MessageEvent).data || "{}") as { title?: string; type?: string };
+            if (data.title) {
+              toast({ title: data.title });
+            }
+          } catch { /* ignore malformed payload */ }
+        });
+        es.onerror = () => {
+          try { es?.close(); } catch { /* ignore */ }
+          es = null;
+          reconnectTimer = window.setTimeout(connect, 5000);
+        };
+      } catch {
+        reconnectTimer = window.setTimeout(connect, 5000);
+      }
+    };
+    connect();
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      try { es?.close(); } catch { /* ignore */ }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUnreadCount, fetchNotifications]);
 
   useEffect(() => {
     if (open) fetchNotifications();

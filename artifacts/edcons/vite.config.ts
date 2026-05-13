@@ -5,6 +5,7 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const isBuild = process.argv.includes("build");
+const isProd = process.env.NODE_ENV === "production";
 
 const rawPort = process.env.PORT;
 const port = rawPort ? Number(rawPort) : 3000;
@@ -64,18 +65,31 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
   root: path.resolve(import.meta.dirname),
+  esbuild: isProd
+    ? { drop: ["console", "debugger"] }
+    : undefined,
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     sourcemap: "hidden",
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor": [
-            "react",
-            "react-dom",
-            "react/jsx-runtime",
-          ],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/") || id.includes("react/jsx-runtime")) {
+            return "vendor-react";
+          }
+          if (id.includes("@tanstack/react-query")) return "vendor-react";
+          if (id.includes("@radix-ui/")) return "vendor-radix";
+          if (id.includes("/recharts/") || id.includes("/d3-") || id.includes("/victory-vendor/")) {
+            return "vendor-charts";
+          }
+          if (id.includes("/jspdf") || id.includes("/pdf-lib/")) return "vendor-pdf";
+          if (id.includes("/xlsx/")) return "vendor-excel";
+          if (id.includes("/framer-motion/")) return "vendor-motion";
+          if (id.includes("@dnd-kit/") || id.includes("@hello-pangea/dnd")) return "vendor-dnd";
+          if (id.includes("/lucide-react/") || id.includes("/react-icons/")) return "vendor-icons";
+          return undefined;
         },
       },
     },

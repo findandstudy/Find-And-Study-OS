@@ -479,10 +479,7 @@ function Router() {
 
   const branch = isStaffAdminPath ? "staff" : isStudentPath ? "student" : isAgentPath ? "agent" : "public";
   if (prevBranch.current !== branch) {
-    console.log("[Router] branch change:", prevBranch.current, "→", branch, "location=", location);
     prevBranch.current = branch;
-  } else {
-    console.log("[Router] re-render, branch=", branch, "location=", location);
   }
 
   if (isStaffAdminPath) {

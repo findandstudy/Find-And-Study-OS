@@ -1,0 +1,90 @@
+import { EventEmitter } from "events";
+import type { PoolClient } from "pg";
+import { pool } from "@workspace/db";
+
+export interface NotificationBusEvent {
+  userId: number;
+  notificationId?: number;
+  type: string;
+  title: string;
+}
+
+const CHANNEL = "notification_events";
+const RECONNECT_DELAY_MS = 1000;
+
+const localEmitter = new EventEmitter();
+localEmitter.setMaxListeners(0);
+
+let listenClient: PoolClient | null = null;
+let connecting: Promise<void> | null = null;
+
+function scheduleReconnect(): void {
+  setTimeout(() => {
+    connectListenClient().catch((err) => {
+      console.error("[notificationBus] reconnect failed, will retry", err);
+      scheduleReconnect();
+    });
+  }, RECONNECT_DELAY_MS);
+}
+
+async function connectListenClient(): Promise<void> {
+  if (listenClient) return;
+  if (connecting) return connecting;
+  connecting = (async () => {
+    try {
+      const client = await pool.connect();
+      const handleNotification = (msg: { channel: string; payload?: string }) => {
+        if (msg.channel !== CHANNEL || !msg.payload) return;
+        try {
+          const event = JSON.parse(msg.payload) as NotificationBusEvent;
+          localEmitter.emit("event", event);
+        } catch (err) {
+          console.error("[notificationBus] failed to parse notification", err);
+        }
+      };
+      const handleError = (err: Error) => {
+        console.error("[notificationBus] LISTEN client error, reconnecting", err);
+        try {
+          client.removeListener("notification", handleNotification);
+          client.removeListener("error", handleError);
+          client.release(true);
+        } catch {
+          // ignore
+        }
+        listenClient = null;
+        scheduleReconnect();
+      };
+      client.on("notification", handleNotification);
+      client.on("error", handleError);
+      await client.query(`LISTEN ${CHANNEL}`);
+      listenClient = client;
+    } finally {
+      connecting = null;
+    }
+  })();
+  return connecting;
+}
+
+void connectListenClient().catch((err) => {
+  console.error("[notificationBus] initial LISTEN failed", err);
+});
+
+export const notificationBus = {
+  subscribe(handler: (event: NotificationBusEvent) => void): () => void {
+    void connectListenClient().catch(() => {
+      // already logged
+    });
+    localEmitter.on("event", handler);
+    return () => {
+      localEmitter.off("event", handler);
+    };
+  },
+  publish(event: NotificationBusEvent): void {
+    const payload = JSON.stringify(event);
+    pool
+      .query("SELECT pg_notify($1, $2)", [CHANNEL, payload])
+      .catch((err: unknown) => {
+        console.error("[notificationBus] publish failed", err);
+      });
+  },
+};

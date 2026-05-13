@@ -485,6 +485,55 @@ async function seedClaudeIntegration() {
     console.error("[migrate] contract-signing tables:", err);
   }
 
+  // Step 2b3: Performance quick-wins (Task #141) — pg_trgm trigram GIN
+  // indexes for ILIKE '%term%' searches, partial index for unread
+  // notifications, and the students.has_photo denormalized flag with
+  // one-time backfill. All steps are idempotent (IF NOT EXISTS).
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+
+    // Trigram indexes — Postgres can use these for ILIKE '%term%' planning,
+    // turning O(n) sequential scans on 50K+ rows into index lookups.
+    await pool.query(`CREATE INDEX IF NOT EXISTS students_first_name_trgm_idx ON students USING GIN (first_name gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS students_last_name_trgm_idx ON students USING GIN (last_name gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS students_email_trgm_idx ON students USING GIN (email gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS leads_first_name_trgm_idx ON leads USING GIN (first_name gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS leads_last_name_trgm_idx ON leads USING GIN (last_name gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS leads_email_trgm_idx ON leads USING GIN (email gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS programs_name_trgm_idx ON programs USING GIN (name gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS universities_name_trgm_idx ON universities USING GIN (name gin_trgm_ops)`);
+
+    // Partial index — every notification fetch reads only is_read=false rows;
+    // a partial index is small (only unread rows) and dramatically speeds
+    // up the unread-count queries used by the badge / SSE flow.
+    await pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_unread_idx ON notifications (user_id) WHERE is_read = false`);
+
+    // students.has_photo: denormalize the photo-presence check so the
+    // listing query no longer needs an extra SELECT against documents.
+    await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS has_photo BOOLEAN NOT NULL DEFAULT FALSE`);
+    // One-time backfill (idempotent via system_flags so it only runs once
+    // per deployment lifetime — safe to re-execute, but skipped after the
+    // first successful run to avoid scanning the documents table on boot).
+    const flagRes = await pool.query(
+      `INSERT INTO system_flags (key) VALUES ('students_has_photo_backfilled') ON CONFLICT DO NOTHING RETURNING key`
+    );
+    if (flagRes.rows.length > 0) {
+      await pool.query(`
+        UPDATE students s
+        SET has_photo = TRUE
+        WHERE EXISTS (
+          SELECT 1 FROM documents d
+          WHERE d.student_id = s.id
+            AND d.type IN ('photo', 'photograph')
+            AND d.deleted_at IS NULL
+        ) AND has_photo = FALSE
+      `);
+      console.log("[migrate] students.has_photo backfilled from documents");
+    }
+  } catch (err) {
+    console.error("[migrate] perf quick-win indexes:", err);
+  }
+
   // Step 2c: Idempotent migrations for the Branch system.
   try {
     await pool.query(`

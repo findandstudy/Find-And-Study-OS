@@ -203,7 +203,9 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     try {
       const photoMime = mimeType || "image/jpeg";
       const photoUrl = `data:${photoMime};base64,${fileData}`;
-      await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, doc.studentId));
+      // Keep students.has_photo denormalized so the listing query no longer
+      // needs an extra SELECT against documents per page load.
+      await db.update(studentsTable).set({ photoUrl, hasPhoto: true }).where(eq(studentsTable.id, doc.studentId));
     } catch (err) {
       console.error("[DOCUMENTS] Failed to set student photo from document:", err);
     }
@@ -327,6 +329,28 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
   const activeIds = docs.map(d => d.id);
   await db.update(documentsTable).set({ deletedAt: new Date() }).where(inArray(documentsTable.id, activeIds));
   await logAudit(req.user!.id, "bulk_delete_documents", "document", null as any, { count: docs.length, ids: numericIds }, req.ip);
+
+  // Resync students.has_photo for any students whose photo doc(s) were just
+  // soft-deleted in this batch.
+  const photoStudentIds = Array.from(new Set(
+    docs.filter(d => d.studentId && (d.type === "photo" || d.type === "photograph")).map(d => d.studentId!) as number[]
+  ));
+  if (photoStudentIds.length > 0) {
+    try {
+      const stillHave = await db.select({ studentId: documentsTable.studentId }).from(documentsTable).where(and(
+        inArray(documentsTable.studentId, photoStudentIds),
+        inArray(documentsTable.type, ["photo", "photograph"]),
+        isNull(documentsTable.deletedAt),
+      ));
+      const stillSet = new Set(stillHave.map(r => r.studentId!));
+      const toClear = photoStudentIds.filter(sid => !stillSet.has(sid));
+      if (toClear.length > 0) {
+        await db.update(studentsTable).set({ hasPhoto: false }).where(inArray(studentsTable.id, toClear));
+      }
+    } catch (err) {
+      console.error("[DOCUMENTS] Failed to bulk-sync students.has_photo:", err);
+    }
+  }
   res.json({ deleted: docs.length });
 });
 
@@ -348,6 +372,24 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
 
   await db.update(documentsTable).set({ deletedAt: new Date() }).where(eq(documentsTable.id, id));
   await logAudit(req.user!.id, "delete_document", "document", id, { name: doc.name }, req.ip);
+
+  // Keep students.has_photo in sync when the deleted doc was the student's
+  // photo: only flip to false when no other active photo doc remains.
+  // Both 'photo' and 'photograph' type variants count as a student photo.
+  if (doc.studentId && (doc.type === "photo" || doc.type === "photograph")) {
+    try {
+      const remaining = await db.select({ id: documentsTable.id }).from(documentsTable).where(and(
+        eq(documentsTable.studentId, doc.studentId),
+        inArray(documentsTable.type, ["photo", "photograph"]),
+        isNull(documentsTable.deletedAt),
+      )).limit(1);
+      if (remaining.length === 0) {
+        await db.update(studentsTable).set({ hasPhoto: false }).where(eq(studentsTable.id, doc.studentId));
+      }
+    } catch (err) {
+      console.error("[DOCUMENTS] Failed to sync students.has_photo on delete:", err);
+    }
+  }
   res.sendStatus(204);
 });
 

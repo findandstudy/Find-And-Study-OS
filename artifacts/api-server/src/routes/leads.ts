@@ -530,7 +530,7 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
   if (action === "delete") {
     const result = await db.delete(leadsTable).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
-    for (const id of numericIds) await logAudit(req.user!.id, "delete_lead", "lead", id, {}, req.ip);
+    for (const id of numericIds) logAudit(req.user!.id, "delete_lead", "lead", id, {}, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const result = await db.update(leadsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;

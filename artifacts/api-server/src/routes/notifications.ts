@@ -12,8 +12,49 @@ import {
   NOTIFICATION_EVENTS,
   NOTIFICATION_CHANNELS,
 } from "@workspace/db";
+import { notificationBus, type NotificationBusEvent } from "../lib/notificationBus";
 
 const router: IRouter = Router();
+
+/**
+ * Live notification stream (SSE). Replaces the previous 15 s polling loop in
+ * the browser NotificationCenter — events are pushed immediately when
+ * dispatchNotification() inserts a row. Heartbeat every 25 s keeps idle
+ * proxies from closing the connection.
+ */
+router.get("/notifications/events", requireAuth, (req, res): void => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof (res as { flushHeaders?: () => void }).flushHeaders === "function") {
+    (res as { flushHeaders: () => void }).flushHeaders();
+  }
+  res.write(`retry: 5000\n\n`);
+
+  const userId = req.user!.id;
+
+  const ping = setInterval(() => {
+    try { res.write(`event: heartbeat\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`); } catch { /* ignore */ }
+  }, 25000);
+
+  const handler = (event: NotificationBusEvent) => {
+    if (event.userId !== userId) return;
+    try {
+      res.write(`event: notification\n`);
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch { /* socket may be closed */ }
+  };
+  const unsubscribe = notificationBus.subscribe(handler);
+
+  const cleanup = () => {
+    clearInterval(ping);
+    unsubscribe();
+    try { res.end(); } catch { /* ignore */ }
+  };
+  req.on("close", cleanup);
+  req.on("error", cleanup);
+});
 
 async function seedNotificationRules() {
   const existing = await db.select().from(notificationRulesTable);

@@ -187,20 +187,10 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .offset(offset)
     .orderBy(desc(studentsTable.updatedAt), desc(studentsTable.createdAt));
 
-  const flatRows = rows.map(r => ({ ...r.student, agentName: r.agentName || null }));
-  const studentIds = flatRows.map(r => r.id);
-  let photoSet = new Set<number>();
-  if (studentIds.length > 0) {
-    const photoDocs = await db.select({ studentId: documentsTable.studentId })
-      .from(documentsTable)
-      .where(and(
-        sql`${documentsTable.studentId} IN (${sql.join(studentIds.map(id => sql`${id}`), sql`, `)})`,
-        eq(documentsTable.type, "photo"),
-      ));
-    photoSet = new Set(photoDocs.map(d => d.studentId!));
-  }
-
-  const data = flatRows.map(r => ({ ...r, hasPhoto: photoSet.has(r.id) }));
+  // hasPhoto is denormalized on students.has_photo; document upload/delete
+  // handlers keep it in sync, so the listing query no longer needs an
+  // extra SELECT against documents.
+  const data = rows.map(r => ({ ...r.student, agentName: r.agentName || null, hasPhoto: !!r.student.hasPhoto }));
 
   res.json({
     data,

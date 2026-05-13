@@ -33,6 +33,7 @@ export const studentsTable = pgTable("students", {
   languageScore: text("language_score"),
   season: text("season").notNull().default("2026"),
   photoUrl: text("photo_url"),
+  hasPhoto: boolean("has_photo").notNull().default(false),
   interestedLevel: text("interested_level"),
   notes: text("notes"),
   nextFollowup: timestamp("next_followup", { withTimezone: true }),

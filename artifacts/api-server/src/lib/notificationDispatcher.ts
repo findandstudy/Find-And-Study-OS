@@ -1,6 +1,7 @@
 import { db, notificationRulesTable, notificationsTable, usersTable } from "@workspace/db";
 import { eq, and, inArray, ne } from "drizzle-orm";
 import { sendEmail } from "./email";
+import { notificationBus } from "./notificationBus";
 
 interface DispatchContext {
   event: string;
@@ -127,9 +128,11 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
     if (userIds.length === 0) return;
 
     if (channels.includes("in_app")) {
-      for (const userId of userIds) {
-        try {
-          await db.insert(notificationsTable).values({
+      // Batched insert + parallel pg_notify so the notification list and the
+      // recipient's badge update without 15 s polling.
+      try {
+        const inserted = await db.insert(notificationsTable).values(
+          userIds.map(userId => ({
             userId,
             type: ctx.event,
             title: ctx.title,
@@ -138,10 +141,18 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
             actionUrl: ctx.actionUrl,
             data: ctx.data || {},
             channel: "in_app",
+          }))
+        ).returning({ id: notificationsTable.id, userId: notificationsTable.userId });
+        for (const row of inserted) {
+          notificationBus.publish({
+            userId: row.userId,
+            notificationId: row.id,
+            type: ctx.event,
+            title: ctx.title,
           });
-        } catch (err) {
-          console.error(`[NOTIFY] Failed to create in-app notification for user ${userId}:`, err);
         }
+      } catch (err) {
+        console.error(`[NOTIFY] Failed to create in-app notifications:`, err);
       }
     }
 

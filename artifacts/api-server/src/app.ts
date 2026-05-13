@@ -2,6 +2,7 @@ import crypto from "crypto";
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { getCsrfCookieOptions } from "./lib/cookieOptions";
@@ -91,6 +92,20 @@ app.use((_req, res, next) => {
 });
 
 app.use(cookieParser());
+
+// gzip/br compression for JSON / text responses. Skip Server-Sent Events
+// streams (text/event-stream) so events are flushed immediately to the
+// client instead of being buffered by the compressor.
+app.use(
+  compression({
+    filter: (req, res) => {
+      const ct = String(res.getHeader("Content-Type") || "");
+      if (ct.includes("text/event-stream")) return false;
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
 
 // Webhook routes are mounted BEFORE express.json so the raw body is available
 // for HMAC signature verification. These endpoints do not require auth or CSRF.
