@@ -40,24 +40,24 @@ const currentYear = String(new Date().getFullYear());
 const seasons = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 2 + i));
 
 const COMM_STATUS: Record<string, { label: string; color: string }> = {
-  potential:       { label: "Potential",   color: "bg-amber-100 text-amber-700 border-amber-200" },
-  confirmed:       { label: "Confirmed",   color: "bg-blue-100 text-blue-700 border-blue-200" },
-  collected_partial: { label: "Part. Collected", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  collected_full:  { label: "Collected",   color: "bg-green-100 text-green-700 border-green-200" },
-  settled:         { label: "Settled",     color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  excluded:        { label: "Excluded",    color: "bg-slate-100 text-slate-500 border-slate-200" },
+  potential:       { label: "statusPotential", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  confirmed:       { label: "statusConfirmed", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  collected_partial: { label: "statusPartCollected", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
+  collected_full:  { label: "statusCollected", color: "bg-green-100 text-green-700 border-green-200" },
+  settled:         { label: "statusSettled", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  excluded:        { label: "statusExcluded", color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 const FEE_STATUS: Record<string, { label: string; color: string }> = {
-  pending: { label: "Pending", color: "bg-rose-100 text-rose-700 border-rose-200" },
+  pending: { label: "statusPending", color: "bg-rose-100 text-rose-700 border-rose-200" },
   partial: { label: "1st Paid", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  paid:    { label: "Paid",    color: "bg-green-100 text-green-700 border-green-200" },
+  paid:    { label: "statusPaid", color: "bg-green-100 text-green-700 border-green-200" },
 };
 
 const FEE_FINANCE_STATUS: Record<string, { label: string; color: string }> = {
-  potential:  { label: "Potential",  color: "bg-amber-100 text-amber-700 border-amber-200" },
-  confirmed:  { label: "Confirmed",  color: "bg-blue-100 text-blue-700 border-blue-200" },
-  excluded:   { label: "Excluded",   color: "bg-slate-100 text-slate-500 border-slate-200" },
+  potential:  { label: "statusPotential", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  confirmed:  { label: "statusConfirmed", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  excluded:   { label: "statusExcluded", color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: {
@@ -155,6 +155,7 @@ function CommissionModal({
 }: {
   open: boolean; onClose: () => void; initial?: CommissionForm; editId?: number;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [form, setForm] = useState<CommissionForm>(initial || EMPTY_COMM);
@@ -243,7 +244,7 @@ function CommissionModal({
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
       toast({ title: editId ? "Commission updated" : "Commission created" });
       onClose();
-    } catch { toast({ title: "Error saving commission", variant: "destructive" }); }
+    } catch { toast({ title: t("financePage.errorSavingCommission"), variant: "destructive" }); }
     finally { setSaving(false); }
   }
 
@@ -252,32 +253,32 @@ function CommissionModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editId ? "Edit Commission" : "New Commission"}</DialogTitle>
+          <DialogTitle>{editId ? t("financePage.editCommission") : t("financePage.newCommission")}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
           <div className="col-span-2 grid grid-cols-2 gap-3">
             <div>
-              <Label>Student Name</Label>
+              <Label>{t("financePage.studentName")}</Label>
               <Input value={form.studentName} onChange={set("studentName")} placeholder="Full name" />
             </div>
             <div>
-              <Label>University Name</Label>
+              <Label>{t("financePage.universityName")}</Label>
               <Input value={form.universityName} onChange={set("universityName")} placeholder="University" />
             </div>
           </div>
           <div>
-            <Label>Program</Label>
+            <Label>{t("financePage.program")}</Label>
             <Input value={form.programName} onChange={set("programName")} placeholder="Program name" />
           </div>
           <div>
-            <Label>Season</Label>
+            <Label>{t("financePage.season")}</Label>
             <Select value={form.season} onValueChange={set("season")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{seasons.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Currency</Label>
+            <Label>{t("financePage.currency")}</Label>
             <Select value={form.currency} onValueChange={set("currency")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -286,18 +287,18 @@ function CommissionModal({
             </Select>
           </div>
           <div>
-            <Label>Status</Label>
+            <Label>{t("financePage.statusLabel")}</Label>
             <Select value={form.status} onValueChange={set("status")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Object.entries(COMM_STATUS).map(([v, { label }]) =>
-                  <SelectItem key={v} value={v}>{label}</SelectItem>)}
+                  <SelectItem key={v} value={v}>{t(`financePage.${label}`)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
 
           <div className="col-span-2">
-            <Label>Agent</Label>
+            <Label>{t("financePage.agent")}</Label>
             <Select value={form.agentId || "none"} onValueChange={(val) => {
               if (val === "none") {
                 setForm(f => ({ ...f, agentId: "", subAgentId: "", subAgentCommissionRate: "" }));
@@ -305,9 +306,9 @@ function CommissionModal({
                 setForm(f => ({ ...f, agentId: val, subAgentId: "", subAgentCommissionRate: "" }));
               }
             }}>
-              <SelectTrigger><SelectValue placeholder="Select agent..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("financePage.selectAgent")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No agent</SelectItem>
+                <SelectItem value="none">{t("financePage.noAgent")}</SelectItem>
                 {parentAgents.map((a: any) => (
                   <SelectItem key={a.id} value={String(a.id)}>
                     {a.firstName} {a.lastName}{a.companyName ? ` (${a.companyName})` : ""}
@@ -333,11 +334,11 @@ function CommissionModal({
             {subAgents.length > 0 && (
               <>
                 <div className="col-span-2">
-                  <Label>Sub Agent</Label>
+                  <Label>{t("financePage.subAgent")}</Label>
                   <Select value={form.subAgentId || "none"} onValueChange={handleSubAgentChange}>
-                    <SelectTrigger><SelectValue placeholder="Select sub agent..." /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("financePage.selectSubAgent")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No sub agent</SelectItem>
+                      <SelectItem value="none">{t("financePage.noSubAgent")}</SelectItem>
                       {subAgents.map((sa: any) => (
                         <SelectItem key={sa.id} value={String(sa.id)}>
                           {sa.firstName} {sa.lastName}{sa.commissionRate ? ` (${sa.commissionRate}%)` : ""}
@@ -355,21 +356,21 @@ function CommissionModal({
             {uAmt > 0 && (
               <div className={`col-span-4 grid ${saAmt > 0 ? "grid-cols-4" : "grid-cols-3"} gap-2 pt-1 text-sm`}>
                 <div className="rounded bg-blue-50 border border-blue-200 p-2 text-center">
-                  <div className="text-xs text-blue-600 font-medium">University Pays Agency</div>
+                  <div className="text-xs text-blue-600 font-medium">{t("financePage.universityPaysAgency")}</div>
                   <div className="font-bold text-blue-700">{fmt(uAmt, form.currency)}</div>
                 </div>
                 <div className="rounded bg-amber-50 border border-amber-200 p-2 text-center">
-                  <div className="text-xs text-amber-600 font-medium">Agency Pays Agent</div>
+                  <div className="text-xs text-amber-600 font-medium">{t("financePage.agencyPaysAgent")}</div>
                   <div className="font-bold text-amber-700">{fmt(aAmt, form.currency)}</div>
                 </div>
                 {saAmt > 0 && (
                   <div className="rounded bg-purple-50 border border-purple-200 p-2 text-center">
-                    <div className="text-xs text-purple-600 font-medium">Agent Pays Sub Agent</div>
+                    <div className="text-xs text-purple-600 font-medium">{t("financePage.agentPaysSubAgent")}</div>
                     <div className="font-bold text-purple-700">{fmt(saAmt, form.currency)}</div>
                   </div>
                 )}
                 <div className="rounded bg-emerald-50 border border-emerald-200 p-2 text-center">
-                  <div className="text-xs text-emerald-600 font-medium">Net Income</div>
+                  <div className="text-xs text-emerald-600 font-medium">{t("financePage.netIncome")}</div>
                   <div className="font-bold text-emerald-700">{fmt(netAgency, form.currency)}</div>
                 </div>
               </div>
@@ -377,28 +378,28 @@ function CommissionModal({
           </div>
 
           <div>
-            <Label>University Collected</Label>
+            <Label>{t("financePage.universityCollected")}</Label>
             <Input type="number" value={form.universityCollected} onChange={set("universityCollected")} placeholder="0" />
           </div>
           <div>
-            <Label>Agent Paid Out</Label>
+            <Label>{t("financePage.agentPaidOut")}</Label>
             <Input type="number" value={form.agentPaid} onChange={set("agentPaid")} placeholder="0" />
           </div>
           {saAmt > 0 && (
             <div>
-              <Label>Sub Agent Paid Out</Label>
+              <Label>{t("financePage.subAgentPaidOut")}</Label>
               <Input type="number" value={form.subAgentPaid} onChange={set("subAgentPaid")} placeholder="0" />
             </div>
           )}
 
           <div>
-            <Label>State University</Label>
+            <Label>{t("financePage.stateUniversity")}</Label>
             <div className="flex items-center gap-2 mt-2">
               <Checkbox
                 checked={form.isStateUniversity}
                 onCheckedChange={(v) => setForm(f => ({ ...f, isStateUniversity: !!v }))}
               />
-              <span className="text-sm text-slate-600">Is state university</span>
+              <span className="text-sm text-slate-600">{t("financePage.isStateUniversity")}</span>
             </div>
           </div>
           {form.isStateUniversity && (
@@ -415,12 +416,12 @@ function CommissionModal({
           )}
 
           <div className="col-span-2">
-            <Label>Notes</Label>
+            <Label>{t("financePage.notes")}</Label>
             <Textarea value={form.notes} onChange={set("notes")} rows={2} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             {editId ? "Update" : "Create"}
@@ -458,6 +459,7 @@ function ServiceFeeModal({
 }: {
   open: boolean; onClose: () => void; initial?: ServiceFeeForm; editId?: number;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [form, setForm] = useState<ServiceFeeForm>(initial || EMPTY_FEE);
@@ -485,7 +487,7 @@ function ServiceFeeModal({
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       toast({ title: editId ? "Service fee updated" : "Service fee created" });
       onClose();
-    } catch { toast({ title: "Error saving service fee", variant: "destructive" }); }
+    } catch { toast({ title: t("financePage.errorSavingServiceFee"), variant: "destructive" }); }
     finally { setSaving(false); }
   }
 
@@ -497,36 +499,36 @@ function ServiceFeeModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editId ? "Edit Service Fee" : "New Service Fee"}</DialogTitle>
+          <DialogTitle>{editId ? t("financePage.editServiceFee") : t("financePage.newServiceFee")}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
           <div>
-            <Label>Student Name</Label>
+            <Label>{t("financePage.studentName")}</Label>
             <Input value={form.studentName} onChange={set("studentName")} />
           </div>
           <div>
-            <Label>University Name</Label>
+            <Label>{t("financePage.universityName")}</Label>
             <Input value={form.universityName} onChange={set("universityName")} />
           </div>
           <div>
-            <Label>Payer</Label>
+            <Label>{t("financePage.payer")}</Label>
             <Select value={form.payerType} onValueChange={set("payerType")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="student">Student</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
+                <SelectItem value="student">{t("financePage.student")}</SelectItem>
+                <SelectItem value="agent">{t("financePage.agent")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Season</Label>
+            <Label>{t("financePage.season")}</Label>
             <Select value={form.season} onValueChange={set("season")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{seasons.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Currency</Label>
+            <Label>{t("financePage.currency")}</Label>
             <Select value={form.currency} onValueChange={set("currency")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -535,7 +537,7 @@ function ServiceFeeModal({
             </Select>
           </div>
           <div>
-            <Label>Total Amount</Label>
+            <Label>{t("financePage.totalAmount")}</Label>
             <Input type="number" value={form.totalAmount} onChange={set("totalAmount")} placeholder="0" />
           </div>
 
@@ -547,9 +549,9 @@ function ServiceFeeModal({
                   type="date"
                   value={form.firstInstallmentPaidAt}
                   onChange={set("firstInstallmentPaidAt")}
-                  placeholder="Paid date"
+                  placeholder={t("financePage.paidDate")}
                 />
-                <p className="text-xs text-slate-400 mt-1">Leave blank if unpaid</p>
+                <p className="text-xs text-slate-400 mt-1">{t("financePage.leaveBlankIfUnpaid")}</p>
               </div>
               <div>
                 <Label className="text-xs">2nd Installment ({fmt(half, form.currency)})</Label>
@@ -557,9 +559,9 @@ function ServiceFeeModal({
                   type="date"
                   value={form.secondInstallmentPaidAt}
                   onChange={set("secondInstallmentPaidAt")}
-                  placeholder="Paid date"
+                  placeholder={t("financePage.paidDate")}
                 />
-                <p className="text-xs text-slate-400 mt-1">Leave blank if unpaid</p>
+                <p className="text-xs text-slate-400 mt-1">{t("financePage.leaveBlankIfUnpaid")}</p>
               </div>
             </div>
           )}
@@ -569,16 +571,16 @@ function ServiceFeeModal({
               checked={form.isStateUniversity}
               onCheckedChange={(v) => setForm(f => ({ ...f, isStateUniversity: !!v }))}
             />
-            <Label>State University</Label>
+            <Label>{t("financePage.stateUniversity")}</Label>
           </div>
 
           <div className="col-span-2">
-            <Label>Notes</Label>
+            <Label>{t("financePage.notes")}</Label>
             <Textarea value={form.notes} onChange={set("notes")} rows={2} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             {editId ? "Update" : "Create"}
@@ -599,6 +601,7 @@ function TransactionModal({
   commissionLabel?: string;
   universityName?: string;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [amount, setAmount] = useState("");
@@ -639,7 +642,7 @@ function TransactionModal({
 
   async function save() {
     if (!amount || !date) {
-      toast({ title: "Amount and date are required", variant: "destructive" });
+      toast({ title: t("financePage.amountAndDateRequired"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -673,7 +676,7 @@ function TransactionModal({
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
       toast({ title: type === "collection" ? "Collection recorded" : type === "agent_payment" ? "Agent payment recorded" : "Sub agent payment recorded" });
       onClose();
-    } catch { toast({ title: "Error saving transaction", variant: "destructive" }); }
+    } catch { toast({ title: t("financePage.errorSavingTransaction"), variant: "destructive" }); }
     finally { setSaving(false); }
   }
 
@@ -694,11 +697,11 @@ function TransactionModal({
         )}
         <div className="grid grid-cols-2 gap-3 py-2">
           <div>
-            <Label>Amount</Label>
+            <Label>{t("financePage.amount")}</Label>
             <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
           </div>
           <div>
-            <Label>Date</Label>
+            <Label>{t("financePage.date")}</Label>
             <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div className="col-span-2">
@@ -739,12 +742,12 @@ function TransactionModal({
             </div>
           </div>
           <div className="col-span-2">
-            <Label>Notes</Label>
+            <Label>{t("financePage.notes")}</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
           <Button onClick={save} disabled={saving || uploading}>
             {(saving || uploading) ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             {uploading ? "Uploading..." : "Save"}
@@ -757,6 +760,7 @@ function TransactionModal({
 }
 
 function TransactionHistory({ commissionId }: { commissionId: number }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["financial-transactions", commissionId],
@@ -773,8 +777,8 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
       qc.invalidateQueries({ queryKey: ["financial-transactions", commissionId] });
       qc.invalidateQueries({ queryKey: ["commissions"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: "Transaction deleted" });
-    } catch { toast({ title: "Error", variant: "destructive" }); }
+      toast({ title: t("financePage.transactionDeleted") });
+    } catch { toast({ title: t("financePage.errorGeneric"), variant: "destructive" }); }
   }
 
   return (
@@ -786,12 +790,12 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Transaction History</DialogTitle>
+            <DialogTitle>{t("financePage.transactionHistory")}</DialogTitle>
           </DialogHeader>
           {isLoading ? (
             <div className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>
           ) : transactions.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">No transactions recorded yet</p>
+            <p className="text-sm text-slate-400 text-center py-8">{t("financePage.noTransactionsYet")}</p>
           ) : (
             <div className="space-y-2">
               {transactions.map((tx: any) => (
@@ -915,8 +919,8 @@ export default function FinancePage() {
       qc.invalidateQueries({ queryKey: ["commissions"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: "Commission deleted" });
-    } catch { toast({ title: "Error deleting", variant: "destructive" }); }
+      toast({ title: t("financePage.commissionDeleted") });
+    } catch { toast({ title: t("financePage.errorDeleting"), variant: "destructive" }); }
     finally { setDeleting(null); }
   }
 
@@ -926,8 +930,8 @@ export default function FinancePage() {
       await customFetch(`${BASE}/api/service-fees/${id}`, { method: "DELETE" });
       qc.invalidateQueries({ queryKey: ["service-fees"] });
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
-      toast({ title: "Service fee deleted" });
-    } catch { toast({ title: "Error deleting", variant: "destructive" }); }
+      toast({ title: t("financePage.serviceFeeDeleted") });
+    } catch { toast({ title: t("financePage.errorDeleting"), variant: "destructive" }); }
     finally { setDeleting(null); }
   }
 
@@ -962,7 +966,7 @@ export default function FinancePage() {
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
       toast({ title: `${ids.length} commission${ids.length > 1 ? "s" : ""} deleted` });
-    } catch { toast({ title: "Error deleting commissions", variant: "destructive" }); }
+    } catch { toast({ title: t("financePage.errorDeletingCommissions"), variant: "destructive" }); }
     finally { setBulkDeleting(false); }
   }
 
@@ -979,7 +983,7 @@ export default function FinancePage() {
       await customFetch(`${BASE}/api/service-fees/${fee.id}`, { method: "PATCH", body: JSON.stringify(body) });
       qc.invalidateQueries({ queryKey: ["service-fees"] });
       toast({ title: `Installment ${installment} marked as paid` });
-    } catch { toast({ title: "Error", variant: "destructive" }); }
+    } catch { toast({ title: t("financePage.errorGeneric"), variant: "destructive" }); }
   }
 
   const overdueCommissions = useMemo(() => {
@@ -1141,7 +1145,7 @@ export default function FinancePage() {
           <TabsContent value="commissions" className="mt-4 space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
               <Input
-                placeholder="Search student or university..."
+                placeholder={t("financePage.searchStudentOrUniversity")}
                 className="w-64"
                 value={commSearch}
                 onChange={e => setCommSearch(e.target.value)}
@@ -1149,9 +1153,9 @@ export default function FinancePage() {
               <Select value={commStatus} onValueChange={setCommStatus}>
                 <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="all">{t("financePage.allStatuses")}</SelectItem>
                   {Object.entries(COMM_STATUS).map(([v, { label }]) =>
-                    <SelectItem key={v} value={v}>{label}</SelectItem>)}
+                    <SelectItem key={v} value={v}>{t(`financePage.${label}`)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="ml-auto flex items-center gap-2">
@@ -1210,14 +1214,14 @@ export default function FinancePage() {
                         />
                       </th>
                       {([
-                        { key: "student", label: "Student / University", align: "text-left" },
-                        { key: "progFee", label: "Prog. Fee", align: "text-right" },
-                        { key: "univComm", label: "Univ. Commission", align: "text-right" },
-                        { key: "agentComm", label: "Agent Commission", align: "text-right" },
-                        { key: "saComm", label: "SA Commission", align: "text-right" },
-                        { key: "netIncome", label: "Net Income", align: "text-right" },
-                        { key: "collection", label: "Collection", align: "text-center" },
-                        { key: "status", label: "Status", align: "text-center" },
+                        { key: "student", label: t("financePage.studentUniversity"), align: "text-left" },
+                        { key: "progFee", label: t("financePage.progFee"), align: "text-right" },
+                        { key: "univComm", label: t("financePage.univCommission"), align: "text-right" },
+                        { key: "agentComm", label: t("financePage.agentCommission"), align: "text-right" },
+                        { key: "saComm", label: t("financePage.saCommission"), align: "text-right" },
+                        { key: "netIncome", label: t("financePage.netIncome"), align: "text-right" },
+                        { key: "collection", label: t("financePage.collection"), align: "text-center" },
+                        { key: "status", label: t("financePage.statusLabel"), align: "text-center" },
                       ] as const).map(col => {
                         const active = commSort.key === col.key;
                         const isStatus = col.key === "status";
@@ -1251,7 +1255,7 @@ export default function FinancePage() {
                                   <PopoverContent align="end" className="w-56 p-3">
                                     <div className="space-y-2">
                                       <div className="flex items-center justify-between">
-                                        <Label className="text-xs font-semibold">Status</Label>
+                                        <Label className="text-xs font-semibold">{t("financePage.statusLabel")}</Label>
                                         {statusFilterActive && (
                                           <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setCommStatus("all")}>
                                             <X className="w-3 h-3 mr-1" /> Clear
@@ -1261,9 +1265,9 @@ export default function FinancePage() {
                                       <Select value={commStatus} onValueChange={setCommStatus}>
                                         <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="all">All</SelectItem>
+                                          <SelectItem value="all">{t("financePage.allStatuses")}</SelectItem>
                                           {Object.entries(COMM_STATUS).map(([v, m]) => (
-                                            <SelectItem key={v} value={v}>{m.label}</SelectItem>
+                                            <SelectItem key={v} value={v}>{t(`financePage.${m.label}`)}</SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
@@ -1275,7 +1279,7 @@ export default function FinancePage() {
                           </th>
                         );
                       })}
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
+                      <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.actions")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1300,7 +1304,7 @@ export default function FinancePage() {
                             <div className="font-medium text-slate-800">{c.studentName || "—"}</div>
                             <div className="text-xs text-slate-500">{c.universityName || "—"} · {c.programName || "—"}</div>
                             {c.isStateUniversity && (
-                              <Badge className="text-xs mt-0.5 bg-violet-100 text-violet-700 border-violet-200">State</Badge>
+                              <Badge className="text-xs mt-0.5 bg-violet-100 text-violet-700 border-violet-200">{t("financePage.state")}</Badge>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
@@ -1343,7 +1347,7 @@ export default function FinancePage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <Badge className={`text-xs border ${status.color}`}>{status.label}</Badge>
+                            <Badge className={`text-xs border ${status.color}`}>{t(`financePage.${status.label}`)}</Badge>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -1479,25 +1483,25 @@ export default function FinancePage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <Card className="bg-blue-50 border-blue-200">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-blue-600 font-medium uppercase">Total Receivable</p>
+                      <p className="text-xs text-blue-600 font-medium uppercase">{t("financePage.totalReceivable")}</p>
                       <p className="text-xl font-bold text-blue-700">{fmt(uniTotals.totalCommission)}</p>
                     </CardContent>
                   </Card>
                   <Card className="bg-green-50 border-green-200">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-green-600 font-medium uppercase">Total Collected</p>
+                      <p className="text-xs text-green-600 font-medium uppercase">{t("financePage.totalCollected")}</p>
                       <p className="text-xl font-bold text-green-700">{fmt(uniTotals.totalCollected)}</p>
                     </CardContent>
                   </Card>
                   <Card className="bg-amber-50 border-amber-200">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-amber-600 font-medium uppercase">Agent Payouts</p>
+                      <p className="text-xs text-amber-600 font-medium uppercase">{t("financePage.agentPayouts")}</p>
                       <p className="text-xl font-bold text-amber-700">{fmt(uniTotals.totalAgentPaid)}</p>
                     </CardContent>
                   </Card>
                   <Card className="bg-emerald-50 border-emerald-200">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-emerald-600 font-medium uppercase">Net Income</p>
+                      <p className="text-xs text-emerald-600 font-medium uppercase">{t("financePage.netIncome")}</p>
                       <p className="text-xl font-bold text-emerald-700">{fmt(uniTotals.totalNetIncome)}</p>
                     </CardContent>
                   </Card>
@@ -1506,14 +1510,14 @@ export default function FinancePage() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="text-left px-4 py-3 font-semibold text-slate-600">University</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">Total Commission</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">Collected</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">Remaining</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">Agent Payout</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">Net Income</th>
+                        <th className="text-left px-4 py-3 font-semibold text-slate-600">{t("financePage.university")}</th>
+                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.totalCommission")}</th>
+                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.collected")}</th>
+                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.remaining")}</th>
+                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.agentPayout")}</th>
+                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.netIncome")}</th>
                         <th className="text-center px-4 py-3 font-semibold text-slate-600">Collection %</th>
-                        <th className="text-center px-4 py-3 font-semibold text-slate-600">Students</th>
+                        <th className="text-center px-4 py-3 font-semibold text-slate-600">{t("financePage.students")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1527,7 +1531,7 @@ export default function FinancePage() {
                                 <Building2 className="w-4 h-4 text-slate-400" />
                                 {u.universityName}
                                 {isOverdue && (
-                                  <Badge className="text-xs bg-rose-100 text-rose-700 border-rose-200">Overdue</Badge>
+                                  <Badge className="text-xs bg-rose-100 text-rose-700 border-rose-200">{t("financePage.overdue")}</Badge>
                                 )}
                               </div>
                               <div className="text-xs text-slate-400 mt-0.5">{u.commissionCount} commission{u.commissionCount !== 1 ? "s" : ""}</div>
@@ -1620,12 +1624,12 @@ export default function FinancePage() {
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="text-left px-4 py-3 font-semibold text-slate-600">Student / University</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Payer</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Total</th>
+                      <th className="text-left px-4 py-3 font-semibold text-slate-600">{t("financePage.payer")}</th>
+                      <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.total")}</th>
                       <th className="text-center px-4 py-3 font-semibold text-slate-600">1st Installment (50%)</th>
                       <th className="text-center px-4 py-3 font-semibold text-slate-600">2nd Installment (50%)</th>
-                      <th className="text-center px-4 py-3 font-semibold text-slate-600">Status</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">Actions</th>
+                      <th className="text-center px-4 py-3 font-semibold text-slate-600">{t("financePage.statusLabel")}</th>
+                      <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.actions")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1638,7 +1642,7 @@ export default function FinancePage() {
                             <div className="font-medium text-slate-800">{f.studentName || "—"}</div>
                             <div className="text-xs text-slate-500">{f.universityName || "—"}</div>
                             {f.isStateUniversity && (
-                              <Badge className="text-xs mt-0.5 bg-violet-100 text-violet-700 border-violet-200">State</Badge>
+                              <Badge className="text-xs mt-0.5 bg-violet-100 text-violet-700 border-violet-200">{t("financePage.state")}</Badge>
                             )}
                           </td>
                           <td className="px-4 py-3 text-slate-600 capitalize">{f.payerType}</td>
@@ -1682,9 +1686,9 @@ export default function FinancePage() {
                             <div className="flex flex-col items-center gap-1">
                               {(() => {
                                 const fs = FEE_FINANCE_STATUS[f.financeStatus] || FEE_FINANCE_STATUS.potential;
-                                return <Badge className={`text-xs border ${fs.color}`}>{fs.label}</Badge>;
+                                return <Badge className={`text-xs border ${fs.color}`}>{t(`financePage.${fs.label}`)}</Badge>;
                               })()}
-                              <Badge className={`text-xs border ${status.color}`}>{status.label}</Badge>
+                              <Badge className={`text-xs border ${status.color}`}>{t(`financePage.${status.label}`)}</Badge>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -1759,7 +1763,7 @@ export default function FinancePage() {
                 <CardContent>
                   <div className="space-y-3">
                     {[
-                      { label: "Current (0-30 days)", value: agingSummary.current, color: "bg-green-500" },
+                      { label: t("financePage.currentDays"), value: agingSummary.current, color: "bg-green-500" },
                       { label: "31-60 days", value: agingSummary.days30, color: "bg-amber-500" },
                       { label: "61-90 days", value: agingSummary.days60, color: "bg-orange-500" },
                       { label: "90+ days (Overdue)", value: agingSummary.days90plus, color: "bg-rose-500" },
@@ -1776,7 +1780,7 @@ export default function FinancePage() {
                       );
                     })}
                     <div className="pt-2 border-t border-slate-100 flex justify-between text-sm font-semibold">
-                      <span className="text-slate-600">Total Receivable</span>
+                      <span className="text-slate-600">{t("financePage.totalReceivable")}</span>
                       <span className="text-slate-800">
                         {fmt(agingSummary.current + agingSummary.days30 + agingSummary.days60 + agingSummary.days90plus)}
                       </span>
@@ -1808,7 +1812,7 @@ export default function FinancePage() {
                       </div>
                       {toNum(summary?.commissions?.totalSubAgentCommission) > 0 && (
                         <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-center">
-                          <p className="text-xs text-purple-600 font-medium uppercase">Sub Agent Paid</p>
+                          <p className="text-xs text-purple-600 font-medium uppercase">{t("financePage.subAgentPaid")}</p>
                           <p className="text-lg font-bold text-purple-700">
                             {fmt(summary?.commissions?.totalSubAgentPaid || 0)}
                           </p>
@@ -1816,11 +1820,11 @@ export default function FinancePage() {
                       )}
                     </div>
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
-                      <p className="text-xs text-emerald-600 font-medium uppercase">Net Cash Position</p>
+                      <p className="text-xs text-emerald-600 font-medium uppercase">{t("financePage.netCashPosition")}</p>
                       <p className="text-2xl font-bold text-emerald-700">
                         {fmt((toNum(summary?.commissions?.totalUniversityCollected) + toNum(summary?.serviceFees?.collected)) - toNum(summary?.commissions?.totalAgentPaid))}
                       </p>
-                      <p className="text-xs text-emerald-500 mt-1">Includes service fee collections</p>
+                      <p className="text-xs text-emerald-500 mt-1">{t("financePage.includesServiceFee")}</p>
                     </div>
 
                     <div className="space-y-2">
@@ -1890,7 +1894,7 @@ export default function FinancePage() {
                       return (
                         <div key={key} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Badge className={`text-xs border ${color}`}>{label}</Badge>
+                            <Badge className={`text-xs border ${color}`}>{t(`financePage.${label}`)}</Badge>
                             <span className="text-sm text-slate-500">{count}</span>
                           </div>
                           <span className="font-semibold text-sm text-slate-800 tabular-nums">{fmt(amount)}</span>
@@ -1898,7 +1902,7 @@ export default function FinancePage() {
                       );
                     })}
                     <div className="pt-2 border-t border-slate-100 flex justify-between text-sm font-semibold">
-                      <span className="text-slate-600">Total</span>
+                      <span className="text-slate-600">{t("financePage.total")}</span>
                       <span className="text-slate-800">{fmt(commissions.reduce((s: number, c: any) => s + toNum(c.universityCommissionAmount), 0))}</span>
                     </div>
                   </div>

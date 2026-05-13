@@ -5,6 +5,7 @@ import {
   useUpdateApplication,
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useI18n } from "@/hooks/use-i18n";
 import { apiFetch } from "@/lib/apiFetch";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
@@ -58,6 +59,7 @@ interface Props {
 }
 
 export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
+  const { t } = useI18n();
   const { labelOf: studyLabelOf } = useStudyLevels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -110,7 +112,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
       });
       if (res.ok) {
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
-        toast({ title: "Stage updated" });
+        toast({ title: t("applicationDetailPage.stageUpdated") });
         return;
       }
       const body = await res.json().catch(() => ({}));
@@ -120,10 +122,10 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
       } else if (res.status === 422 && body.code === "STUDENT_DOCS_REQUIRED") {
         setStudentDocsMissing(body.missingDocTypes || []);
       } else {
-        toast({ title: "Error", description: body.error || "Could not update stage", variant: "destructive" });
+        toast({ title: t("applicationDetailPage.errorTitle"), description: body.error || t("applicationDetailPage.couldNotUpdateStage"), variant: "destructive" });
       }
     } catch {
-      toast({ title: "Error", description: "Could not update stage", variant: "destructive" });
+      toast({ title: t("applicationDetailPage.errorTitle"), description: t("applicationDetailPage.couldNotUpdateStage"), variant: "destructive" });
     }
   }
 
@@ -195,7 +197,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   disabled={updateApp.isPending || isLoading}
                 >
                   <SelectTrigger className="w-48 rounded-full border-border">
-                    <SelectValue placeholder="Change stage" />
+                    <SelectValue placeholder={t("applicationDetailPage.changeStage")} />
                   </SelectTrigger>
                   <SelectContent>
                     {(() => {
@@ -418,8 +420,8 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="direct">Direct</SelectItem>
-                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="direct">{t("applicationDetailPage.direct")}</SelectItem>
+                        <SelectItem value="agent">{t("applicationDetailPage.agentLabel")}</SelectItem>
                         <SelectItem value="sub_agent">Sub-Agent</SelectItem>
                       </SelectContent>
                     </Select>
@@ -452,7 +454,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           stages={pipelineStages}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
-            toast({ title: "Application updated" });
+            toast({ title: t("applicationDetailPage.applicationUpdated") });
           }}
         />
       )}
@@ -544,6 +546,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
   open: boolean; onClose: () => void; app: any; stages: any[]; onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const { levels: studyLevels } = useStudyLevels();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
@@ -596,14 +599,14 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         return;
       }
       toast({
-        title: `Kaydedilemedi (${res.status})`,
-        description: body.error || body.message || res.statusText || "Bilinmeyen sunucu hatası",
+        title: `${t("applicationDetailPage.saveFailed")} (${res.status})`,
+        description: body.error || body.message || res.statusText || t("applicationDetailPage.unknownServerError"),
         variant: "destructive",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "İstek gönderilemedi";
+      const message = err instanceof Error ? err.message : t("applicationDetailPage.requestNotSent");
       toast({
-        title: "Ağ hatası",
+        title: t("applicationDetailPage.networkError"),
         description: message,
         variant: "destructive",
       });
@@ -618,7 +621,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Application</DialogTitle>
+          <DialogTitle>{t("applicationDetailPage.editApplication")}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -645,7 +648,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
           <div>
             <Label className="text-xs">Level</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("applicationDetailPage.select")} /></SelectTrigger>
               <SelectContent>
                 {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
               </SelectContent>
@@ -677,7 +680,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("applicationDetailPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Changes"}
           </Button>

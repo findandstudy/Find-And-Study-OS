@@ -686,10 +686,10 @@ export default function AgentsPage() {
             <Select onValueChange={v => handleBulkAssignStaff(selected, v === "none" ? null : Number(v))}>
               <SelectTrigger className="h-8 text-xs w-[180px] rounded-lg">
                 <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                <SelectValue placeholder="Assign Contact Person" />
+                <SelectValue placeholder={t("agentsPage.assignContactPerson")} />
               </SelectTrigger>
               <SelectContent className="max-h-60">
-                <SelectItem value="none">Unassigned</SelectItem>
+                <SelectItem value="none">{t("agentsPage.unassigned")}</SelectItem>
                 {staffMembers.map(s => (
                   <SelectItem key={s.id} value={String(s.id)}>
                     {`${s.firstName || ""} ${s.lastName || ""}`.trim() || "Staff"}
@@ -823,10 +823,10 @@ export default function AgentsPage() {
                       onValueChange={v => handleAssignStaff(a.id, v === "none" ? null : Number(v))}
                     >
                       <SelectTrigger className="h-7 text-xs w-[140px]">
-                        <SelectValue placeholder="Assign..." />
+                        <SelectValue placeholder={t("agentsPage.assign")} />
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
-                        <SelectItem value="none">Unassigned</SelectItem>
+                        <SelectItem value="none">{t("agentsPage.unassigned")}</SelectItem>
                         {staffMembers.map(s => (
                           <SelectItem key={s.id} value={String(s.id)}>
                             {`${s.firstName || ""} ${s.lastName || ""}`.trim() || "Staff"}
@@ -988,7 +988,7 @@ export default function AgentsPage() {
                 <div className="flex items-center gap-3 flex-1 flex-wrap">
                   <div className="relative min-w-[200px] max-w-sm flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search agents..." value={search}
+                    <Input placeholder={t("agentsPage.searchAgents")} value={search}
                       onChange={e => { setSearch(e.target.value); setPage(1); }}
                       className="pl-9 rounded-xl" />
                   </div>
@@ -1027,7 +1027,7 @@ export default function AgentsPage() {
                 <div className="flex items-center gap-3 flex-1 flex-wrap">
                   <div className="relative min-w-[200px] max-w-sm flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search sub-agents..." value={subSearch}
+                    <Input placeholder={t("agentsPage.searchSubAgents")} value={subSearch}
                       onChange={e => { setSubSearch(e.target.value); setSubPage(1); }}
                       className="pl-9 rounded-xl" />
                   </div>
@@ -1083,7 +1083,7 @@ export default function AgentsPage() {
             <div className="p-6 space-y-4">
               <p className="text-sm text-muted-foreground">Set a new password for <strong>{passwordDialog.agentName}</strong></p>
               <div className="space-y-1.5">
-                <Label>New Password</Label>
+                <Label>{t("agentsPage.newPassword")}</Label>
                 <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="rounded-xl" placeholder="Min. 6 characters" />
               </div>
             </div>
@@ -1118,7 +1118,7 @@ export default function AgentsPage() {
                   <Label className="text-sm font-semibold mb-2 block">Parent Agent <span className="text-red-500">*</span></Label>
                   <Select value={form.parentAgentId} onValueChange={v => setForm(f => ({ ...f, parentAgentId: v }))}>
                     <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Select parent agent" />
+                      <SelectValue placeholder={t("agentsPage.selectParentAgent")} />
                     </SelectTrigger>
                     <SelectContent>
                       {parentAgents.map(pa => (
@@ -1131,7 +1131,7 @@ export default function AgentsPage() {
 
               {/* Agency Code */}
               <div className="space-y-1.5">
-                <Label>Agency Code</Label>
+                <Label>{t("agentsPage.agencyCode")}</Label>
                 <Input value={form.agencyCode} onChange={e => setForm(f => ({ ...f, agencyCode: e.target.value }))} className="rounded-xl" placeholder="e.g. AG-001" />
               </div>
 
@@ -1190,7 +1190,7 @@ export default function AgentsPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>State</Label>
+                  <Label>{t("agentsPage.state")}</Label>
                   <Input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
@@ -1211,7 +1211,7 @@ export default function AgentsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Address</Label>
+                <Label>{t("agentsPage.address")}</Label>
                 <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="rounded-xl" />
               </div>
 
@@ -1222,7 +1222,7 @@ export default function AgentsPage() {
                   <Input value={form.businessName} onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))} className="rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Category</Label>
+                  <Label>{t("agentsPage.category")}</Label>
                   <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
@@ -1235,12 +1235,12 @@ export default function AgentsPage() {
               {/* Contract identity (used for auto-template matching) */}
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Entity Type</Label>
+                  <Label>{t("agentsPage.entityType")}</Label>
                   <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v }))}>
                     <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="company">Company</SelectItem>
-                      <SelectItem value="individual">Individual</SelectItem>
+                      <SelectItem value="company">{t("agentsPage.company")}</SelectItem>
+                      <SelectItem value="individual">{t("agentsPage.individual")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1249,11 +1249,11 @@ export default function AgentsPage() {
                   <Input value={form.taxNumber} onChange={e => setForm(f => ({ ...f, taxNumber: e.target.value }))} className="rounded-xl" placeholder="VKN / TCKN" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Contract Language</Label>
+                  <Label>{t("agentsPage.contractLanguage")}</Label>
                   <Select value={form.preferredContractLanguage || "__auto__"} onValueChange={v => setForm(f => ({ ...f, preferredContractLanguage: v === "__auto__" ? "" : v, assignedContractTemplateId: "" }))}>
                     <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__auto__">Auto</SelectItem>
+                      <SelectItem value="__auto__">{t("agentsPage.autoLang")}</SelectItem>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="tr">Türkçe</SelectItem>
                       <SelectItem value="ar">العربية</SelectItem>

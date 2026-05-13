@@ -7,6 +7,7 @@ import {
   customFetch,
 } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useI18n } from "@/hooks/use-i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -88,6 +89,7 @@ interface Props {
 }
 
 export default function LeadDetail({ id, basePath = "/staff" }: Props) {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth(true);
@@ -529,7 +531,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               {showFollowUpForm && (
                 <div className="bg-secondary/30 rounded-xl p-4 space-y-3 border">
                   <Input
-                    placeholder="Follow-up title (e.g. Call about admission)"
+                    placeholder={t("leadDetailPage.followUpTitlePlaceholder")}
                     value={fuTitle}
                     onChange={e => setFuTitle(e.target.value)}
                   />
@@ -547,13 +549,13 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     />
                   </div>
                   <Textarea
-                    placeholder="Notes (optional)"
+                    placeholder={t("leadDetailPage.notesOptional")}
                     value={fuNotes}
                     onChange={e => setFuNotes(e.target.value)}
                     className="resize-none min-h-[60px]"
                   />
                   <div className="flex gap-2 justify-end">
-                    <Button variant="ghost" size="sm" onClick={resetFollowUpForm}>Cancel</Button>
+                    <Button variant="ghost" size="sm" onClick={resetFollowUpForm}>{t("leadDetailPage.cancel")}</Button>
                     <Button
                       size="sm"
                       onClick={handleCreateFollowUp}
@@ -752,11 +754,11 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="new">New</SelectItem>
-                    <SelectItem value="contacted">Contacted</SelectItem>
-                    <SelectItem value="interested">Interested</SelectItem>
-                    <SelectItem value="qualified">Qualified</SelectItem>
-                    <SelectItem value="converted">Converted</SelectItem>
+                    <SelectItem value="new">{t("leadDetailPage.statusNew")}</SelectItem>
+                    <SelectItem value="contacted">{t("leadDetailPage.statusContacted")}</SelectItem>
+                    <SelectItem value="interested">{t("leadDetailPage.statusInterested")}</SelectItem>
+                    <SelectItem value="qualified">{t("leadDetailPage.statusQualified")}</SelectItem>
+                    <SelectItem value="converted">{t("leadDetailPage.statusConverted")}</SelectItem>
                     <SelectItem value="lost">Lost (Inactive)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -782,10 +784,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   disabled={assigning}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select assignee" />
+                    <SelectValue placeholder={t("leadDetailPage.selectAssignee")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    <SelectItem value="unassigned">{t("leadDetailPage.unassigned")}</SelectItem>
                     {(() => {
                       const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
                       const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
@@ -860,8 +862,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="direct">Direct</SelectItem>
-                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="direct">{t("leadDetailPage.direct")}</SelectItem>
+                        <SelectItem value="agent">{t("leadDetailPage.agentLabel")}</SelectItem>
                         <SelectItem value="sub_agent">Sub-Agent</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1057,6 +1059,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
 function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   open: boolean; onClose: () => void; lead: any; leadId: number;
 }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "",
     source: "website", interestedProgram: "", interestedCountry: "", nationality: "", estimatedValue: "",
@@ -1106,7 +1109,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("leadDetailPage.editLead")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
             <Label>First Name *</Label>
@@ -1117,11 +1120,11 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
             <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Email</Label>
+            <Label>{t("leadDetailPage.email")}</Label>
             <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Phone</Label>
+            <Label>{t("leadDetailPage.phone")}</Label>
             <div className="flex gap-1">
               <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
                 <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
@@ -1137,11 +1140,11 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Nationality</Label>
+            <Label>{t("leadDetailPage.nationality")}</Label>
             <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Source</Label>
+            <Label>{t("leadDetailPage.source")}</Label>
             <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -1152,11 +1155,11 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Interested Program</Label>
+            <Label>{t("leadDetailPage.interestedProgram")}</Label>
             <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Interested Country</Label>
+            <Label>{t("leadDetailPage.interestedCountry")}</Label>
             <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
           </div>
           <div className="space-y-1.5 col-span-2">
@@ -1165,7 +1168,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("leadDetailPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
             {updateLead.isPending ? "Saving…" : "Save Changes"}
           </Button>

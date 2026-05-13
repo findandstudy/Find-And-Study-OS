@@ -270,12 +270,12 @@ export default function CourseFinder() {
 
   const addWishlist = useMutation({
     mutationFn: (programId: number) => apiFetch(`${BASE_URL}/api/wishlists`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ programId }) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); queryClient.invalidateQueries({ queryKey: ["wishlist-details"] }); toast({ title: "Added to wishlist" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); queryClient.invalidateQueries({ queryKey: ["wishlist-details"] }); toast({ title: t("courseFinderPage.addedToWishlist") }); },
   });
 
   const removeWishlist = useMutation({
     mutationFn: (programId: number) => apiFetch(`${BASE_URL}/api/wishlists/${programId}`, { method: "DELETE" }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); queryClient.invalidateQueries({ queryKey: ["wishlist-details"] }); toast({ title: "Removed from wishlist" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishlists"] }); queryClient.invalidateQueries({ queryKey: ["wishlist-details"] }); toast({ title: t("courseFinderPage.removedFromWishlist") }); },
   });
 
   function toggleWishlist(programId: number) {
@@ -337,7 +337,7 @@ export default function CourseFinder() {
 
   async function handleGeneratePdf() {
     if (selectedIds.size === 0) {
-      toast({ title: "No programs selected", description: "Select one or more programs to generate a proposal.", variant: "destructive" });
+      toast({ title: t("courseFinderPage.noProgramsSelected"), description: t("courseFinderPage.noProgramsSelectedDesc"), variant: "destructive" });
       return;
     }
     setGeneratingPdf(true);
@@ -523,7 +523,7 @@ export default function CourseFinder() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search programs or universities..."
+              placeholder={t("courseFinderPage.searchProgramsUniversities")}
               value={filters.search}
               onChange={e => handleFilterChange("search", e.target.value)}
               className="pl-10 rounded-xl h-11"
@@ -532,78 +532,78 @@ export default function CourseFinder() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Country</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.country")}</Label>
               <MultiSelectFilter
                 values={filters.country}
                 onChange={v => handleFilterChange("country", v)}
                 options={filterOptions?.countries?.map(c => ({ value: c, label: c })) || []}
-                placeholder="All Countries"
+                placeholder={t("courseFinderPage.allCountries")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">City</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.city")}</Label>
               <MultiSelectFilter
                 values={filters.city}
                 onChange={v => handleFilterChange("city", v)}
                 options={filterOptions?.cities?.map(c => ({ value: c, label: c })) || []}
-                placeholder="All Cities"
+                placeholder={t("courseFinderPage.allCities")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">University Type</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.universityType")}</Label>
               <MultiSelectFilter
                 values={filters.universityType}
                 onChange={v => handleFilterChange("universityType", v)}
                 options={filterOptions?.universityTypes?.map(t => ({ value: t, label: t })) || []}
-                placeholder="All Types"
+                placeholder={t("courseFinderPage.allTypes")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">University</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.university")}</Label>
               <MultiSelectFilter
                 values={filters.universityId}
                 onChange={v => handleFilterChange("universityId", v)}
                 options={filterOptions?.universities?.map(u => ({ value: String(u.id), label: u.name })) || []}
-                placeholder="All Universities"
+                placeholder={t("courseFinderPage.allUniversities")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Study Level</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.studyLevel")}</Label>
               <MultiSelectFilter
                 values={filters.level}
                 onChange={v => handleFilterChange("level", v)}
                 options={filterOptions?.degrees?.map(d => ({ value: d, label: d })) || []}
-                placeholder="All Levels"
+                placeholder={t("courseFinderPage.allLevels")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Language</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.language")}</Label>
               <MultiSelectFilter
                 values={filters.language}
                 onChange={v => handleFilterChange("language", v)}
                 options={filterOptions?.languages?.map(l => ({ value: l, label: l })) || []}
-                placeholder="All Languages"
+                placeholder={t("courseFinderPage.allLanguages")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Field</Label>
+              <Label className="text-xs text-muted-foreground">{t("courseFinderPage.field")}</Label>
               <MultiSelectFilter
                 values={filters.field}
                 onChange={v => handleFilterChange("field", v)}
                 options={filterOptions?.fields?.map(f => ({ value: f, label: f })) || []}
-                placeholder="All Fields"
+                placeholder={t("courseFinderPage.allFields")}
               />
             </div>
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">
-                Tuition Fee {filters.feeMin || filters.feeMax ? (
+                {t("courseFinderPage.tuitionFee")} {filters.feeMin || filters.feeMax ? (
                   <span className="text-primary">
                     ({filters.feeMin ? `$${Number(filters.feeMin).toLocaleString()}` : "$0"} – {filters.feeMax ? `$${Number(filters.feeMax).toLocaleString()}` : "Max"})
                   </span>
@@ -612,7 +612,7 @@ export default function CourseFinder() {
               <div className="flex gap-1.5 items-center">
                 <Input
                   type="number"
-                  placeholder="Min"
+                  placeholder={t("courseFinderPage.min")}
                   value={filters.feeMin}
                   onChange={e => handleFilterChange("feeMin", e.target.value)}
                   className="h-9 rounded-lg text-sm w-full"
@@ -620,7 +620,7 @@ export default function CourseFinder() {
                 <span className="text-muted-foreground text-xs shrink-0">–</span>
                 <Input
                   type="number"
-                  placeholder="Max"
+                  placeholder={t("courseFinderPage.max")}
                   value={filters.feeMax}
                   onChange={e => handleFilterChange("feeMax", e.target.value)}
                   className="h-9 rounded-lg text-sm w-full"
@@ -882,7 +882,8 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
   );
 }
 
-function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick, filterOptions, filters, setFilters, colIntakes, setColIntakes, colStatus, setColStatus, onResetPage }: {
+function ProgramListView(props: any) { const { t } = useI18n(); return <ProgramListViewBody {...props} t={t} />; }
+function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommission, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick, filterOptions, filters, setFilters, colIntakes, setColIntakes, colStatus, setColStatus, onResetPage, t }: {
   programs: Program[];
   wishlistIds: number[];
   selectedIds: Set<number>;
@@ -905,6 +906,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
   colStatus: string;
   setColStatus: (v: string) => void;
   onResetPage: () => void;
+  t: (k: string) => string;
 }) {
   // Convert ColumnHeader's single-select API to the array-based server filters.
   const setSingle = (key: keyof Filters, v: string) => {
@@ -992,7 +994,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
                 }}
               />
               {showCommission && (
-                <th className="p-3 text-right">Commission</th>
+                <th className="p-3 text-right">{t("courseFinderPage.commission")}</th>
               )}
               <ColumnHeader
                 asTh
@@ -1003,7 +1005,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
                   type: "text",
                   value: colIntakes,
                   onChange: setColIntakes,
-                  placeholder: "e.g. Sep, January…",
+                  placeholder: t("courseFinderPage.intakesPlaceholder"),
                   label: "Intake contains",
                 }}
               />
@@ -1023,7 +1025,7 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
                   label: "University status",
                 }}
               />
-              <th className="p-3 text-center w-[120px]">Actions</th>
+              <th className="p-3 text-center w-[120px]">{t("courseFinderPage.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1179,7 +1181,8 @@ function ProgramListView({ programs, wishlistIds, selectedIds, showCommission, a
   );
 }
 
-function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, agentShareRate, showWishlist = true, isSelected, onToggleSelect }: {
+function ProgramCard(props: any) { const { t } = useI18n(); return <ProgramCardBody {...props} t={t} />; }
+function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, agentShareRate, showWishlist = true, isSelected, onToggleSelect, t }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
@@ -1191,6 +1194,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
   showWishlist?: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
+  t: (k: string) => string;
 }) {
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const commissionAmount = calcCommissionAmount(p, agentShareRate);
@@ -1284,7 +1288,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
         <div className="bg-muted/40 rounded-xl p-3 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Tuition</span>
+              <span className="text-xs text-muted-foreground">{t("courseFinderPage.tuition")}</span>
               {p.feeType && (
                 <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 rounded font-normal text-muted-foreground">{p.feeType}</Badge>
               )}
@@ -1306,21 +1310,21 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
 
           {p.scholarship != null && p.scholarship > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-xs text-emerald-600 font-medium">Scholarship</span>
+              <span className="text-xs text-emerald-600 font-medium">{t("courseFinderPage.scholarship")}</span>
               <span className="text-xs font-semibold text-emerald-600">{formatCurrency(p.scholarship, cur)}</span>
             </div>
           )}
 
           {p.applicationFee != null && p.applicationFee > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">App Fee</span>
+              <span className="text-xs text-muted-foreground">{t("courseFinderPage.appFee")}</span>
               <span className="text-xs font-medium">{formatCurrency(p.applicationFee, cur)}</span>
             </div>
           )}
 
           {p.intakes && (
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Intakes</span>
+              <span className="text-xs text-muted-foreground">{t("courseFinderPage.intakes")}</span>
               <div className="flex gap-1">
                 {p.intakes.split(",").map(intake => (
                   <Badge key={intake.trim()} variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full">
@@ -1333,7 +1337,7 @@ function ProgramCard({ program: p, isWishlisted, onToggleWishlist, onInfo, onApp
 
           {showCommission && commissionAmount != null && (
             <div className="flex items-center justify-between pt-1 border-t border-dashed border-muted-foreground/20">
-              <span className="text-xs font-medium text-indigo-600">Commission</span>
+              <span className="text-xs font-medium text-indigo-600">{t("courseFinderPage.commission")}</span>
               <span className="text-sm font-bold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
             </div>
           )}
@@ -1784,6 +1788,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
 }
 
 function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined }) {
+  const { t } = useI18n();
   const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2107,7 +2112,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
     <Dialog open={!!p} onOpenChange={o => !o && handleClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-lg">Create Application</DialogTitle>
+          <DialogTitle className="text-lg">{t("courseFinderPage.createApplication")}</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -2162,18 +2167,18 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   </div>
                 ) : (
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">Select Student</Label>
+                    <Label className="text-sm font-medium mb-2 block">{t("courseFinderPage.selectStudent")}</Label>
                     <div className="relative mb-3">
                       <UserSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search by name, email or phone..."
+                        placeholder={t("courseFinderPage.searchByNameEmailPhone")}
                         value={searchTerm}
                         onChange={e => { setSearchTerm(e.target.value); setSelectedStudent(null); }}
                         className="pl-10 rounded-lg"
                       />
                     </div>
                     {!debouncedSearch && recentStudents.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">Recent Students</p>
+                      <p className="text-[11px] text-muted-foreground mb-2 uppercase tracking-wide font-medium">{t("courseFinderPage.recentStudents")}</p>
                     )}
                     <div className="space-y-1.5 max-h-52 overflow-y-auto">
                       {isSearching ? (
@@ -2328,38 +2333,38 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      First Name <span className="text-destructive ml-0.5">*</span>
+                      {t("courseFinderPage.firstName")} <span className="text-destructive ml-0.5">*</span>
                       {reviewExtracted.has("firstName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.firstName} onChange={e => setReviewForm(f => ({ ...f, firstName: e.target.value }))}
-                      placeholder="First name" className={`rounded-xl ${reviewExtracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                      placeholder={t("courseFinderPage.firstNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      Last Name <span className="text-destructive ml-0.5">*</span>
+                      {t("courseFinderPage.lastName")} <span className="text-destructive ml-0.5">*</span>
                       {reviewExtracted.has("lastName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.lastName} onChange={e => setReviewForm(f => ({ ...f, lastName: e.target.value }))}
-                      placeholder="Last name" className={`rounded-xl ${reviewExtracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                      placeholder={t("courseFinderPage.lastNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      Mother Name
+                      {t("courseFinderPage.motherName")}
                       {reviewExtracted.has("motherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.motherName} onChange={e => setReviewForm(f => ({ ...f, motherName: e.target.value }))}
-                      placeholder="Mother's full name" className={`rounded-xl ${reviewExtracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                      placeholder={t("courseFinderPage.motherNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      Father Name
+                      {t("courseFinderPage.fatherName")}
                       {reviewExtracted.has("fatherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.fatherName} onChange={e => setReviewForm(f => ({ ...f, fatherName: e.target.value }))}
-                      placeholder="Father's full name" className={`rounded-xl ${reviewExtracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                      placeholder={t("courseFinderPage.fatherNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                   </div>
                 </div>
 
@@ -2390,15 +2395,15 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      Passport Number
+                      {t("courseFinderPage.passportNumber")}
                       {reviewExtracted.has("passportNumber") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.passportNumber} onChange={e => setReviewForm(f => ({ ...f, passportNumber: e.target.value }))}
-                      placeholder="Passport number" className={`rounded-xl ${reviewExtracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                      placeholder={t("courseFinderPage.passportNumberPlaceholder")} className={`rounded-xl ${reviewExtracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      GPA
+                      {t("courseFinderPage.gpa")}
                       {reviewExtracted.has("gpa") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.gpa} onChange={e => setReviewForm(f => ({ ...f, gpa: e.target.value }))}
@@ -2409,15 +2414,15 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      High School
+                      {t("courseFinderPage.highSchool")}
                       {reviewExtracted.has("highSchool") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.highSchool} onChange={e => setReviewForm(f => ({ ...f, highSchool: e.target.value }))}
-                      placeholder="High school name" className={`rounded-xl ${reviewExtracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                      placeholder={t("courseFinderPage.highSchoolPlaceholder")} className={`rounded-xl ${reviewExtracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
-                      Graduation Year
+                      {t("courseFinderPage.graduationYear")}
                       {reviewExtracted.has("graduationYear") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                     </Label>
                     <Input value={reviewForm.graduationYear} onChange={e => setReviewForm(f => ({ ...f, graduationYear: e.target.value }))}
@@ -2427,16 +2432,16 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
 
                 <div className="space-y-1.5">
                   <Label className="text-sm font-semibold flex items-center">
-                    Address
+                    {t("courseFinderPage.address")}
                     {reviewExtracted.has("address") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
                   </Label>
                   <Input value={reviewForm.address} onChange={e => setReviewForm(f => ({ ...f, address: e.target.value }))}
-                    placeholder="Home address" className={`rounded-xl ${reviewExtracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
+                    placeholder={t("courseFinderPage.addressPlaceholder")} className={`rounded-xl ${reviewExtracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                 </div>
 
                 <div>
-                  <Label className="text-sm font-medium mb-1.5 block">Note (Optional)</Label>
-                  <Textarea rows={2} placeholder="Add a note about this application..." value={notes}
+                  <Label className="text-sm font-medium mb-1.5 block">{t("courseFinderPage.noteOptional")}</Label>
+                  <Textarea rows={2} placeholder={t("courseFinderPage.applicationNotePlaceholder")} value={notes}
                     onChange={e => setNotes(e.target.value)} className="resize-none rounded-lg" />
                 </div>
 

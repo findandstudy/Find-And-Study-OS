@@ -492,6 +492,7 @@ function AddStudentModal({
   onSuccess: () => void;
   defaultStatus?: string;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const createStudent = useCreateStudent();
   const { season } = useSeason();
@@ -583,10 +584,10 @@ function AddStudentModal({
 
       if (!res.ok) {
         if (res.status === 413) {
-          throw new Error("Documents are too large even after compression. Please use smaller files (max ~10MB total).");
+          throw new Error(t("studentsPage.documentsTooLarge"));
         }
         const err = await res.json().catch(() => ({ error: "AI extraction failed" }));
-        throw new Error(err.error || "AI extraction failed");
+        throw new Error(err.error || t("studentsPage.aiExtractionFailed"));
       }
 
       const { extracted, warnings: serverWarnings }: { extracted: ExtractedData; warnings?: string[] } = await res.json();
@@ -838,7 +839,7 @@ function AddStudentModal({
         onEscapeKeyDown={(e) => { if (step === "analyzing") e.preventDefault(); }}
       >
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
-          <DialogTitle className="text-xl font-display">Add New Student</DialogTitle>
+          <DialogTitle className="text-xl font-display">{t("studentsPage.addNewStudent")}</DialogTitle>
           <div className="mt-3 space-y-2">
             <Progress value={stepProgress} className="h-1.5" />
             <div className="flex items-center gap-6 text-xs font-medium">
@@ -982,8 +983,8 @@ function AddStudentModal({
                   <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" aiExtracted={ef.has("firstName")} latinUppercase />
-                  <FormField required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" aiExtracted={ef.has("lastName")} latinUppercase />
+                  <FormField required label={t("studentsPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentsPage.firstNamePlaceholder")} aiExtracted={ef.has("firstName")} latinUppercase />
+                  <FormField required label={t("studentsPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentsPage.lastNamePlaceholder")} aiExtracted={ef.has("lastName")} latinUppercase />
                   <FormField required label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">
@@ -1023,8 +1024,8 @@ function AddStudentModal({
                       className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Select…</option>
-                      <option value="female">Female</option>
-                      <option value="male">Male</option>
+                      <option value="female">{t("studentsPage.female")}</option>
+                      <option value="male">{t("studentsPage.male")}</option>
                     </select>
                   </div>
                   <div>
@@ -1033,10 +1034,10 @@ function AddStudentModal({
                       <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
                     </div>
                   </div>
-                  <FormField required label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" aiExtracted={ef.has("motherName")} latinUppercase />
-                  <FormField required label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" aiExtracted={ef.has("fatherName")} latinUppercase />
+                  <FormField required label={t("studentsPage.motherName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentsPage.motherNamePlaceholder")} aiExtracted={ef.has("motherName")} latinUppercase />
+                  <FormField required label={t("studentsPage.fatherName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentsPage.fatherNamePlaceholder")} aiExtracted={ef.has("fatherName")} latinUppercase />
                   <div className="col-span-2">
-                    <FormField label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" aiExtracted={ef.has("address")} />
+                    <FormField label={t("studentsPage.address")} value={form.address} onChange={field("address")} placeholder={t("studentsPage.addressPlaceholder")} aiExtracted={ef.has("address")} />
                   </div>
                 </div>
               </section>
@@ -1155,7 +1156,7 @@ function AddStudentModal({
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Any additional notes about this student…"
+                  placeholder={t("studentsPage.additionalNotesPlaceholder")}
                   rows={2}
                   className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
                 />
@@ -1217,6 +1218,7 @@ John,Doe,john@example.com,+1-555-0001,American,1998-05-15,male,US12345678,Mary D
 Jane,Smith,jane@example.com,+44-20-0002,British,2000-09-22,female,GB87654321,Sarah Smith,Robert Smith`;
 
 function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void; }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -1245,7 +1247,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
         credentials: "include",
         body: JSON.stringify({ csvData: text }),
       });
-      if (!res.ok) throw new Error("CSV parsing failed");
+      if (!res.ok) throw new Error(t("studentsPage.csvParsingFailed"));
       const { students } = await res.json();
       setPreview(students);
     } catch (err: any) {
@@ -1265,7 +1267,7 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
         credentials: "include",
         body: JSON.stringify({ students: preview }),
       });
-      if (!res.ok) throw new Error("Import failed");
+      if (!res.ok) throw new Error(t("studentsPage.importFailed"));
       const data = await res.json();
       setResult({ success: data.success, errors: data.errors?.length || 0 });
       onSuccess();
@@ -1656,6 +1658,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
 }
 
 function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; onClose: () => void; student: any; stages: PipelineStage[] }) {
+  const { t } = useI18n();
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "",
@@ -1772,7 +1775,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("studentsPage.editStudent")}</DialogTitle></DialogHeader>
         <div className="overflow-y-auto flex-1 space-y-6 pr-1 py-2">
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
@@ -1780,8 +1783,8 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" latinUppercase />
-              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" latinUppercase />
+              <F required label={t("studentsPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentsPage.firstNamePlaceholder")} latinUppercase />
+              <F required label={t("studentsPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentsPage.lastNamePlaceholder")} latinUppercase />
               <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Phone</Label>
@@ -1806,9 +1809,9 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 <Label className="font-semibold text-sm">Nationality</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
               </div>
-              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" latinUppercase />
-              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" latinUppercase />
-              <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
+              <F label={t("studentsPage.motherName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentsPage.motherNamePlaceholder")} latinUppercase />
+              <F label={t("studentsPage.fatherName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentsPage.fatherNamePlaceholder")} latinUppercase />
+              <F label={t("studentsPage.address")} value={form.address} onChange={field("address")} placeholder={t("studentsPage.addressPlaceholder")} className="col-span-2" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Status</Label>
                 <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
@@ -1884,7 +1887,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
             <textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Any additional notes about this student..."
+              placeholder={t("studentsPage.additionalNotesPlaceholder")}
               rows={2}
               className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
             />
@@ -1905,15 +1908,16 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
 function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Delete {count} Student{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
-        <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
+        <DialogHeader><DialogTitle>{count > 1 ? t("studentsPage.deleteStudentMulti") : t("studentsPage.deleteStudentSingle")}</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">{t("studentsPage.thisActionCannotBeUndone")}</p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
+          <Button variant="outline" onClick={onClose}>{t("studentsPage.cancel")}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? t("studentsPage.deleting") : `${t("studentsPage.deleteAction")} ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1948,6 +1952,7 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
   currentUserId?: number;
   students: any[];
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
 
@@ -1988,46 +1993,46 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Nationality</Label>
+          <Label className="text-xs">{t("studentsPage.nationalityLabel")}</Label>
           <Select value={filters.nationality} onValueChange={v => onChange({ ...filters, nationality: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
               {uniqueNationalities.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Agent</Label>
+          <Label className="text-xs">{t("studentsPage.agentLabel")}</Label>
           <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="none">No Agent</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="none">{t("studentsPage.noAgent")}</SelectItem>
               {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Origin</Label>
+          <Label className="text-xs">{t("studentsPage.origin")}</Label>
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="direct">Direct</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="direct">{t("studentsPage.direct")}</SelectItem>
+              <SelectItem value="agent">{t("studentsPage.agentLabel")}</SelectItem>
+              <SelectItem value="sub_agent">{t("studentsPage.subAgent")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Assigned To</Label>
+          <Label className="text-xs">{t("studentsPage.assignedToLabel")}</Label>
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="mine">Me</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="mine">{t("studentsPage.me")}</SelectItem>
+              <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>
               {staffUsers.filter(u => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>
                   {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
@@ -2037,56 +2042,56 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Applications</Label>
+          <Label className="text-xs">{t("studentsPage.applications")}</Label>
           <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="staff">Staff</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="agent">{t("studentsPage.agentLabel")}</SelectItem>
+              <SelectItem value="staff">{t("studentsPage.staffLabel")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Origin</Label>
+          <Label className="text-xs">{t("studentsPage.origin")}</Label>
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="direct">Direct</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="direct">{t("studentsPage.direct")}</SelectItem>
+              <SelectItem value="agent">{t("studentsPage.agentLabel")}</SelectItem>
+              <SelectItem value="sub_agent">{t("studentsPage.subAgent")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Created Date</Label>
+          <Label className="text-xs">{t("studentsPage.createdDate")}</Label>
           <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="yesterday">Yesterday</SelectItem>
-              <SelectItem value="last7">Last 7 Days</SelectItem>
-              <SelectItem value="thisMonth">This Month</SelectItem>
-              <SelectItem value="thisYear">This Year</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="today">{t("studentsPage.today")}</SelectItem>
+              <SelectItem value="yesterday">{t("studentsPage.yesterday")}</SelectItem>
+              <SelectItem value="last7">{t("studentsPage.last7days")}</SelectItem>
+              <SelectItem value="thisMonth">{t("studentsPage.thisMonth")}</SelectItem>
+              <SelectItem value="thisYear">{t("studentsPage.thisYear")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Next Follow-up</Label>
+          <Label className="text-xs">{t("studentsPage.nextFollowup")}</Label>
           <Select value={filters.followupRange} onValueChange={v => onChange({ ...filters, followupRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="upcoming7">Next 7 Days</SelectItem>
-              <SelectItem value="none">Not Set</SelectItem>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="overdue">{t("studentsPage.overdue")}</SelectItem>
+              <SelectItem value="today">{t("studentsPage.today")}</SelectItem>
+              <SelectItem value="upcoming7">{t("studentsPage.next7days")}</SelectItem>
+              <SelectItem value="none">{t("studentsPage.notSet")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>{t("studentsPage.apply")}</Button>
       </PopoverContent>
     </Popover>
     </>
@@ -2338,7 +2343,7 @@ export default function StudentsPage() {
           <div className="flex items-center gap-3">
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+              <Input placeholder={t("studentsPage.searchStudents")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
             <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} staffUsers={staffUsers} currentUserId={user?.id} students={allStudents} />
             <div className="flex items-center border rounded-full overflow-hidden">
@@ -2410,66 +2415,66 @@ export default function StudentsPage() {
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
                     <ColumnHeader
-                      label="Name"
+                      label={t("studentsPage.name")}
                       sort={{ sortKey: "name", current: sort, onSort: handleSort }}
                     />
                     <ColumnHeader
-                      label="Email"
+                      label={t("studentsPage.email")}
                       sort={{ sortKey: "email", current: sort, onSort: handleSort }}
                     />
                     <ColumnHeader
-                      label="Nationality"
+                      label={t("studentsPage.nationalityLabel")}
                       sort={{ sortKey: "nationality", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.nationality, onChange: v => setFilters(f => ({ ...f, nationality: v })), options: uniqueNationalities.map(n => ({ value: n, label: n })), label: "Nationality" }}
+                      filter={{ type: "select", value: filters.nationality, onChange: v => setFilters(f => ({ ...f, nationality: v })), options: uniqueNationalities.map(n => ({ value: n, label: n })), label: t("studentsPage.nationalityLabel") }}
                     />
                     <ColumnHeader
-                      label="Passport"
+                      label={t("studentsPage.passport")}
                       sort={{ sortKey: "passport", current: sort, onSort: handleSort }}
                     />
                     <ColumnHeader
-                      label="Status"
+                      label={t("studentsPage.statusLabel")}
                       sort={{ sortKey: "status", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.status, onChange: v => setFilters(f => ({ ...f, status: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: "Status" }}
+                      filter={{ type: "select", value: filters.status, onChange: v => setFilters(f => ({ ...f, status: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: t("studentsPage.statusLabel") }}
                     />
                     <ColumnHeader
-                      label="Assigned"
+                      label={t("studentsPage.assigned")}
                       filter={{
                         type: "select",
                         value: filters.assignment,
                         onChange: v => setFilters(f => ({ ...f, assignment: v })),
                         options: [
-                          { value: "mine", label: "Me" },
-                          { value: "unassigned", label: "Unassigned" },
+                          { value: "mine", label: t("studentsPage.me") },
+                          { value: "unassigned", label: t("studentsPage.unassigned") },
                           ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
                         ],
-                        label: "Assigned to",
+                        label: t("studentsPage.assignedToLabel"),
                       }}
                     />
                     <ColumnHeader
-                      label="Joined"
+                      label={t("studentsPage.joined")}
                       sort={{ sortKey: "date", current: sort, onSort: handleSort }}
                       filter={{
                         type: "select",
                         value: filters.dateRange,
                         onChange: v => setFilters(f => ({ ...f, dateRange: v })),
                         options: [
-                          { value: "today", label: "Today" },
-                          { value: "yesterday", label: "Yesterday" },
-                          { value: "last7", label: "Last 7 Days" },
-                          { value: "thisMonth", label: "This Month" },
-                          { value: "thisYear", label: "This Year" },
+                          { value: "today", label: t("studentsPage.today") },
+                          { value: "yesterday", label: t("studentsPage.yesterday") },
+                          { value: "last7", label: t("studentsPage.last7days") },
+                          { value: "thisMonth", label: t("studentsPage.thisMonth") },
+                          { value: "thisYear", label: t("studentsPage.thisYear") },
                         ],
-                        label: "Joined date",
+                        label: t("studentsPage.joinedDateLabel"),
                       }}
                     />
-                    <TableHead className="w-20 text-right">Actions</TableHead>
+                    <TableHead className="w-20 text-right">{t("studentsPage.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">{t("studentsPage.loading")}</TableCell></TableRow>
                   ) : pagedStudents.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">{t("studentsPage.noStudentsFound")}</TableCell></TableRow>
                   ) : pagedStudents.map((student: any) => (
                     <TableRow key={student.id} className={`cursor-pointer hover:bg-muted/30 transition-colors ${selectedIds.has(student.id) ? "bg-primary/5" : ""}`}>
                       <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(student.id)} onCheckedChange={() => toggleSelect(student.id)} /></TableCell>

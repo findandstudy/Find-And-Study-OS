@@ -356,11 +356,14 @@ function leadIsDateInRange(dateStr: string, range: string): boolean {
   return true;
 }
 
-function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, leads }: {
+function FilterPopoverInner(props: any) { const { t } = useI18n(); return <FilterPopoverBody {...props} t={t} />; }
+const FilterPopover = FilterPopoverInner;
+function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUserId, leads, t }: {
   filters: LeadFilters;
   onChange: (f: LeadFilters) => void;
   columns: ColDef[];
   staffUsers: any[];
+  t: (k: string) => string;
   currentUserId?: number;
   leads: any[];
 }) {
@@ -399,7 +402,7 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.source} onValueChange={v => onChange({ ...filters, source: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               {SOURCES.map(s => (
                 <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
               ))}
@@ -412,7 +415,7 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               {columns.map(c => (
                 <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
               ))}
@@ -425,7 +428,7 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.nationality} onValueChange={v => onChange({ ...filters, nationality: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               {uniqueNationalities.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -436,8 +439,8 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="none">No Agent</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
+              <SelectItem value="none">{t("leadsPage.noAgent")}</SelectItem>
               {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -448,9 +451,9 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="direct">Direct</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
+              <SelectItem value="direct">{t("leadsPage.direct")}</SelectItem>
+              <SelectItem value="agent">{t("leadsPage.agentLabel")}</SelectItem>
               <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
@@ -461,9 +464,9 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               <SelectItem value="mine">Me</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
+              <SelectItem value="unassigned">{t("leadsPage.unassigned")}</SelectItem>
               {staffUsers.filter(u => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>
                   {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
@@ -478,9 +481,9 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="staff">Staff</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
+              <SelectItem value="agent">{t("leadsPage.agentLabel")}</SelectItem>
+              <SelectItem value="staff">{t("leadsPage.staff")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -490,9 +493,9 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="direct">Direct</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
+              <SelectItem value="direct">{t("leadsPage.direct")}</SelectItem>
+              <SelectItem value="agent">{t("leadsPage.agentLabel")}</SelectItem>
               <SelectItem value="sub_agent">Sub-Agent</SelectItem>
             </SelectContent>
           </Select>
@@ -503,12 +506,12 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="yesterday">Yesterday</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
+              <SelectItem value="today">{t("leadsPage.today")}</SelectItem>
+              <SelectItem value="yesterday">{t("leadsPage.yesterday")}</SelectItem>
               <SelectItem value="last7">Last 7 Days</SelectItem>
-              <SelectItem value="thisMonth">This Month</SelectItem>
-              <SelectItem value="thisYear">This Year</SelectItem>
+              <SelectItem value="thisMonth">{t("leadsPage.thisMonth")}</SelectItem>
+              <SelectItem value="thisYear">{t("leadsPage.thisYear")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -518,11 +521,11 @@ function FilterPopover({ filters, onChange, columns, staffUsers, currentUserId, 
           <Select value={filters.followupRange} onValueChange={v => onChange({ ...filters, followupRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
+              <SelectItem value="overdue">{t("leadsPage.overdue")}</SelectItem>
+              <SelectItem value="today">{t("leadsPage.today")}</SelectItem>
               <SelectItem value="upcoming7">Next 7 Days</SelectItem>
-              <SelectItem value="none">Not Set</SelectItem>
+              <SelectItem value="none">{t("leadsPage.notSet")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -677,8 +680,9 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
 }
 
 /* ── EditLeadDialog ───────────────────────────────────────── */
-function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
-  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[];
+function EditLeadDialog(props: any) { const { t } = useI18n(); return <EditLeadDialogBody {...props} t={t} />; }
+function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: {
+  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[]; t: (k: string) => string;
 }) {
   const [form, setForm] = useState({ ...EMPTY_FORM, status: "new" });
   const updateLead = useUpdateLead();
@@ -731,7 +735,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("leadsPage.editLead")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
             <Label>First Name *</Label>
@@ -762,11 +766,11 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Nationality</Label>
+            <Label>{t("leadsPage.nationality")}</Label>
             <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Source</Label>
+            <Label>{t("leadsPage.source")}</Label>
             <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -777,7 +781,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Status</Label>
+            <Label>{t("leadsPage.status")}</Label>
             <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -788,11 +792,11 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Interested Program</Label>
+            <Label>{t("leadsPage.interestedProgram")}</Label>
             <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>Interested Country</Label>
+            <Label>{t("leadsPage.interestedCountry")}</Label>
             <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
           </div>
           {canSeeRevenue && (
@@ -806,7 +810,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("leadsPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
             {updateLead.isPending ? "Saving…" : "Save Changes"}
           </Button>
@@ -821,6 +825,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
 function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
@@ -832,7 +837,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
           This action cannot be undone. The selected lead{count > 1 ? "s" : ""} and all associated data will be permanently removed.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("leadsPage.cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
             {isPending ? "Deleting…" : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
           </Button>
@@ -1290,7 +1295,7 @@ export default function LeadsPage() {
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search leads..."
+                placeholder={t("leadsPage.searchLeads")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
@@ -1632,7 +1637,7 @@ export default function LeadsPage() {
       {/* ── Create Lead Dialog ─────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Add New Lead</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t("leadsPage.addNewLead")}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
               <Label>First Name *</Label>
@@ -1663,11 +1668,11 @@ export default function LeadsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Nationality</Label>
+              <Label>{t("leadsPage.nationality")}</Label>
               <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Source</Label>
+              <Label>{t("leadsPage.source")}</Label>
               <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -1678,11 +1683,11 @@ export default function LeadsPage() {
               </Select>
             </div>
             <div className="space-y-1.5 col-span-2">
-              <Label>Interested Program</Label>
+              <Label>{t("leadsPage.interestedProgram")}</Label>
               <Input value={form.interestedProgram} onChange={(e) => setForm({ ...form, interestedProgram: e.target.value })} placeholder="e.g. Computer Science" />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <Label>Interested Country</Label>
+              <Label>{t("leadsPage.interestedCountry")}</Label>
               <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
             </div>
             {canSeeRevenue && (

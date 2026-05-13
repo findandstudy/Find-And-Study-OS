@@ -7,6 +7,7 @@ import {
   customFetch,
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { useI18n } from "@/hooks/use-i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,6 +78,7 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
 }
 
 export default function StudentDetail({ id, basePath = "/staff" }: Props) {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const isAgent = basePath === "/agent";
@@ -624,7 +626,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
         <Tabs defaultValue="profile">
           <TabsList className="rounded-xl bg-secondary/60">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="profile">{t("studentDetailPage.profile")}</TabsTrigger>
             <TabsTrigger value="documents">
               Documents {documents.length > 0 && `(${documents.length})`}
             </TabsTrigger>
@@ -639,7 +641,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 Follow-ups {(followUps as any[]).length > 0 && `(${(followUps as any[]).length})`}
               </TabsTrigger>
             )}
-            <TabsTrigger value="messaging">All Messaging</TabsTrigger>
+            <TabsTrigger value="messaging">{t("studentDetailPage.allMessaging")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -734,8 +736,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="direct">Direct</SelectItem>
-                            <SelectItem value="agent">Agent</SelectItem>
+                            <SelectItem value="direct">{t("studentDetailPage.direct")}</SelectItem>
+                            <SelectItem value="agent">{t("studentDetailPage.agentLabel")}</SelectItem>
                             <SelectItem value="sub_agent">Sub-Agent</SelectItem>
                           </SelectContent>
                         </Select>
@@ -848,7 +850,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       value={appCountry}
                       onValueChange={setAppCountry}
                       options={(countriesList || []).map((c: string) => ({ value: c, label: c }))}
-                      placeholder="Select Country"
                     />
                   </div>
                   <div>
@@ -981,7 +982,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 {showFollowUpForm && (
                   <div className="bg-secondary/30 rounded-xl p-4 space-y-3 border">
                     <Input
-                      placeholder="Follow-up title (e.g. Call about admission)"
+                      placeholder={t("studentDetailPage.followUpTitlePlaceholder")}
                       value={fuTitle}
                       onChange={e => setFuTitle(e.target.value)}
                     />
@@ -999,13 +1000,13 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       />
                     </div>
                     <Textarea
-                      placeholder="Notes (optional)"
+                      placeholder={t("studentDetailPage.notesOptional")}
                       value={fuNotes}
                       onChange={e => setFuNotes(e.target.value)}
                       className="resize-none min-h-[60px]"
                     />
                     <div className="flex gap-2 justify-end">
-                      <Button variant="ghost" size="sm" onClick={resetFollowUpForm}>Cancel</Button>
+                      <Button variant="ghost" size="sm" onClick={resetFollowUpForm}>{t("studentDetailPage.cancel")}</Button>
                       <Button
                         size="sm"
                         onClick={handleCreateFollowUp}
@@ -1106,7 +1107,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       <Dialog open={uploadOpen} onOpenChange={o => { if (!uploading) setUploadOpen(o); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Upload Document</DialogTitle>
+            <DialogTitle>{t("studentDetailPage.uploadDocument")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -1195,7 +1196,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
+            <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>{t("studentDetailPage.cancel")}</Button>
             <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
               {uploading ? "Uploading\u2026" : "Save"}
             </Button>
@@ -1307,6 +1308,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
 function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   open: boolean; onClose: () => void; student: any; studentId: number;
 }) {
+  const { t } = useI18n();
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
@@ -1409,7 +1411,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("studentDetailPage.editStudent")}</DialogTitle></DialogHeader>
         <div className="overflow-y-auto flex-1 space-y-6 pr-1 py-2">
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-border/50 pb-2">
@@ -1417,8 +1419,8 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Personal Information</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <F required label="First Name" value={form.firstName} onChange={field("firstName")} placeholder="First name" latinUppercase />
-              <F required label="Last Name" value={form.lastName} onChange={field("lastName")} placeholder="Last name" latinUppercase />
+              <F required label={t("studentDetailPage.firstName")} value={form.firstName} onChange={field("firstName")} placeholder={t("studentDetailPage.firstNamePh")} latinUppercase />
+              <F required label={t("studentDetailPage.lastName")} value={form.lastName} onChange={field("lastName")} placeholder={t("studentDetailPage.lastNamePh")} latinUppercase />
               <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Phone</Label>
@@ -1447,16 +1449,16 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="">Select…</option>
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
+                  <option value="female">{t("studentDetailPage.female")}</option>
+                  <option value="male">{t("studentDetailPage.male")}</option>
                 </select>
               </div>
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Nationality</Label>
                 <NationalityCombobox value={form.nationality} onChange={field("nationality")} />
               </div>
-              <F label="Mother's Name" value={form.motherName} onChange={field("motherName")} placeholder="Mother's name" latinUppercase />
-              <F label="Father's Name" value={form.fatherName} onChange={field("fatherName")} placeholder="Father's name" latinUppercase />
+              <F label={t("studentDetailPage.mothersName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentDetailPage.mothersNamePh")} latinUppercase />
+              <F label={t("studentDetailPage.fathersName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentDetailPage.fathersNamePh")} latinUppercase />
               <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
             </div>
           </section>
@@ -1483,7 +1485,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                 <Label className="font-semibold text-sm">Interested Level</Label>
                 <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
                   <SelectTrigger className="rounded-xl h-9">
-                    <SelectValue placeholder="Select level..." />
+                    <SelectValue placeholder={t("studentDetailPage.selectLevel")} />
                   </SelectTrigger>
                   <SelectContent>
                     {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
@@ -1526,7 +1528,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
             <textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Any additional notes about this student..."
+              placeholder={t("studentDetailPage.additionalNotesPh")}
               rows={2}
               className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
             />

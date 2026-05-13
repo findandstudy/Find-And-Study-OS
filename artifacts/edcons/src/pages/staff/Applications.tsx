@@ -623,6 +623,7 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 
 /* ── EditApplicationDialog ───────────────────────────────── */
 function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     stage: "", level: "", country: "", universityId: "", universityName: "",
     programId: "", programName: "", intake: "", instructionLanguage: "",
@@ -756,24 +757,24 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Edit Application</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("applicationsPage.editApplication")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label>Stage</Label>
+            <Label>{t("applicationsPage.stage")}</Label>
             <Select value={form.stage} onValueChange={v => setForm({ ...form, stage: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Country</Label>
+            <Label>{t("applicationsPage.country")}</Label>
             <Select value={form.country} onValueChange={handleCountryChange}>
-              <SelectTrigger><SelectValue placeholder="Select country..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("applicationsPage.selectCountry")} /></SelectTrigger>
               <SelectContent className="max-h-60">{activeDestinations.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>University</Label>
+            <Label>{t("applicationsPage.university")}</Label>
             <Select value={form.universityId} onValueChange={handleUniversityChange} disabled={!form.country}>
               <SelectTrigger>
                 <SelectValue placeholder={!form.country ? "Select country first..." : universities.length === 0 ? "No universities found" : "Select university..."} />
@@ -787,14 +788,14 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Level</Label>
+            <Label>{t("applicationsPage.level")}</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("applicationsPage.select")} /></SelectTrigger>
               <SelectContent>{studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Program</Label>
+            <Label>{t("applicationsPage.program")}</Label>
             <Select value={form.programId} onValueChange={handleProgramChange} disabled={!form.universityId}>
               <SelectTrigger>
                 <SelectValue placeholder={!form.universityId ? "Select university first..." : programs.length === 0 ? "No programs found" : "Select program..."} />
@@ -812,16 +813,16 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Language</Label>
+            <Label>{t("applicationsPage.language")}</Label>
             <Select value={form.instructionLanguage} onValueChange={v => setForm({ ...form, instructionLanguage: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("applicationsPage.select")} /></SelectTrigger>
               <SelectContent>{INSTRUCTION_LANGUAGES.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Intake</Label>
+            <Label>{t("applicationsPage.intake")}</Label>
             <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("applicationsPage.select")} /></SelectTrigger>
               <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -841,12 +842,12 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             )}
           </div>
           <div className="space-y-1.5 col-span-2">
-            <Label>Notes</Label>
+            <Label>{t("applicationsPage.notes")}</Label>
             <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={updateApp.isPending}>{updateApp.isPending ? "Saving..." : "Save Changes"}</Button>
         </DialogFooter>
       </DialogContent>
@@ -873,6 +874,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <>
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
@@ -880,7 +882,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
         <DialogHeader><DialogTitle>Delete {count} Application{count > 1 ? "s" : ""}?</DialogTitle></DialogHeader>
         <p className="text-sm text-muted-foreground py-2">This action cannot be undone.</p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("applicationsPage.cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>{isPending ? "Deleting..." : `Delete ${count}`}</Button>
         </DialogFooter>
       </DialogContent>
@@ -913,6 +915,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
   apps: any[];
   staffUsersList: { id: number; name: string }[];
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
   const { data: allCountries = [] } = useCountries();
@@ -954,7 +957,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.stage} onValueChange={v => onChange({ ...filters, stage: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
               {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -964,7 +967,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.country} onValueChange={v => onChange({ ...filters, country: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
               {countriesInApps.map(c => <SelectItem key={c.id} value={c.name}><span className="inline-flex items-center gap-1.5"><CountryFlag code={c.code} size="sm" />{c.name}</span></SelectItem>)}
             </SelectContent>
           </Select>
@@ -974,7 +977,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.university} onValueChange={v => onChange({ ...filters, university: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
               {uniqueUniversities.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -984,9 +987,9 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.universityType} onValueChange={v => onChange({ ...filters, universityType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="state">State</SelectItem>
-              <SelectItem value="private">Private</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
+              <SelectItem value="state">{t("applicationsPage.state")}</SelectItem>
+              <SelectItem value="private">{t("applicationsPage.privateLabel")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -995,8 +998,8 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="none">No Agent (Staff)</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
+              <SelectItem value="none">{t("leadsPage.noAgent")}</SelectItem>
               {uniqueAgents.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -1018,8 +1021,8 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.assignedTo} onValueChange={v => onChange({ ...filters, assignedTo: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
+              <SelectItem value="unassigned">{t("applicationsPage.unassigned")}</SelectItem>
               {staffUsersList.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -1041,12 +1044,12 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="yesterday">Yesterday</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.allTime")}</SelectItem>
+              <SelectItem value="today">{t("applicationsPage.today")}</SelectItem>
+              <SelectItem value="yesterday">{t("applicationsPage.yesterday")}</SelectItem>
               <SelectItem value="last7">Last 7 Days</SelectItem>
-              <SelectItem value="thisMonth">This Month</SelectItem>
-              <SelectItem value="thisYear">This Year</SelectItem>
+              <SelectItem value="thisMonth">{t("applicationsPage.thisMonth")}</SelectItem>
+              <SelectItem value="thisYear">{t("applicationsPage.thisYear")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1059,6 +1062,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
 
 /* ── AddApplicationModal ─────────────────────────────────── */
 function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open: boolean; onClose: () => void; onSuccess: () => void; defaultStage?: string }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const { season } = useSeason();
   const { levels: studyLevels } = useStudyLevels();
@@ -1213,12 +1217,12 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
             </div>
             <div className="space-y-2 col-span-2">
               <Label className="font-semibold">Notes</Label>
-              <textarea placeholder="Notes..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
+              <textarea placeholder={t("applicationsPage.notesPlaceholder")} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none" />
             </div>
           </div>
         </div>
         <DialogFooter className="gap-2 pt-2">
-          <Button variant="outline" onClick={handleClose} className="rounded-xl">Cancel</Button>
+          <Button variant="outline" onClick={handleClose} className="rounded-xl">{t("applicationsPage.cancel")}</Button>
           <Button onClick={handleSubmit} disabled={createApplication.isPending || !selectedStudent || !form.country || !form.level} className="rounded-xl">{createApplication.isPending ? "Creating..." : "Create Application"}</Button>
         </DialogFooter>
       </DialogContent>
@@ -1489,7 +1493,7 @@ export default function ApplicationsPage() {
           <div className="flex items-center gap-3">
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search applications..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
+              <Input placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
             <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} />
             <div className="flex items-center border rounded-full overflow-hidden">
