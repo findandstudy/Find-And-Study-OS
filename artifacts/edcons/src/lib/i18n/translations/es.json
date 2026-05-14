@@ -475,7 +475,8 @@
     "staffPortal": "Portal de personal",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "Todos los campos son obligatorios"
   },
   "footer": {
     "description": "Empoderando a los estudiantes para alcanzar sus sueños de educación global con orientación experta y apoyo dedicado.",

@@ -475,7 +475,8 @@
     "staffPortal": "Portal Staf",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "Semua kolom wajib diisi"
   },
   "footer": {
     "description": "Memberdayakan siswa untuk mewujudkan impian pendidikan global melalui bimbingan ahli dan dukungan yang berdedikasi.",

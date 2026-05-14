@@ -87,7 +87,7 @@ export default function Login() {
   const [passwordSet, setPasswordSet] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
-  const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phoneCode: "+90", phone: "" });
+  const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phoneCode: "", phone: "" });
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [resending, setResending] = useState(false);
@@ -150,6 +150,16 @@ export default function Login() {
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    const firstName = registerForm.firstName.trim();
+    const lastName = registerForm.lastName.trim();
+    const email = registerForm.email.trim();
+    const phone = registerForm.phone.trim();
+    const phoneCode = registerForm.phoneCode.trim();
+    if (!firstName || !lastName || !email || !phoneCode || !phone) {
+      setError(t("login.requiredFields"));
+      return;
+    }
 
     if (registerForm.password !== registerForm.confirmPassword) {
       setError(t("login.passwordsNoMatch"));
@@ -515,7 +525,9 @@ export default function Login() {
                         value={registerForm.phoneCode}
                         onChange={e => setRegisterForm(f => ({ ...f, phoneCode: e.target.value }))}
                         className="h-11 rounded-xl border border-input bg-background px-2 text-sm font-medium w-[100px] shrink-0 focus:outline-none focus:ring-2 focus:ring-ring"
+                        required
                       >
+                        <option value="" disabled>Code</option>
                         <option value="+90">🇹🇷 +90</option>
                         <option value="+1">🇺🇸 +1</option>
                         <option value="+44">🇬🇧 +44</option>

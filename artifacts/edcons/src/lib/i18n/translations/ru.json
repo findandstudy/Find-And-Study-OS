@@ -475,7 +475,8 @@
     "staffPortal": "Портал сотрудников",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "Все поля обязательны"
   },
   "footer": {
     "description": "Помогаем студентам осуществить мечты о мировом образовании.",

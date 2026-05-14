@@ -475,7 +475,8 @@
     "staffPortal": "स्टाफ पोर्टल",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "सभी फ़ील्ड आवश्यक हैं"
   },
   "footer": {
     "description": "विशेषज्ञ मार्गदर्शन और समर्पित सहायता से छात्रों को उनके वैश्विक शिक्षा सपनों को पूरा करने में सशक्त बनाना।",

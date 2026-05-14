@@ -481,7 +481,8 @@
     "and": "ve",
     "studentsPortal": "Öğrenci Portalı",
     "agentsPortal": "Acenteler Portalı",
-    "staffPortal": "Personel Portalı"
+    "staffPortal": "Personel Portalı",
+    "requiredFields": "Tüm alanların doldurulması zorunludur"
   },
   "footer": {
     "description": "Uzman rehberliği, sorunsuz başvurular ve özel destek ile öğrencilerin küresel eğitim hayallerini gerçekleştirmelerine yardımcı oluyoruz.",

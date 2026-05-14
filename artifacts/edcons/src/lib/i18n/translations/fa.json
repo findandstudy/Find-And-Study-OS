@@ -475,7 +475,8 @@
     "staffPortal": "پورتال کارکنان",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "تمام فیلدها الزامی است"
   },
   "footer": {
     "description": "توانمندسازی دانشجویان برای تحقق رؤیاهای آموزشی جهانی.",

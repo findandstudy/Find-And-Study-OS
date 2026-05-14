@@ -481,7 +481,8 @@
     "and": "and",
     "studentsPortal": "Students Portal",
     "agentsPortal": "Agents Portal",
-    "staffPortal": "Staff Portal"
+    "staffPortal": "Staff Portal",
+    "requiredFields": "All fields are required"
   },
   "footer": {
     "description": "Empowering students to achieve their global education dreams through expert guidance, seamless applications, and dedicated support.",

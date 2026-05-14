@@ -475,7 +475,8 @@
     "staffPortal": "员工门户",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "所有字段均为必填项"
   },
   "footer": {
     "description": "通过专业指导和全程支持，帮助学生实现全球教育梦想。",

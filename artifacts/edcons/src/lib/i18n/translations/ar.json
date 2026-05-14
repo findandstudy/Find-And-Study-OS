@@ -475,7 +475,8 @@
     "staffPortal": "بوابة الموظفين",
     "invalidCredentials": "Invalid email or password",
     "tooManyAttempts": "Too many attempts. Please wait a moment and try again.",
-    "serverError": "Server is temporarily unavailable. Please try again in a moment."
+    "serverError": "Server is temporarily unavailable. Please try again in a moment.",
+    "requiredFields": "جميع الحقول مطلوبة"
   },
   "footer": {
     "description": "تمكين الطلاب من تحقيق أحلامهم التعليمية العالمية من خلال التوجيه الخبير والتطبيقات السلسة والدعم المخصص.",
