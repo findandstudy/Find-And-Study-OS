@@ -74,6 +74,21 @@ async function buildAll() {
     await copyFile(seedSrc, seedDest);
     console.log("copied seed.sql to dist/");
   } catch { }
+
+  // Copy bundled fonts (used by contract PDF generator) so the production
+  // build can find them next to index.cjs the same way dev (tsx) finds them
+  // next to src/lib/contractPdf.ts.
+  const fontsSrcDir = path.resolve(__dirname, "src/assets/fonts");
+  const fontsDestDir = path.resolve(distDir, "assets/fonts");
+  try {
+    await mkdir(fontsDestDir, { recursive: true });
+    for (const f of ["DejaVuSans.ttf", "DejaVuSans-Bold.ttf"]) {
+      await copyFile(path.join(fontsSrcDir, f), path.join(fontsDestDir, f));
+    }
+    console.log("copied DejaVu fonts to dist/assets/fonts/");
+  } catch (err) {
+    console.warn("font copy failed:", err);
+  }
 }
 
 buildAll().catch((err) => {

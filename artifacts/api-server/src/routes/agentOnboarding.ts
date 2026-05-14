@@ -244,10 +244,51 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
       signerName: session.signerName,
       template: template ? { id: template.id, name: template.name, language: template.language, entityType: template.entityType } : null,
       previewHtml,
-      signedPdfUrl: signedContract ? `/api/contracts/signed/${signedContract.id}/pdf` : null,
+      // Agent-scoped download endpoint — the admin /api/contracts/signed/:id/pdf
+      // requires contracts.view (manager+ only), which agents lack.
+      signedPdfUrl: signedContract ? `/api/contracts/me/pdf` : null,
       signedAt: signedContract?.signedAt ?? null,
     },
   });
+});
+
+/**
+ * GET /api/contracts/me/pdf — stream the signed PDF for the authenticated
+ * agent's own signed contract. Authorisation is by ownership: the contract's
+ * agentId must match the agent record bound to the current user. This is
+ * the agent-side counterpart of the admin-only /api/contracts/signed/:id/pdf.
+ */
+router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+    if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+    const session = await loadOnboardingSession(agent.id);
+    if (!session || session.status !== "signed") {
+      res.status(404).json({ error: "Signed contract not available" });
+      return;
+    }
+    const [signed] = await db.select().from(signedContractsTable)
+      .where(eq(signedContractsTable.signingSessionId, session.id));
+    if (!signed) { res.status(404).json({ error: "Signed contract record not found" }); return; }
+    if (signed.agentId !== agent.id) { res.status(403).json({ error: "Forbidden" }); return; }
+    const { ObjectStorageService } = await import("../lib/objectStorage");
+    const svc = new ObjectStorageService();
+    let normalizedPath = signed.pdfObjectKey;
+    if (normalizedPath.startsWith("/objects/")) normalizedPath = normalizedPath.slice("/objects/".length);
+    if (normalizedPath.startsWith("objects/")) normalizedPath = normalizedPath.slice("objects/".length);
+    const file = await svc.getObjectEntityFile(`/objects/${normalizedPath}`);
+    const [meta] = await file.getMetadata();
+    res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="contract-${signed.id}.pdf"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    if (meta.size) res.setHeader("Content-Length", String(meta.size));
+    file.createReadStream()
+      .on("error", (err) => { console.error("[contracts/me/pdf] stream:", err); if (!res.headersSent) res.status(500).end(); })
+      .pipe(res);
+  } catch (err) {
+    console.error("[contracts/me/pdf]:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download signed contract" });
+  }
 });
 
 /**

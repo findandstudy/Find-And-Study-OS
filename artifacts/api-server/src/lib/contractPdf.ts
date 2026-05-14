@@ -1,5 +1,8 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import crypto from "crypto";
+import { readFileSync, existsSync } from "fs";
+import path from "path";
 
 interface BuildPdfParams {
   templateName: string;
@@ -18,6 +21,46 @@ interface BuildPdfResult {
 }
 
 /**
+ * Locate a bundled font file. We deliberately avoid `import.meta.url` /
+ * `__dirname` because the production bundle is emitted by esbuild as a
+ * single CJS file (`dist/index.cjs`) where `import.meta` is empty and
+ * `__dirname` collapses to the dist root — both unreliable across
+ * dev (tsx + ESM) and prod (CJS bundle).
+ *
+ * Strategy: probe a fixed set of well-known paths anchored to either
+ * `process.cwd()` (varies by how the workflow is launched) or the system
+ * font install. The cwd candidates cover both running from the repo root
+ * (pnpm dev) and from `artifacts/api-server` (production process manager).
+ */
+function resolveFontPath(filename: string): string {
+  const cwd = process.cwd();
+  const candidates = [
+    // Dev (tsx) — workflow runs from artifacts/api-server, src tree present
+    path.join(cwd, "src/assets/fonts", filename),
+    path.join(cwd, "dist/assets/fonts", filename),
+    // Repo-root launches
+    path.join(cwd, "artifacts/api-server/src/assets/fonts", filename),
+    path.join(cwd, "artifacts/api-server/dist/assets/fonts", filename),
+    // System DejaVu install — last-resort fallback so PDF generation
+    // never silently breaks on Replit/Linux even if the bundle copy is
+    // missing. DejaVu Sans covers the same Unicode ranges we ship.
+    `/usr/share/fonts/truetype/dejavu/${filename}`,
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  throw new Error(`Font not found: ${filename}. Tried: ${candidates.join(", ")}`);
+}
+
+let cachedRegular: Buffer | null = null;
+let cachedBold: Buffer | null = null;
+function loadFontBytes(): { regular: Buffer; bold: Buffer } {
+  if (!cachedRegular) cachedRegular = readFileSync(resolveFontPath("DejaVuSans.ttf"));
+  if (!cachedBold) cachedBold = readFileSync(resolveFontPath("DejaVuSans-Bold.ttf"));
+  return { regular: cachedRegular, bold: cachedBold };
+}
+
+/**
  * Convert simplified HTML (h1/h2/h3, p, ul/li, br) to plain text blocks.
  * We don't run a full HTML parser — templates are author-controlled markup
  * meant for a contract document, not arbitrary user input.
@@ -31,6 +74,10 @@ function htmlToBlocks(html: string): { kind: "h1" | "h2" | "h3" | "p" | "li" | "
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/<!--[\s\S]*?-->/g, "")
+    // Drop <img> entirely — signature artwork is rendered separately on the
+    // signature page, and template-side signature placeholders should not
+    // print as anything in the body text.
+    .replace(/<img\b[^>]*>/gi, "")
     .replace(/<br\s*\/?\s*>/gi, "\n")
     .replace(/<\/(p|h1|h2|h3|li|ul|ol|div|section|article|header|footer)>/gi, "\n")
     .replace(/<(?!\/?(?:h1|h2|h3|p|li|ul|ol|div|section|article|header|footer|br)\b)[^>]+>/gi, "");
@@ -71,12 +118,6 @@ function decodeEntities(s: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
-// Strip non-WinAnsi (e.g. non-Latin) characters so StandardFonts can render
-// the text without throwing. Replaces unsupported runs with `?`.
-function asciiSafe(s: string): string {
-  return s.replace(/[^\x20-\x7E\r\n\t]/g, "?");
-}
-
 function wrapLine(font: any, fontSize: number, maxWidth: number, line: string): string[] {
   const words = line.split(/\s+/);
   const wrapped: string[] = [];
@@ -97,8 +138,16 @@ function wrapLine(font: any, fontSize: number, maxWidth: number, line: string): 
 
 export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  // Register fontkit so pdf-lib can embed custom Unicode TTFs. Without it,
+  // embedFont is restricted to the WinAnsi-only StandardFonts and Turkish,
+  // Cyrillic, Greek etc. would render as `?` glyphs.
+  pdf.registerFontkit(fontkit);
+  const { regular, bold } = loadFontBytes();
+  // subset:true would shrink the embed, but pdf-lib 1.17 trips a fontkit
+  // edge-case ("Cannot read properties of undefined (reading 'advanceWidth')")
+  // for some glyphs in DejaVu Sans. The full embed is ~1.5MB but stable.
+  const font = await pdf.embedFont(regular);
+  const fontBold = await pdf.embedFont(bold);
 
   const pageWidth = 595.28; // A4
   const pageHeight = 841.89;
@@ -110,8 +159,7 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
 
   const drawText = (text: string, opts: { size: number; bold?: boolean; spaceAfter?: number }) => {
     const f = opts.bold ? fontBold : font;
-    const safe = asciiSafe(text);
-    const wrapped = wrapLine(f, opts.size, usableWidth, safe);
+    const wrapped = wrapLine(f, opts.size, usableWidth, text);
     for (const line of wrapped) {
       if (cursorY - opts.size - 4 < margin) {
         page = pdf.addPage([pageWidth, pageHeight]);

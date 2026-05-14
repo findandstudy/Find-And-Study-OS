@@ -108,20 +108,39 @@ export function buildAgentContext(agent: any | null, intake: Record<string, any>
  * literal `<img src="{{...}}">` placeholders that the renderer left intact
  * because the path didn't match its regex.
  */
-export function cleanupSignatureImages(html: string, placeholderText: string): string {
-  // Strip the literal `{{...}}` (3-dot) placeholder that the contract author
-  // left in the template — it's not a real path, just a visual marker.
-  let out = html.replace(/<img[^>]*src=["']\{\{\.\.\.\}\}["'][^>]*>/gi, "");
+/**
+ * An <img> src looks "unfilled" when the template renderer was unable to
+ * substitute a real value into it. Covers:
+ *   - completely missing/whitespace src
+ *   - bare handlebars remnants (`{{signature}}`, `{{...}}`, etc.) that the
+ *     renderer left in place because the path didn't resolve
+ *   - any src that still contains `{{` or `}}` from a partial substitution
+ *   - `data:` URLs with an empty payload such as `data:image/png;base64,`
+ *     produced when a template wraps `{{signature}}` inside a data-URL
+ *     prefix and the signature variable resolved to ""
+ *
+ * We deliberately do NOT match on alt/class/id text, because contracts may
+ * legitimately reference real signature artwork (e.g. a notarised seal
+ * served from a CDN) and we must not swap those out.
+ */
+function looksUnfilled(src: string): boolean {
+  const s = src.trim();
+  if (!s) return true;
+  if (/^\{\{[\w.\s]*\}\}$/.test(s)) return true;
+  if (s.includes("{{") || s.includes("}}")) return true;
+  if (/^data:[^,]*,\s*$/.test(s)) return true;
+  return false;
+}
 
-  out = out.replace(/<img\b([^>]*)>/gi, (full, attrs) => {
-    const srcMatch = (attrs as string).match(/\bsrc\s*=\s*(["'])(.*?)\1/i);
-    const src = srcMatch ? srcMatch[2].trim() : "";
-    if (src && !/^\{\{[\w.]+\}\}$/.test(src)) return full;
-    const altMatch = (attrs as string).match(/\balt\s*=\s*(["'])(.*?)\1/i);
-    const alt = altMatch ? altMatch[2].trim() : placeholderText;
+export function cleanupSignatureImages(html: string, placeholderText: string): string {
+  return html.replace(/<img\b([^>]*)>/gi, (full, attrs) => {
+    const a = attrs as string;
+    const srcMatch = a.match(/\bsrc\s*=\s*(["'])(.*?)\1/i);
+    const src = srcMatch ? srcMatch[2] : "";
+    if (!looksUnfilled(src)) return full;
+    const altMatch = a.match(/\balt\s*=\s*(["'])(.*?)\1/i);
+    const alt = altMatch ? altMatch[2].trim() : "";
     const safe = escapeHtml(alt || placeholderText);
     return `<div style="display:flex;align-items:center;justify-content:center;min-height:64px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;color:#94a3b8;font-size:12px;font-style:italic;padding:16px;margin:4px 0;">${safe}</div>`;
   });
-
-  return out;
 }
