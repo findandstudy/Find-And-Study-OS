@@ -1,7 +1,14 @@
-import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction, json } from "express";
 import { requireAuth } from "../lib/auth";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+
+// AI extraction endpoints accept base64-encoded PDF/image documents in the
+// JSON body. Base64 inflates payload size by ~33%, and the route itself
+// allows up to 10 MB of raw document data — so the global 1mb body limit
+// blocks legitimate requests before they reach the route. These routes are
+// gated by requireAuth + aiRateLimit so a higher local limit is acceptable.
+const aiJson = json({ limit: "20mb" });
 
 /**
  * Convert whatever GPA string the AI extracted from a diploma/transcript
@@ -92,7 +99,7 @@ Rules:
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
-router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), async (req, res): Promise<void> => {
+router.post("/ai/extract-document", aiJson, requireAuth, aiRateLimit(10, 15 * 60 * 1000), async (req, res): Promise<void> => {
   try {
     const { documents } = req.body as {
       documents: Array<{
@@ -199,7 +206,7 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
   }
 });
 
-router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000), async (req, res): Promise<void> => {
+router.post("/ai/extract-bulk-csv", aiJson, requireAuth, aiRateLimit(5, 15 * 60 * 1000), async (req, res): Promise<void> => {
   try {
     const { csvData } = req.body as { csvData: string };
     if (!csvData) {

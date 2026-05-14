@@ -124,6 +124,10 @@ const LARGE_BODY_PATHS = [
   "/api/cities/bulk",
   "/api/universities/bulk",
   "/api/programs/bulk",
+  "/api/public/apply",
+  "/api/public/ai/extract-document",
+  "/api/ai/extract-document",
+  "/api/ai/extract-bulk-csv",
 ];
 function isLargeBodyPath(path: string): boolean {
   for (const p of LARGE_BODY_PATHS) {

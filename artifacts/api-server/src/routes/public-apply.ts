@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response, json } from "express";
 import crypto from "crypto";
 import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
 import { eq, and, isNotNull, inArray, isNull, sql } from "drizzle-orm";
@@ -15,6 +15,13 @@ import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
+
+// Public-apply form (course-finder widget) and AI document extraction accept
+// base64-encoded PDF/image uploads in the JSON body. Base64 inflates payload
+// size by ~33%, so the global 1mb body limit blocks legitimate submissions.
+// These routes are gated by their own rate limiters (applyLimiter /
+// aiExtractLimiter) so a higher local limit is acceptable.
+const applyJson = json({ limit: "20mb" });
 
 const APPLY_WINDOW_MS = 15 * 60 * 1000;
 
@@ -300,7 +307,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
   }
 }
 
-router.post("/public/apply", applyLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post("/public/apply", applyJson, applyLimiter, async (req: Request, res: Response): Promise<void> => {
   const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, leadId: incomingLeadId, documents, reuseDocumentIds } = req.body;
   let leadId: number | null = null;
 
@@ -832,7 +839,7 @@ Rules:
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
-router.post("/public/ai/extract-document", aiExtractLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post("/public/ai/extract-document", applyJson, aiExtractLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documents } = req.body as {
       documents: Array<{
