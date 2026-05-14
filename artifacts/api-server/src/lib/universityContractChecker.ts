@@ -1,6 +1,7 @@
 import { db, universityContractsTable, universitiesTable, usersTable, rolesTable, destinationsTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
+import { formatDate } from "@workspace/i18n";
 import { getAppBaseUrl } from "./email";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
@@ -110,7 +111,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       const expiry = new Date(row.expiryDate);
       const daysLeft = daysBetween(expiry, now);
       const uniName = row.universityName || `Üniversite #${row.universityId}`;
-      const fmt = (d: Date) => d.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
+      const fmt = (d: Date) => formatDate(d, "tr", { day: "2-digit", month: "long", year: "numeric" });
       const expiryStr = fmt(expiry);
       const effective = row.effectiveDate ? new Date(row.effectiveDate) : null;
       const effectiveStr = effective ? fmt(effective) : "—";

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { getClientIp } from "../lib/clientIp";
+import { getRateLimitIp } from "../lib/clientIp";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
 import { and, eq, gt, desc } from "drizzle-orm";
@@ -29,15 +29,15 @@ function generateVerificationCode(): string {
 }
 
 function buildOnboardingVerificationCodeEmail(firstName: string, code: string): { subject: string; html: string; text: string } {
-  const subject = "Welcome ��� Verify Your Email / Ho�� geldiniz ��� E-posta Do��rulama";
+  const subject = "Welcome — Verify Your Email / Hoş geldiniz — E-posta Doğrulama";
   const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
     <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
       <h1 style="margin:0;color:#fff;font-size:24px;">Find And Study OS</h1>
-      <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Agent Onboarding �� Acente Kay��t</p>
+      <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Agent Onboarding · Acente Kayıt</p>
     </div>
     <div style="padding:32px;">
-      <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Verify your email / E-postan��z�� do��rulay��n</h2>
+      <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Verify your email / E-postanızı doğrulayın</h2>
       <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
         Hi ${firstName}, your agent account has been created. Use the code below to verify your email. After verifying you must sign your agency contract before accessing the dashboard. This code expires in 15 minutes.
       </p>
@@ -128,11 +128,11 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
 });
 
 /**
- * POST /api/agents/me/resend-verification ��� generates a new 6-digit code,
+ * POST /api/agents/me/resend-verification — generates a new 6-digit code,
  * invalidates older codes, emails the agent.
  */
 router.post("/agents/me/resend-verification", requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const ip = getClientIp(req);
+  const ip = getRateLimitIp(req);
   try {
     await rateLimiter.consume(`agent-resend:${ip}`);
     await rateLimiter.consume(`agent-resend:${req.user!.id}`);
@@ -171,13 +171,13 @@ router.post("/agents/me/resend-verification", requireAuth, async (req: Request, 
 });
 
 /**
- * POST /api/agents/me/verify-email ��� confirms the 6-digit code, flips
+ * POST /api/agents/me/verify-email — confirms the 6-digit code, flips
  * users.emailVerified=true, refreshes the session payload.
  */
 router.post("/agents/me/verify-email", requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { code } = req.body || {};
   if (!code || typeof code !== "string") { res.status(400).json({ error: "Code is required" }); return; }
-  const ip = getClientIp(req);
+  const ip = getRateLimitIp(req);
   try {
     await rateLimiter.consume(`agent-verify:${ip}`);
     await rateLimiter.consume(`agent-verify:${req.user!.id}`);
@@ -207,7 +207,7 @@ router.post("/agents/me/verify-email", requireAuth, async (req: Request, res: Re
 });
 
 /**
- * GET /api/contracts/me ��� primary onboarding session info plus rendered
+ * GET /api/contracts/me — primary onboarding session info plus rendered
  * preview HTML for the review step. Returns the signed PDF link if signed.
  */
 router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Promise<void> => {
@@ -251,7 +251,7 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
 });
 
 /**
- * POST /api/contracts/me/sign ��� agent draws their signature in the dashboard
+ * POST /api/contracts/me/sign — agent draws their signature in the dashboard
  * and finalizes the primary onboarding session (no token).
  */
 router.post("/contracts/me/sign", requireAuth, async (req: Request, res: Response): Promise<void> => {
@@ -283,7 +283,7 @@ router.post("/contracts/me/sign", requireAuth, async (req: Request, res: Respons
 });
 
 /**
- * POST /api/contracts/agent/:agentId/resend-onboarding ��� admin reissues a
+ * POST /api/contracts/agent/:agentId/resend-onboarding — admin reissues a
  * primary onboarding session for an agent whose previous session expired or
  * was revoked. Reuses the originally assigned template if any.
  */
@@ -362,10 +362,10 @@ router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireR
 
 export default router;
 
-// ������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������
+// ————————————————————————————————————————————————————————————————————————————
 // Helpers exported for the gate middleware in routes/index.ts and the agents
 // POST handler that creates the initial verification code + signing session.
-// ������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������
+// ————————————————————————————————————————————————————————————————————————————
 
 export const ONBOARDING_HELPERS = {
   generateVerificationCode,

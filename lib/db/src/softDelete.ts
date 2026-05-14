@@ -1,4 +1,4 @@
-import { sql, inArray, eq, type SQL } from "drizzle-orm";
+import { sql, inArray, eq, isNull, and, type SQL } from "drizzle-orm";
 import type { PgTable, PgColumn, PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { db } from "./index";
 
@@ -35,12 +35,13 @@ export async function softDelete<T extends SoftDeletableTable>(
     (updates as Record<string, unknown>).deletedBy = opts.actorUserId;
   }
 
-  const where = idArr.length === 1
+  const idWhere = idArr.length === 1
     ? eq(table.id, idArr[0])
     : inArray(table.id, idArr);
+  const where = and(idWhere, isNull(table.deletedAt));
 
   const result = await runner.update(table).set(updates).where(where);
-  return result?.rowCount ?? idArr.length;
+  return result?.rowCount ?? 0;
 }
 
 /**

@@ -8,8 +8,17 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
+import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
+
+const documentsObjectStorage = new ObjectStorageService();
+
+async function fetchFileKeyHeadBytes(fileKey: string, byteLen = 4100): Promise<Buffer> {
+  const file = await documentsObjectStorage.getObjectEntityFile(fileKey);
+  const [buf] = await file.download({ start: 0, end: byteLen - 1 });
+  return buf;
+}
 
 const router: IRouter = Router();
 
@@ -160,6 +169,24 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     if (validationError) {
       const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: validationError.message });
+      return;
+    }
+    let head: Buffer;
+    try {
+      head = await fetchFileKeyHeadBytes(fileKey);
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        res.status(400).json({ error: "Uploaded file could not be located in object storage." });
+        return;
+      }
+      console.error("[DOCUMENTS] head-byte fetch failed:", err);
+      res.status(502).json({ error: "Failed to verify uploaded file." });
+      return;
+    }
+    const bufferError = await validateUploadedFileBuffer(validationFileName, mimeType, head);
+    if (bufferError) {
+      const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
+      res.status(httpStatus).json({ error: bufferError.message });
       return;
     }
   }

@@ -1,6 +1,7 @@
 import { db, agentsTable, usersTable, settingsTable, signingSessionsTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, lt, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
+import { formatDate } from "@workspace/i18n";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
 
@@ -123,7 +124,7 @@ export async function checkContractExpiries(): Promise<void> {
 
       const agentName = `${agent.firstName} ${agent.lastName}`.trim();
       const businessName = agent.businessName || "";
-      const contractEndStr = endDate.toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" });
+      const contractEndStr = formatDate(endDate, "tr", { day: "2-digit", month: "long", year: "numeric" });
       const title = `Sözleşme ${daysLeft} gün içinde sona eriyor — ${businessName || agentName}`;
       const body = `${businessName ? businessName + " (" + agentName + ")" : agentName} acentesinin sözleşmesi ${contractEndStr} tarihinde sona eriyor (${daysLeft} gün kaldı).`;
 
