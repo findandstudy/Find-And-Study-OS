@@ -808,7 +808,13 @@ export default function AgentsPage() {
                 <td className="py-3 px-3">
                   {a.country ? (
                     <div className="flex items-center gap-1.5 text-xs">
-                      <CountryFlag code={a.country} size="sm" />
+                      {(() => {
+                        const v = a.country.trim();
+                        const code = /^[A-Za-z]{2}$/.test(v)
+                          ? v
+                          : countries.find(c => c.name.toLowerCase() === v.toLowerCase())?.code;
+                        return code ? <CountryFlag code={code} size="sm" /> : null;
+                      })()}
                       <span>{a.country}</span>
                     </div>
                   ) : <span className="text-muted-foreground text-xs">-</span>}
