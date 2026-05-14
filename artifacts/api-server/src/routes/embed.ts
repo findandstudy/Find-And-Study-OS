@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, json } from "express";
 import crypto from "crypto";
 import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, desc, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -14,6 +14,16 @@ import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 
 const router: IRouter = Router();
+
+// Embed widget /apply submissions include base64-encoded PDF/image documents
+// in the JSON body (course-finder widget). Base64 inflates payload by ~33%
+// so the global 1mb limit blocks legitimate submissions. Routes are gated by
+// embedSubmitLimiter (applied BEFORE the parser so rate-limited requests
+// never pay the parse cost) and per-widget allowed-domains validation.
+// /lead carries only personal-info text fields, so it keeps a tight limit;
+// only /apply needs the larger envelope for documents.
+const embedApplyJson = json({ limit: "20mb" });
+const embedLeadJson = json({ limit: "256kb" });
 
 const EMBED_WINDOW_MS = 15 * 60 * 1000;
 const embedSubmitLimiter = rateLimit({
@@ -383,7 +393,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
 // the widget's allowed-domains list. Called by the widget JS when the user
 // clicks "Continue" on the Personal Info step so the lead lands in the
 // "new" column even if the user abandons the form before submitting docs.
-router.post("/public/embed/:slug/lead", embedSubmitLimiter, async (req, res): Promise<void> => {
+router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async (req, res): Promise<void> => {
   const { slug } = req.params;
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
@@ -429,7 +439,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, async (req, res): Pr
   }
 });
 
-router.post("/public/embed/:slug/apply", embedSubmitLimiter, async (req, res): Promise<void> => {
+router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
   const { slug } = req.params;
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }

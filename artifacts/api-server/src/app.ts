@@ -126,6 +126,7 @@ const LARGE_BODY_PATHS = [
   "/api/programs/bulk",
   "/api/public/apply",
   "/api/public/ai/extract-document",
+  "/api/public/embed",
   "/api/ai/extract-document",
   "/api/ai/extract-bulk-csv",
 ];
