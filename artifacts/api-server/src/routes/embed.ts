@@ -797,7 +797,7 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.src = '${baseUrl}/api/public/embed/' + slug + '/widget';
     iframe.style.width = '100%';
     iframe.style.border = 'none';
-    iframe.style.minHeight = '600px';
+    iframe.style.minHeight = '780px';
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
     el.appendChild(iframe);
@@ -906,12 +906,21 @@ function generateEmbedScript(baseUrl: string): string {
         try{
           var rect = iframe.getBoundingClientRect();
           var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-          if (rect.bottom < 80 || rect.top > vh - 80) {
+          var isMobile = (window.innerWidth || document.documentElement.clientWidth || 0) < 768;
+          if (isMobile) {
+            // On mobile the iframe is often very tall and the user just
+            // tapped an Apply button somewhere in the middle of the host
+            // page. Always scroll the iframe top to the top of the viewport
+            // so the modal (which positions itself near the visible top of
+            // the iframe) lands inside the visible area instead of above it.
+            iframe.scrollIntoView({block: 'start'});
+          } else if (rect.bottom < 80 || rect.top > vh - 80) {
             iframe.scrollIntoView({block: 'start'});
           }
         }catch(err){}
         lockScroll();
         sendViewport();
+        setTimeout(sendViewport, 120);
       } else if (d.type === 'edcons-modal-close') {
         unlockScroll();
       } else if (d.type === 'edcons-viewport-request') {
@@ -1660,31 +1669,33 @@ function renderFormContent(prog){
     var natStyle=natIsAi?'border-color:#22c55e;background:#f0fdf4':'';
     var natOpts='<option value="">Select nationality...</option>';
     for(var ni=0;ni<NATIONALITIES.length;ni++){var nc=NATIONALITIES[ni];natOpts+='<option value="'+esc(nc)+'"'+(natVal===nc?' selected':'')+'>'+esc(nc)+'</option>';}
-    h+='<div class="ew-form-group"><label>Nationality'+(natIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><select name="nationality" style="'+natStyle+'">'+natOpts+'</select></div>';
+    h+='<div class="ew-form-group"><label>Nationality *'+(natIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><select name="nationality" style="'+natStyle+'" required>'+natOpts+'</select></div>';
     h+='<div class="ew-form-group"><label>Desired Level</label><select name="desiredLevel"><option value="">Select...</option><option value="Foundation"'+(fv2.desiredLevel==='Foundation'?' selected':'')+'>Foundation</option><option value="Associate"'+(fv2.desiredLevel==='Associate'?' selected':'')+'>Associate</option><option value="Bachelor"'+(fv2.desiredLevel==='Bachelor'?' selected':'')+'>Bachelor</option><option value="Master"'+(fv2.desiredLevel==='Master'?' selected':'')+'>Master</option><option value="PhD"'+(fv2.desiredLevel==='PhD'?' selected':'')+'>PhD</option></select></div>';
     if(!prog){
       h+='<div class="ew-form-group"><label>Preferred University</label><input name="preferredUniversity" value="'+esc(fv2.preferredUniversity||'')+'"></div>';
       h+='<div class="ew-form-group"><label>Desired Program</label><input name="desiredProgram" value="'+esc(fv2.desiredProgram||'')+'"></div>';
     }
     // Personal details (most often AI-extracted from passport / transcripts).
-    aiField('dateOfBirth','Date of Birth','date',false,true);
+    // These are required for application processing on the staff side, so they
+    // are marked with "*" even though the AI usually fills them automatically.
+    aiField('dateOfBirth','Date of Birth','date',true,true);
     // Gender — render as a select since aiField only supports input types.
     var gVal=savedFormData.gender||'';
     var gIsAi=!!extractedFields.gender;
     var gStyle=gIsAi?'border-color:#22c55e;background:#f0fdf4':'';
     var gLow=String(gVal).toLowerCase();
-    h+='<div class="ew-form-group"><label>Gender'+(gIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><select name="gender" style="'+gStyle+'"><option value="">Select...</option><option value="female"'+(gLow==='female'?' selected':'')+'>Female</option><option value="male"'+(gLow==='male'?' selected':'')+'>Male</option></select></div>';
-    aiField('motherName','Mother Name','text',false,true);
-    aiField('fatherName','Father Name','text',false,true);
+    h+='<div class="ew-form-group"><label>Gender *'+(gIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><select name="gender" style="'+gStyle+'" required><option value="">Select...</option><option value="female"'+(gLow==='female'?' selected':'')+'>Female</option><option value="male"'+(gLow==='male'?' selected':'')+'>Male</option></select></div>';
+    aiField('motherName','Mother Name','text',true,true);
+    aiField('fatherName','Father Name','text',true,true);
     // Passport details.
-    aiField('passportNumber','Passport Number','text',false,true);
+    aiField('passportNumber','Passport Number','text',true,true);
     aiField('passportIssueDate','Passport Issue Date','date',false,true);
-    aiField('passportExpiry','Passport Expiry','date',false,true);
+    aiField('passportExpiry','Passport Expiry','date',true,true);
     // Address — textarea (longer free-form), rendered inline.
     var adVal=savedFormData.address||'';
     var adIsAi=!!extractedFields.address;
     var adStyle=adIsAi?'border-color:#22c55e;background:#f0fdf4':'';
-    h+='<div class="ew-form-group full"><label>Address'+(adIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><textarea name="address" rows="2" style="'+adStyle+'">'+esc(adVal)+'</textarea></div>';
+    h+='<div class="ew-form-group full"><label>Address *'+(adIsAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><textarea name="address" rows="2" style="'+adStyle+'" required>'+esc(adVal)+'</textarea></div>';
     // Education.
     aiField('highSchool','High School','text',false,true);
     aiField('graduationYear','Graduation Year','number',false,true);
@@ -2055,6 +2066,16 @@ function handleAnalyze(){
             else if(gl==='m'||gl==='male')sval='male';
             else continue;
           }
+          // Clean punctuation from name-like text fields. Some passport/ID
+          // OCR results come back as "AHMET, " or "Ali." — strip surrounding
+          // whitespace, leading/trailing punctuation, and collapse internal
+          // commas/periods that aren't meaningful for proper names.
+          var nameLike={firstName:1,lastName:1,motherName:1,fatherName:1,highSchool:1};
+          if(nameLike[fk]){
+            sval=sval.replace(/^[\\s.,;:!?"'\\u2013\\u2014\\-]+|[\\s.,;:!?"'\\u2013\\u2014\\-]+$/g,'');
+            sval=sval.replace(/[.,;:!?]+/g,' ').replace(/\\s{2,}/g,' ').trim();
+          }
+          if(!sval)continue;
           savedFormData[fk]=sval;
           extractedFields[fk]=true;
         }
@@ -2195,7 +2216,13 @@ function esc(s){if(!s)return '';var d=document.createElement('div');d.textConten
 function resizeParent(){
   try{
     var root=document.querySelector('.ew-root');
-    var h=root?(root.offsetHeight+32):document.body.scrollHeight;
+    // Use the larger of root.scrollHeight (full content) and document
+    // scrollHeight so internal overflow containers don't truncate the
+    // reported height and force an inner scrollbar on the host page.
+    var rootH=root?Math.max(root.scrollHeight,root.offsetHeight):0;
+    var docH=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);
+    var h=Math.max(rootH,docH)+32;
+    if(h<780)h=780;
     window.parent.postMessage({type:'edcons-resize',slug:SLUG,height:h},'*');
   }catch(e){}
 }
