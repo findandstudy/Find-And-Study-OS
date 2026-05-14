@@ -56,14 +56,22 @@ router.get("/universities/countries", async (_req, res): Promise<void> => {
 });
 
 router.get("/universities", async (req, res): Promise<void> => {
-  const { country, search, page = "1", limit = "20" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const { country, city, type, status, qs, search, name, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
+  const pageNum = Math.max(1, safeInt(page, 1));
+  const limitNum = Math.min(100, Math.max(1, safeInt(limit, 20)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
   if (country) conditions.push(ilike(universitiesTable.country, `%${country}%`));
+  if (city) conditions.push(ilike(universitiesTable.city, `%${city}%`));
+  if (type) conditions.push(ilike(universitiesTable.universityType, type));
+  if (status) conditions.push(ilike(universitiesTable.status, status));
   if (search) conditions.push(ilike(universitiesTable.name, `%${search}%`));
+  if (name) conditions.push(ilike(universitiesTable.name, `%${name}%`));
+  if (qs && /^\d+$/.test(qs)) {
+    conditions.push(eq(universitiesTable.qsRanking, parseInt(qs, 10)));
+  }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(universitiesTable).where(where);

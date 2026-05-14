@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { CountryFlag } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { ColumnHeader } from "@/components/ui/column-header";
 import { apiFetch } from "@/lib/apiFetch";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
@@ -676,12 +677,33 @@ function UniversitiesTab() {
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Column filters
+  const [fName, setFName] = useState("");
+  const [fCountry, setFCountry] = useState("");
+  const [fCity, setFCity] = useState("");
+  const [fType, setFType] = useState("");
+  const [fQs, setFQs] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const dfName = useDebounce(fName);
+  const dfCity = useDebounce(fCity);
+  const dfQs = useDebounce(fQs);
+
   const { data: catOptsResp } = useQuery({ queryKey: ["catalog-options"], queryFn: () => api("/api/catalog-options") });
   const uniTypeOpts = ((catOptsResp as any)?.grouped?.university_type || []).filter((o: any) => o.isActive).map((o: any) => o.value);
 
   const { data } = useQuery({
-    queryKey: ["universities", page, dSearch],
-    queryFn: () => api(`/api/universities?page=${page}&limit=30${dSearch ? `&search=${encodeURIComponent(dSearch)}` : ""}`),
+    queryKey: ["universities", page, dSearch, dfName, fCountry, dfCity, fType, dfQs, fStatus],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: "30" });
+      if (dSearch) params.set("search", dSearch);
+      if (dfName) params.set("name", dfName);
+      if (fCountry) params.set("country", fCountry);
+      if (dfCity) params.set("city", dfCity);
+      if (fType) params.set("type", fType);
+      if (dfQs) params.set("qs", dfQs);
+      if (fStatus) params.set("status", fStatus);
+      return api(`/api/universities?${params.toString()}`);
+    },
   });
   const universities: University[] = data?.data ?? [];
   const totalPages = data?.meta?.totalPages ?? 1;
@@ -823,12 +845,27 @@ function UniversitiesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="University" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Country" col="country" sort={sort} onSort={handleSort} />
-              <SortTh label="City" col="city" sort={sort} onSort={handleSort} />
-              <SortTh label="Type" col="type" sort={sort} onSort={handleSort} />
-              <SortTh label="QS" col="qs" sort={sort} onSort={handleSort} />
-              <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
+              <ColumnHeader asTh label="University"
+                sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "University" }} />
+              <ColumnHeader asTh label="Country"
+                sort={{ sortKey: "country", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fCountry || "all", onChange: v => { setFCountry(v === "all" ? "" : v); setPage(1); },
+                  options: allCountries.map(c => ({ value: c.name, label: c.name })), allLabel: "All countries", label: "Country" }} />
+              <ColumnHeader asTh label="City"
+                sort={{ sortKey: "city", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fCity, onChange: v => { setFCity(v); setPage(1); }, placeholder: "Filter by city…", label: "City" }} />
+              <ColumnHeader asTh label="Type"
+                sort={{ sortKey: "type", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fType || "all", onChange: v => { setFType(v === "all" ? "" : v); setPage(1); },
+                  options: uniTypeOpts.map((t: string) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) })), allLabel: "All types", label: "Type" }} />
+              <ColumnHeader asTh label="QS"
+                sort={{ sortKey: "qs", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fQs, onChange: v => { setFQs(v.replace(/[^\d]/g, "")); setPage(1); }, placeholder: "Exact QS rank…", label: "QS Ranking" }} />
+              <ColumnHeader asTh label="Status"
+                sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
+                  options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }], allLabel: "All", label: "Status" }} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
