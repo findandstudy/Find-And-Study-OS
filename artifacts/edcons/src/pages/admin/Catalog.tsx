@@ -692,6 +692,10 @@ function UniversitiesTab() {
         const cmp = (a.country ?? "").localeCompare(b.country ?? "", "tr", { sensitivity: "base" });
         return sort.dir === "asc" ? cmp : -cmp;
       }
+      if (sort.col === "city") {
+        const cmp = (a.city ?? "").localeCompare(b.city ?? "", "tr", { sensitivity: "base" });
+        return sort.dir === "asc" ? cmp : -cmp;
+      }
       if (sort.col === "type") return sortCompare(a, b, "universityType" as keyof University, sort.dir);
       if (sort.col === "qs") return sortCompare(a, b, "qsRanking" as keyof University, sort.dir);
       if (sort.col === "status") return sortCompare(a, b, "status" as keyof University, sort.dir);
@@ -820,7 +824,8 @@ function UniversitiesTab() {
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
               <SortTh label="University" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Country / City" col="country" sort={sort} onSort={handleSort} />
+              <SortTh label="Country" col="country" sort={sort} onSort={handleSort} />
+              <SortTh label="City" col="city" sort={sort} onSort={handleSort} />
               <SortTh label="Type" col="type" sort={sort} onSort={handleSort} />
               <SortTh label="QS" col="qs" sort={sort} onSort={handleSort} />
               <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
@@ -829,7 +834,7 @@ function UniversitiesTab() {
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No universities found</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No universities found</td></tr>
             )}
             {sorted.map(u => (
               <tr key={u.id} className={`hover:bg-muted/20 transition-colors ${selected.has(u.id) ? "bg-primary/5" : ""}`}>
@@ -848,7 +853,8 @@ function UniversitiesTab() {
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">{u.country}{u.city ? `, ${u.city}` : ""}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{u.country ?? "—"}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{u.city ?? "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">
                   {u.universityType === "state" ? "State" : u.universityType === "private" ? "Private" : u.universityType === "foundation" ? "Foundation" : u.universityType ?? "—"}
                 </td>
