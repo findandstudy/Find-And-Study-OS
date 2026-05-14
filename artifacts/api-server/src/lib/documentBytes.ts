@@ -65,6 +65,14 @@ export async function streamDocumentToResponse(
         normalizeFileKey(doc.fileKey),
       );
       res.setHeader("Content-Type", mime);
+      try {
+        const [metadata] = await file.getMetadata();
+        if (metadata?.size != null) {
+          res.setHeader("Content-Length", String(metadata.size));
+        }
+      } catch {
+        // metadata is optional; stream without Content-Length if unavailable
+      }
       const nodeStream = file.createReadStream();
       await new Promise<void>((resolve, reject) => {
         nodeStream.on("error", reject);

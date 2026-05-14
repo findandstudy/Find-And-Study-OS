@@ -1,4 +1,4 @@
-import { db, universityContractsTable, universitiesTable, usersTable, rolesTable, destinationsTable } from "@workspace/db";
+import { db, universityContractsTable, universitiesTable, usersTable, rolesTable, destinationsTable, settingsTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 import { formatDate } from "@workspace/i18n";
@@ -111,7 +111,7 @@ export async function checkUniversityContractExpiries(): Promise<void> {
       const expiry = new Date(row.expiryDate);
       const daysLeft = daysBetween(expiry, now);
       const uniName = row.universityName || `Üniversite #${row.universityId}`;
-      const fmt = (d: Date) => formatDate(d, "tr", { day: "2-digit", month: "long", year: "numeric" });
+      const fmt = (d: Date) => formatDate(d, lang, { day: "2-digit", month: "long", year: "numeric" });
       const expiryStr = fmt(expiry);
       const effective = row.effectiveDate ? new Date(row.effectiveDate) : null;
       const effectiveStr = effective ? fmt(effective) : "—";

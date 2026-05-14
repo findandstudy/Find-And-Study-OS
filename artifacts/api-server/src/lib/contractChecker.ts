@@ -124,7 +124,7 @@ export async function checkContractExpiries(): Promise<void> {
 
       const agentName = `${agent.firstName} ${agent.lastName}`.trim();
       const businessName = agent.businessName || "";
-      const contractEndStr = formatDate(endDate, "tr", { day: "2-digit", month: "long", year: "numeric" });
+      const contractEndStr = formatDate(endDate, lang, { day: "2-digit", month: "long", year: "numeric" });
       const title = `Sözleşme ${daysLeft} gün içinde sona eriyor — ${businessName || agentName}`;
       const body = `${businessName ? businessName + " (" + agentName + ")" : agentName} acentesinin sözleşmesi ${contractEndStr} tarihinde sona eriyor (${daysLeft} gün kaldı).`;
 

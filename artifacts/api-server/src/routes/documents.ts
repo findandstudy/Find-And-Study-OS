@@ -185,6 +185,12 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     }
     const bufferError = await validateUploadedFileBuffer(validationFileName, mimeType, head);
     if (bufferError) {
+      try {
+        const file = await documentsObjectStorage.getObjectEntityFile(fileKey);
+        await file.delete({ ignoreNotFound: true });
+      } catch (delErr) {
+        console.error("[DOCUMENTS] failed to clean up rejected upload:", delErr);
+      }
       const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: bufferError.message });
       return;

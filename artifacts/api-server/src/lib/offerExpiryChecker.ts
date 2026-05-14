@@ -110,7 +110,7 @@ export async function checkOfferLetterExpiries(): Promise<void> {
       if (recipientUserIds.size === 0) continue;
 
       const stageLabel = stageLabels.get(doc.stage) || doc.stage;
-      const validUntilStr = formatDate(validUntil, "tr", { day: "2-digit", month: "long", year: "numeric" });
+      const validUntilStr = formatDate(validUntil, lang, { day: "2-digit", month: "long", year: "numeric" });
       const title = `${stageLabel} ${daysLeft} gün içinde geçerliliğini yitiriyor`;
       const body = `${studentName ? studentName + " — " : ""}${app.universityName || ""}${app.programName ? " / " + app.programName : ""} için yüklenen ${stageLabel.toLowerCase()} belgesinin son geçerlilik tarihi: ${validUntilStr} (${daysLeft} gün kaldı).`;
 
