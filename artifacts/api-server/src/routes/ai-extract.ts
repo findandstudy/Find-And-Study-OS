@@ -99,7 +99,7 @@ Rules:
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
-router.post("/ai/extract-document", aiJson, requireAuth, aiRateLimit(10, 15 * 60 * 1000), async (req, res): Promise<void> => {
+router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   try {
     const { documents } = req.body as {
       documents: Array<{
@@ -206,7 +206,7 @@ router.post("/ai/extract-document", aiJson, requireAuth, aiRateLimit(10, 15 * 60
   }
 });
 
-router.post("/ai/extract-bulk-csv", aiJson, requireAuth, aiRateLimit(5, 15 * 60 * 1000), async (req, res): Promise<void> => {
+router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   try {
     const { csvData } = req.body as { csvData: string };
     if (!csvData) {

@@ -307,7 +307,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
   }
 }
 
-router.post("/public/apply", applyJson, applyLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
   const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, leadId: incomingLeadId, documents, reuseDocumentIds } = req.body;
   let leadId: number | null = null;
 
@@ -839,7 +839,7 @@ Rules:
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
-router.post("/public/ai/extract-document", applyJson, aiExtractLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documents } = req.body as {
       documents: Array<{
