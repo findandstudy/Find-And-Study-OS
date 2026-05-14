@@ -2118,6 +2118,7 @@ function WebToLeadTab() {
 }
 
 function OfferExpiryThresholdsCard() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: settings } = useQuery<any>({
@@ -2139,7 +2140,7 @@ function OfferExpiryThresholdsCard() {
     const parts = value.split(",").map(s => s.trim()).filter(Boolean);
     const nums = parts.map(p => parseInt(p, 10));
     if (nums.some(n => isNaN(n) || n <= 0)) {
-      toast({ title: "Geçersiz değer", description: "Sadece pozitif tam sayıları virgülle ayırarak girin (örn: 30,14,7,1).", variant: "destructive" });
+      toast({ title: t("settingsPage.invalidValue"), description: t("settingsPage.invalidThresholdsDesc"), variant: "destructive" });
       return;
     }
     const normalized = Array.from(new Set(nums)).sort((a, b) => b - a).join(",");
@@ -2151,9 +2152,9 @@ function OfferExpiryThresholdsCard() {
         body: JSON.stringify({ offerExpiryWarningDays: normalized }),
       });
       qc.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Eşikler kaydedildi", description: `Aktif: ${normalized}` });
+      toast({ title: t("settingsPage.thresholdsSaved"), description: t("settingsPage.activeColon", { value: normalized }) });
     } catch (err: any) {
-      toast({ title: "Kaydetme başarısız", description: err?.message, variant: "destructive" });
+      toast({ title: t("settingsPage.saveFailed"), description: err?.message, variant: "destructive" });
     }
     setSaving(false);
   }
@@ -2161,14 +2162,14 @@ function OfferExpiryThresholdsCard() {
   return (
     <Card className="border shadow-sm p-6">
       <div className="mb-4">
-        <h3 className="font-display font-semibold text-base">Kabul Mektubu Süre Bildirimi Eşikleri</h3>
+        <h3 className="font-display font-semibold text-base">{t("settingsPage.offerExpiryTitle")}</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Yüklenen kabul mektubunun son geçerlilik tarihine "kaç gün kala" bildirim gönderileceğini belirleyin. Virgülle ayrılmış pozitif gün sayıları (örn: <code className="text-xs px-1 py-0.5 rounded bg-secondary">30,14,7,1</code>).
+          {t("settingsPage.offerExpiryDesc")} <code className="text-xs px-1 py-0.5 rounded bg-secondary">30,14,7,1</code>).
         </p>
       </div>
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <Label htmlFor="offerExpiryWarningDays" className="text-xs">Eşikler (gün)</Label>
+          <Label htmlFor="offerExpiryWarningDays" className="text-xs">{t("settingsPage.thresholdsLabel")}</Label>
           <Input
             id="offerExpiryWarningDays"
             value={value}
@@ -2178,7 +2179,7 @@ function OfferExpiryThresholdsCard() {
           />
         </div>
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Kaydediliyor..." : "Kaydet"}
+          {saving ? t("settingsPage.saving") : t("settingsPage.save")}
         </Button>
       </div>
     </Card>
@@ -2186,6 +2187,7 @@ function OfferExpiryThresholdsCard() {
 }
 
 function SigningDeadlineDaysCard() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: settings } = useQuery<any>({
@@ -2205,7 +2207,7 @@ function SigningDeadlineDaysCard() {
   async function handleSave() {
     const n = parseInt(value, 10);
     if (!Number.isInteger(n) || n < 1 || n > 365) {
-      toast({ title: "Geçersiz değer", description: "1 ile 365 arasında bir tam sayı girin.", variant: "destructive" });
+      toast({ title: t("settingsPage.invalidValue"), description: t("settingsPage.invalidDaysDesc"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -2216,9 +2218,9 @@ function SigningDeadlineDaysCard() {
         body: JSON.stringify({ defaultSigningDeadlineDays: n }),
       });
       qc.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Süre kaydedildi", description: `Yeni varsayılan: ${n} gün` });
+      toast({ title: t("settingsPage.deadlineSaved"), description: t("settingsPage.newDefaultDays", { n }) });
     } catch (err: any) {
-      toast({ title: "Kaydetme başarısız", description: err?.message, variant: "destructive" });
+      toast({ title: t("settingsPage.saveFailed"), description: err?.message, variant: "destructive" });
     }
     setSaving(false);
   }
@@ -2226,14 +2228,14 @@ function SigningDeadlineDaysCard() {
   return (
     <Card className="border shadow-sm p-6">
       <div className="mb-4">
-        <h3 className="font-display font-semibold text-base">Sözleşme imza süresi (gün)</h3>
+        <h3 className="font-display font-semibold text-base">{t("settingsPage.signingDeadlineTitle")}</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Yeni acente oluşturulduğunda otomatik açılan birincil onboarding imza oturumu, kaç gün geçerli olsun? Süre dolarsa acente kilit ekranı görür ve admin yeniden gönderebilir. (1–365 gün, varsayılan 14)
+          {t("settingsPage.signingDeadlineDesc")}
         </p>
       </div>
       <div className="flex items-end gap-3">
         <div className="flex-1 max-w-[200px]">
-          <Label htmlFor="defaultSigningDeadlineDays" className="text-xs">Gün</Label>
+          <Label htmlFor="defaultSigningDeadlineDays" className="text-xs">{t("settingsPage.daysLabel")}</Label>
           <Input
             id="defaultSigningDeadlineDays"
             type="number"
@@ -2245,7 +2247,7 @@ function SigningDeadlineDaysCard() {
           />
         </div>
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Kaydediliyor..." : "Kaydet"}
+          {saving ? t("settingsPage.saving") : t("settingsPage.save")}
         </Button>
       </div>
     </Card>
@@ -2253,6 +2255,7 @@ function SigningDeadlineDaysCard() {
 }
 
 function ContractExpiryThresholdsCard() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: settings } = useQuery<any>({
@@ -2274,7 +2277,7 @@ function ContractExpiryThresholdsCard() {
     const parts = value.split(",").map(s => s.trim()).filter(Boolean);
     const nums = parts.map(p => parseInt(p, 10));
     if (nums.some(n => isNaN(n) || n <= 0)) {
-      toast({ title: "Geçersiz değer", description: "Sadece pozitif tam sayıları virgülle ayırarak girin (örn: 30,14,7,1).", variant: "destructive" });
+      toast({ title: t("settingsPage.invalidValue"), description: t("settingsPage.invalidThresholdsDesc"), variant: "destructive" });
       return;
     }
     const normalized = Array.from(new Set(nums)).sort((a, b) => b - a).join(",");
@@ -2286,9 +2289,9 @@ function ContractExpiryThresholdsCard() {
         body: JSON.stringify({ contractExpiryReminderDays: normalized }),
       });
       qc.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Eşikler kaydedildi", description: `Aktif: ${normalized}` });
+      toast({ title: t("settingsPage.thresholdsSaved"), description: t("settingsPage.activeColon", { value: normalized }) });
     } catch (err: any) {
-      toast({ title: "Kaydetme başarısız", description: err?.message, variant: "destructive" });
+      toast({ title: t("settingsPage.saveFailed"), description: err?.message, variant: "destructive" });
     }
     setSaving(false);
   }
@@ -2296,14 +2299,14 @@ function ContractExpiryThresholdsCard() {
   return (
     <Card className="border shadow-sm p-6">
       <div className="mb-4">
-        <h3 className="font-display font-semibold text-base">Acente Sözleşme Süre Bildirimi Eşikleri</h3>
+        <h3 className="font-display font-semibold text-base">{t("settingsPage.contractExpiryTitle")}</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Acente sözleşmesinin bitiş tarihine "kaç gün kala" süper admin, acente sahibi ve atanmış ofis personeline (in-app + e-posta) bildirim gönderileceğini belirleyin. Her eşik için her sözleşmede yalnızca bir kez bildirim gönderilir. Virgülle ayrılmış pozitif gün sayıları (örn: <code className="text-xs px-1 py-0.5 rounded bg-secondary">30,14,7,1</code>).
+          {t("settingsPage.contractExpiryDesc")} <code className="text-xs px-1 py-0.5 rounded bg-secondary">30,14,7,1</code>).
         </p>
       </div>
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <Label htmlFor="contractExpiryReminderDays" className="text-xs">Eşikler (gün)</Label>
+          <Label htmlFor="contractExpiryReminderDays" className="text-xs">{t("settingsPage.thresholdsLabel")}</Label>
           <Input
             id="contractExpiryReminderDays"
             value={value}
@@ -2313,7 +2316,7 @@ function ContractExpiryThresholdsCard() {
           />
         </div>
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Kaydediliyor..." : "Kaydet"}
+          {saving ? t("settingsPage.saving") : t("settingsPage.save")}
         </Button>
       </div>
     </Card>
