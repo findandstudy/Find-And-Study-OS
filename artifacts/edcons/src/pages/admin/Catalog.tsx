@@ -1245,9 +1245,22 @@ function ProgramsTab() {
   const catOpts: Record<string, CatalogOption[]> = (catOptsResp as any)?.grouped || {};
   const activeOpts = (key: string) => (catOpts[key] || []).filter(o => o.isActive).map(o => o.value);
 
+  const [fName, setFName] = useState("");
+  const [fDegree, setFDegree] = useState("");
+  const [fField, setFField] = useState("");
+  const dfName = useDebounce(fName);
+
   const { data } = useQuery({
-    queryKey: ["programs", page, dSearch, filterUni],
-    queryFn: () => api(`/api/programs?page=${page}&limit=30${dSearch ? `&search=${encodeURIComponent(dSearch)}` : ""}${filterUni !== "all" ? `&universityId=${filterUni}` : ""}`),
+    queryKey: ["programs", page, dSearch, filterUni, dfName, fDegree, fField],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: "30" });
+      if (dSearch) params.set("search", dSearch);
+      if (filterUni !== "all") params.set("universityId", filterUni);
+      if (dfName) params.set("name", dfName);
+      if (fDegree) params.set("degree", fDegree);
+      if (fField) params.set("field", fField);
+      return api(`/api/programs?${params.toString()}`);
+    },
   });
   const programs: Program[] = data?.data ?? [];
   const totalPages = data?.meta?.totalPages ?? 1;
@@ -1267,6 +1280,7 @@ function ProgramsTab() {
         return sort.dir === "asc" ? cmp : -cmp;
       }
       if (sort.col === "degree") return sortCompare(a, b, "degree" as keyof Program, sort.dir);
+      if (sort.col === "field") return sortCompare(a, b, "field" as keyof Program, sort.dir);
       if (sort.col === "fee") return sortCompare(a, b, "tuitionFee" as keyof Program, sort.dir);
       if (sort.col === "commission") return sortCompare(a, b, "commissionRate" as keyof Program, sort.dir);
       return sortCompare(a, b, "name" as keyof Program, sort.dir);
@@ -1465,9 +1479,21 @@ function ProgramsTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="Program" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="University" col="university" sort={sort} onSort={handleSort} />
-              <SortTh label="Degree / Field" col="degree" sort={sort} onSort={handleSort} />
+              <ColumnHeader asTh label="Program"
+                sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "Program" }} />
+              <ColumnHeader asTh label="University"
+                sort={{ sortKey: "university", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: filterUni, onChange: v => { setFilterUni(v); setPage(1); setSelected(new Set()); },
+                  options: universities.map(u => ({ value: String(u.id), label: u.name })), allLabel: "All universities", allValue: "all", label: "University" }} />
+              <ColumnHeader asTh label="Degree"
+                sort={{ sortKey: "degree", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fDegree || "all", onChange: v => { setFDegree(v === "all" ? "" : v); setPage(1); },
+                  options: activeOpts("degree").map(d => ({ value: d, label: d })), allLabel: "All", label: "Degree" }} />
+              <ColumnHeader asTh label="Field"
+                sort={{ sortKey: "field", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fField || "all", onChange: v => { setFField(v === "all" ? "" : v); setPage(1); },
+                  options: activeOpts("field").map(f => ({ value: f, label: f })), allLabel: "All", label: "Field" }} />
               <SortTh label="Fee" col="fee" sort={sort} onSort={handleSort} />
               <SortTh label="Commission" col="commission" sort={sort} onSort={handleSort} />
               <th className="px-4 py-2 text-xs font-medium text-left">Quota</th>
@@ -1476,7 +1502,7 @@ function ProgramsTab() {
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No programs found</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">No programs found</td></tr>
             )}
             {sorted.map(p => (
               <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${selected.has(p.id) ? "bg-primary/5" : ""}`}>
@@ -1488,7 +1514,8 @@ function ProgramsTab() {
                   {p.language && <span className="text-xs text-muted-foreground">{p.language} {p.duration ? `· ${p.duration}` : ""}</span>}
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">{uniMap[p.universityId]?.name ?? `#${p.universityId}`}</td>
-                <td className="px-4 py-2.5 text-muted-foreground text-xs">{[p.degree, p.field].filter(Boolean).join(" / ") || "—"}</td>
+                <td className="px-4 py-2.5 text-muted-foreground text-xs">{p.degree || "—"}</td>
+                <td className="px-4 py-2.5 text-muted-foreground text-xs">{p.field || "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.tuitionFee ? `${p.tuitionFee.toLocaleString()} ${p.currency ?? "USD"}` : "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.commissionRate != null ? `%${p.commissionRate}` : "—"}</td>
                 <td className="px-4 py-2.5 text-xs">

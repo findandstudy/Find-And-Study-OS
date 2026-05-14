@@ -170,15 +170,19 @@ router.delete("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), a
 /* ─── PROGRAMS ───────────────────────────────────────────────── */
 
 router.get("/programs", async (req, res): Promise<void> => {
-  const { universityId, language, search, page = "1", limit = "20" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const { universityId, language, search, name, degree, field, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
+  const pageNum = Math.max(1, safeInt(page, 1));
+  const limitNum = Math.min(100, Math.max(1, safeInt(limit, 20)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
-  if (universityId) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
+  if (universityId && /^\d+$/.test(universityId)) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
   if (language) conditions.push(ilike(programsTable.language, language));
   if (search) conditions.push(ilike(programsTable.name, `%${search}%`));
+  if (name) conditions.push(ilike(programsTable.name, `%${name}%`));
+  if (degree) conditions.push(ilike(programsTable.degree, degree));
+  if (field) conditions.push(ilike(programsTable.field, field));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(programsTable).where(where);
