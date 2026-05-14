@@ -242,9 +242,22 @@ function CountriesTab() {
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const [fName, setFName] = useState("");
+  const [fCode, setFCode] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const dfName = useDebounce(fName);
+  const dfCode = useDebounce(fCode);
+
   const { data } = useQuery({
-    queryKey: ["countries", page, dSearch],
-    queryFn: () => api(`/api/countries?page=${page}&limit=50${dSearch ? `&search=${encodeURIComponent(dSearch)}` : ""}`),
+    queryKey: ["countries", page, dSearch, dfName, dfCode, fStatus],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: "50" });
+      if (dSearch) params.set("search", dSearch);
+      if (dfName) params.set("name", dfName);
+      if (dfCode) params.set("code", dfCode);
+      if (fStatus) params.set("status", fStatus);
+      return api(`/api/countries?${params.toString()}`);
+    },
   });
   const countries: Country[] = data?.data ?? [];
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
@@ -336,9 +349,16 @@ function CountriesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="Country" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Code" col="code" sort={sort} onSort={handleSort} />
-              <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
+              <ColumnHeader asTh label="Country"
+                sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "Country" }} />
+              <ColumnHeader asTh label="Code"
+                sort={{ sortKey: "code", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fCode, onChange: v => { setFCode(v.toUpperCase()); setPage(1); }, placeholder: "TR, GB…", label: "ISO Code" }} />
+              <ColumnHeader asTh label="Status"
+                sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
+                  options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], allLabel: "All", label: "Status" }} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
@@ -438,6 +458,10 @@ function CitiesTab() {
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const [fName, setFName] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const dfName = useDebounce(fName);
+
   const { data: countriesData } = useQuery({
     queryKey: ["all-countries-cities"],
     queryFn: () => api("/api/countries?limit=500"),
@@ -446,8 +470,15 @@ function CitiesTab() {
   const countryMap: Record<number, Country> = Object.fromEntries(countries.map(c => [c.id, c]));
 
   const { data } = useQuery({
-    queryKey: ["cities", page, dSearch, filterCountry],
-    queryFn: () => api(`/api/cities?page=${page}&limit=50${dSearch ? `&search=${encodeURIComponent(dSearch)}` : ""}${filterCountry !== "all" ? `&countryId=${filterCountry}` : ""}`),
+    queryKey: ["cities", page, dSearch, filterCountry, dfName, fStatus],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: "50" });
+      if (dSearch) params.set("search", dSearch);
+      if (dfName) params.set("name", dfName);
+      if (filterCountry !== "all") params.set("countryId", filterCountry);
+      if (fStatus) params.set("status", fStatus);
+      return api(`/api/cities?${params.toString()}`);
+    },
   });
   const cities: City[] = data?.data ?? [];
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
@@ -561,9 +592,17 @@ function CitiesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <SortTh label="City" col="name" sort={sort} onSort={handleSort} />
-              <SortTh label="Country" col="country" sort={sort} onSort={handleSort} />
-              <SortTh label="Status" col="status" sort={sort} onSort={handleSort} />
+              <ColumnHeader asTh label="City"
+                sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "City" }} />
+              <ColumnHeader asTh label="Country"
+                sort={{ sortKey: "country", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: filterCountry, onChange: v => { setFilterCountry(v); setPage(1); setSelected(new Set()); },
+                  options: countries.map(c => ({ value: String(c.id), label: c.name })), allLabel: "All countries", allValue: "all", label: "Country" }} />
+              <ColumnHeader asTh label="Status"
+                sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
+                filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
+                  options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], allLabel: "All", label: "Status" }} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>

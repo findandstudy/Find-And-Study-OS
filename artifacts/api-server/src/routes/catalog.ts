@@ -76,12 +76,20 @@ const router: IRouter = Router();
 /* ─── COUNTRIES ─────────────────────────────────────────────── */
 
 router.get("/countries", async (req, res): Promise<void> => {
-  const { search, page = "1", limit = "200" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
+  const { search, name, code, status, page = "1", limit = "200" } = req.query as Record<string, string>;
+  const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
+  const pageNum = Math.max(1, safeInt(page, 1));
+  const limitNum = Math.min(500, Math.max(1, safeInt(limit, 200)));
   const offset = (pageNum - 1) * limitNum;
 
-  const where = search ? ilike(countriesTable.name, `%${search}%`) : undefined;
+  const conditions = [];
+  if (search) conditions.push(ilike(countriesTable.name, `%${search}%`));
+  if (name) conditions.push(ilike(countriesTable.name, `%${name}%`));
+  if (code) conditions.push(ilike(countriesTable.code, `%${code}%`));
+  if (status === "active") conditions.push(eq(countriesTable.isActive, true));
+  else if (status === "inactive") conditions.push(eq(countriesTable.isActive, false));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(countriesTable).where(where);
   const data = await db.select().from(countriesTable).where(where)
     .orderBy(countriesTable.name).limit(limitNum).offset(offset);
@@ -130,14 +138,18 @@ router.delete("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), asyn
 /* ─── CITIES ─────────────────────────────────────────────────── */
 
 router.get("/cities", async (req, res): Promise<void> => {
-  const { countryId, search, page = "1", limit = "500" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(1000, Math.max(1, parseInt(limit, 10)));
+  const { countryId, search, name, status, page = "1", limit = "500" } = req.query as Record<string, string>;
+  const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
+  const pageNum = Math.max(1, safeInt(page, 1));
+  const limitNum = Math.min(1000, Math.max(1, safeInt(limit, 500)));
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
-  if (countryId) conditions.push(eq(citiesTable.countryId, parseInt(countryId, 10)));
+  if (countryId && /^\d+$/.test(countryId)) conditions.push(eq(citiesTable.countryId, parseInt(countryId, 10)));
   if (search) conditions.push(ilike(citiesTable.name, `%${search}%`));
+  if (name) conditions.push(ilike(citiesTable.name, `%${name}%`));
+  if (status === "active") conditions.push(eq(citiesTable.isActive, true));
+  else if (status === "inactive") conditions.push(eq(citiesTable.isActive, false));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(citiesTable).where(where);
