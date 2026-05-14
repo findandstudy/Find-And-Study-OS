@@ -904,23 +904,21 @@ function generateEmbedScript(baseUrl: string): string {
         iframe.style.height = d.height + 'px';
       } else if (d.type === 'edcons-modal-open') {
         try{
-          var rect = iframe.getBoundingClientRect();
-          var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-          var isMobile = (window.innerWidth || document.documentElement.clientWidth || 0) < 768;
-          if (isMobile) {
-            // On mobile the iframe is often very tall and the user just
-            // tapped an Apply button somewhere in the middle of the host
-            // page. Always scroll the iframe top to the top of the viewport
-            // so the modal (which positions itself near the visible top of
-            // the iframe) lands inside the visible area instead of above it.
-            iframe.scrollIntoView({block: 'start'});
-          } else if (rect.bottom < 80 || rect.top > vh - 80) {
-            iframe.scrollIntoView({block: 'start'});
-          }
+          // Always scroll the iframe top to the top of the host viewport
+          // when the modal opens. With dynamic resize the iframe can be
+          // 1500-3000px tall while the viewport is only ~800px, so even
+          // when the iframe bottom is partially visible the modal (which
+          // anchors itself near the visible top of the iframe) ends up
+          // above or far below the user's actual viewport. Snapping the
+          // iframe top to the viewport top guarantees the modal lands in
+          // the visible area on every device, then lockScroll keeps the
+          // host page from drifting while the modal is open.
+          iframe.scrollIntoView({block: 'start'});
         }catch(err){}
         lockScroll();
         sendViewport();
         setTimeout(sendViewport, 120);
+        setTimeout(sendViewport, 400);
       } else if (d.type === 'edcons-modal-close') {
         unlockScroll();
       } else if (d.type === 'edcons-viewport-request') {
@@ -1019,7 +1017,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-pagination button:disabled{opacity:.4;cursor:default}
 .ew-pagination button.active{background:${primaryColor};color:#fff;border-color:${primaryColor}}
 .ew-modal-overlay{position:absolute;top:0;left:0;width:100%;min-height:100%;background:rgba(0,0,0,.5);z-index:9999;padding:0}
-.ew-modal{position:absolute;left:50%;transform:translateX(-50%);top:24px;background:#fff;border-radius:${borderRadius};max-width:540px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.ew-modal{position:absolute;left:50%;transform:translateX(-50%);top:24px;background:#fff;border-radius:${borderRadius};max-width:540px;width:calc(100% - 32px);max-height:600px;overflow-y:auto;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
 .ew-modal h3{font-size:1.25rem;font-weight:700;margin-bottom:4px;color:#1f2937}
 .ew-modal .ew-modal-subtitle{font-size:0.85rem;color:#64748b;margin-bottom:20px}
 .ew-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -1726,13 +1724,21 @@ function computeModalPosition(modalHeight){
   var ROOT=document.querySelector('.ew-root');
   var rootHeight=ROOT?ROOT.offsetHeight:document.body.scrollHeight;
   if(!parentViewport){
-    return {top:24,maxHeight:Math.max(300,Math.min(rootHeight-32,window.innerHeight-32||600))};
+    // Until the parent reports its actual viewport, cap the modal at 600px
+    // (sensible single-screen size). Using window.innerHeight here would
+    // return the iframe's tall internal height (we set iframe height to
+    // root.scrollHeight so the host page scrolls naturally), which would
+    // render the modal far taller than the visible host viewport.
+    return {top:24,maxHeight:Math.max(300,Math.min(rootHeight-32,600))};
   }
   var pv=parentViewport;
   var visibleTopInIframe=Math.max(0,pv.parentScrollY-pv.iframeTop);
   var visibleBottomInIframe=Math.min(pv.iframeHeight||rootHeight,(pv.parentScrollY+pv.parentViewportHeight)-pv.iframeTop);
   var visibleHeight=Math.max(0,visibleBottomInIframe-visibleTopInIframe);
-  var maxHeight=Math.max(240,pv.parentViewportHeight-32);
+  // Hard-cap at 90% of the parent viewport AND no taller than 720px so the
+  // modal fits comfortably on common laptop screens even when the parent
+  // viewport is unusually tall.
+  var maxHeight=Math.max(240,Math.min(pv.parentViewportHeight-32,720));
   if(visibleHeight<120){
     return {top:visibleTopInIframe+16,maxHeight:maxHeight};
   }
