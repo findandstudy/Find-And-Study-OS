@@ -2,8 +2,10 @@ const FLAG_CDN = "https://flagcdn.com";
 
 interface CountryFlagProps {
   code: string;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl";
   className?: string;
+  rounded?: boolean;
+  alt?: string;
 }
 
 const SIZES = {
@@ -11,9 +13,11 @@ const SIZES = {
   md: { w: 20, h: 15, cls: "w-5 h-[15px]" },
   lg: { w: 24, h: 18, cls: "w-6 h-[18px]" },
   xl: { w: 32, h: 24, cls: "w-8 h-6" },
+  "2xl": { w: 64, h: 48, cls: "w-16 h-12" },
+  "3xl": { w: 108, h: 81, cls: "w-[108px] h-[81px]" },
 };
 
-export function CountryFlag({ code, size = "md", className = "" }: CountryFlagProps) {
+export function CountryFlag({ code, size = "md", className = "", rounded = false, alt }: CountryFlagProps) {
   if (!code) return null;
   const lc = code.toLowerCase();
   const s = SIZES[size];
@@ -21,8 +25,8 @@ export function CountryFlag({ code, size = "md", className = "" }: CountryFlagPr
     <img
       src={`${FLAG_CDN}/${s.w}x${s.h}/${lc}.png`}
       srcSet={`${FLAG_CDN}/${s.w * 2}x${s.h * 2}/${lc}.png 2x`}
-      alt={code.toUpperCase()}
-      className={`inline-block rounded-[2px] object-cover ${s.cls} ${className}`}
+      alt={alt ?? code.toUpperCase()}
+      className={`inline-block ${rounded ? "rounded-md" : "rounded-[2px]"} object-cover shadow-sm ${s.cls} ${className}`}
       loading="lazy"
     />
   );

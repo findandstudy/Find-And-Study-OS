@@ -1155,7 +1155,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                             className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${extracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : needsReview("nationality") ? "border-amber-300 bg-amber-50/40" : ""}`}>
                             <option value="">{t("apply.selectNationality")}</option>
                             {allCountries.length > 0
-                              ? allCountries.map(c => <option key={c.id} value={c.name}>{c.flagEmoji ? `${c.flagEmoji} ${c.name}` : c.name}</option>)
+                              ? allCountries.map(c => <option key={c.id} value={c.name}>{c.name}</option>)
                               : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>

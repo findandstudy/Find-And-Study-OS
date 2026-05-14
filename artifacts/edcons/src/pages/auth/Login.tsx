@@ -10,6 +10,49 @@ import { PasswordStrengthIndicator, validatePasswordPolicy } from "@/components/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CountryFlag } from "@/components/CountryFlag";
+
+const PHONE_CODES: Array<{ code: string; iso: string; name: string }> = [
+  { code: "+90", iso: "TR", name: "Türkiye" },
+  { code: "+1", iso: "US", name: "United States" },
+  { code: "+44", iso: "GB", name: "United Kingdom" },
+  { code: "+49", iso: "DE", name: "Germany" },
+  { code: "+33", iso: "FR", name: "France" },
+  { code: "+39", iso: "IT", name: "Italy" },
+  { code: "+34", iso: "ES", name: "Spain" },
+  { code: "+31", iso: "NL", name: "Netherlands" },
+  { code: "+46", iso: "SE", name: "Sweden" },
+  { code: "+47", iso: "NO", name: "Norway" },
+  { code: "+7", iso: "RU", name: "Russia" },
+  { code: "+86", iso: "CN", name: "China" },
+  { code: "+81", iso: "JP", name: "Japan" },
+  { code: "+82", iso: "KR", name: "South Korea" },
+  { code: "+91", iso: "IN", name: "India" },
+  { code: "+92", iso: "PK", name: "Pakistan" },
+  { code: "+880", iso: "BD", name: "Bangladesh" },
+  { code: "+62", iso: "ID", name: "Indonesia" },
+  { code: "+60", iso: "MY", name: "Malaysia" },
+  { code: "+234", iso: "NG", name: "Nigeria" },
+  { code: "+20", iso: "EG", name: "Egypt" },
+  { code: "+212", iso: "MA", name: "Morocco" },
+  { code: "+213", iso: "DZ", name: "Algeria" },
+  { code: "+216", iso: "TN", name: "Tunisia" },
+  { code: "+964", iso: "IQ", name: "Iraq" },
+  { code: "+966", iso: "SA", name: "Saudi Arabia" },
+  { code: "+971", iso: "AE", name: "UAE" },
+  { code: "+974", iso: "QA", name: "Qatar" },
+  { code: "+973", iso: "BH", name: "Bahrain" },
+  { code: "+998", iso: "UZ", name: "Uzbekistan" },
+  { code: "+993", iso: "TM", name: "Turkmenistan" },
+  { code: "+994", iso: "AZ", name: "Azerbaijan" },
+  { code: "+995", iso: "GE", name: "Georgia" },
+  { code: "+380", iso: "UA", name: "Ukraine" },
+  { code: "+55", iso: "BR", name: "Brazil" },
+  { code: "+52", iso: "MX", name: "Mexico" },
+  { code: "+61", iso: "AU", name: "Australia" },
+  { code: "+64", iso: "NZ", name: "New Zealand" },
+];
 import { motion, AnimatePresence } from "framer-motion";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -521,52 +564,36 @@ export default function Login() {
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> {t("login.phoneLabel")}</Label>
                     <div className="flex gap-2">
-                      <select
+                      <Select
                         value={registerForm.phoneCode}
-                        onChange={e => setRegisterForm(f => ({ ...f, phoneCode: e.target.value }))}
-                        className="h-11 rounded-xl border border-input bg-background px-2 text-sm font-medium w-[100px] shrink-0 focus:outline-none focus:ring-2 focus:ring-ring"
+                        onValueChange={v => setRegisterForm(f => ({ ...f, phoneCode: v }))}
                         required
                       >
-                        <option value="" disabled>Code</option>
-                        <option value="+90">🇹🇷 +90</option>
-                        <option value="+1">🇺🇸 +1</option>
-                        <option value="+44">🇬🇧 +44</option>
-                        <option value="+49">🇩🇪 +49</option>
-                        <option value="+33">🇫🇷 +33</option>
-                        <option value="+39">🇮🇹 +39</option>
-                        <option value="+34">🇪🇸 +34</option>
-                        <option value="+31">🇳🇱 +31</option>
-                        <option value="+46">🇸🇪 +46</option>
-                        <option value="+47">🇳🇴 +47</option>
-                        <option value="+7">🇷🇺 +7</option>
-                        <option value="+86">🇨🇳 +86</option>
-                        <option value="+81">🇯🇵 +81</option>
-                        <option value="+82">🇰🇷 +82</option>
-                        <option value="+91">🇮🇳 +91</option>
-                        <option value="+92">🇵🇰 +92</option>
-                        <option value="+880">🇧🇩 +880</option>
-                        <option value="+62">🇮🇩 +62</option>
-                        <option value="+60">🇲🇾 +60</option>
-                        <option value="+234">🇳🇬 +234</option>
-                        <option value="+20">🇪🇬 +20</option>
-                        <option value="+212">🇲🇦 +212</option>
-                        <option value="+213">🇩🇿 +213</option>
-                        <option value="+216">🇹🇳 +216</option>
-                        <option value="+964">🇮🇶 +964</option>
-                        <option value="+966">🇸🇦 +966</option>
-                        <option value="+971">🇦🇪 +971</option>
-                        <option value="+974">🇶🇦 +974</option>
-                        <option value="+973">🇧🇭 +973</option>
-                        <option value="+998">🇺🇿 +998</option>
-                        <option value="+993">🇹🇲 +993</option>
-                        <option value="+994">🇦🇿 +994</option>
-                        <option value="+995">🇬🇪 +995</option>
-                        <option value="+380">🇺🇦 +380</option>
-                        <option value="+55">🇧🇷 +55</option>
-                        <option value="+52">🇲🇽 +52</option>
-                        <option value="+61">🇦🇺 +61</option>
-                        <option value="+64">🇳🇿 +64</option>
-                      </select>
+                        <SelectTrigger className="h-11 rounded-xl w-[110px] shrink-0 text-sm font-medium">
+                          {registerForm.phoneCode ? (
+                            (() => {
+                              const sel = PHONE_CODES.find(p => p.code === registerForm.phoneCode);
+                              return sel ? (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <CountryFlag code={sel.iso} size="md" rounded />
+                                  <span>{sel.code}</span>
+                                </span>
+                              ) : <SelectValue placeholder="Code" />;
+                            })()
+                          ) : <SelectValue placeholder="Code" />}
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[320px]">
+                          {PHONE_CODES.map(p => (
+                            <SelectItem key={p.code + p.iso} value={p.code}>
+                              <span className="inline-flex items-center gap-2">
+                                <CountryFlag code={p.iso} size="md" rounded />
+                                <span className="font-medium">{p.code}</span>
+                                <span className="text-muted-foreground text-xs">{p.name}</span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Input
                         value={registerForm.phone}
                         onChange={e => setRegisterForm(f => ({ ...f, phone: e.target.value.replace(/[^\d\s]/g, "") }))}

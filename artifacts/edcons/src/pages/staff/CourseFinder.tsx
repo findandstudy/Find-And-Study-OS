@@ -2388,7 +2388,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                       className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${reviewExtracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
                       <option value="">Select nationality</option>
                       {allCountries.length > 0
-                        ? allCountries.map(c => <option key={c.id} value={c.name}>{c.flagEmoji ? `${c.flagEmoji} ${c.name}` : c.name}</option>)
+                        ? allCountries.map(c => <option key={c.id} value={c.name}>{c.name}</option>)
                         : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>

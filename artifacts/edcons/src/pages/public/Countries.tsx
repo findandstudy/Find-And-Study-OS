@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { Globe2, GraduationCap, Building2, ArrowRight, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
 
 interface Destination {
   id: number;
@@ -156,7 +157,14 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
             {dest.thumbnailUrl ? (
               <img src={dest.thumbnailUrl} alt={dest.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
             ) : (
-              <span className="text-7xl">{dest.flagEmoji || "🌍"}</span>
+              (() => {
+                const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
+                return iso ? (
+                  <CountryFlag code={iso} size="3xl" rounded className="shadow-md" alt={dest.name} />
+                ) : (
+                  <span className="text-6xl font-bold text-foreground/30">{dest.country?.slice(0, 2).toUpperCase()}</span>
+                );
+              })()
             )}
             {dest.isFeatured && (
               <Badge className="absolute top-4 right-4 bg-amber-500 text-white border-0">{t("countries.featuredBadge")}</Badge>
@@ -164,7 +172,10 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
           </div>
           <div className="p-6 flex-1 flex flex-col">
             <div className="flex items-center gap-2 mb-2">
-              {dest.flagEmoji && <span className="text-2xl">{dest.flagEmoji}</span>}
+              {(() => {
+                const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
+                return iso ? <CountryFlag code={iso} size="lg" rounded alt={dest.name} /> : null;
+              })()}
               <h3 className="text-xl font-display font-bold text-foreground group-hover:text-primary transition-colors">
                 {dest.name}
               </h3>

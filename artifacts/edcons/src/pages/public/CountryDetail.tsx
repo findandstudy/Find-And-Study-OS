@@ -7,6 +7,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
 import {
   Globe2, GraduationCap, Building2, MapPin, DollarSign, Languages,
   Wallet, Thermometer, FileText, Briefcase, ArrowLeft, ChevronRight,
@@ -172,7 +173,14 @@ export default function CountryDetail({ slug }: { slug: string }) {
             <ArrowLeft className="w-4 h-4" /> {t("countryDetail.allDestinations")}
           </Link>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-center gap-6">
-            <span className="text-7xl">{dest.flagEmoji || "🌍"}</span>
+            {(() => {
+              const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
+              return iso ? (
+                <CountryFlag code={iso} size="3xl" rounded className="shadow-md" alt={dest.name} />
+              ) : (
+                <Globe2 className="w-20 h-20 text-primary" />
+              );
+            })()}
             <div>
               <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
                 {(() => {

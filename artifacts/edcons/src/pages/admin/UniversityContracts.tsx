@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -551,7 +552,10 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="text-base leading-none">{dest?.flagEmoji || "🌍"}</span>
+                          {(() => {
+                            const iso = (c.country && c.country.length === 2 ? c.country : null) || (dest?.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
+                            return iso ? <CountryFlag code={iso} size="md" rounded /> : <span className="w-5 h-[15px] inline-block bg-muted rounded-[2px]" />;
+                          })()}
                           <span>{dest?.name || c.country}</span>
                         </span>
                       </td>
@@ -638,7 +642,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                       clearable
                       options={sortedDestinations.map(d => ({
                         value: String(d.id),
-                        label: `${d.flagEmoji || "🌍"} ${d.name} — ${d.country}`,
+                        label: `${d.name} — ${d.country}`,
                         group: uniCountry && d.country === uniCountry ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
                       }))}
                     />

@@ -1045,6 +1045,19 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-phone-group{display:flex;gap:6px}
 .ew-phone-group select{width:100px;flex-shrink:0}
 .ew-phone-group input{flex:1}
+.ew-cc{position:relative;width:120px;flex-shrink:0}
+.ew-cc-trigger{width:100%;height:38px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#1f2937;font-size:0.875rem;display:flex;align-items:center;gap:6px;cursor:pointer;outline:none}
+.ew-cc-trigger:focus{border-color:${primaryColor};box-shadow:0 0 0 3px ${primaryColor}22}
+.ew-cc-trigger img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0;display:block}
+.ew-cc-trigger .ew-cc-code{flex:1;text-align:left;font-weight:500}
+.ew-cc-trigger .ew-cc-caret{margin-left:auto;font-size:0.7rem;opacity:.6}
+.ew-cc-list{position:absolute;top:calc(100% + 4px);left:0;right:0;min-width:240px;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:1000;padding:4px;display:none}
+.ew-cc-list.open{display:block}
+.ew-cc-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#1f2937}
+.ew-cc-item:hover,.ew-cc-item.active{background:${primaryColor}15}
+.ew-cc-item img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+.ew-cc-item .ew-cc-item-code{font-weight:600;min-width:42px}
+.ew-cc-item .ew-cc-item-name{color:#64748b;font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ew-hp{position:absolute;left:-9999px;opacity:0;height:0}
 .ew-steps{display:flex;align-items:center;gap:0;margin-bottom:24px;padding:0 4px}
 .ew-step{display:flex;align-items:center;gap:8px;flex:1}
@@ -1196,6 +1209,26 @@ var uploadedDocs={};
 var aiResult=null;
 var extractedFields={};
 var NATIONALITIES=${JSON.stringify(NATIONALITIES)};
+// Country phone codes for the custom flag dropdown. Tuples: [code, isoAlpha2, displayName].
+// Using flagcdn PNG images instead of unicode flag emoji so flags render
+// consistently on Windows (where regional-indicator emoji show as "TR"/"GB"
+// letter pairs instead of actual flag glyphs).
+var PHONE_CODES=[
+  ['+1','US','United States'],['+44','GB','United Kingdom'],
+  ['+90','TR','Turkey'],['+971','AE','UAE'],['+966','SA','Saudi Arabia'],
+  ['+33','FR','France'],['+49','DE','Germany'],['+39','IT','Italy'],
+  ['+34','ES','Spain'],['+31','NL','Netherlands'],['+46','SE','Sweden'],
+  ['+47','NO','Norway'],['+7','RU','Russia'],['+86','CN','China'],
+  ['+91','IN','India'],['+92','PK','Pakistan'],['+880','BD','Bangladesh'],
+  ['+81','JP','Japan'],['+82','KR','South Korea'],['+62','ID','Indonesia'],
+  ['+60','MY','Malaysia'],['+63','PH','Philippines'],['+55','BR','Brazil'],
+  ['+52','MX','Mexico'],['+20','EG','Egypt'],['+212','MA','Morocco'],
+  ['+213','DZ','Algeria'],['+216','TN','Tunisia'],['+234','NG','Nigeria'],
+  ['+254','KE','Kenya'],['+27','ZA','South Africa'],['+964','IQ','Iraq'],
+  ['+974','QA','Qatar'],['+973','BH','Bahrain'],['+998','UZ','Uzbekistan'],
+  ['+994','AZ','Azerbaijan'],['+995','GE','Georgia'],['+380','UA','Ukraine'],
+  ['+61','AU','Australia'],['+64','NZ','New Zealand']
+];
 var searchDebounce=null;
 var userFilters={};
 var parentViewport=null;
@@ -1540,6 +1573,32 @@ function renderFormContent(prog){
     var style=isAi?'border-color:#22c55e;background:#f0fdf4':'';
     h+='<div class="'+cls+'"><label>'+label+(required?' *':'')+(isAi?' <span style="color:#22c55e;font-size:0.65rem;font-weight:700;margin-left:4px">AI</span>':'')+'</label><input name="'+name+'" type="'+(type||'text')+'" value="'+esc(val)+'" style="'+style+'"'+(required?' required':'')+'></div>';
   }
+  // Cross-platform country-code dropdown that uses flagcdn PNG images
+  // instead of unicode flag emoji (which render as letter pairs on Windows).
+  // Hidden input named "countryCode" so FormData/snapshotForm picks it up.
+  function buildCcDropdown(sel){
+    var ops=PHONE_CODES;
+    var cur=null;
+    for(var pi=0;pi<ops.length;pi++){if(ops[pi][0]===sel){cur=ops[pi];break;}}
+    var trigInner=cur
+      ?'<img src="https://flagcdn.com/24x18/'+cur[1].toLowerCase()+'.png" srcset="https://flagcdn.com/48x36/'+cur[1].toLowerCase()+'.png 2x" alt=""><span class="ew-cc-code">'+cur[0]+'</span><span class="ew-cc-caret">\\u25BC</span>'
+      :'<span class="ew-cc-code" style="color:#9ca3af">Code</span><span class="ew-cc-caret">\\u25BC</span>';
+    var listHtml='';
+    for(var pj=0;pj<ops.length;pj++){
+      var o=ops[pj];
+      var lc=o[1].toLowerCase();
+      var act=o[0]===sel?' active':'';
+      listHtml+='<div class="ew-cc-item'+act+'" role="option" tabindex="-1" aria-selected="'+(o[0]===sel?'true':'false')+'" data-cc="'+o[0]+'" data-iso="'+o[1]+'">'+
+        '<img src="https://flagcdn.com/24x18/'+lc+'.png" srcset="https://flagcdn.com/48x36/'+lc+'.png 2x" alt="">'+
+        '<span class="ew-cc-item-code">'+o[0]+'</span>'+
+        '<span class="ew-cc-item-name">'+o[2]+'</span>'+
+      '</div>';
+    }
+    return '<div class="ew-cc"><input type="hidden" name="countryCode" value="'+esc(sel)+'">'+
+      '<button type="button" class="ew-cc-trigger" aria-haspopup="listbox" aria-expanded="false">'+trigInner+'</button>'+
+      '<div class="ew-cc-list" role="listbox">'+listHtml+'</div>'+
+    '</div>';
+  }
   if(formStep==='personal'){
     // Step 1 — Personal Info: collect ONLY the same basic contact fields
     // shown on the homepage non-login ApplyDialog (first/last name, email,
@@ -1563,25 +1622,8 @@ function renderFormContent(prog){
     var fv=savedFormData;
     // Phone with a flag-prefixed country code picker (matches the portal's
     // PhoneCodePicker visual). Spans the full row.
-    var ccOpts=[
-      ['+1','\\ud83c\\uddfa\\ud83c\\uddf8'],['+44','\\ud83c\\uddec\\ud83c\\udde7'],
-      ['+90','\\ud83c\\uddf9\\ud83c\\uddf7'],['+971','\\ud83c\\udde6\\ud83c\\uddea'],
-      ['+966','\\ud83c\\uddf8\\ud83c\\udde6'],['+33','\\ud83c\\uddeb\\ud83c\\uddf7'],
-      ['+49','\\ud83c\\udde9\\ud83c\\uddea'],['+7','\\ud83c\\uddf7\\ud83c\\uddfa'],
-      ['+86','\\ud83c\\udde8\\ud83c\\uddf3'],['+91','\\ud83c\\uddee\\ud83c\\uddf3'],
-      ['+81','\\ud83c\\uddef\\ud83c\\uddf5'],['+82','\\ud83c\\uddf0\\ud83c\\uddf7'],
-      ['+55','\\ud83c\\udde7\\ud83c\\uddf7'],['+20','\\ud83c\\uddea\\ud83c\\uddec'],
-      ['+234','\\ud83c\\uddf3\\ud83c\\uddec'],['+254','\\ud83c\\uddf0\\ud83c\\uddea'],
-      ['+27','\\ud83c\\uddff\\ud83c\\udde6'],['+62','\\ud83c\\uddee\\ud83c\\udde9'],
-      ['+60','\\ud83c\\uddf2\\ud83c\\uddfe'],['+63','\\ud83c\\uddf5\\ud83c\\udded']
-    ];
     var sel=fv.countryCode||'';
-    var ccHtml='<option value=""'+(sel===''?' selected':'')+'>Code</option>';
-    for(var ci=0;ci<ccOpts.length;ci++){
-      var o=ccOpts[ci];
-      ccHtml+='<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+' '+o[0]+'</option>';
-    }
-    h+='<div class="ew-form-group full"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode">'+ccHtml+'</select><input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div></div>';
+    h+='<div class="ew-form-group full"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel)+'<input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div></div>';
     h+='</div>';
     if(prog){
       // "Applying for" summary pill (mirrors portal's bg-secondary/50 card).
@@ -1658,10 +1700,7 @@ function renderFormContent(prog){
     aiField('lastName','Last Name','text',true,true);
     aiField('email','Email','email',true,true);
     var sel2=fv2.countryCode||'';
-    var ccCodes=['+1','+44','+90','+971','+966','+33','+49','+7','+86','+91','+81','+82','+55','+20','+234','+254','+27','+62','+60','+63'];
-    var ccHtml2='<option value=""'+(sel2===''?' selected':'')+'>Code</option>';
-    for(var cj=0;cj<ccCodes.length;cj++){ccHtml2+='<option value="'+ccCodes[cj]+'"'+(sel2===ccCodes[cj]?' selected':'')+'>'+ccCodes[cj]+'</option>';}
-    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group"><select name="countryCode">'+ccHtml2+'</select><input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
+    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel2)+'<input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
     var natVal=savedFormData.nationality||'';
     var natIsAi=!!extractedFields.nationality;
     var natStyle=natIsAi?'border-color:#22c55e;background:#f0fdf4':'';
@@ -1949,6 +1988,7 @@ function bindModalEvents(modal,overlay){
   if(backPersonalBtn)backPersonalBtn.addEventListener('click',function(){formStep='personal';if(formOpen)showModal();else render(false)});
   var nextPersonalBtn=$('#ew-next-personal',modal);
   if(nextPersonalBtn)nextPersonalBtn.addEventListener('click',function(){handleNextPersonal(modal);});
+  wireCcDropdown(modal);
 }
 
 var savedFormData={};
@@ -1966,6 +2006,86 @@ var analyzeNextStep=null;
 // Helper: snapshot any currently rendered form fields into savedFormData
 // so back-navigation does not lose user edits. Called before transitions
 // triggered by buttons that live alongside an editable form.
+// Wire up custom country-code dropdowns (.ew-cc) inside the given scope.
+// Click trigger to toggle list, click item to select, click outside to close.
+// Updates hidden input + trigger inner so FormData/snapshotForm reads the value.
+// Keyboard: ArrowUp/Down to move highlight, Enter/Space to select, Escape to close.
+// Uses a single delegated document listener (window.__ewCcInit guard) to avoid
+// listener accumulation across re-renders.
+function wireCcDropdown(scope){
+  var root=scope||document;
+  // One-time global outside-click closer — works across all current/future ew-cc.
+  if(!window.__ewCcInit){
+    window.__ewCcInit=true;
+    document.addEventListener('click',function(e){
+      var opened=document.querySelectorAll('.ew-cc-list.open');
+      for(var k=0;k<opened.length;k++){
+        var cc=opened[k].closest?opened[k].closest('.ew-cc'):opened[k].parentNode;
+        if(cc&&!cc.contains(e.target)){
+          opened[k].classList.remove('open');
+          var t=cc.querySelector('.ew-cc-trigger');
+          if(t)t.setAttribute('aria-expanded','false');
+        }
+      }
+    });
+  }
+  var ccs=root.querySelectorAll?root.querySelectorAll('.ew-cc'):[];
+  for(var i=0;i<ccs.length;i++){(function(cc){
+    if(cc.__ewWired)return; cc.__ewWired=true;
+    var trig=cc.querySelector('.ew-cc-trigger');
+    var list=cc.querySelector('.ew-cc-list');
+    var hidden=cc.querySelector('input[type="hidden"]');
+    if(!trig||!list||!hidden)return;
+    function items(){return list.querySelectorAll('.ew-cc-item');}
+    function close(){list.classList.remove('open');trig.setAttribute('aria-expanded','false');}
+    function open(){
+      var others=document.querySelectorAll('.ew-cc-list.open');
+      for(var k=0;k<others.length;k++)if(others[k]!==list)others[k].classList.remove('open');
+      list.classList.add('open');trig.setAttribute('aria-expanded','true');
+      var act=list.querySelector('.ew-cc-item.active')||items()[0];
+      if(act){act.focus({preventScroll:false});if(act.scrollIntoView)act.scrollIntoView({block:'nearest'});}
+    }
+    function commit(item){
+      if(!item)return;
+      var code=item.getAttribute('data-cc');
+      var iso=item.getAttribute('data-iso');
+      if(!code||!iso)return;
+      hidden.value=code;
+      var lc=iso.toLowerCase();
+      trig.innerHTML='<img src="https://flagcdn.com/24x18/'+lc+'.png" srcset="https://flagcdn.com/48x36/'+lc+'.png 2x" alt=""><span class="ew-cc-code">'+code+'</span><span class="ew-cc-caret">\\u25BC</span>';
+      var its=items();
+      for(var k=0;k<its.length;k++){its[k].classList.remove('active');its[k].setAttribute('aria-selected','false');}
+      item.classList.add('active');item.setAttribute('aria-selected','true');
+      savedFormData.countryCode=code;
+      close();trig.focus();
+    }
+    trig.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      if(list.classList.contains('open'))close();else open();
+    });
+    trig.addEventListener('keydown',function(e){
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'||e.key==='Enter'||e.key===' '){
+        e.preventDefault();open();
+      }
+    });
+    list.addEventListener('click',function(e){
+      var item=e.target.closest?e.target.closest('.ew-cc-item'):null;
+      commit(item);
+    });
+    list.addEventListener('keydown',function(e){
+      var its=items();if(!its.length)return;
+      var cur=document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('ew-cc-item')?document.activeElement:null;
+      var idx=-1;for(var k=0;k<its.length;k++)if(its[k]===cur){idx=k;break;}
+      if(e.key==='ArrowDown'){e.preventDefault();var n=its[Math.min(its.length-1,idx+1)]||its[0];n.focus();n.scrollIntoView({block:'nearest'});}
+      else if(e.key==='ArrowUp'){e.preventDefault();var p=its[Math.max(0,idx-1)]||its[0];p.focus();p.scrollIntoView({block:'nearest'});}
+      else if(e.key==='Home'){e.preventDefault();its[0].focus();its[0].scrollIntoView({block:'nearest'});}
+      else if(e.key==='End'){e.preventDefault();its[its.length-1].focus();its[its.length-1].scrollIntoView({block:'nearest'});}
+      else if(e.key==='Enter'||e.key===' '){e.preventDefault();commit(cur||its[0]);}
+      else if(e.key==='Escape'){e.preventDefault();close();trig.focus();}
+    });
+  })(ccs[i]);}
+}
+
 function snapshotForm(scope){
   var ids=['ew-personal-form','ew-form'];
   for(var i=0;i<ids.length;i++){
@@ -2201,6 +2321,7 @@ function bindEvents(){
   if(inlineBackPersonalBtn&&!formOpen)inlineBackPersonalBtn.addEventListener('click',function(){formStep='personal';render(false)});
   var inlineNextPersonalBtn=$('#ew-next-personal');
   if(inlineNextPersonalBtn&&!formOpen)inlineNextPersonalBtn.addEventListener('click',function(){handleNextPersonal(null);});
+  if(!formOpen)wireCcDropdown(null);
   $$('[data-doc-input]').forEach(function(input){
     if(formOpen)return;
     input.addEventListener('change',function(e){
