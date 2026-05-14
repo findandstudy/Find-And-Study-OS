@@ -16,8 +16,9 @@ function daysBetween(future: Date, now: Date): number {
 
 export async function checkContractExpiries(): Promise<void> {
   try {
-    const [settings] = await db.select({ contractExpiryReminderDays: settingsTable.contractExpiryReminderDays }).from(settingsTable);
+    const [settings] = await db.select({ contractExpiryReminderDays: settingsTable.contractExpiryReminderDays, defaultLanguage: settingsTable.defaultLanguage }).from(settingsTable);
     const thresholds = parseThresholds(settings?.contractExpiryReminderDays);
+    const lang = settings?.defaultLanguage || "tr";
     if (thresholds.length === 0) return;
 
     const agents = await db.select({

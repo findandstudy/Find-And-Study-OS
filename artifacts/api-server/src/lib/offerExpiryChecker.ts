@@ -16,8 +16,9 @@ function daysBetween(future: Date, now: Date): number {
 
 export async function checkOfferLetterExpiries(): Promise<void> {
   try {
-    const [settings] = await db.select({ offerExpiryWarningDays: settingsTable.offerExpiryWarningDays }).from(settingsTable);
+    const [settings] = await db.select({ offerExpiryWarningDays: settingsTable.offerExpiryWarningDays, defaultLanguage: settingsTable.defaultLanguage }).from(settingsTable);
     const thresholds = parseThresholds(settings?.offerExpiryWarningDays);
+    const lang = settings?.defaultLanguage || "tr";
     if (thresholds.length === 0) return;
 
     const expiryStages = await db.select({

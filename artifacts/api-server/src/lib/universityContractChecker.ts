@@ -103,6 +103,8 @@ export async function checkUniversityContractExpiries(): Promise<void> {
     if (rows.length === 0) return;
 
     const adminIds = await getAdminRecipients();
+    const [settings] = await db.select({ defaultLanguage: settingsTable.defaultLanguage }).from(settingsTable);
+    const lang = settings?.defaultLanguage || "tr";
     const now = new Date();
     const baseUrl = getAppBaseUrl().replace(/\/$/, "");
 
