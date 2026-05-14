@@ -11,7 +11,7 @@ router.get("/public/destinations", async (_req: Request, res: Response): Promise
     .orderBy(asc(destinationsTable.sortOrder), asc(destinationsTable.name));
 
   const countryCounts = await db.select({
-    country: universitiesTable.country,
+    countryKey: sql<string>`lower(trim(${universitiesTable.country}))`.as("country_key"),
     uniCount: sql<number>`count(DISTINCT ${universitiesTable.id})`.as("uni_count"),
     progCount: sql<number>`count(DISTINCT ${programsTable.id})`.as("prog_count"),
   })
@@ -21,15 +21,19 @@ router.get("/public/destinations", async (_req: Request, res: Response): Promise
       eq(programsTable.isActive, true),
     ))
     .where(eq(universitiesTable.isActive, true))
-    .groupBy(universitiesTable.country);
+    .groupBy(sql`lower(trim(${universitiesTable.country}))`);
 
-  const countMap = new Map(countryCounts.map(c => [c.country, { uniCount: Number(c.uniCount), progCount: Number(c.progCount) }]));
+  const countMap = new Map(countryCounts.map(c => [c.countryKey, { uniCount: Number(c.uniCount), progCount: Number(c.progCount) }]));
 
-  const enriched = destinations.map(d => ({
-    ...d,
-    universityCount: countMap.get(d.country)?.uniCount ?? d.universityCount ?? 0,
-    programCount: countMap.get(d.country)?.progCount ?? d.programCount ?? 0,
-  }));
+  const enriched = destinations.map(d => {
+    const key = (d.country ?? "").trim().toLowerCase();
+    const live = countMap.get(key);
+    return {
+      ...d,
+      universityCount: live?.uniCount ?? 0,
+      programCount: live?.progCount ?? 0,
+    };
+  });
 
   res.json(enriched);
 });
@@ -57,7 +61,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
   })
     .from(universitiesTable)
     .where(and(
-      eq(universitiesTable.country, destination.country),
+      sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
       eq(universitiesTable.isActive, true),
     ))
     .orderBy(asc(universitiesTable.name));

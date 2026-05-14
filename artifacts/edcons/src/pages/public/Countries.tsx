@@ -190,7 +190,7 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
               </span>
               <span className="flex items-center gap-1.5">
                 <GraduationCap className="w-4 h-4 text-accent" />
-                {dest.programCount} {t("countries.programs")}
+                {dest.programCount} {dest.programCount === 1 ? t("countries.program") : t("countries.programs")}
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-primary text-sm font-semibold mt-4 group-hover:gap-3 transition-all">
