@@ -32,9 +32,19 @@ function generateVerificationCode(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-async function buildOnboardingVerificationCodeEmail(firstName: string, code: string, email: string): Promise<{ subject: string; html: string; text: string }> {
+/**
+ * URL-safe one-time onboarding token. Embedded in the email CTA so the
+ * verify link does not leak the human-friendly 6-digit code via URL logs,
+ * referrers, or screenshots. Stored alongside the code; either one (token
+ * or code+email) can complete verification.
+ */
+function generateOnboardingToken(): string {
+  return crypto.randomBytes(24).toString("base64url");
+}
+
+async function buildOnboardingVerificationCodeEmail(firstName: string, code: string, email: string, token: string): Promise<{ subject: string; html: string; text: string }> {
   const baseUrl = getAppBaseUrl();
-  const verifyUrl = `${baseUrl}/agent/onboarding?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`;
+  const verifyUrl = `${baseUrl}/agent/onboarding?token=${encodeURIComponent(token)}`;
   return buildAgentOnboardingEmail({ firstName, email, code, verifyUrl });
 }
 
@@ -139,11 +149,12 @@ router.post("/agents/me/resend-verification", requireAuth, async (req: Request, 
     .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
 
   const code = generateVerificationCode();
+  const token = generateOnboardingToken();
   await db.insert(emailVerificationCodesTable).values({
-    email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    email: normalizedEmail, code, token, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
   });
   try {
-    const email = await buildOnboardingVerificationCodeEmail(user.firstName || "Agent", code, normalizedEmail);
+    const email = await buildOnboardingVerificationCodeEmail(user.firstName || "Agent", code, normalizedEmail, token);
     await sendEmail(normalizedEmail, email);
   } catch (err) {
     console.error("[agent-onboarding] resend code email failed:", err);
@@ -196,17 +207,26 @@ router.post("/agents/me/verify-email", requireAuth, async (req: Request, res: Re
 });
 
 /**
- * POST /api/agents/onboarding/verify-with-link — public endpoint hit when the
- * agent clicks the verify button in their welcome email. Validates the code
- * against the email, marks the user verified+active, and creates a logged-in
- * session so the agent can immediately set their password.
+ * POST /api/agents/onboarding/verify-with-link — public, no auth required.
+ * Hit when the agent clicks the verify button in their welcome email
+ * (`{ token }` body) OR enters their 6-digit code manually on the public
+ * onboarding page (`{ email, code }` body). Validates the credential,
+ * marks the user verified+active, and creates a logged-in session so the
+ * agent can immediately set their password.
+ *
+ * Returns a uniform error on any failure to prevent account enumeration.
  */
 router.post("/agents/onboarding/verify-with-link", async (req: Request, res: Response): Promise<void> => {
-  const { email, code } = req.body || {};
-  if (!email || typeof email !== "string" || !code || typeof code !== "string") {
-    res.status(400).json({ error: "Email and code are required" });
+  const body = (req.body || {}) as { token?: string; email?: string; code?: string };
+  const tokenInput = typeof body.token === "string" ? body.token.trim() : "";
+  const emailInput = typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
+  const codeInput = typeof body.code === "string" ? body.code.trim() : "";
+
+  if (!tokenInput && !(emailInput && codeInput)) {
+    res.status(400).json({ error: "Token or email+code is required" });
     return;
   }
+
   const ip = getRateLimitIp(req);
   try {
     await rateLimiter.consume(`agent-verify-link:${ip}`);
@@ -214,29 +234,48 @@ router.post("/agents/onboarding/verify-with-link", async (req: Request, res: Res
     res.status(429).json({ error: "Too many attempts. Please try again later." });
     return;
   }
-  const normalizedEmail = email.toLowerCase().trim();
-  // Uniform error to prevent enumeration of which emails exist / are verified.
-  const INVALID = { status: 400, body: { error: "Invalid or expired link. Log in and request a new code." } };
+
+  // Uniform error to prevent enumeration of which emails exist / are verified
+  // and to avoid leaking which arm (token vs code) failed.
+  const INVALID = { status: 400, body: { error: "Invalid or expired link. Request a new code on the verification page." } };
+
+  // Look up the verification record by token first (preferred), then fall
+  // back to email+code. ALWAYS require a valid, unused, unexpired record —
+  // never bypass on emailVerified=true (that would allow anyone who knows a
+  // verified agent's email to mint a session without a credential).
+  let record:
+    | { id: number; email: string }
+    | undefined;
+  if (tokenInput) {
+    const [r] = await db.select({ id: emailVerificationCodesTable.id, email: emailVerificationCodesTable.email })
+      .from(emailVerificationCodesTable)
+      .where(and(
+        eq(emailVerificationCodesTable.token, tokenInput),
+        eq(emailVerificationCodesTable.used, false),
+        gt(emailVerificationCodesTable.expiresAt, new Date()),
+      ));
+    record = r;
+  } else {
+    const [r] = await db.select({ id: emailVerificationCodesTable.id, email: emailVerificationCodesTable.email })
+      .from(emailVerificationCodesTable)
+      .where(and(
+        eq(emailVerificationCodesTable.email, emailInput),
+        eq(emailVerificationCodesTable.code, codeInput),
+        eq(emailVerificationCodesTable.used, false),
+        gt(emailVerificationCodesTable.expiresAt, new Date()),
+      ));
+    record = r;
+  }
+  if (!record) { res.status(INVALID.status).json(INVALID.body); return; }
+
+  const normalizedEmail = record.email;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
   if (!user || !AGENT_ROLES.includes(user.role)) {
     res.status(INVALID.status).json(INVALID.body);
     return;
   }
-  // ALWAYS require a valid, unused, unexpired code match — never bypass on
-  // emailVerified=true (that would allow anyone who knows a verified agent's
-  // email to mint a session without a code).
-  const [record] = await db.select().from(emailVerificationCodesTable).where(and(
-    eq(emailVerificationCodesTable.email, normalizedEmail),
-    eq(emailVerificationCodesTable.code, code.trim()),
-    eq(emailVerificationCodesTable.used, false),
-    gt(emailVerificationCodesTable.expiresAt, new Date()),
-  ));
-  if (!record) {
-    res.status(INVALID.status).json(INVALID.body);
-    return;
-  }
-  // Burn the matched code (and any other unused codes for this email) so it
-  // cannot be replayed.
+  // Burn the matched record (and any other unused codes for this email) so
+  // it cannot be replayed.
   await db.update(emailVerificationCodesTable).set({ used: true })
     .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
   if (!user.emailVerified || !user.isActive) {
@@ -270,6 +309,55 @@ router.post("/agents/onboarding/verify-with-link", async (req: Request, res: Res
     user: sessionUser,
     passwordSet: !!user.passwordHash,
   });
+});
+
+/**
+ * POST /api/agents/onboarding/resend-public — public, no auth. Lets a user
+ * whose token/code expired request a fresh one without first having to log in
+ * (which they cannot do because their password isn't set yet). Always returns
+ * a generic success response to prevent enumeration; the email is only
+ * actually sent when the address belongs to an unverified agent.
+ */
+router.post("/agents/onboarding/resend-public", async (req: Request, res: Response): Promise<void> => {
+  const { email } = (req.body || {}) as { email?: string };
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+  const ip = getRateLimitIp(req);
+  const normalizedEmail = email.toLowerCase().trim();
+  try {
+    await rateLimiter.consume(`agent-resend-pub:${ip}`);
+    await rateLimiter.consume(`agent-resend-pub:${normalizedEmail}`);
+  } catch {
+    res.status(429).json({ error: "Too many attempts. Please wait a few minutes before requesting again." });
+    return;
+  }
+  // Generic success — do not reveal whether the address exists or is verified.
+  const GENERIC_OK = { success: true };
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  if (!user || !AGENT_ROLES.includes(user.role) || user.emailVerified) {
+    res.json(GENERIC_OK);
+    return;
+  }
+  await db.update(emailVerificationCodesTable).set({ used: true })
+    .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
+  const code = generateVerificationCode();
+  const token = generateOnboardingToken();
+  await db.insert(emailVerificationCodesTable).values({
+    email: normalizedEmail, code, token, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  });
+  try {
+    const emailContent = await buildOnboardingVerificationCodeEmail(user.firstName || "Agent", code, normalizedEmail, token);
+    await sendEmail(normalizedEmail, emailContent);
+  } catch (err) {
+    console.error("[agent-onboarding] public resend email failed:", err);
+  }
+  await writeAudit({
+    userId: user.id, action: "agent.email_verification_sent", resource: "user", resourceId: user.id,
+    changes: { resentPublic: true }, ipAddress: req.ip,
+  });
+  res.json(GENERIC_OK);
 });
 
 /**
@@ -514,6 +602,7 @@ export default router;
 
 export const ONBOARDING_HELPERS = {
   generateVerificationCode,
+  generateOnboardingToken,
   buildOnboardingVerificationCodeEmail,
   loadAgentForUser,
   loadOnboardingSession,

@@ -921,11 +921,12 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       .set({ used: true })
       .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
     const code = ONBOARDING_HELPERS.generateVerificationCode();
+    const token = ONBOARDING_HELPERS.generateOnboardingToken();
     await db.insert(emailVerificationCodesTable).values({
-      email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      email: normalizedEmail, code, token, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
     try {
-      const emailContent = await ONBOARDING_HELPERS.buildOnboardingVerificationCodeEmail(firstName, code, normalizedEmail);
+      const emailContent = await ONBOARDING_HELPERS.buildOnboardingVerificationCodeEmail(firstName, code, normalizedEmail, token);
       await sendEmail(normalizedEmail, emailContent);
     } catch (err) {
       console.error("[agents POST] failed to send verification email:", err);

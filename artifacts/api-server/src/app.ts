@@ -161,7 +161,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     // an email button before any session/CSRF cookie has been issued. It is
     // protected by per-IP rate limiting and a single-use, time-bounded
     // 6-digit code bound to the email.
-    req.path === "/api/agents/onboarding/verify-with-link"
+    req.path === "/api/agents/onboarding/verify-with-link" ||
+    req.path === "/api/agents/onboarding/resend-public"
   ) {
     return next();
   }

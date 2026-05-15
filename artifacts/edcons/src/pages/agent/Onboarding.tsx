@@ -4,22 +4,21 @@ import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, CheckCircle2, AlertCircle, KeyRound, Mail } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, KeyRound, Mail, RotateCw } from "lucide-react";
 
 function goToAgentDashboard() {
-  // Full reload so the new session cookie + cleared query cache result in
-  // useGetMe re-fetching the now-authenticated user.
   if (typeof window !== "undefined") {
     window.location.href = "/agent";
   }
 }
 
-type Step = "verifying" | "verify_failed" | "set_password" | "done";
+type Step = "verifying" | "manual_entry" | "set_password" | "done";
 
-function readQueryParams(): { email: string; code: string } {
-  if (typeof window === "undefined") return { email: "", code: "" };
+function readQueryParams(): { token: string; email: string; code: string } {
+  if (typeof window === "undefined") return { token: "", email: "", code: "" };
   const sp = new URLSearchParams(window.location.search);
   return {
+    token: (sp.get("token") || "").trim(),
     email: (sp.get("email") || "").trim(),
     code: (sp.get("code") || "").trim(),
   };
@@ -27,42 +26,96 @@ function readQueryParams(): { email: string; code: string } {
 
 export default function AgentOnboardingPage() {
   const [, setLocation] = useLocation();
-  const params = readQueryParams();
-  const [email] = useState(params.email);
-  const [code] = useState(params.code);
+  const initial = readQueryParams();
+  const [token] = useState(initial.token);
 
-  const [step, setStep] = useState<Step>(email && code ? "verifying" : "verify_failed");
-  const [errorMessage, setErrorMessage] = useState("");
+  // Manual fallback form state
+  const [manualEmail, setManualEmail] = useState(initial.email);
+  const [manualCode, setManualCode] = useState(initial.code);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendNotice, setResendNotice] = useState("");
+
+  const hasAutoCredential = !!token || (!!initial.email && !!initial.code);
+  const [step, setStep] = useState<Step>(hasAutoCredential ? "verifying" : "manual_entry");
   const ranVerify = useRef(false);
 
-  // Password form
+  // Set-password form
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [pwError, setPwError] = useState("");
 
+  async function attemptVerify(body: Record<string, string>): Promise<boolean> {
+    try {
+      const res: any = await customFetch("/api/agents/onboarding/verify-with-link", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      if (res?.passwordSet) {
+        setStep("done");
+        setTimeout(goToAgentDashboard, 800);
+      } else {
+        setStep("set_password");
+      }
+      return true;
+    } catch (err: any) {
+      setManualError(err?.body?.error || err?.message || "Doğrulama başarısız oldu.");
+      return false;
+    }
+  }
+
+  // Auto-verify when arriving from the email link.
   useEffect(() => {
-    if (ranVerify.current) return;
-    if (!email || !code) return;
+    if (ranVerify.current || !hasAutoCredential) return;
     ranVerify.current = true;
     (async () => {
-      try {
-        const res: any = await customFetch("/api/agents/onboarding/verify-with-link", {
-          method: "POST",
-          body: JSON.stringify({ email, code }),
-        });
-        if (res?.passwordSet) {
-          setStep("done");
-          setTimeout(goToAgentDashboard, 800);
-        } else {
-          setStep("set_password");
-        }
-      } catch (err: any) {
-        setErrorMessage(err?.body?.error || err?.message || "Doğrulama başarısız oldu.");
-        setStep("verify_failed");
-      }
+      const body: Record<string, string> = token
+        ? { token }
+        : { email: initial.email, code: initial.code };
+      const ok = await attemptVerify(body);
+      if (!ok) setStep("manual_entry");
     })();
-  }, [email, code]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleManualSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setManualError("");
+    setResendNotice("");
+    if (!manualEmail.trim() || !manualCode.trim()) {
+      setManualError("E-posta ve doğrulama kodu zorunlu. / Email and code are required.");
+      return;
+    }
+    setManualSubmitting(true);
+    try {
+      await attemptVerify({ email: manualEmail.trim(), code: manualCode.trim() });
+    } finally {
+      setManualSubmitting(false);
+    }
+  }
+
+  async function handleResend() {
+    setManualError("");
+    setResendNotice("");
+    if (!manualEmail.trim()) {
+      setManualError("Yeni kod için e-posta gerekli. / Email is required to resend a code.");
+      return;
+    }
+    setResendBusy(true);
+    try {
+      await customFetch("/api/agents/onboarding/resend-public", {
+        method: "POST",
+        body: JSON.stringify({ email: manualEmail.trim() }),
+      });
+      setResendNotice("Hesabınız varsa yeni bir doğrulama kodu e-postanıza gönderildi. / If your account exists, a new code has been emailed to you.");
+    } catch (err: any) {
+      setManualError(err?.body?.error || err?.message || "Yeni kod gönderilemedi.");
+    } finally {
+      setResendBusy(false);
+    }
+  }
 
   function validateClient(): string {
     if (password.length < 8) return "Şifre en az 8 karakter olmalı. / Password must be at least 8 characters.";
@@ -109,23 +162,89 @@ export default function AgentOnboardingPage() {
             </div>
           )}
 
-          {step === "verify_failed" && (
-            <div className="flex flex-col items-center text-center py-4">
-              <AlertCircle className="w-10 h-10 text-destructive mb-4" />
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                Doğrulama Başarısız
-              </h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
-                {errorMessage || "Geçersiz veya süresi dolmuş bağlantı."}
-              </p>
-              <p className="text-xs text-slate-500 mb-6">
-                Invalid or expired link. Log in and request a new code.
-              </p>
-              <Button onClick={() => setLocation("/login")} className="w-full">
-                <Mail className="w-4 h-4 mr-2" />
-                Giriş Yap / Go to Login
+          {step === "manual_entry" && (
+            <form onSubmit={handleManualSubmit} className="space-y-4">
+              <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">
+                    {hasAutoCredential ? "Bağlantı doğrulanamadı" : "Bağlantı bulunamadı"}
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                    Hoş geldin e-postanızdaki 6 haneli kodu girin veya yeni kod isteyin.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="manual-email">E-posta / Email</Label>
+                <Input
+                  id="manual-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                  disabled={manualSubmitting || resendBusy}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="manual-code">Doğrulama Kodu / Verification Code</Label>
+                <Input
+                  id="manual-code"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  required
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value.replace(/\D/g, ""))}
+                  disabled={manualSubmitting || resendBusy}
+                  placeholder="123456"
+                />
+              </div>
+
+              {manualError && (
+                <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
+                  {manualError}
+                </div>
+              )}
+              {resendNotice && (
+                <div className="text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-md p-3">
+                  {resendNotice}
+                </div>
+              )}
+
+              <Button type="submit" disabled={manualSubmitting || resendBusy} className="w-full">
+                {manualSubmitting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Doğrulanıyor...</>
+                ) : (
+                  <><Mail className="w-4 h-4 mr-2" />Doğrula / Verify</>
+                )}
               </Button>
-            </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={manualSubmitting || resendBusy}
+                  className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-60 disabled:no-underline"
+                >
+                  {resendBusy
+                    ? (<><Loader2 className="w-3 h-3 animate-spin" />Gönderiliyor...</>)
+                    : (<><RotateCw className="w-3 h-3" />Yeni kod gönder / Resend code</>)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/login")}
+                  className="hover:underline"
+                >
+                  Girişe dön / Back to login
+                </button>
+              </div>
+            </form>
           )}
 
           {step === "set_password" && (
