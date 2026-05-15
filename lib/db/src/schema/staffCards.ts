@@ -128,5 +128,5 @@ export const STAFF_DOC_RULES: Record<StaffDocType, { maxBytes: number; mimeTypes
 };
 
 export const STAFF_SALARY_STATUSES = ["pending", "paid", "cancelled"] as const;
-export const STAFF_COMMISSION_STATUSES = ["pending", "approved", "paid", "cancelled"] as const;
+export const STAFF_COMMISSION_STATUSES = ["potential", "pending", "approved", "paid", "cancelled"] as const;
 export const STAFF_SALARY_PERIODS = ["monthly", "weekly", "biweekly", "project", "hourly"] as const;

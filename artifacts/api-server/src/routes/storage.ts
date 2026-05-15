@@ -11,6 +11,7 @@ const RequestUploadUrlBody = z.object({
   name: z.string(),
   size: z.number(),
   contentType: z.string(),
+  prefix: z.string().regex(/^[a-zA-Z0-9._-]+(\/[a-zA-Z0-9._-]+)*\/?$/).max(120).optional(),
 });
 
 const RequestUploadUrlResponse = z.object({
@@ -44,7 +45,7 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
   }
 
   try {
-    const { name, size, contentType } = parsed.data;
+    const { name, size, contentType, prefix } = parsed.data;
 
     const validationError = validateUploadedFile(name, contentType, size);
     if (validationError) {
@@ -53,7 +54,7 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
       return;
     }
 
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL(prefix);
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
     res.json(

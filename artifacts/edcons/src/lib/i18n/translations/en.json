@@ -2321,10 +2321,12 @@
       "agentId": "Agent ID",
       "applicationId": "Application ID",
       "approved": "Approved",
+      "potential": "Potential",
       "totalPaid": "Total paid",
       "totalPending": "Total pending",
       "refs": "References",
       "empty": "No commission records yet"
-    }
+    },
+    "tzVsAdmin": "vs admin"
   }
 }

@@ -131,7 +131,7 @@ export class ObjectStorageService {
     return `/objects/${relPath}`;
   }
 
-  async getObjectEntityUploadURL(): Promise<string> {
+  async getObjectEntityUploadURL(prefix?: string): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
       throw new Error(
@@ -141,7 +141,9 @@ export class ObjectStorageService {
     }
 
     const objectId = randomUUID();
-    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    let cleanPrefix = (prefix || "uploads").replace(/^\/+|\/+$/g, "");
+    if (cleanPrefix.includes("..") || cleanPrefix.includes("\\")) cleanPrefix = "uploads";
+    const fullPath = `${privateObjectDir}/${cleanPrefix}/${objectId}`;
 
     const { bucketName, objectName } = parseObjectPath(fullPath);
 

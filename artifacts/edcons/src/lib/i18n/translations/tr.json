@@ -2262,10 +2262,12 @@
       "agentId": "Acente ID",
       "applicationId": "Başvuru ID",
       "approved": "Onaylandı",
+      "potential": "Potansiyel",
       "totalPaid": "Toplam Ödenen",
       "totalPending": "Toplam Bekleyen",
       "refs": "Referanslar",
       "empty": "Henüz komisyon kaydı yok"
-    }
+    },
+    "tzVsAdmin": "yöneticiye göre"
   }
 }

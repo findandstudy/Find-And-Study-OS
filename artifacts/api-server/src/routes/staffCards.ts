@@ -81,7 +81,7 @@ router.get("/staff-cards/:userId", requireAuth, requireStaffCardAdmin, async (re
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  const { passwordHash: _ph, replitId: _ri, passwordResetToken: _prt, emailVerificationToken: _evt, ...safeUser } = user as any;
+  const { passwordHash: _ph, replitId: _ri, passwordResetToken: _prt, emailVerificationToken: _evt, ...safeUser } = user;
 
   const schedules = await db.select().from(staffWorkSchedulesTable)
     .where(eq(staffWorkSchedulesTable.userId, userId))
@@ -291,10 +291,11 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     res.status(413).json({ error: `Dosya boyutu ${Math.round(rule.maxBytes / 1024 / 1024)}MB sınırını aşıyor.` });
     return;
   }
-  // objectPath integrity guard — must be /objects/<id> as produced by
-  // ObjectStorageService.normalizeObjectEntityPath.
-  if (!objectPath.startsWith("/objects/")) {
-    res.status(400).json({ error: "Invalid object path" });
+  // Enforce staff-documents/{userId}/<id> prefix so private staff docs are
+  // stored under their dedicated namespace (per spec).
+  const expectedPrefix = `/objects/staff-documents/${userId}/`;
+  if (!objectPath.startsWith(expectedPrefix)) {
+    res.status(400).json({ error: `Object path must use prefix ${expectedPrefix}` });
     return;
   }
   const [doc] = await db.insert(staffDocumentsTable).values({
@@ -302,7 +303,7 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     uploadedBy: req.user!.id,
   }).returning();
   logAudit(req.user!.id, "staff_card.document.upload", "user", userId, { docType, filename, sizeBytes }, req.ip);
-  const { objectPath: _op, ...safe } = doc as any;
+  const { objectPath: _op, ...safe } = doc;
   res.status(201).json(safe);
 });
 
@@ -513,21 +514,61 @@ router.delete("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffC
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Activity raporu — planlanan vs gerçek aktif saat
-// Range: daily (last 7 days), weekly (last 4 weeks), monthly (last 12 months)
+// Activity raporu — planlanan vs gerçek aktif saat (staff timezone aware)
+// Range: daily (last 7 days), weekly (last 4 weeks), monthly (last 12 months grouped by month)
 // ─────────────────────────────────────────────────────────────────────────────
+function tzOffsetMinutes(date: Date, tz: string): number {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+    const parts = dtf.formatToParts(date);
+    const m: Record<string, string> = {};
+    for (const p of parts) m[p.type] = p.value;
+    const asUTC = Date.UTC(+m.year, +m.month - 1, +m.day, +m.hour, +m.minute, +m.second);
+    return Math.round((asUTC - date.getTime()) / 60000);
+  } catch { return 0; }
+}
+function tzDayKey(date: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  } catch { return date.toISOString().slice(0, 10); }
+}
+function tzDayStartMs(dayKey: string, tz: string): number {
+  const [y, mo, d] = dayKey.split("-").map(Number);
+  const guess = Date.UTC(y, mo - 1, d, 0, 0, 0);
+  const off = tzOffsetMinutes(new Date(guess), tz);
+  return guess - off * 60000;
+}
+function tzWeekday(date: Date, tz: string): number {
+  try {
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(date);
+    const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return map[wd] ?? 0;
+  } catch { return date.getDay(); }
+}
+
 router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
   const userId = parseInt(String(req.params.userId), 10);
+  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
   const range = ((req.query.range as string) || "weekly").toLowerCase();
 
+  // Resolve staff timezone (fallback UTC)
+  const [u] = await db.select({ timezone: usersTable.timezone }).from(usersTable).where(eq(usersTable.id, userId));
+  const tz = u?.timezone || "UTC";
+
   let days = 7;
-  if (range === "monthly") days = 30;
+  if (range === "monthly") days = 365;
   else if (range === "weekly") days = 28;
   else if (range === "daily") days = 7;
 
-  const dateFrom = new Date();
-  dateFrom.setHours(0, 0, 0, 0);
-  dateFrom.setDate(dateFrom.getDate() - days + 1);
+  const now = new Date();
+  const todayKey = tzDayKey(now, tz);
+  const todayStart = tzDayStartMs(todayKey, tz);
+  const fromMs = todayStart - (days - 1) * 24 * 60 * 60 * 1000;
+  const dateFrom = new Date(fromMs);
 
   const schedules = await db.select().from(staffWorkSchedulesTable)
     .where(eq(staffWorkSchedulesTable.userId, userId));
@@ -540,22 +581,19 @@ router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, 
   const sessions = await db.select().from(userSessionsTable)
     .where(and(eq(userSessionsTable.userId, userId), gte(userSessionsTable.startedAt, dateFrom)));
 
-  // Per-day breakdown
-  const byDay: Record<string, { plannedMinutes: number; actualMinutes: number; outsideMinutes: number }> = {};
-  const today = new Date();
+  // Per-day breakdown in staff timezone
+  const byDay: Record<string, { plannedMinutes: number; actualMinutes: number; outsideMinutes: number; weekday: number }> = {};
   for (let i = 0; i < days; i++) {
-    const d = new Date(dateFrom);
-    d.setDate(dateFrom.getDate() + i);
-    if (d > today) break;
-    const key = d.toISOString().slice(0, 10);
-    const wd = d.getDay();
+    const dayMs = fromMs + i * 24 * 60 * 60 * 1000;
+    if (dayMs > now.getTime()) break;
+    const key = tzDayKey(new Date(dayMs), tz);
+    const wd = tzWeekday(new Date(dayMs + 12 * 60 * 60 * 1000), tz);
     const planned = (scheduleByWeekday[wd] || []).reduce((sum, w) => sum + (w.endMinutes - w.startMinutes), 0);
-    byDay[key] = { plannedMinutes: planned, actualMinutes: 0, outsideMinutes: 0 };
+    byDay[key] = { plannedMinutes: planned, actualMinutes: 0, outsideMinutes: 0, weekday: wd };
   }
 
-  // Session window intersection: split each session by day, intersect with that
-  // day's schedule windows. Use proportional split when only startedAt is known
-  // (active < total), so credited active minutes track the share of each segment.
+  // Session window intersection in staff timezone: split each session by tz-day,
+  // intersect with that weekday's schedule windows (window minutes are local).
   for (const s of sessions) {
     const startMs = new Date(s.startedAt).getTime();
     const endMs = s.endedAt ? new Date(s.endedAt).getTime()
@@ -565,45 +603,47 @@ router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, 
     const activeMin = (s.activeDurationSeconds || 0) / 60;
     const activeRatio = totalMin > 0 ? Math.min(1, activeMin / totalMin) : 0;
 
-    // Walk day by day from session start to end
-    let cursor = new Date(startMs);
-    cursor.setHours(0, 0, 0, 0);
-    const lastDay = new Date(endMs);
-    lastDay.setHours(0, 0, 0, 0);
-
-    while (cursor.getTime() <= lastDay.getTime()) {
-      const dayStart = cursor.getTime();
+    let cursorKey = tzDayKey(new Date(startMs), tz);
+    const lastKey = tzDayKey(new Date(endMs), tz);
+    let safety = 400;
+    while (safety-- > 0) {
+      const dayStart = tzDayStartMs(cursorKey, tz);
       const dayEnd = dayStart + 24 * 60 * 60 * 1000;
       const segStart = Math.max(startMs, dayStart);
       const segEnd = Math.min(endMs, dayEnd);
       const segMin = (segEnd - segStart) / 60000;
-      if (segMin > 0) {
-        const key = cursor.toISOString().slice(0, 10);
-        if (byDay[key]) {
-          const wd = cursor.getDay();
-          const windows = scheduleByWeekday[wd] || [];
-          // Compute intersection of [segStart, segEnd] with each scheduled window (in this day)
-          let inWindowMin = 0;
-          for (const w of windows) {
-            const wStart = dayStart + w.startMinutes * 60000;
-            const wEnd = dayStart + w.endMinutes * 60000;
-            const iStart = Math.max(segStart, wStart);
-            const iEnd = Math.min(segEnd, wEnd);
-            if (iEnd > iStart) inWindowMin += (iEnd - iStart) / 60000;
-          }
-          const outsideMin = Math.max(0, segMin - inWindowMin);
-          // Credit active time proportionally (we only know aggregate active for the whole session)
-          byDay[key].actualMinutes += Math.round(inWindowMin * activeRatio);
-          byDay[key].outsideMinutes += Math.round(outsideMin * activeRatio);
+      if (segMin > 0 && byDay[cursorKey]) {
+        const wd = byDay[cursorKey].weekday;
+        const windows = scheduleByWeekday[wd] || [];
+        let inWindowMin = 0;
+        for (const w of windows) {
+          const wStart = dayStart + w.startMinutes * 60000;
+          const wEnd = dayStart + w.endMinutes * 60000;
+          const iStart = Math.max(segStart, wStart);
+          const iEnd = Math.min(segEnd, wEnd);
+          if (iEnd > iStart) inWindowMin += (iEnd - iStart) / 60000;
         }
+        const outsideMin = Math.max(0, segMin - inWindowMin);
+        byDay[cursorKey].actualMinutes += Math.round(inWindowMin * activeRatio);
+        byDay[cursorKey].outsideMinutes += Math.round(outsideMin * activeRatio);
       }
-      cursor = new Date(dayStart + 24 * 60 * 60 * 1000);
+      if (cursorKey === lastKey) break;
+      cursorKey = tzDayKey(new Date(dayEnd + 60 * 60 * 1000), tz);
     }
   }
 
-  const breakdown = Object.entries(byDay)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, v]) => ({
+  // Build breakdown — for monthly bucket per month (YYYY-MM); else per day.
+  let breakdown: Array<{ day: string; plannedMinutes: number; actualMinutes: number; outsideMinutes: number; missingMinutes: number; overtimeMinutes: number }>;
+  if (range === "monthly") {
+    const byMonth: Record<string, { plannedMinutes: number; actualMinutes: number; outsideMinutes: number }> = {};
+    for (const [day, v] of Object.entries(byDay)) {
+      const mk = day.slice(0, 7);
+      if (!byMonth[mk]) byMonth[mk] = { plannedMinutes: 0, actualMinutes: 0, outsideMinutes: 0 };
+      byMonth[mk].plannedMinutes += v.plannedMinutes;
+      byMonth[mk].actualMinutes += v.actualMinutes;
+      byMonth[mk].outsideMinutes += v.outsideMinutes;
+    }
+    breakdown = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([day, v]) => ({
       day,
       plannedMinutes: v.plannedMinutes,
       actualMinutes: v.actualMinutes,
@@ -611,6 +651,16 @@ router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, 
       missingMinutes: Math.max(0, v.plannedMinutes - v.actualMinutes),
       overtimeMinutes: Math.max(0, v.actualMinutes - v.plannedMinutes),
     }));
+  } else {
+    breakdown = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b)).map(([day, v]) => ({
+      day,
+      plannedMinutes: v.plannedMinutes,
+      actualMinutes: v.actualMinutes,
+      outsideMinutes: v.outsideMinutes,
+      missingMinutes: Math.max(0, v.plannedMinutes - v.actualMinutes),
+      overtimeMinutes: Math.max(0, v.actualMinutes - v.plannedMinutes),
+    }));
+  }
 
   const totals = breakdown.reduce((acc, d) => {
     acc.plannedMinutes += d.plannedMinutes;

@@ -90,6 +90,7 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant={data.presence.status === "online" ? "default" : "outline"}>{data.presence.status}</Badge>
+          {data.user.timezone && <TzDiffBadge staffTz={data.user.timezone} />}
           {data.presence.lastActiveAt && <span>{t("staffCards.lastActive")}: {new Date(data.presence.lastActiveAt).toLocaleString()}</span>}
         </div>
       </div>
@@ -119,6 +120,25 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
       </Tabs>
     </div>
   );
+}
+
+function TzDiffBadge({ staffTz }: { staffTz: string }) {
+  const { t } = useI18n();
+  try {
+    const now = new Date();
+    const adminTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const offMin = (tz: string) => {
+      const dtf = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const parts = dtf.formatToParts(now);
+      const m: Record<string, string> = {};
+      for (const p of parts) m[p.type] = p.value;
+      return Math.round((Date.UTC(+m.year, +m.month - 1, +m.day, +m.hour, +m.minute, +m.second) - now.getTime()) / 60000);
+    };
+    const diff = offMin(staffTz) - offMin(adminTz);
+    const h = Math.floor(Math.abs(diff) / 60), mm = Math.abs(diff) % 60;
+    const sign = diff > 0 ? "+" : diff < 0 ? "-" : "±";
+    return <Badge variant="outline" title={`${staffTz} ${t("staffCards.tzVsAdmin") || "vs admin"}`}>{staffTz} {sign}{h}{mm ? `:${String(mm).padStart(2, "0")}` : ""}h</Badge>;
+  } catch { return <Badge variant="outline">{staffTz}</Badge>; }
 }
 
 // ─── General ────────────────────────────────────────────────────────────────
@@ -284,7 +304,7 @@ function DocumentsTab({ documents, userId, onSaved }: { documents: any[]; userId
     try {
       const { uploadURL, objectPath } = await customFetch<{ uploadURL: string; objectPath: string }>(`/api/storage/uploads/request-url`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "application/octet-stream" }),
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "application/octet-stream", prefix: `staff-documents/${userId}` }),
       });
       const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
       if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
@@ -693,6 +713,7 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
           <Select value={form.status} onValueChange={(v) => setForm(f => ({ ...f, status: v }))}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="potential">{t("staffCards.commissions.potential")}</SelectItem>
               <SelectItem value="pending">{t("staffCards.salary.pending")}</SelectItem>
               <SelectItem value="approved">{t("staffCards.commissions.approved")}</SelectItem>
               <SelectItem value="paid">{t("staffCards.salary.paid")}</SelectItem>
@@ -720,6 +741,7 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
                   <Select value={c.status} onValueChange={(v) => updateStatus(c.id, v)}>
                     <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="potential">{t("staffCards.commissions.potential")}</SelectItem>
                       <SelectItem value="pending">{t("staffCards.salary.pending")}</SelectItem>
                       <SelectItem value="approved">{t("staffCards.commissions.approved")}</SelectItem>
                       <SelectItem value="paid">{t("staffCards.salary.paid")}</SelectItem>
