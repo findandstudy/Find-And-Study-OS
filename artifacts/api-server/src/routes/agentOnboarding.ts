@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { getRateLimitIp } from "../lib/clientIp";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
-import { and, eq, gt, desc } from "drizzle-orm";
+import { and, eq, gt, desc, ilike } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
@@ -268,8 +268,12 @@ router.post("/agents/onboarding/verify-with-link", async (req: Request, res: Res
   }
   if (!record) { res.status(INVALID.status).json(INVALID.body); return; }
 
+  // The verification code row stores the lowercase address. Older agent
+  // user rows may still have mixed-case emails (created before the
+  // normalization fix in agents.ts POST), so look up case-insensitively
+  // to keep legacy accounts able to verify.
   const normalizedEmail = record.email;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  const [user] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedEmail));
   if (!user || !AGENT_ROLES.includes(user.role)) {
     res.status(INVALID.status).json(INVALID.body);
     return;
@@ -335,7 +339,8 @@ router.post("/agents/onboarding/resend-public", async (req: Request, res: Respon
   }
   // Generic success — do not reveal whether the address exists or is verified.
   const GENERIC_OK = { success: true };
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  // Case-insensitive — see comment in verify-with-link above.
+  const [user] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedEmail));
   if (!user || !AGENT_ROLES.includes(user.role) || user.emailVerified) {
     res.json(GENERIC_OK);
     return;

@@ -827,18 +827,29 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     res.status(400).json({ error: "Email is required to send onboarding verification" });
     return;
   }
+  // Normalize at the source: the email_verification_codes row created below
+  // uses the lowercase address, and the public verify-with-link endpoint
+  // resolves the user via that same address. Storing the user with mixed
+  // case here was the root cause of "Invalid or expired link" — the code
+  // was created lowercase, but the user lookup later compared lowercase
+  // against the original case and missed the row. Use a case-insensitive
+  // lookup as well so legacy mixed-case rows are still matched.
+  const normalizedAccountEmail = String(email).toLowerCase().trim();
 
   let userId: number | null = null;
   {
-    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedAccountEmail));
     if (existingUser) {
       userId = existingUser.id;
-      // Force email re-verification for the onboarding flow.
-      await db.update(usersTable).set({ emailVerified: false }).where(eq(usersTable.id, existingUser.id));
+      // Force email re-verification for the onboarding flow, and normalize
+      // the stored address while we have the row so future lookups match.
+      await db.update(usersTable)
+        .set({ emailVerified: false, email: normalizedAccountEmail })
+        .where(eq(usersTable.id, existingUser.id));
     } else {
       const role = parentAgentId ? "sub_agent" : "agent";
       const [newUser] = await db.insert(usersTable).values({
-        email, firstName, lastName, role,
+        email: normalizedAccountEmail, firstName, lastName, role,
         phone: phone || null, phoneE164: toE164(phone || null),
         emailVerified: false, isActive: true,
       }).returning();
