@@ -111,7 +111,12 @@ router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (r
     await logAudit(req.user!.id, "create_embed_widget", "embed_widget", widget.id, { name, slug: cleanSlug }, req.ip);
     res.status(201).json(widget);
   } catch (err: any) {
-    if (err.message?.includes("duplicate") || err.message?.includes("unique")) {
+    // Postgres unique-violation SQLSTATE is 23505. We previously matched on
+    // `err.message.includes("duplicate")`, which only worked under the
+    // English locale postgres uses in dev — production server returned a
+    // localized/wrapped message and the check missed, surfacing as 500.
+    // Match by SQLSTATE for a locale-independent detection.
+    if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
       res.status(409).json({ error: "A widget with this slug already exists" });
     } else {
       throw err;
@@ -135,10 +140,18 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), asy
   if (allowedDomains !== undefined) updates.allowedDomains = allowedDomains;
   if (isActive !== undefined) updates.isActive = isActive;
 
-  const [widget] = await db.update(embedWidgetsTable).set(updates).where(eq(embedWidgetsTable.id, id)).returning();
-  if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
-  await logAudit(req.user!.id, "update_embed_widget", "embed_widget", id, updates, req.ip);
-  res.json(widget);
+  try {
+    const [widget] = await db.update(embedWidgetsTable).set(updates).where(eq(embedWidgetsTable.id, id)).returning();
+    if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+    await logAudit(req.user!.id, "update_embed_widget", "embed_widget", id, updates, req.ip);
+    res.json(widget);
+  } catch (err: any) {
+    if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
+      res.status(409).json({ error: "A widget with this slug already exists" });
+    } else {
+      throw err;
+    }
+  }
 });
 
 router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
