@@ -2227,6 +2227,46 @@
       "salary": "Salary",
       "commissions": "Commissions"
     },
+    "section": {
+      "profile": "Profile & Contact",
+      "schedule": "Work Hours",
+      "languages": "Languages",
+      "documents": "Documents"
+    },
+    "filters": {
+      "search": "Search…",
+      "sortBy": "Sort by",
+      "all": "All",
+      "status": "Status",
+      "season": "Season",
+      "primaryOnly": "Primary only",
+      "reset": "Reset filters",
+      "noMatch": "No records match the filter"
+    },
+    "openInUsers": "Staff Card",
+    "view": {
+      "summary": "Summary",
+      "modules": "Module Usage",
+      "daily": "Daily Activity",
+      "sessions": "Sessions"
+    },
+    "kpi": {
+      "totalSessions": "Total Sessions",
+      "totalTime": "Total Time",
+      "activeTime": "Active Time",
+      "idleTime": "Idle Time",
+      "planned": "Planned",
+      "actual": "Actual",
+      "missing": "Missing",
+      "overtime": "Overtime",
+      "outside": "Outside Plan"
+    },
+    "preset": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "7days": "Last 7 Days",
+      "30days": "Last 30 Days"
+    },
     "field": {
       "firstName": "First name",
       "lastName": "Last name",

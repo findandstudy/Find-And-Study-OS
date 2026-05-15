@@ -7,11 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { CountryFlag } from "@/components/CountryFlag";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { ArrowLeft, Trash2, Plus, Upload, Download, Loader2, FileText, BadgeCheck, AlertTriangle } from "lucide-react";
+import {
+  ArrowLeft, Trash2, Plus, Upload, Download, Loader2, FileText, BadgeCheck, AlertTriangle,
+  Search, ArrowUpDown, ArrowUp, ArrowDown, Clock, Activity, Monitor, Pause, BarChart3, TrendingUp,
+} from "lucide-react";
 
 const WEEKDAYS_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -37,6 +44,20 @@ function minutesToHHMM(m: number): string {
 function hhmmToMinutes(s: string): number {
   const [h, m] = s.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
+}
+
+function fmtSec(seconds: number): string {
+  if (!seconds || seconds < 0) return "0d";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}s ${m}d`;
+  return `${m}d`;
+}
+function fmtMin(m: number): string {
+  if (!m || m < 0) return "0d";
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return h > 0 ? `${h}s ${mm}d` : `${mm}d`;
 }
 
 export default function StaffCardDetailPage({ userId }: { userId: number }) {
@@ -90,7 +111,6 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant={data.presence.status === "online" ? "default" : "outline"}>{data.presence.status}</Badge>
-          {data.user.timezone && <TzDiffBadge staffTz={data.user.timezone} />}
           {data.presence.lastActiveAt && <span>{t("staffCards.lastActive")}: {new Date(data.presence.lastActiveAt).toLocaleString()}</span>}
         </div>
       </div>
@@ -98,9 +118,6 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex flex-wrap h-auto">
           <TabsTrigger value="general">{t("staffCards.tab.general")}</TabsTrigger>
-          <TabsTrigger value="schedule">{t("staffCards.tab.schedule")}</TabsTrigger>
-          <TabsTrigger value="languages">{t("staffCards.tab.languages")}</TabsTrigger>
-          <TabsTrigger value="documents">{t("staffCards.tab.documents")}</TabsTrigger>
           <TabsTrigger value="agents">{t("staffCards.tab.agents")}</TabsTrigger>
           <TabsTrigger value="students">{t("staffCards.tab.students")}</TabsTrigger>
           <TabsTrigger value="activity">{t("staffCards.tab.activity")}</TabsTrigger>
@@ -108,10 +125,34 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
           <TabsTrigger value="commissions">{t("staffCards.tab.commissions")}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="mt-4"><GeneralTab user={data.user} onSaved={refresh} userId={userId} /></TabsContent>
-        <TabsContent value="schedule" className="mt-4"><ScheduleTab schedules={data.schedules} userId={userId} onSaved={refresh} /></TabsContent>
-        <TabsContent value="languages" className="mt-4"><LanguagesTab languages={data.languages} userId={userId} onSaved={refresh} /></TabsContent>
-        <TabsContent value="documents" className="mt-4"><DocumentsTab documents={data.documents} userId={userId} onSaved={refresh} /></TabsContent>
+        <TabsContent value="general" className="mt-4">
+          <Accordion type="multiple" defaultValue={["profile"]} className="space-y-3">
+            <AccordionItem value="profile" className="border rounded-md bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.profile")}</AccordionTrigger>
+              <AccordionContent className="px-1 pb-1">
+                <ProfileSection user={data.user} userId={userId} onSaved={refresh} />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="schedule" className="border rounded-md bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.schedule")} <span className="ml-2 text-xs text-muted-foreground">({data.schedules.length})</span></AccordionTrigger>
+              <AccordionContent className="px-1 pb-1">
+                <ScheduleSection schedules={data.schedules} userId={userId} onSaved={refresh} />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="languages" className="border rounded-md bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.languages")} <span className="ml-2 text-xs text-muted-foreground">({data.languages.length})</span></AccordionTrigger>
+              <AccordionContent className="px-1 pb-1">
+                <LanguagesSection languages={data.languages} userId={userId} onSaved={refresh} />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="documents" className="border rounded-md bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.documents")} <span className="ml-2 text-xs text-muted-foreground">({data.documents.length})</span></AccordionTrigger>
+              <AccordionContent className="px-1 pb-1">
+                <DocumentsSection documents={data.documents} userId={userId} onSaved={refresh} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </TabsContent>
         <TabsContent value="agents" className="mt-4"><AgentsTab assignedAgents={data.assignedAgents} userId={userId} onSaved={refresh} /></TabsContent>
         <TabsContent value="students" className="mt-4"><StudentsTab assignedStudents={data.assignedStudents} userId={userId} onSaved={refresh} /></TabsContent>
         <TabsContent value="activity" className="mt-4"><ActivityTab userId={userId} /></TabsContent>
@@ -122,27 +163,8 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
   );
 }
 
-function TzDiffBadge({ staffTz }: { staffTz: string }) {
-  const { t } = useI18n();
-  try {
-    const now = new Date();
-    const adminTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const offMin = (tz: string) => {
-      const dtf = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      const parts = dtf.formatToParts(now);
-      const m: Record<string, string> = {};
-      for (const p of parts) m[p.type] = p.value;
-      return Math.round((Date.UTC(+m.year, +m.month - 1, +m.day, +m.hour, +m.minute, +m.second) - now.getTime()) / 60000);
-    };
-    const diff = offMin(staffTz) - offMin(adminTz);
-    const h = Math.floor(Math.abs(diff) / 60), mm = Math.abs(diff) % 60;
-    const sign = diff > 0 ? "+" : diff < 0 ? "-" : "±";
-    return <Badge variant="outline" title={`${staffTz} ${t("staffCards.tzVsAdmin") || "vs admin"}`}>{staffTz} {sign}{h}{mm ? `:${String(mm).padStart(2, "0")}` : ""}h</Badge>;
-  } catch { return <Badge variant="outline">{staffTz}</Badge>; }
-}
-
-// ─── General ────────────────────────────────────────────────────────────────
-function GeneralTab({ user, userId, onSaved }: { user: any; userId: number; onSaved: () => void }) {
+// ─── Section: Profile (Country/City catalog + PhoneInput, no timezone) ──────
+function ProfileSection({ user, userId, onSaved }: { user: any; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [form, setForm] = useState({
@@ -152,12 +174,38 @@ function GeneralTab({ user, userId, onSaved }: { user: any; userId: number; onSa
     homeAddress: user.homeAddress || "",
     locationCountry: user.locationCountry || "",
     locationCity: user.locationCity || "",
-    timezone: user.timezone || "",
     emergencyContactName: user.emergencyContactName || "",
     emergencyContactPhone: user.emergencyContactPhone || "",
-    isActive: !!user.isActive,
   });
   const [saving, setSaving] = useState(false);
+  const [countries, setCountries] = useState<Array<{ id: number; name: string; code: string }>>([]);
+  const [cities, setCities] = useState<Array<{ id: number; name: string }>>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+
+  // Lazy load all countries (active only)
+  useEffect(() => {
+    customFetch<{ data: any[] }>(`/api/countries?status=active&limit=500`)
+      .then(r => setCountries(r.data || []))
+      .catch(() => setCountries([]));
+  }, []);
+
+  // Reload cities when country changes
+  useEffect(() => {
+    const c = countries.find(x => x.name === form.locationCountry || x.code === form.locationCountry);
+    if (!c) { setCities([]); return; }
+    setCitiesLoading(true);
+    customFetch<{ data: any[] }>(`/api/cities?countryId=${c.id}&status=active&limit=1000`)
+      .then(r => setCities(r.data || []))
+      .catch(() => setCities([]))
+      .finally(() => setCitiesLoading(false));
+  }, [form.locationCountry, countries]);
+
+  const countryOptions = useMemo(() => countries.map(c => ({
+    value: c.name,
+    label: c.name,
+    node: <span className="flex items-center gap-2"><CountryFlag code={c.code} size="sm" />{c.name}</span>,
+  })), [countries]);
+  const cityOptions = useMemo(() => cities.map(c => ({ value: c.name, label: c.name })), [cities]);
 
   const save = async () => {
     setSaving(true);
@@ -172,29 +220,48 @@ function GeneralTab({ user, userId, onSaved }: { user: any; userId: number; onSa
   };
 
   return (
-    <Card className="p-6 space-y-4">
+    <div className="p-4 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><Label>{t("staffCards.field.firstName")}</Label><Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))} /></div>
         <div><Label>{t("staffCards.field.lastName")}</Label><Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))} /></div>
-        <div><Label>{t("staffCards.field.phone")}</Label><Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-        <div><Label>{t("staffCards.field.timezone")}</Label><Input placeholder="Europe/Istanbul" value={form.timezone} onChange={(e) => setForm(f => ({ ...f, timezone: e.target.value }))} /></div>
-        <div><Label>{t("staffCards.field.locationCountry")}</Label><Input value={form.locationCountry} onChange={(e) => setForm(f => ({ ...f, locationCountry: e.target.value }))} /></div>
-        <div><Label>{t("staffCards.field.locationCity")}</Label><Input value={form.locationCity} onChange={(e) => setForm(f => ({ ...f, locationCity: e.target.value }))} /></div>
+        <div><Label>{t("staffCards.field.phone")}</Label><PhoneInput value={form.phone} onChange={(v) => setForm(f => ({ ...f, phone: v }))} /></div>
+        <div>
+          <Label>{t("staffCards.field.locationCountry")}</Label>
+          <SearchableSelect
+            value={form.locationCountry}
+            onChange={(v) => setForm(f => ({ ...f, locationCountry: v, locationCity: "" }))}
+            options={countryOptions}
+            placeholder={t("staffCards.field.locationCountry")}
+            clearable
+          />
+        </div>
+        <div>
+          <Label>{t("staffCards.field.locationCity")}</Label>
+          <SearchableSelect
+            value={form.locationCity}
+            onChange={(v) => setForm(f => ({ ...f, locationCity: v }))}
+            options={cityOptions}
+            placeholder={citiesLoading ? "..." : t("staffCards.field.locationCity")}
+            clearable
+            disabled={!form.locationCountry || citiesLoading}
+          />
+        </div>
         <div className="md:col-span-2"><Label>{t("staffCards.field.homeAddress")}</Label><Textarea rows={2} value={form.homeAddress} onChange={(e) => setForm(f => ({ ...f, homeAddress: e.target.value }))} /></div>
         <div><Label>{t("staffCards.field.emergencyName")}</Label><Input value={form.emergencyContactName} onChange={(e) => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} /></div>
-        <div><Label>{t("staffCards.field.emergencyPhone")}</Label><Input value={form.emergencyContactPhone} onChange={(e) => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} /></div>
+        <div><Label>{t("staffCards.field.emergencyPhone")}</Label><PhoneInput value={form.emergencyContactPhone} onChange={(v) => setForm(f => ({ ...f, emergencyContactPhone: v }))} /></div>
       </div>
       <div className="flex justify-end"><Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{t("common.save")}</Button></div>
-    </Card>
+    </div>
   );
 }
 
-// ─── Schedule ───────────────────────────────────────────────────────────────
-function ScheduleTab({ schedules, userId, onSaved }: { schedules: any[]; userId: number; onSaved: () => void }) {
+// ─── Section: Schedule ──────────────────────────────────────────────────────
+function ScheduleSection({ schedules, userId, onSaved }: { schedules: any[]; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [entries, setEntries] = useState(schedules.map(s => ({ ...s })));
   const [saving, setSaving] = useState(false);
+  useEffect(() => { setEntries(schedules.map(s => ({ ...s }))); }, [schedules]);
 
   const addRow = () => setEntries(e => [...e, { weekday: 1, startMinutes: 9 * 60, endMinutes: 17 * 60 }]);
   const removeRow = (i: number) => setEntries(e => e.filter((_, idx) => idx !== i));
@@ -210,8 +277,13 @@ function ScheduleTab({ schedules, userId, onSaved }: { schedules: any[]; userId:
     finally { setSaving(false); }
   };
 
+  const totalMinutes = entries.reduce((s, e) => s + Math.max(0, Number(e.endMinutes) - Number(e.startMinutes)), 0);
+
   return (
-    <Card className="p-6 space-y-4">
+    <div className="p-4 space-y-4">
+      <div className="flex justify-end">
+        <span className="text-xs text-muted-foreground">{t("staffCards.kpi.planned")}: {fmtMin(totalMinutes)} / {t("staffCards.preset.7days")}</span>
+      </div>
       <div className="space-y-2">
         {entries.length === 0 && <p className="text-sm text-muted-foreground">{t("staffCards.schedule.empty")}</p>}
         {entries.map((row, i) => (
@@ -233,16 +305,17 @@ function ScheduleTab({ schedules, userId, onSaved }: { schedules: any[]; userId:
         <Button variant="outline" size="sm" onClick={addRow}><Plus className="h-4 w-4 mr-1" />{t("staffCards.schedule.add")}</Button>
         <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{t("common.save")}</Button>
       </div>
-    </Card>
+    </div>
   );
 }
 
-// ─── Languages ──────────────────────────────────────────────────────────────
-function LanguagesTab({ languages, userId, onSaved }: { languages: any[]; userId: number; onSaved: () => void }) {
+// ─── Section: Languages ─────────────────────────────────────────────────────
+function LanguagesSection({ languages, userId, onSaved }: { languages: any[]; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [items, setItems] = useState(languages.map(l => ({ ...l })));
   const [saving, setSaving] = useState(false);
+  useEffect(() => { setItems(languages.map(l => ({ ...l }))); }, [languages]);
 
   const addRow = () => setItems(e => [...e, { language: "", proficiency: "" }]);
   const removeRow = (i: number) => setItems(e => e.filter((_, idx) => idx !== i));
@@ -259,7 +332,7 @@ function LanguagesTab({ languages, userId, onSaved }: { languages: any[]; userId
   };
 
   return (
-    <Card className="p-6 space-y-4">
+    <div className="p-4 space-y-4">
       {items.length === 0 && <p className="text-sm text-muted-foreground">{t("staffCards.languages.empty")}</p>}
       {items.map((row, i) => (
         <div key={i} className="grid grid-cols-12 gap-2 items-end">
@@ -282,12 +355,12 @@ function LanguagesTab({ languages, userId, onSaved }: { languages: any[]; userId
         <Button variant="outline" size="sm" onClick={addRow}><Plus className="h-4 w-4 mr-1" />{t("staffCards.languages.add")}</Button>
         <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{t("common.save")}</Button>
       </div>
-    </Card>
+    </div>
   );
 }
 
-// ─── Documents (private upload via presigned URL) ───────────────────────────
-function DocumentsTab({ documents, userId, onSaved }: { documents: any[]; userId: number; onSaved: () => void }) {
+// ─── Section: Documents ─────────────────────────────────────────────────────
+function DocumentsSection({ documents, userId, onSaved }: { documents: any[]; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [docType, setDocType] = useState<"contract" | "diploma" | "passport">("contract");
@@ -337,7 +410,7 @@ function DocumentsTab({ documents, userId, onSaved }: { documents: any[]; userId
   };
 
   return (
-    <Card className="p-6 space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-end gap-3">
         <div className="flex-1 max-w-xs">
           <Label>{t("staffCards.documents.type")}</Label>
@@ -377,16 +450,31 @@ function DocumentsTab({ documents, userId, onSaved }: { documents: any[]; userId
           </div>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 
-// ─── Agents ─────────────────────────────────────────────────────────────────
+// ─── Sortable header helper ─────────────────────────────────────────────────
+function SortHeader({ label, active, dir, onClick, className }: { label: string; active: boolean; dir: "asc" | "desc"; onClick: () => void; className?: string }) {
+  return (
+    <th className={`p-3 cursor-pointer select-none hover:bg-muted/60 ${className || ""}`} onClick={onClick}>
+      <div className="flex items-center gap-1">
+        {label}
+        {active ? (dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />}
+      </div>
+    </th>
+  );
+}
+
+// ─── Agents (with filter / sort) ────────────────────────────────────────────
 function AgentsTab({ assignedAgents, userId, onSaved }: { assignedAgents: any[]; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [allAgents, setAllAgents] = useState<any[]>([]);
   const [selected, setSelected] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const [primaryOnly, setPrimaryOnly] = useState(false);
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
 
   useEffect(() => { customFetch<any>("/api/agents?limit=500").then((d) => setAllAgents(Array.isArray(d) ? d : (d?.data || d?.agents || []))); }, []);
 
@@ -397,56 +485,105 @@ function AgentsTab({ assignedAgents, userId, onSaved }: { assignedAgents: any[];
       setSelected(""); onSaved();
     } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
   };
-
   const remove = async (agentId: number) => {
-    try {
-      await customFetch(`/api/staff-cards/${userId}/assigned-agents/${agentId}`, { method: "DELETE" });
-      onSaved();
-    } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
+    try { await customFetch(`/api/staff-cards/${userId}/assigned-agents/${agentId}`, { method: "DELETE" }); onSaved(); }
+    catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
   };
 
   const assignedIds = new Set(assignedAgents.map(a => a.id));
   const available = allAgents.filter(a => !assignedIds.has(a.id));
 
+  const displayName = (a: any) => a.companyName || a.businessName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || a.email || `#${a.id}`;
+
+  const filtered = useMemo(() => {
+    let list = assignedAgents.filter(a => {
+      if (primaryOnly && !a.isPrimary) return false;
+      if (search.trim()) {
+        const s = search.toLowerCase();
+        return [displayName(a), a.email].some(v => (v || "").toLowerCase().includes(s));
+      }
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      const dir = sort.dir === "asc" ? 1 : -1;
+      switch (sort.key) {
+        case "email": return dir * (a.email || "").localeCompare(b.email || "");
+        case "primary": return dir * (Number(b.isPrimary) - Number(a.isPrimary));
+        default: return dir * displayName(a).localeCompare(displayName(b));
+      }
+    });
+    return list;
+  }, [assignedAgents, search, primaryOnly, sort]);
+
+  function sortBy(key: string) { setSort(p => p.key === key ? { key, dir: p.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }); }
+
   return (
     <Card className="p-6 space-y-4">
-      <div className="flex items-end gap-2">
-        <div className="flex-1 max-w-md">
+      <div className="flex items-end gap-2 flex-wrap">
+        <div className="flex-1 min-w-[240px] max-w-md">
           <Label>{t("staffCards.agents.add")}</Label>
           <Select value={selected} onValueChange={setSelected}>
             <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
             <SelectContent>
-              {available.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.companyName || a.businessName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || a.email}</SelectItem>)}
+              {available.map(a => <SelectItem key={a.id} value={String(a.id)}>{displayName(a)}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <Button onClick={add} disabled={!selected}><Plus className="h-4 w-4 mr-1" />{t("staffCards.agents.assign")}</Button>
       </div>
-      <div className="space-y-2">
-        {assignedAgents.length === 0 && <p className="text-sm text-muted-foreground">{t("staffCards.agents.empty")}</p>}
-        {assignedAgents.map(a => (
-          <div key={a.id} className="flex items-center justify-between border rounded-md p-3">
-            <div>
-              <div className="font-medium">{a.companyName || a.businessName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || a.email}</div>
-              <div className="text-xs text-muted-foreground">{a.email}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              {a.isPrimary && <Badge>{t("staffCards.agents.primary")}</Badge>}
-              <Link href={`/admin/agents/${a.id}`}><Button size="sm" variant="outline">{t("common.open")}</Button></Link>
-              <Button variant="ghost" size="icon" onClick={() => remove(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-            </div>
-          </div>
-        ))}
+
+      <div className="flex items-center gap-2 flex-wrap pt-2 border-t">
+        <div className="relative w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("staffCards.filters.search")} className="pl-9 h-9" />
+        </div>
+        <Button size="sm" variant={primaryOnly ? "default" : "outline"} onClick={() => setPrimaryOnly(p => !p)}>{t("staffCards.filters.primaryOnly")}</Button>
+        {(search || primaryOnly) && <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setPrimaryOnly(false); }}>{t("staffCards.filters.reset")}</Button>}
+        <span className="ml-auto text-xs text-muted-foreground">{filtered.length} / {assignedAgents.length}</span>
+      </div>
+
+      <div className="overflow-hidden border rounded-md">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-left text-xs uppercase">
+            <tr>
+              <SortHeader label={t("staffCards.col.name")} active={sort.key === "name"} dir={sort.dir} onClick={() => sortBy("name")} />
+              <SortHeader label={t("staffCards.col.email")} active={sort.key === "email"} dir={sort.dir} onClick={() => sortBy("email")} />
+              <SortHeader label={t("staffCards.agents.primary")} active={sort.key === "primary"} dir={sort.dir} onClick={() => sortBy("primary")} />
+              <th className="p-3 text-right">{t("staffCards.col.actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">{assignedAgents.length === 0 ? t("staffCards.agents.empty") : t("staffCards.filters.noMatch")}</td></tr>
+            ) : filtered.map(a => (
+              <tr key={a.id} className="border-t hover:bg-muted/30">
+                <td className="p-3 font-medium">{displayName(a)}</td>
+                <td className="p-3 text-muted-foreground">{a.email || "—"}</td>
+                <td className="p-3">{a.isPrimary && <Badge>{t("staffCards.agents.primary")}</Badge>}</td>
+                <td className="p-3 text-right">
+                  <div className="inline-flex items-center gap-2">
+                    <Link href={`/admin/agents/${a.id}`}><Button size="sm" variant="outline">{t("common.open")}</Button></Link>
+                    <Button variant="ghost" size="icon" onClick={() => remove(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </Card>
   );
 }
 
-// ─── Students ───────────────────────────────────────────────────────────────
+// ─── Students (with filter / sort) ──────────────────────────────────────────
 function StudentsTab({ assignedStudents, userId, onSaved }: { assignedStudents: any[]; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [studentId, setStudentId] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [seasonFilter, setSeasonFilter] = useState<string>("");
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
 
   const add = async () => {
     const id = Number(studentId); if (!id) return;
@@ -455,13 +592,39 @@ function StudentsTab({ assignedStudents, userId, onSaved }: { assignedStudents: 
       setStudentId(""); onSaved();
     } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
   };
-
   const remove = async (sid: number) => {
-    try {
-      await customFetch(`/api/staff-cards/${userId}/assigned-students/${sid}`, { method: "DELETE" });
-      onSaved();
-    } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
+    try { await customFetch(`/api/staff-cards/${userId}/assigned-students/${sid}`, { method: "DELETE" }); onSaved(); }
+    catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
   };
+
+  const displayName = (s: any) => [s.firstName, s.lastName].filter(Boolean).join(" ") || s.email || `#${s.id}`;
+
+  const statuses = useMemo(() => Array.from(new Set(assignedStudents.map(s => s.status).filter(Boolean))) as string[], [assignedStudents]);
+  const seasons = useMemo(() => Array.from(new Set(assignedStudents.map(s => s.season).filter(Boolean))) as string[], [assignedStudents]);
+
+  const filtered = useMemo(() => {
+    let list = assignedStudents.filter(s => {
+      if (statusFilter && s.status !== statusFilter) return false;
+      if (seasonFilter && s.season !== seasonFilter) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        return [displayName(s), s.email].some(v => (v || "").toLowerCase().includes(q));
+      }
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      const dir = sort.dir === "asc" ? 1 : -1;
+      switch (sort.key) {
+        case "email": return dir * (a.email || "").localeCompare(b.email || "");
+        case "status": return dir * (a.status || "").localeCompare(b.status || "");
+        case "season": return dir * (a.season || "").localeCompare(b.season || "");
+        default: return dir * displayName(a).localeCompare(displayName(b));
+      }
+    });
+    return list;
+  }, [assignedStudents, search, statusFilter, seasonFilter, sort]);
+
+  function sortBy(key: string) { setSort(p => p.key === key ? { key, dir: p.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }); }
 
   return (
     <Card className="p-6 space-y-4">
@@ -469,85 +632,205 @@ function StudentsTab({ assignedStudents, userId, onSaved }: { assignedStudents: 
         <div className="flex-1"><Label>{t("staffCards.students.studentId")}</Label><Input type="number" value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="123" /></div>
         <Button onClick={add} disabled={!studentId}><Plus className="h-4 w-4 mr-1" />{t("staffCards.students.assign")}</Button>
       </div>
-      <div className="space-y-2">
-        {assignedStudents.length === 0 && <p className="text-sm text-muted-foreground">{t("staffCards.students.empty")}</p>}
-        {assignedStudents.map(s => (
-          <div key={s.id} className="flex items-center justify-between border rounded-md p-3">
-            <div>
-              <div className="font-medium">{[s.firstName, s.lastName].filter(Boolean).join(" ") || s.email || `#${s.id}`}</div>
-              <div className="text-xs text-muted-foreground">{s.email} {s.status ? `· ${s.status}` : ""} {s.season ? `· ${s.season}` : ""}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href={`/staff/students/${s.id}`}><Button size="sm" variant="outline">{t("common.open")}</Button></Link>
-              <Button variant="ghost" size="icon" onClick={() => remove(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-            </div>
-          </div>
-        ))}
+
+      <div className="flex items-center gap-2 flex-wrap pt-2 border-t">
+        <div className="relative w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("staffCards.filters.search")} className="pl-9 h-9" />
+        </div>
+        <Select value={statusFilter || "__all"} onValueChange={(v) => setStatusFilter(v === "__all" ? "" : v)}>
+          <SelectTrigger className="w-40 h-9"><SelectValue placeholder={t("staffCards.filters.status")} /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">{t("staffCards.filters.all")}</SelectItem>
+            {statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={seasonFilter || "__all"} onValueChange={(v) => setSeasonFilter(v === "__all" ? "" : v)}>
+          <SelectTrigger className="w-40 h-9"><SelectValue placeholder={t("staffCards.filters.season")} /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">{t("staffCards.filters.all")}</SelectItem>
+            {seasons.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(search || statusFilter || seasonFilter) && <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setStatusFilter(""); setSeasonFilter(""); }}>{t("staffCards.filters.reset")}</Button>}
+        <span className="ml-auto text-xs text-muted-foreground">{filtered.length} / {assignedStudents.length}</span>
+      </div>
+
+      <div className="overflow-hidden border rounded-md">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-left text-xs uppercase">
+            <tr>
+              <SortHeader label={t("staffCards.col.name")} active={sort.key === "name"} dir={sort.dir} onClick={() => sortBy("name")} />
+              <SortHeader label={t("staffCards.col.email")} active={sort.key === "email"} dir={sort.dir} onClick={() => sortBy("email")} />
+              <SortHeader label={t("staffCards.filters.status")} active={sort.key === "status"} dir={sort.dir} onClick={() => sortBy("status")} />
+              <SortHeader label={t("staffCards.filters.season")} active={sort.key === "season"} dir={sort.dir} onClick={() => sortBy("season")} />
+              <th className="p-3 text-right">{t("staffCards.col.actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">{assignedStudents.length === 0 ? t("staffCards.students.empty") : t("staffCards.filters.noMatch")}</td></tr>
+            ) : filtered.map(s => (
+              <tr key={s.id} className="border-t hover:bg-muted/30">
+                <td className="p-3 font-medium">{displayName(s)}</td>
+                <td className="p-3 text-muted-foreground">{s.email || "—"}</td>
+                <td className="p-3">{s.status ? <Badge variant="outline" className="capitalize">{s.status}</Badge> : "—"}</td>
+                <td className="p-3 text-muted-foreground">{s.season || "—"}</td>
+                <td className="p-3 text-right">
+                  <div className="inline-flex items-center gap-2">
+                    <Link href={`/staff/students/${s.id}`}><Button size="sm" variant="outline">{t("common.open")}</Button></Link>
+                    <Button variant="ghost" size="icon" onClick={() => remove(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </Card>
   );
 }
 
-// ─── Activity ───────────────────────────────────────────────────────────────
+// ─── Activity (matches User Activity look + planned vs actual) ──────────────
+type ActPreset = "today" | "yesterday" | "7days" | "30days";
+function getRange(p: ActPreset): { from: string; to: string } {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (p) {
+    case "today": return { from: todayStart.toISOString(), to: now.toISOString() };
+    case "yesterday": { const ys = new Date(todayStart); ys.setDate(ys.getDate() - 1); return { from: ys.toISOString(), to: todayStart.toISOString() }; }
+    case "7days": { const d = new Date(todayStart); d.setDate(d.getDate() - 7); return { from: d.toISOString(), to: now.toISOString() }; }
+    case "30days": { const d = new Date(todayStart); d.setDate(d.getDate() - 30); return { from: d.toISOString(), to: now.toISOString() }; }
+  }
+}
+
 function ActivityTab({ userId }: { userId: number }) {
   const { t } = useI18n();
-  const [range, setRange] = useState<"daily" | "weekly" | "monthly">("weekly");
-  const [data, setData] = useState<any | null>(null);
+  const [preset, setPreset] = useState<ActPreset>("7days");
+  const [detail, setDetail] = useState<any>(null);
+  const [planned, setPlanned] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    const range = getRange(preset);
+    const plannedRange = preset === "today" || preset === "yesterday" ? "daily" : preset === "7days" ? "weekly" : "monthly";
     setLoading(true);
-    customFetch<any>(`/api/staff-cards/${userId}/activity?range=${range}`)
-      .then(d => { if (!cancelled) setData(d); })
+    Promise.all([
+      customFetch<any>(`/api/activity/user/${userId}?from=${range.from}&to=${range.to}`),
+      customFetch<any>(`/api/staff-cards/${userId}/activity?range=${plannedRange}`).catch(() => null),
+    ]).then(([d, p]) => { if (!cancelled) { setDetail(d); setPlanned(p); } })
+      .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [userId, range]);
+  }, [userId, preset]);
 
-  if (loading || !data) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  const sessions = detail?.sessions || [];
+  const moduleBreakdown = detail?.moduleBreakdown || [];
+  const dailyBreakdown = detail?.dailyBreakdown || [];
+  const totalActive = sessions.reduce((s: number, x: any) => s + (x.activeDurationSeconds || 0), 0);
+  const totalIdle = sessions.reduce((s: number, x: any) => s + (x.idleDurationSeconds || 0), 0);
+  const totalDuration = sessions.reduce((s: number, x: any) => s + (x.totalDurationSeconds || 0), 0);
 
-  const fmt = (m: number) => `${Math.floor(m / 60)}s ${m % 60}d`;
+  const cards = [
+    { label: t("staffCards.kpi.totalSessions"), value: sessions.length, icon: Monitor, color: "text-blue-500 bg-blue-50 dark:bg-blue-500/10" },
+    { label: t("staffCards.kpi.totalTime"), value: fmtSec(totalDuration), icon: Clock, color: "text-purple-500 bg-purple-50 dark:bg-purple-500/10" },
+    { label: t("staffCards.kpi.activeTime"), value: fmtSec(totalActive), icon: Activity, color: "text-green-500 bg-green-50 dark:bg-green-500/10" },
+    { label: t("staffCards.kpi.idleTime"), value: fmtSec(totalIdle), icon: Pause, color: "text-amber-500 bg-amber-50 dark:bg-amber-500/10" },
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        {(["daily", "weekly", "monthly"] as const).map(r => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>{t(`staffCards.activity.range.${r}`)}</Button>
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 flex-wrap">
+        {(["today", "yesterday", "7days", "30days"] as ActPreset[]).map(p => (
+          <Button key={p} size="sm" variant={preset === p ? "default" : "outline"} className="rounded-xl text-xs"
+            onClick={() => setPreset(p)}>
+            {t(`staffCards.preset.${p}`)}
+          </Button>
         ))}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-        <StatCard label={t("staffCards.activity.planned")} value={fmt(data.totals.plannedMinutes)} />
-        <StatCard label={t("staffCards.activity.actual")} value={fmt(data.totals.actualMinutes)} />
-        <StatCard label={t("staffCards.activity.outside")} value={fmt(data.totals.outsideMinutes)} icon={<AlertTriangle className="h-4 w-4" />} />
-        <StatCard label={t("staffCards.activity.missing")} value={fmt(data.totals.missingMinutes)} />
-        <StatCard label={t("staffCards.activity.overtime")} value={fmt(data.totals.overtimeMinutes)} icon={<BadgeCheck className="h-4 w-4" />} />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {cards.map((s, i) => (
+          <Card key={i} className="p-4 border-none shadow-md shadow-black/5">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0`}>
+                <s.icon className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{s.label}</p>
+                <p className="text-xl font-display font-bold">{loading ? "..." : s.value}</p>
+              </div>
+            </div>
+          </Card>
+        ))}
       </div>
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-left text-xs uppercase">
-            <tr>
-              <th className="p-3">{t("staffCards.activity.day")}</th>
-              <th className="p-3">{t("staffCards.activity.planned")}</th>
-              <th className="p-3">{t("staffCards.activity.actual")}</th>
-              <th className="p-3">{t("staffCards.activity.outside")}</th>
-              <th className="p-3">{t("staffCards.activity.missing")}</th>
-              <th className="p-3">{t("staffCards.activity.overtime")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.breakdown.map((d: any) => (
-              <tr key={d.day} className="border-t">
-                <td className="p-3 font-medium">{d.day}</td>
-                <td className="p-3">{fmt(d.plannedMinutes)}</td>
-                <td className="p-3">{fmt(d.actualMinutes)}</td>
-                <td className="p-3 text-amber-600">{fmt(d.outsideMinutes)}</td>
-                <td className="p-3 text-rose-600">{fmt(d.missingMinutes)}</td>
-                <td className="p-3 text-emerald-600">{fmt(d.overtimeMinutes)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+
+      {/* Planned vs Actual (from work schedule) */}
+      {planned?.totals && (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <StatCard label={t("staffCards.kpi.planned")} value={fmtMin(planned.totals.plannedMinutes)} />
+          <StatCard label={t("staffCards.kpi.actual")} value={fmtMin(planned.totals.actualMinutes)} />
+          <StatCard label={t("staffCards.kpi.outside")} value={fmtMin(planned.totals.outsideMinutes)} icon={<AlertTriangle className="h-4 w-4" />} />
+          <StatCard label={t("staffCards.kpi.missing")} value={fmtMin(planned.totals.missingMinutes)} />
+          <StatCard label={t("staffCards.kpi.overtime")} value={fmtMin(planned.totals.overtimeMinutes)} icon={<BadgeCheck className="h-4 w-4" />} />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="p-5 border-none shadow-md shadow-black/5">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-purple-500" /> {t("staffCards.view.modules")}
+          </h3>
+          {moduleBreakdown.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">—</p>
+          ) : (
+            <div className="space-y-3">
+              {moduleBreakdown.map((m: any) => {
+                const maxActive = Math.max(...moduleBreakdown.map((x: any) => x.activeDuration || 1));
+                const pct = Math.round(((m.activeDuration || 0) / maxActive) * 100);
+                return (
+                  <div key={m.moduleName}>
+                    <div className="flex justify-between items-center text-xs mb-1">
+                      <span className="font-medium text-foreground">{m.moduleName}</span>
+                      <span className="text-muted-foreground">{m.visitCount} · {fmtSec(m.activeDuration || 0)}</span>
+                    </div>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-green-500/80 to-green-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5 border-none shadow-md shadow-black/5">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-blue-500" /> {t("staffCards.view.daily")}
+          </h3>
+          {dailyBreakdown.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">—</p>
+          ) : (
+            <div className="space-y-2">
+              {dailyBreakdown.map((d: any) => {
+                const maxDur = Math.max(...dailyBreakdown.map((x: any) => x.activeDuration || 1));
+                const pct = Math.round(((d.activeDuration || 0) / maxDur) * 100);
+                return (
+                  <div key={d.day} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-24 shrink-0">{new Date(d.day).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+                    <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden relative">
+                      <div className="h-full bg-gradient-to-r from-blue-500/80 to-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs font-mono text-foreground w-16 text-right">{fmtSec(d.activeDuration || 0)}</span>
+                    <span className="text-[10px] text-muted-foreground w-14 text-right">{d.sessionCount}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }
@@ -580,10 +863,8 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
   };
 
   const updateStatus = async (id: number, status: string) => {
-    try {
-      await customFetch(`/api/staff-cards/${userId}/salary-payments/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
-      onSaved();
-    } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
+    try { await customFetch(`/api/staff-cards/${userId}/salary-payments/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); onSaved(); }
+    catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
   };
 
   const remove = async (id: number) => {

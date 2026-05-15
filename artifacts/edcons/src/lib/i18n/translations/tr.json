@@ -2168,6 +2168,46 @@
       "salary": "Maaş",
       "commissions": "Komisyonlar"
     },
+    "section": {
+      "profile": "Profil & İletişim",
+      "schedule": "Çalışma Saatleri",
+      "languages": "Diller",
+      "documents": "Belgeler"
+    },
+    "filters": {
+      "search": "Ara…",
+      "sortBy": "Sıralama",
+      "all": "Tümü",
+      "status": "Durum",
+      "season": "Sezon",
+      "primaryOnly": "Sadece ana",
+      "reset": "Filtreleri sıfırla",
+      "noMatch": "Filtreyle eşleşen kayıt yok"
+    },
+    "openInUsers": "Personel Kartı",
+    "view": {
+      "summary": "Özet",
+      "modules": "Modül Kullanımı",
+      "daily": "Günlük Aktivite",
+      "sessions": "Oturumlar"
+    },
+    "kpi": {
+      "totalSessions": "Toplam Oturum",
+      "totalTime": "Toplam Süre",
+      "activeTime": "Aktif Süre",
+      "idleTime": "Boşta Süre",
+      "planned": "Planlanan",
+      "actual": "Gerçekleşen",
+      "missing": "Eksik",
+      "overtime": "Mesai",
+      "outside": "Plan Dışı"
+    },
+    "preset": {
+      "today": "Bugün",
+      "yesterday": "Dün",
+      "7days": "Son 7 Gün",
+      "30days": "Son 30 Gün"
+    },
     "field": {
       "firstName": "Ad",
       "lastName": "Soyad",

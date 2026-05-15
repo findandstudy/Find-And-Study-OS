@@ -19,8 +19,9 @@ import {
   Search, Users, UserPlus, Shield, MoreHorizontal, Mail, Edit2,
   Plus, Trash2, ChevronDown, ChevronRight, Check, X, Eye, Lock,
   Settings2, ShieldCheck, KeyRound, LogIn, ShieldOff, Loader2,
-  ArrowUpDown, ArrowUp, ArrowDown, Phone
+  ArrowUpDown, ArrowUp, ArrowDown, Phone, IdCard
 } from "lucide-react";
+import { Link } from "wouter";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { useI18n } from "@/hooks/use-i18n";
@@ -135,6 +136,7 @@ function UsersTab() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
   const pg = useTablePagination(25);
 
   useEffect(() => {
@@ -442,6 +444,13 @@ function UsersTab() {
                             <DropdownMenuItem onClick={() => handleImpersonate(user)}>
                               <LogIn className="w-4 h-4 mr-2" /> Login as {user.firstName}
                             </DropdownMenuItem>
+                            {["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"].includes(user.role) && (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/admin/staff-cards/${user.id}`} className="cursor-pointer">
+                                  <IdCard className="w-4 h-4 mr-2" /> {t("staffCards.openInUsers")}
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
                               {user.isActive ? (
