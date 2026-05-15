@@ -1140,8 +1140,15 @@ router.delete("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (
     res.status(403).json({ error: "Agent not in your branch scope" });
     return;
   }
+  // Match the parent-deletes-sub-agent path (line ~325): when an agent has a
+  // linked login user, remove that user too. Without this the admin "Delete
+  // agent" action left an orphan `users` row with role=agent and no profile,
+  // diverging from the sub-agent delete behaviour.
   const [agent] = await db.delete(agentsTable).where(eq(agentsTable.id, id)).returning();
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (agent.userId) {
+    await db.delete(usersTable).where(eq(usersTable.id, agent.userId));
+  }
   res.json({ success: true });
 });
 
@@ -1157,6 +1164,12 @@ router.post("/agents/bulk-delete", requireAuth, requireRole(...MANAGER_ROLES), a
     return;
   }
   const deleted = await db.delete(agentsTable).where(inArray(agentsTable.id, numIds)).returning();
+  // Same cascade as the single-delete handler above — keep `users` and
+  // `agents` in sync so admin bulk-delete doesn't leave orphan login rows.
+  const userIdsToRemove = deleted.map(a => a.userId).filter((u): u is number => u !== null && u !== undefined);
+  if (userIdsToRemove.length > 0) {
+    await db.delete(usersTable).where(inArray(usersTable.id, userIdsToRemove));
+  }
   res.json({ success: true, count: deleted.length });
 });
 
