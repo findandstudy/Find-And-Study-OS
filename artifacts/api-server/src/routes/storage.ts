@@ -47,11 +47,39 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
   try {
     const { name, size, contentType, prefix } = parsed.data;
 
-    const validationError = validateUploadedFile(name, contentType, size);
-    if (validationError) {
-      const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
-      res.status(httpStatus).json({ error: validationError.message });
-      return;
+    // Staff document uploads use STAFF_DOC_RULES (PDF/DOC/DOCX/JPG/PNG, up
+    // to 25MB) — admin-only, gated by prefix `staff-documents/{userId}/`.
+    // Generic uploads still go through the global validateUploadedFile policy.
+    const isStaffDoc = !!prefix && /^staff-documents\/\d+\/?$/.test(prefix);
+    if (isStaffDoc) {
+      const role = (req.user as { role?: string } | undefined)?.role;
+      if (role !== "super_admin" && role !== "admin") {
+        res.status(403).json({ error: "Staff document uploads are admin-only" });
+        return;
+      }
+      const STAFF_DOC_MIMES = new Set([
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/jpeg",
+        "image/png",
+      ]);
+      const STAFF_DOC_MAX = 25 * 1024 * 1024;
+      if (!STAFF_DOC_MIMES.has(contentType)) {
+        res.status(400).json({ error: "Unsupported file type for staff documents" });
+        return;
+      }
+      if (size > STAFF_DOC_MAX) {
+        res.status(413).json({ error: "Dosya boyutu 25MB sınırını aşıyor." });
+        return;
+      }
+    } else {
+      const validationError = validateUploadedFile(name, contentType, size);
+      if (validationError) {
+        const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
+        res.status(httpStatus).json({ error: validationError.message });
+        return;
+      }
     }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL(prefix);
