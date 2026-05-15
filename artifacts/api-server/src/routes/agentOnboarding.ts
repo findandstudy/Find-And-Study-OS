@@ -417,11 +417,18 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
   let previewHtml: string | null = null;
   if (template && (session.status === "review_pending" || session.status === "intake_pending")) {
     try {
-      const { renderTemplate, buildAgentContext } = await import("../lib/contractRenderer");
+      const { renderTemplate, buildAgentContext, cleanupSignatureImages } = await import("../lib/contractRenderer");
       const ctx = buildAgentContext(agent, (session.intakeData as any) || null, {
         signerEmail: session.signerEmail, signerName: session.signerName || undefined,
       });
-      previewHtml = renderTemplate(template.bodyHtml, ctx);
+      const rendered = renderTemplate(template.bodyHtml, ctx);
+      // Strip empty <img src=""> placeholders left by the unfilled
+      // {{signature}} / {{main_agency_signature}} variables. Without this
+      // the agent dashboard preview shows broken-image icons inside the
+      // signature boxes before signing. Public signing routes already do
+      // this; we mirror their behavior here. Empty placeholderText keeps
+      // the signature boxes visually blank in the pre-sign preview.
+      previewHtml = cleanupSignatureImages(rendered, "");
     } catch (err) {
       console.error("[contracts/me] preview render failed:", err);
     }
