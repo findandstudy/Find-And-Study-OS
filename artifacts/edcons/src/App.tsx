@@ -679,7 +679,19 @@ function setupUnauthorizedHandler() {
     const langSegment = pathname.split("/")[1] || DEFAULT_LANGUAGE;
     const isOnLogin = /\/login(\/|$|\?)/.test(pathname);
     const isOnPublic = !/\/(admin|agent|student|staff)(\/|$)/.test(pathname);
-    if (isOnLogin || isOnPublic) return;
+    // Public agent flows: the email-verification page is reachable BEFORE
+    // login (the user has only clicked the link in their inbox), and the
+    // public sign flow obviously can't require an active session either.
+    // Without these exemptions the first /api/auth/me 401 yanks the user
+    // to /login?returnTo=... and they never see the verification screen.
+    // Anchor at the language-prefixed root so an unrelated "/.../sign/" or
+    // "/.../agent/onboarding-..." segment can't accidentally bypass the
+    // login redirect in the future.
+    const isOnAgentOnboarding = /^\/[a-z]{2}\/agent\/onboarding(?:\/|$)/.test(pathname)
+      || /^\/agent\/onboarding(?:\/|$)/.test(pathname);
+    const isOnPublicSign = /^\/[a-z]{2}\/sign\//.test(pathname)
+      || pathname.startsWith("/sign/");
+    if (isOnLogin || isOnPublic || isOnAgentOnboarding || isOnPublicSign) return;
 
     redirecting = true;
 
