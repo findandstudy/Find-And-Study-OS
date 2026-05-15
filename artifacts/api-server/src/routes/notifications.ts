@@ -17,6 +17,46 @@ import { notificationBus, type NotificationBusEvent } from "../lib/notificationB
 const router: IRouter = Router();
 
 /**
+ * SQL fragment that excludes notifications whose target resource has been
+ * deleted (or, for soft-deletable tables, soft-deleted). The bell badge,
+ * the per-section nav badges, and the notification panel listing all share
+ * this filter so they stay in sync — a notification pointing at a vanished
+ * lead/student/application/conversation never contributes to a count or
+ * shows up in the panel.
+ *
+ * Notifications without a recognised resource reference (system messages,
+ * etc.) are kept by default — only known patterns are checked.
+ */
+const liveResourceFilter = sql`(
+  CASE
+    WHEN ${notificationsTable.actionUrl} ~ '/applications/([0-9]+)' THEN
+      EXISTS (
+        SELECT 1 FROM applications a
+        WHERE a.id = (regexp_match(${notificationsTable.actionUrl}, '/applications/([0-9]+)'))[1]::int
+          AND a.deleted_at IS NULL
+      )
+    WHEN ${notificationsTable.actionUrl} ~ '/leads/([0-9]+)' THEN
+      EXISTS (
+        SELECT 1 FROM leads l
+        WHERE l.id = (regexp_match(${notificationsTable.actionUrl}, '/leads/([0-9]+)'))[1]::int
+          AND l.deleted_at IS NULL
+      )
+    WHEN ${notificationsTable.actionUrl} ~ '/students/([0-9]+)' THEN
+      EXISTS (
+        SELECT 1 FROM students s
+        WHERE s.id = (regexp_match(${notificationsTable.actionUrl}, '/students/([0-9]+)'))[1]::int
+          AND s.deleted_at IS NULL
+      )
+    WHEN ${notificationsTable.actionUrl} ~ 'conversation=([0-9]+)' THEN
+      EXISTS (
+        SELECT 1 FROM conversations c
+        WHERE c.id = (regexp_match(${notificationsTable.actionUrl}, 'conversation=([0-9]+)'))[1]::int
+      )
+    ELSE TRUE
+  END
+)`;
+
+/**
  * Live notification stream (SSE). Replaces the previous 15 s polling loop in
  * the browser NotificationCenter — events are pushed immediately when
  * dispatchNotification() inserts a row. Heartbeat every 25 s keeps idle
@@ -83,7 +123,7 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { limit = "20", unreadOnly } = req.query as Record<string, string>;
 
-  const conditions = [eq(notificationsTable.userId, userId)];
+  const conditions = [eq(notificationsTable.userId, userId), liveResourceFilter];
   if (unreadOnly === "true") {
     conditions.push(eq(notificationsTable.isRead, false));
   }
@@ -103,7 +143,11 @@ router.get("/notifications/unread-count", requireAuth, async (req, res): Promise
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)` })
     .from(notificationsTable)
-    .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, false)));
+    .where(and(
+      eq(notificationsTable.userId, userId),
+      eq(notificationsTable.isRead, false),
+      liveResourceFilter,
+    ));
 
   res.json({ count: Number(count) });
 });
@@ -117,7 +161,11 @@ router.get("/notifications/section-counts", requireAuth, async (req, res): Promi
       data: notificationsTable.data,
     })
     .from(notificationsTable)
-    .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, false)));
+    .where(and(
+      eq(notificationsTable.userId, userId),
+      eq(notificationsTable.isRead, false),
+      liveResourceFilter,
+    ));
 
   const sections: Record<string, number> = { leads: 0, students: 0, applications: 0 };
   for (const row of rows) {
