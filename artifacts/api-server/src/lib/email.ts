@@ -186,13 +186,38 @@ export async function getEmailBranding(): Promise<EmailBranding> {
   }
 }
 
+/**
+ * Resolve the public base URL used when constructing links inside outgoing
+ * emails. Priority (highest first):
+ *   1. APP_BASE_URL — explicit operator override. Set this to your custom
+ *      production domain (e.g. https://portal.masterstudyinturkey.com) so
+ *      onboarding/contract links go to the branded URL instead of the
+ *      generic *.replit.app deployment URL. Trailing slashes are trimmed.
+ *   2. REPLIT_DOMAINS — the comma-separated list of domains routed to the
+ *      deployment. When a custom domain is attached this is preferred over
+ *      the bare REPLIT_DEPLOYMENT_URL because users recognize their own
+ *      brand. We pick the first non-*.replit.app entry when one exists,
+ *      otherwise fall back to the first entry.
+ *   3. REPLIT_DEPLOYMENT_URL — fallback Replit-assigned production URL.
+ *   4. REPLIT_DEV_DOMAIN — development workspace URL.
+ *   5. http://localhost:5000 — last-resort local default.
+ */
 export function getAppBaseUrl(): string {
-  if (process.env.REPLIT_DEPLOYMENT_URL) {
-    return `https://${process.env.REPLIT_DEPLOYMENT_URL}`;
+  const explicit = process.env.APP_BASE_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, "");
   }
   if (process.env.REPLIT_DOMAINS) {
-    const firstDomain = process.env.REPLIT_DOMAINS.split(",")[0].trim();
-    if (firstDomain) return `https://${firstDomain}`;
+    const domains = process.env.REPLIT_DOMAINS
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    const custom = domains.find((d) => !d.endsWith(".replit.app") && !d.endsWith(".replit.dev"));
+    const chosen = custom || domains[0];
+    if (chosen) return `https://${chosen}`;
+  }
+  if (process.env.REPLIT_DEPLOYMENT_URL) {
+    return `https://${process.env.REPLIT_DEPLOYMENT_URL}`;
   }
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}`;
