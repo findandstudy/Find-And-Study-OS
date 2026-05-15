@@ -378,6 +378,7 @@
     "auditLog": "Denetim Günlüğü",
     "userActivity": "Kullanıcı Etkinliği",
     "embeds": "Gömülü Kodlar",
+    "staffCards": "Personel Kartları",
     "settings": "Ayarlar",
     "wishlist": "İstek Listesi",
     "myApplications": "Başvurularım",
@@ -506,6 +507,7 @@
     "error": "Bir hata oluştu. Lütfen tekrar deneyin.",
     "success": "Başarılı!",
     "back": "Geri",
+    "open": "Aç",
     "next": "İleri",
     "previous": "Önceki",
     "search": "Ara",
@@ -2134,5 +2136,136 @@
     "appFee": "Başvuru Ücreti",
     "intakes": "Dönemler",
     "intakesPlaceholder": "örn. Eyl, Ocak…"
+  },
+  "staffCards": {
+    "title": "Personel Kartları",
+    "subtitle": "Tüm personelin tek bakışta ayrıntılı kartı",
+    "searchPlaceholder": "Ad, soyad veya e-posta ara",
+    "empty": "Personel bulunamadı",
+    "openCard": "Kartı Aç",
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "saved": "Kaydedildi",
+    "loadFailed": "Kart yüklenemedi",
+    "lastActive": "Son aktiflik",
+    "col": {
+      "name": "Ad Soyad",
+      "email": "E-posta",
+      "role": "Rol",
+      "location": "Lokasyon",
+      "timezone": "Saat Dilimi",
+      "status": "Durum",
+      "actions": "İşlemler"
+    },
+    "tab": {
+      "general": "Genel",
+      "schedule": "Çalışma Saatleri",
+      "languages": "Diller",
+      "documents": "Belgeler",
+      "agents": "Atanmış Acenteler",
+      "students": "Atanmış Öğrenciler",
+      "activity": "Etkinlik Raporu",
+      "salary": "Maaş",
+      "commissions": "Komisyonlar"
+    },
+    "field": {
+      "firstName": "Ad",
+      "lastName": "Soyad",
+      "phone": "Telefon",
+      "homeAddress": "Ev Adresi",
+      "locationCountry": "Ülke",
+      "locationCity": "Şehir",
+      "timezone": "Saat Dilimi (IANA)",
+      "emergencyName": "Acil Durum İrtibat — Ad",
+      "emergencyPhone": "Acil Durum İrtibat — Telefon"
+    },
+    "schedule": {
+      "weekday": "Gün",
+      "start": "Başlangıç",
+      "end": "Bitiş",
+      "add": "Aralık Ekle",
+      "empty": "Henüz çalışma saati tanımlı değil"
+    },
+    "weekday": {
+      "sunday": "Pazar",
+      "monday": "Pazartesi",
+      "tuesday": "Salı",
+      "wednesday": "Çarşamba",
+      "thursday": "Perşembe",
+      "friday": "Cuma",
+      "saturday": "Cumartesi"
+    },
+    "languages": {
+      "language": "Dil",
+      "proficiency": "Seviye",
+      "native": "Anadil",
+      "add": "Dil Ekle",
+      "empty": "Henüz dil eklenmedi"
+    },
+    "documents": {
+      "type": "Belge Türü",
+      "contract": "Sözleşme",
+      "diploma": "Diploma",
+      "passport": "Pasaport",
+      "upload": "Yükle",
+      "download": "İndir",
+      "empty": "Henüz belge yüklenmedi",
+      "uploaded": "Belge yüklendi",
+      "confirmDelete": "Bu belge silinsin mi?",
+      "privacyNote": "Belgeler gizlidir; yalnızca admin görebilir. Sözleşme: PDF/DOC/DOCX, en fazla 25 MB. Diploma: PDF/JPG/PNG/DOC/DOCX, en fazla 10 MB. Pasaport: PDF/JPG/PNG, en fazla 10 MB."
+    },
+    "agents": {
+      "add": "Acente Ata",
+      "assign": "Ata",
+      "primary": "Ana",
+      "empty": "Atanmış acente yok"
+    },
+    "students": {
+      "studentId": "Öğrenci ID",
+      "assign": "Ata",
+      "empty": "Atanmış öğrenci yok"
+    },
+    "activity": {
+      "range": {
+        "daily": "Son 7 Gün",
+        "weekly": "Son 4 Hafta",
+        "monthly": "Son 30 Gün"
+      },
+      "day": "Gün",
+      "planned": "Planlanan",
+      "actual": "Gerçekleşen",
+      "outside": "Plan Dışı",
+      "missing": "Eksik",
+      "overtime": "Fazla Mesai"
+    },
+    "salary": {
+      "amount": "Tutar",
+      "currency": "Para Birimi",
+      "period": "Dönem",
+      "payDate": "Ödeme Tarihi",
+      "status": "Durum",
+      "notes": "Not",
+      "monthly": "Aylık",
+      "weekly": "Haftalık",
+      "biweekly": "İki Haftalık",
+      "hourly": "Saatlik",
+      "project": "Proje Bazlı",
+      "pending": "Bekliyor",
+      "paid": "Ödendi",
+      "cancelled": "İptal",
+      "totalPaid": "Toplam Ödenen",
+      "totalPending": "Toplam Bekleyen",
+      "empty": "Henüz maaş kaydı yok"
+    },
+    "commissions": {
+      "studentId": "Öğrenci ID",
+      "agentId": "Acente ID",
+      "applicationId": "Başvuru ID",
+      "approved": "Onaylandı",
+      "totalPaid": "Toplam Ödenen",
+      "totalPending": "Toplam Bekleyen",
+      "refs": "Referanslar",
+      "empty": "Henüz komisyon kaydı yok"
+    }
   }
 }

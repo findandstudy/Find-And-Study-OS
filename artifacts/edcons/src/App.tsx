@@ -85,6 +85,8 @@ const AdminPopups = lazyRetry(() => import("@/pages/admin/Popups"));
 const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
 const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
+const AdminStaffCards = lazyRetry(() => import("@/pages/admin/StaffCards"));
+const AdminStaffCardDetail = lazyRetry(() => import("@/pages/admin/StaffCardDetail"));
 const AdminContractTemplates = lazyRetry(() => import("@/pages/admin/ContractTemplates"));
 const AdminContracts = lazyRetry(() => import("@/pages/admin/Contracts"));
 const AdminSelfFillLinks = lazyRetry(() => import("@/pages/admin/SelfFillLinks"));
@@ -294,6 +296,12 @@ function StaffAdminShell() {
           </Route>
           <Route path="/admin/embeds">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/staff-cards/:userId">
+            {(params) => <ProtectedRoute allowedRoles={["super_admin","admin"]}><AdminStaffCardDetail userId={Number(params.userId)} /></ProtectedRoute>}
+          </Route>
+          <Route path="/admin/staff-cards">
+            <ProtectedRoute allowedRoles={["super_admin","admin"]}><AdminStaffCards /></ProtectedRoute>
           </Route>
           <Route path="/admin/contract-templates">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminContractTemplates /></ProtectedRoute>

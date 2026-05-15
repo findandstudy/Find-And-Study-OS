@@ -37,3 +37,4 @@ export * from "./contracts";
 export * from "./universityContracts";
 export * from "./leadAssignmentRules";
 export * from "./agencyAssignedStaff";
+export * from "./staffCards";

@@ -43,6 +43,7 @@ import publicSigningRouter from "./publicSigning";
 import universityContractsRouter from "./universityContracts";
 import agentOnboardingRouter, { ONBOARDING_HELPERS } from "./agentOnboarding";
 import leadAssignmentRulesRouter from "./leadAssignmentRules";
+import staffCardsRouter from "./staffCards";
 
 const router: IRouter = Router();
 
@@ -156,5 +157,6 @@ router.use(publicSigningRouter);
 router.use(universityContractsRouter);
 router.use(agentOnboardingRouter);
 router.use(leadAssignmentRulesRouter);
+router.use(staffCardsRouter);
 
 export default router;

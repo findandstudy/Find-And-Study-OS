@@ -378,6 +378,7 @@
     "auditLog": "Audit Log",
     "userActivity": "User Activity",
     "embeds": "Embeds",
+    "staffCards": "Staff Cards",
     "settings": "Settings",
     "wishlist": "Wishlist",
     "myApplications": "My Applications",
@@ -506,6 +507,7 @@
     "error": "Something went wrong. Please try again.",
     "success": "Success!",
     "back": "Back",
+    "open": "Open",
     "next": "Next",
     "previous": "Previous",
     "search": "Search",
@@ -2193,5 +2195,136 @@
     "appFee": "App Fee",
     "intakes": "Intakes",
     "intakesPlaceholder": "e.g. Sep, January…"
+  },
+  "staffCards": {
+    "title": "Staff Cards",
+    "subtitle": "Detailed at-a-glance cards for every staff member",
+    "searchPlaceholder": "Search by name or email",
+    "empty": "No staff found",
+    "openCard": "Open Card",
+    "active": "Active",
+    "inactive": "Inactive",
+    "saved": "Saved",
+    "loadFailed": "Failed to load card",
+    "lastActive": "Last active",
+    "col": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "location": "Location",
+      "timezone": "Timezone",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "tab": {
+      "general": "General",
+      "schedule": "Work Hours",
+      "languages": "Languages",
+      "documents": "Documents",
+      "agents": "Assigned Agents",
+      "students": "Assigned Students",
+      "activity": "Activity Report",
+      "salary": "Salary",
+      "commissions": "Commissions"
+    },
+    "field": {
+      "firstName": "First name",
+      "lastName": "Last name",
+      "phone": "Phone",
+      "homeAddress": "Home address",
+      "locationCountry": "Country",
+      "locationCity": "City",
+      "timezone": "Timezone (IANA)",
+      "emergencyName": "Emergency contact — Name",
+      "emergencyPhone": "Emergency contact — Phone"
+    },
+    "schedule": {
+      "weekday": "Day",
+      "start": "Start",
+      "end": "End",
+      "add": "Add range",
+      "empty": "No work hours defined yet"
+    },
+    "weekday": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "languages": {
+      "language": "Language",
+      "proficiency": "Level",
+      "native": "Native",
+      "add": "Add language",
+      "empty": "No languages added yet"
+    },
+    "documents": {
+      "type": "Document type",
+      "contract": "Contract",
+      "diploma": "Diploma",
+      "passport": "Passport",
+      "upload": "Upload",
+      "download": "Download",
+      "empty": "No documents uploaded yet",
+      "uploaded": "Document uploaded",
+      "confirmDelete": "Delete this document?",
+      "privacyNote": "Documents are private; only admins can view. Contract: PDF/DOC/DOCX, up to 25 MB. Diploma: PDF/JPG/PNG/DOC/DOCX, up to 10 MB. Passport: PDF/JPG/PNG, up to 10 MB."
+    },
+    "agents": {
+      "add": "Assign agent",
+      "assign": "Assign",
+      "primary": "Primary",
+      "empty": "No agents assigned"
+    },
+    "students": {
+      "studentId": "Student ID",
+      "assign": "Assign",
+      "empty": "No students assigned"
+    },
+    "activity": {
+      "range": {
+        "daily": "Last 7 Days",
+        "weekly": "Last 4 Weeks",
+        "monthly": "Last 30 Days"
+      },
+      "day": "Day",
+      "planned": "Planned",
+      "actual": "Actual",
+      "outside": "Outside Hours",
+      "missing": "Missing",
+      "overtime": "Overtime"
+    },
+    "salary": {
+      "amount": "Amount",
+      "currency": "Currency",
+      "period": "Period",
+      "payDate": "Pay date",
+      "status": "Status",
+      "notes": "Notes",
+      "monthly": "Monthly",
+      "weekly": "Weekly",
+      "biweekly": "Biweekly",
+      "hourly": "Hourly",
+      "project": "Project",
+      "pending": "Pending",
+      "paid": "Paid",
+      "cancelled": "Cancelled",
+      "totalPaid": "Total paid",
+      "totalPending": "Total pending",
+      "empty": "No salary records yet"
+    },
+    "commissions": {
+      "studentId": "Student ID",
+      "agentId": "Agent ID",
+      "applicationId": "Application ID",
+      "approved": "Approved",
+      "totalPaid": "Total paid",
+      "totalPending": "Total pending",
+      "refs": "References",
+      "empty": "No commission records yet"
+    }
   }
 }
