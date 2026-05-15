@@ -816,7 +816,11 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.src = '${baseUrl}/api/public/embed/' + slug + '/widget';
     iframe.style.width = '100%';
     iframe.style.border = 'none';
-    iframe.style.minHeight = '780px';
+    // No artificial minimum: the iframe must size itself to the widget's
+    // actual content. The widget's own resizeParent() reports a height that
+    // already includes any open modal or dropdown overlays, so a fixed
+    // 780px floor here only produced empty space below the form.
+    iframe.style.minHeight = '0';
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
     el.appendChild(iframe);
@@ -1072,6 +1076,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-cc-trigger .ew-cc-caret{margin-left:auto;font-size:0.7rem;opacity:.6}
 .ew-cc-list{position:absolute;top:calc(100% + 4px);left:0;right:0;min-width:240px;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:1000;padding:4px;display:none}
 .ew-cc-list.open{display:block}
+.ew-cc-list.ew-cc-list-up{top:auto;bottom:calc(100% + 4px)}
 .ew-cc-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#1f2937}
 .ew-cc-item:hover,.ew-cc-item.active{background:${primaryColor}15}
 .ew-cc-item img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
@@ -1889,6 +1894,10 @@ function closeModal(){
     modalNotified=false;
     notifyParentModalClose();
   }
+  // Modal overlay lives on document.body and is absolutely positioned, so
+  // its removal does not change .ew-root scrollHeight. Trigger a manual
+  // resize so the iframe shrinks back to the launcher card height.
+  if(typeof resizeParent==='function')resizeParent();
 }
 
 function showModal(){
@@ -1908,12 +1917,17 @@ function showModal(){
   }
   repositionModal();
   setTimeout(repositionModal,60);
+  // The modal is absolute-positioned on document.body, so the root-level
+  // ResizeObserver won't see it. Push a fresh height to the host so the
+  // iframe grows to contain the modal (and avoid the host clipping it).
+  if(typeof resizeParent==='function'){resizeParent();setTimeout(resizeParent,80);}
 }
 
 function closeDetailModal(){
   detailOpen=false;detailProgram=null;
   if(modalElements){modalElements.overlay.remove();modalElements=null;}
   if(modalNotified){modalNotified=false;notifyParentModalClose();}
+  if(typeof resizeParent==='function')resizeParent();
 }
 
 function showDetailModal(){
@@ -1942,6 +1956,7 @@ function showDetailModal(){
   if(!modalNotified){modalNotified=true;notifyParentModalOpen();}
   repositionModal();
   setTimeout(repositionModal,60);
+  if(typeof resizeParent==='function'){resizeParent();setTimeout(resizeParent,80);}
 }
 
 function renderDetailContent(p){
@@ -2087,14 +2102,22 @@ function wireCcDropdown(scope){
     window.__ewCcInit=true;
     document.addEventListener('click',function(e){
       var opened=document.querySelectorAll('.ew-cc-list.open');
+      var changed=false;
       for(var k=0;k<opened.length;k++){
         var cc=opened[k].closest?opened[k].closest('.ew-cc'):opened[k].parentNode;
         if(cc&&!cc.contains(e.target)){
           opened[k].classList.remove('open');
+          opened[k].classList.remove('ew-cc-list-up');
+          opened[k].style.top='';opened[k].style.bottom='';
           var t=cc.querySelector('.ew-cc-trigger');
           if(t)t.setAttribute('aria-expanded','false');
+          changed=true;
         }
       }
+      // Outside-click closed at least one dropdown — let the iframe shrink
+      // back. The instance close() handler isn't reachable here (private
+      // closure per ew-cc), so we replicate the resizeParent trigger.
+      if(changed&&typeof resizeParent==='function')resizeParent();
     });
   }
   var ccs=root.querySelectorAll?root.querySelectorAll('.ew-cc'):[];
@@ -2105,11 +2128,38 @@ function wireCcDropdown(scope){
     var hidden=cc.querySelector('input[type="hidden"]');
     if(!trig||!list||!hidden)return;
     function items(){return list.querySelectorAll('.ew-cc-item');}
-    function close(){list.classList.remove('open');trig.setAttribute('aria-expanded','false');}
+    function close(){
+      list.classList.remove('open');list.classList.remove('ew-cc-list-up');
+      list.style.top='';list.style.bottom='';
+      trig.setAttribute('aria-expanded','false');
+      // Let the iframe shrink back to its idle height once the dropdown
+      // is gone — its open state was contributing to the reported height.
+      if(typeof resizeParent==='function')resizeParent();
+    }
     function open(){
       var others=document.querySelectorAll('.ew-cc-list.open');
       for(var k=0;k<others.length;k++)if(others[k]!==list)others[k].classList.remove('open');
       list.classList.add('open');trig.setAttribute('aria-expanded','true');
+      // Decide whether to drop down or up. The widget lives in a cross-
+      // origin iframe, so the only viewport we control is the iframe
+      // itself. If opening downward would push past the iframe's bottom
+      // and there's more room above, anchor the list to the trigger's
+      // top edge instead. Otherwise grow the iframe (resizeParent below)
+      // so the full list is reachable without an inner scrollbar.
+      list.classList.remove('ew-cc-list-up');
+      list.style.top='';list.style.bottom='';
+      try{
+        var trRect=trig.getBoundingClientRect();
+        var listH=Math.min(260, list.scrollHeight||260);
+        var spaceBelow=(window.innerHeight||document.documentElement.clientHeight)-trRect.bottom;
+        var spaceAbove=trRect.top;
+        if(spaceBelow<listH+8 && spaceAbove>spaceBelow){
+          list.classList.add('ew-cc-list-up');
+        }
+      }catch(_){}
+      // Ensure the iframe is tall enough to show the full dropdown without
+      // clipping at its boundary (cross-origin iframes can't escape).
+      if(typeof resizeParent==='function')resizeParent();
       var act=list.querySelector('.ew-cc-item.active')||items()[0];
       if(act){act.focus({preventScroll:false});if(act.scrollIntoView)act.scrollIntoView({block:'nearest'});}
     }
@@ -2443,8 +2493,20 @@ function resizeParent(){
     // reported height and force an inner scrollbar on the host page.
     var rootH=root?Math.max(root.scrollHeight,root.offsetHeight):0;
     var docH=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);
-    var h=Math.max(rootH,docH)+32;
-    if(h<780)h=780;
+    var h=Math.max(rootH,docH);
+    // Absolutely-positioned overlays (the apply modal and any open country
+    // code dropdown) do not contribute to scrollHeight, so query their
+    // bounding rects explicitly and grow the iframe just enough to contain
+    // them. This both prevents the modal/dropdown from being clipped at
+    // the iframe boundary AND lets the iframe shrink back to the launcher
+    // card height once they close.
+    var extras=document.querySelectorAll('.ew-modal, .ew-cc-list.open');
+    for(var i=0;i<extras.length;i++){
+      var r=extras[i].getBoundingClientRect();
+      var bottom=r.bottom+(window.pageYOffset||document.documentElement.scrollTop||0);
+      if(bottom>h)h=bottom;
+    }
+    h=Math.ceil(h)+16;
     window.parent.postMessage({type:'edcons-resize',slug:SLUG,height:h},'*');
   }catch(e){}
 }
@@ -2452,7 +2514,12 @@ function resizeParent(){
 var ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(resizeParent):null;
 if(ro){
   var rootEl=document.querySelector('.ew-root');
-  ro.observe(rootEl||document.body);
+  // Observe BOTH the widget root AND document.body. The modal overlay and
+  // any open country code dropdown are appended to document.body (or
+  // float above .ew-root via position:absolute), so root-only observation
+  // misses size changes from those overlays.
+  if(rootEl)ro.observe(rootEl);
+  ro.observe(document.body);
 }
 
 window.addEventListener('message',function(e){
