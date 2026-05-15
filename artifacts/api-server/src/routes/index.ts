@@ -59,6 +59,16 @@ const ALLOWLIST_EXACT = new Set([
   "/agents/me/onboarding-status",
   "/agents/me/resend-verification",
   "/agents/me/verify-email",
+  // Set-password is part of the pre-contract onboarding flow: a freshly
+  // verified agent must be able to choose a password before they can sign
+  // their contract. Without this, the contract gate would 403 the request.
+  "/agents/me/set-password",
+  // Public onboarding endpoints. They're intended to be hit without a
+  // session, but a user who already token-verified earlier still has a
+  // session cookie on subsequent calls (manual fallback form, resend) —
+  // the contract gate would otherwise 403 those calls.
+  "/agents/onboarding/verify-with-link",
+  "/agents/onboarding/resend-public",
   "/contracts/me",
   "/contracts/me/sign",
   "/settings/branding",
