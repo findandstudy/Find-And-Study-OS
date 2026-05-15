@@ -1218,7 +1218,20 @@ router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), a
   res.json(agent);
 });
 
-router.post("/agents/:id/set-password", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/agents/:id/set-password", requireAuth, async (req, res, next): Promise<void> => {
+  // `/agents/me/set-password` belongs to the agent self-service onboarding
+  // router (agentOnboarding.ts). Express matches this `:id` route first
+  // because agentsRouter is mounted earlier; without skipping "me" here
+  // we'd hit requireRole(MANAGER_ROLES) for the agent (403) or, for an
+  // admin who somehow lands on this URL, run `parseInt("me") = NaN`
+  // through a `agents.id = NaN` query and crash with a 500.
+  if (req.params.id === "me") { next(); return; }
+  // Inline the manager-role check now that requireRole is no longer in the
+  // chain (we needed an async wrapper to call next() above).
+  if (!req.user || !MANAGER_ROLES.includes(req.user.role)) {
+    res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
+    return;
+  }
   const id = parseInt(req.params.id, 10);
   const { password } = req.body;
   const pwd = validatePassword(password);
@@ -1234,7 +1247,15 @@ router.post("/agents/:id/set-password", requireAuth, requireRole(...MANAGER_ROLE
   res.json({ success: true });
 });
 
-router.post("/agents/:id/impersonate", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Promise<void> => {
+  // Same defence as /agents/:id/set-password above — never let "me" fall
+  // through to a `parseInt("me") = NaN` agents lookup. No agentOnboarding
+  // counterpart today, so we 404 instead of next()'ing.
+  if (req.params.id === "me") { res.status(404).json({ error: "Not found" }); return; }
+  if (!req.user || !MANAGER_ROLES.includes(req.user.role)) {
+    res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
+    return;
+  }
   const id = parseInt(req.params.id, 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
