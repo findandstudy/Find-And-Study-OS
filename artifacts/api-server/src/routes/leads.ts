@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, softDelete } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -23,12 +23,19 @@ const LEAD_PATCH_FIELDS = [
 ];
 
 router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
-  const rows = await db
-    .selectDistinct({ source: leadsTable.source })
-    .from(leadsTable)
-    .where(sql`${leadsTable.source} IS NOT NULL AND ${leadsTable.source} != ''`);
-  const sources = rows.map(r => r.source!).filter(Boolean).sort();
-  res.json({ data: sources });
+  const [leadRows, widgetRows] = await Promise.all([
+    db
+      .selectDistinct({ source: leadsTable.source })
+      .from(leadsTable)
+      .where(sql`${leadsTable.source} IS NOT NULL AND ${leadsTable.source} != ''`),
+    db
+      .select({ slug: embedWidgetsTable.slug, mode: embedWidgetsTable.mode })
+      .from(embedWidgetsTable),
+  ]);
+  const all = new Set<string>();
+  for (const r of leadRows) if (r.source) all.add(r.source);
+  for (const w of widgetRows) if (w.slug) all.add(`embed:${w.slug}`);
+  res.json({ data: [...all].sort() });
 });
 
 router.get("/leads/distinct-cities", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
