@@ -502,6 +502,38 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 <OriginSection originType={lead?.originType || "direct"} originDisplayName={lead?.originDisplayName} />
               </div>
 
+              {(lead?.sourcePageUrl || lead?.utmSource || lead?.utmMedium || lead?.utmCampaign || lead?.utmTerm || lead?.utmContent) && (
+                <div className="pt-2 border-t">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Kaynak Bilgisi</p>
+                  <div className="space-y-2 text-sm">
+                    {lead?.sourcePageUrl && (() => {
+                      const safeHref = /^https?:\/\//i.test(lead.sourcePageUrl) ? lead.sourcePageUrl : null;
+                      return (
+                        <div className="flex items-start gap-2">
+                          <Globe className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                          {safeHref ? (
+                            <a href={safeHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all text-xs">
+                              {lead.sourcePageUrl}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground break-all text-xs">{lead.sourcePageUrl}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {(lead?.utmSource || lead?.utmMedium || lead?.utmCampaign || lead?.utmTerm || lead?.utmContent) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {lead?.utmSource && <Badge variant="secondary" className="text-[10px]">utm_source: {lead.utmSource}</Badge>}
+                        {lead?.utmMedium && <Badge variant="secondary" className="text-[10px]">utm_medium: {lead.utmMedium}</Badge>}
+                        {lead?.utmCampaign && <Badge variant="secondary" className="text-[10px]">utm_campaign: {lead.utmCampaign}</Badge>}
+                        {lead?.utmTerm && <Badge variant="secondary" className="text-[10px]">utm_term: {lead.utmTerm}</Badge>}
+                        {lead?.utmContent && <Badge variant="secondary" className="text-[10px]">utm_content: {lead.utmContent}</Badge>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {lead?.notes && (
                 <div className="pt-2 border-t">
                   <p className="text-xs font-medium text-muted-foreground mb-1">Initial Notes</p>

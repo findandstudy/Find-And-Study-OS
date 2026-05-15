@@ -20,8 +20,9 @@ import {
   Building2, Search as SearchIcon, FileText, Code, ChevronRight, Copy,
   ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
   Youtube, Facebook, Twitter, Camera, Kanban, Pencil, ChevronDown,
-  CalendarDays, Plus, Trash2, GripVertical, Power, Link as LinkIcon,
+  CalendarDays, Plus, Trash2, GripVertical, Power, PowerOff, Link as LinkIcon,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1948,7 +1949,313 @@ function QuickLinksTab() {
 
 
 
+type LeadFormWidget = {
+  id: number;
+  name: string;
+  slug: string;
+  mode: string;
+  theme: Record<string, any>;
+  allowedDomains: string[];
+  isActive: boolean;
+  createdAt: string;
+};
+
 function WebToLeadTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<LeadFormWidget | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [codeFor, setCodeFor] = useState<LeadFormWidget | null>(null);
+
+  const { data: list, isLoading } = useQuery<{ data: LeadFormWidget[] }>({
+    queryKey: ["lead-form-widgets"],
+    queryFn: async () => {
+      const res: any = await customFetch(`/api/embed/widgets?limit=100`);
+      return { data: (res?.data || []).filter((w: any) => w.mode === "lead_form") };
+    },
+  });
+
+  const widgets = list?.data || [];
+
+  const deleteWidget = async (id: number) => {
+    if (!confirm("Bu form silinsin mi?")) return;
+    try {
+      await customFetch(`/api/embed/widgets/${id}`, { method: "DELETE" });
+      toast({ title: "Form silindi" });
+      qc.invalidateQueries({ queryKey: ["lead-form-widgets"] });
+    } catch {
+      toast({ title: "Silinemedi", variant: "destructive" });
+    }
+  };
+
+  const toggleActive = async (w: LeadFormWidget) => {
+    try {
+      await customFetch(`/api/embed/widgets/${w.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !w.isActive }),
+      } as any);
+      qc.invalidateQueries({ queryKey: ["lead-form-widgets"] });
+    } catch {
+      toast({ title: "Güncellenemedi", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="border shadow-sm p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h3 className="font-display font-semibold text-base mb-1">Web to Lead Formları</h3>
+            <p className="text-sm text-muted-foreground">
+              Web sitelerinize gömebileceğiniz form widget'ları oluşturun. Her form için ayrı bir kod parçası alır, hangi sayfadan geldiğini ve UTM bilgilerini lead detayında görürsünüz.
+            </p>
+          </div>
+          <Button onClick={() => setCreating(true)} className="gap-1.5 shrink-0">
+            <Plus className="w-4 h-4" /> Yeni Form
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Yükleniyor...</p>
+        ) : widgets.length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed rounded-xl">
+            <Code className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-sm font-medium mb-1">Henüz form yok</p>
+            <p className="text-xs text-muted-foreground mb-4">İlk web-to-lead formunuzu oluşturun.</p>
+            <Button size="sm" onClick={() => setCreating(true)} className="gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Form Oluştur
+            </Button>
+          </div>
+        ) : (
+          <div className="border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/50">
+                <tr className="text-left">
+                  <th className="px-4 py-2.5 font-semibold">Ad</th>
+                  <th className="px-4 py-2.5 font-semibold">Slug</th>
+                  <th className="px-4 py-2.5 font-semibold">İzinli Domainler</th>
+                  <th className="px-4 py-2.5 font-semibold">Durum</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {widgets.map(w => (
+                  <tr key={w.id} className="border-t">
+                    <td className="px-4 py-2.5 font-medium">{w.name}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{w.slug}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                      {w.allowedDomains?.length ? w.allowedDomains.join(", ") : "Tüm domainler"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant={w.isActive ? "default" : "secondary"} className="text-[10px]">
+                        {w.isActive ? "Aktif" : "Pasif"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setCodeFor(w)} title="Kodu kopyala">
+                          <Code className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(w)} title="Düzenle">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => toggleActive(w)} title={w.isActive ? "Devre dışı" : "Etkinleştir"}>
+                          {w.isActive ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => deleteWidget(w.id)} title="Sil">
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {(creating || editing) && (
+        <LeadFormWidgetDialog
+          widget={editing}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ["lead-form-widgets"] }); }}
+        />
+      )}
+      {codeFor && <LeadFormCodeDialog widget={codeFor} onClose={() => setCodeFor(null)} />}
+    </div>
+  );
+}
+
+function slugify(s: string) {
+  return s.toLowerCase()
+    .replace(/ı/g, "i").replace(/ğ/g, "g").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ö/g, "o").replace(/ü/g, "u")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+}
+
+function LeadFormWidgetDialog({ widget, onClose, onSaved }: { widget: LeadFormWidget | null; onClose: () => void; onSaved: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!widget;
+  const [name, setName] = useState(widget?.name || "");
+  const [slug, setSlug] = useState(widget?.slug || "");
+  const [primaryColor, setPrimaryColor] = useState((widget?.theme?.primaryColor as string) || "#2563eb");
+  const [domains, setDomains] = useState((widget?.allowedDomains || []).join(", "));
+  const [saving, setSaving] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(isEdit);
+
+  const handleSave = async () => {
+    if (!name.trim()) { toast({ title: "Form adı gerekli", variant: "destructive" }); return; }
+    const finalSlug = (slug || slugify(name)).trim();
+    if (!finalSlug) { toast({ title: "Slug gerekli", variant: "destructive" }); return; }
+    setSaving(true);
+    const allowedDomains = domains.split(",").map(d => d.trim()).filter(Boolean);
+    const payload = {
+      name: name.trim(),
+      slug: finalSlug,
+      mode: "lead_form",
+      theme: { primaryColor, secondaryColor: primaryColor, buttonColor: primaryColor, borderRadius: "8px" },
+      allowedDomains,
+      presetFilters: {},
+      lockedFilters: [],
+      hiddenFilters: [],
+      visibleFilters: [],
+      isActive: true,
+    };
+    try {
+      if (isEdit) {
+        await customFetch(`/api/embed/widgets/${widget!.id}`, { method: "PATCH", body: JSON.stringify(payload) } as any);
+        toast({ title: "Form güncellendi" });
+      } else {
+        await customFetch(`/api/embed/widgets`, { method: "POST", body: JSON.stringify(payload) } as any);
+        toast({ title: "Form oluşturuldu" });
+      }
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      toast({ title: "Kaydedilemedi", description: e?.message || "Slug benzersiz olmalı.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Formu Düzenle" : "Yeni Form"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label className="text-xs font-semibold mb-1.5 block">Form Adı *</Label>
+            <Input
+              value={name}
+              onChange={e => {
+                setName(e.target.value);
+                if (!slugTouched) setSlug(slugify(e.target.value));
+              }}
+              placeholder="Örn: Anasayfa İletişim Formu"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold mb-1.5 block">Slug *</Label>
+            <Input
+              value={slug}
+              onChange={e => { setSlug(e.target.value); setSlugTouched(true); }}
+              placeholder="anasayfa-iletisim"
+              className="font-mono text-xs"
+              disabled={isEdit}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">Lead'in source alanı: <code>embed:{slug || "slug"}</code></p>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold mb-1.5 block">Ana Renk</Label>
+            <div className="flex gap-2 items-center">
+              <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-10 h-10 rounded cursor-pointer border" />
+              <Input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="flex-1 font-mono text-xs" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold mb-1.5 block">İzinli Domainler</Label>
+            <Input
+              value={domains}
+              onChange={e => setDomains(e.target.value)}
+              placeholder="örn: example.com, masterstudyinturkey.com"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">Virgülle ayırın. Boş bırakırsanız her domainden çalışır.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>İptal</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? "Kaydediliyor..." : (isEdit ? "Güncelle" : "Oluştur")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LeadFormCodeDialog({ widget, onClose }: { widget: LeadFormWidget; onClose: () => void }) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const apiBase = `${window.location.origin}/api`;
+  const scriptCode = `<!-- ${widget.name} -->
+<div data-edcons-widget="${widget.slug}"></div>
+<script src="${apiBase}/public/embed/embed.js"></script>`;
+  const iframeCode = `<iframe
+  src="${apiBase}/public/embed/${widget.slug}/widget"
+  style="width:100%;min-height:520px;border:none;"
+  loading="lazy"></iframe>`;
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast({ title: "Kod kopyalandı" });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Embed Kodu: {widget.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-xs font-semibold">JavaScript Embed (önerilen — otomatik boyutlanır)</Label>
+              <Button size="sm" variant="secondary" onClick={() => copy(scriptCode)} className="gap-1.5 text-xs h-7">
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />} Kopyala
+              </Button>
+            </div>
+            <pre className="bg-secondary/50 border rounded-xl p-3 text-xs whitespace-pre-wrap break-all font-mono">{scriptCode}</pre>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-xs font-semibold">Iframe (alternatif)</Label>
+              <Button size="sm" variant="secondary" onClick={() => copy(iframeCode)} className="gap-1.5 text-xs h-7">
+                <Copy className="w-3 h-3" /> Kopyala
+              </Button>
+            </div>
+            <pre className="bg-secondary/50 border rounded-xl p-3 text-xs whitespace-pre-wrap break-all font-mono">{iframeCode}</pre>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
+            <p className="font-semibold mb-1">Nasıl çalışır?</p>
+            <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+              <li>Bu kodu sitenizin herhangi bir sayfasına yapıştırın (WordPress için Custom HTML bloğu).</li>
+              <li>Form gönderildiğinde lead otomatik olarak CRM'e düşer ve <code className="bg-white/60 px-1 rounded">embed:{widget.slug}</code> kaynağıyla işaretlenir.</li>
+              <li>Sayfa URL'si ve UTM parametreleri (utm_source, utm_medium, utm_campaign, ...) lead detayında görünür.</li>
+            </ul>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Kapat</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _DeprecatedWebToLeadTab() {
   const { t } = useI18n();
   const { toast } = useToast();
   const [, setLocation] = useLocation();

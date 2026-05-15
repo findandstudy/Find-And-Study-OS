@@ -55,7 +55,7 @@ router.get("/nationalities", requireAuth, requireRole(...STAFF_ROLES), async (_r
 });
 
 router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> => {
-  const { firstName, lastName, email, phone, nationality, interestedProgram, interestedCountry, message } = req.body;
+  const { firstName, lastName, email, phone, nationality, interestedProgram, interestedCountry, message, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, source: bodySource } = req.body;
   if (!firstName || !lastName || !email || !phone) {
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
@@ -79,8 +79,14 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     interestedProgram: interestedProgram ? String(interestedProgram).slice(0, 255) : null,
     interestedCountry: interestedCountry ? String(interestedCountry).slice(0, 100) : null,
     notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
-    source: "website",
+    source: bodySource ? String(bodySource).slice(0, 100) : "website",
     status: "new",
+    sourcePageUrl: sourcePageUrl ? String(sourcePageUrl).slice(0, 500) : null,
+    utmSource: utmSource ? String(utmSource).slice(0, 100) : null,
+    utmMedium: utmMedium ? String(utmMedium).slice(0, 100) : null,
+    utmCampaign: utmCampaign ? String(utmCampaign).slice(0, 100) : null,
+    utmTerm: utmTerm ? String(utmTerm).slice(0, 100) : null,
+    utmContent: utmContent ? String(utmContent).slice(0, 100) : null,
     ...origin,
   }).returning();
   await applyLeadAssignmentRules(lead, req.ip);

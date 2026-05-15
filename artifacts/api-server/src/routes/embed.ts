@@ -69,7 +69,7 @@ function sanitizeTheme(theme: any): Record<string, string> {
   return safe;
 }
 
-const VALID_MODES = ["combined", "course_finder", "application_only"];
+const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form"];
 
 router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { page = "1", limit = "20" } = req.query as Record<string, string>;
@@ -405,7 +405,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
     return;
   }
 
-  const { firstName, lastName, email, phone, countryCode, programName, universityName, _hp } = req.body;
+  const { firstName, lastName, email, phone, countryCode, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp } = req.body;
   if (_hp) { res.json({ success: true, leadId: null }); return; }
 
   if (!firstName || !lastName || !email) {
@@ -430,6 +430,12 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
       status: "new",
       interestedProgram: s(programName, 255),
       interestedCountry: s(universityName, 255),
+      sourcePageUrl: s(sourcePageUrl, 500),
+      utmSource: s(utmSource, 100),
+      utmMedium: s(utmMedium, 100),
+      utmCampaign: s(utmCampaign, 100),
+      utmTerm: s(utmTerm, 100),
+      utmContent: s(utmContent, 100),
     }).returning();
     await applyLeadAssignmentRules(lead, req.ip);
     res.status(201).json({ success: true, leadId: lead.id });
@@ -1425,7 +1431,7 @@ function render(loading){
   var app=$('#ew-app');
   var html='';
 
-  if(MODE!=='application_only'){
+  if(MODE!=='application_only'&&MODE!=='lead_form'){
     html+=renderFilters();
     if(loading){
       html+='<div class="ew-skeleton">';
@@ -1444,7 +1450,7 @@ function render(loading){
     }
   }
 
-  if(MODE==='application_only'){
+  if(MODE==='application_only'||MODE==='lead_form'){
     html+=renderFormInline();
   }
 
@@ -1575,6 +1581,8 @@ function renderFormInline(){
 }
 
 function renderSteps(){
+  // Lead-form mode is single-step (contact only) — skip the stepper strip.
+  if(MODE==='lead_form')return '';
   // Mirror the homepage non-login ApplyDialog ordering:
   // 1) Personal Info  2) Documents  3) Review & Submit
   var steps=['Personal Info','Documents','Review & Submit'];
@@ -1679,7 +1687,8 @@ function renderFormContent(prog){
       h+='</div>';
     }
     h+='<div class="ew-form-actions" style="margin-top:14px">';
-    h+='<button type="button" class="ew-btn" id="ew-next-personal" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">Next \\u2192</button>';
+    var nextLabel=(MODE==='lead_form')?(formLoading?'Submitting...':'Submit'):'Next \\u2192';
+    h+='<button type="button" class="ew-btn" id="ew-next-personal"'+(formLoading?' disabled':'')+' style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">'+nextLabel+'</button>';
     if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
     h+='</div></form>';
   } else if(formStep==='documents'){
@@ -2156,11 +2165,17 @@ function handleNextPersonal(scope){
   // came back, edited, clicked Next again) skip the create call and just
   // advance — the final /apply will update that same row.
   if(leadId||leadCreating){
-    formStep='documents';
-    if(formOpen)showModal();else render(false);
+    if(MODE==='lead_form'){
+      formSubmitted=true;formLoading=false;
+      if(formOpen)showModal();else render(false);
+    } else {
+      formStep='documents';
+      if(formOpen)showModal();else render(false);
+    }
     return;
   }
   leadCreating=true;
+  if(MODE==='lead_form'){formLoading=true;if(formOpen)showModal();else render(false);}
   var leadPayload={
     firstName:savedFormData.firstName,
     lastName:savedFormData.lastName,
@@ -2170,6 +2185,15 @@ function handleNextPersonal(scope){
     programName:formProgram?formProgram.name:null,
     universityName:formProgram?formProgram.universityName:null
   };
+  // Capture page URL + UTMs so the lead row carries source attribution.
+  try{leadPayload.sourcePageUrl=window.parent.location.href}catch(_){leadPayload.sourcePageUrl=window.location.href}
+  try{
+    var search=window.location.search;
+    try{search=window.parent.location.search}catch(_){}
+    var params=new URLSearchParams(search);
+    var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
+    Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)leadPayload[utmMap[k]]=v});
+  }catch(_){}
   fetch(API+'/lead',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -2179,12 +2203,24 @@ function handleNextPersonal(scope){
   }).then(function(res){
     leadCreating=false;
     if(res.ok&&res.data&&res.data.leadId)leadId=res.data.leadId;
+    if(MODE==='lead_form'){
+      // Lead-form widgets only collect contact info — show success now.
+      formSubmitted=true;formLoading=false;
+      if(formOpen)showModal();else render(false);
+      return;
+    }
     // Always advance — failing to create the lead should not block the
     // user from completing the form. The final /apply will create it.
     formStep='documents';
     if(formOpen)showModal();else render(false);
   }).catch(function(){
     leadCreating=false;
+    if(MODE==='lead_form'){
+      formLoading=false;
+      alert('Submission failed. Please try again.');
+      if(formOpen)showModal();else render(false);
+      return;
+    }
     formStep='documents';
     if(formOpen)showModal();else render(false);
   });
