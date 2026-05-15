@@ -2679,7 +2679,7 @@ function LeadAssignmentRulesTab() {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [cities, setCities] = useState<string[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
+  const [sources, setSources] = useState<{ value: string; label: string; kind: "lead_form" | "embed" | "other" }[]>([]);
   const [universities, setUniversities] = useState<UniversityOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -2722,7 +2722,7 @@ function LeadAssignmentRulesTab() {
         fetchAllPages<StaffOption>("/api/users", 100),
         fetchAllPages<CountryOption>("/api/countries", 500),
         fetchAllPages<{ id: number; name: string; countryId?: number }>("/api/cities", 1000),
-        customFetch("/api/leads/distinct-sources") as Promise<{ data: string[] }>,
+        customFetch("/api/leads/distinct-sources") as Promise<{ data: { value: string; label: string; kind: "lead_form" | "embed" | "other" }[] }>,
         fetchAllPages<UniversityOption>("/api/universities", 100),
       ]);
       setRules(rulesRes.data || []);
@@ -2890,7 +2890,7 @@ function LeadAssignmentRulesTab() {
                 <MultiSelectFilter
                   values={form.sources}
                   onChange={v => setForm(f => ({ ...f, sources: v }))}
-                  options={sources.map(s => ({ value: s, label: s }))}
+                  options={sources.map(s => ({ value: s.value, label: s.label }))}
                   placeholder={sources.length === 0 ? "(sistemde lead kaynağı yok)" : "Tüm kaynaklar"}
                 />
               </div>

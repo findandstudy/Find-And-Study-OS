@@ -29,13 +29,33 @@ router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), 
       .from(leadsTable)
       .where(sql`${leadsTable.source} IS NOT NULL AND ${leadsTable.source} != ''`),
     db
-      .select({ slug: embedWidgetsTable.slug, mode: embedWidgetsTable.mode })
+      .select({ slug: embedWidgetsTable.slug, name: embedWidgetsTable.name, mode: embedWidgetsTable.mode })
       .from(embedWidgetsTable),
   ]);
-  const all = new Set<string>();
-  for (const r of leadRows) if (r.source) all.add(r.source);
-  for (const w of widgetRows) if (w.slug) all.add(`embed:${w.slug}`);
-  res.json({ data: [...all].sort() });
+  type SourceItem = { value: string; label: string; kind: "lead_form" | "embed" | "other" };
+  const byValue = new Map<string, SourceItem>();
+  for (const w of widgetRows) {
+    if (!w.slug) continue;
+    const value = `embed:${w.slug}`;
+    const isLeadForm = w.mode === "lead_form";
+    const prefix = isLeadForm ? "Web Form" : "Embed";
+    byValue.set(value, {
+      value,
+      label: `${prefix}: ${w.name || w.slug}`,
+      kind: isLeadForm ? "lead_form" : "embed",
+    });
+  }
+  for (const r of leadRows) {
+    const v = r.source;
+    if (!v || byValue.has(v)) continue;
+    byValue.set(v, { value: v, label: v, kind: "other" });
+  }
+  const order: Record<SourceItem["kind"], number> = { lead_form: 0, embed: 1, other: 2 };
+  const data = [...byValue.values()].sort((a, b) => {
+    const k = order[a.kind] - order[b.kind];
+    return k !== 0 ? k : a.label.localeCompare(b.label, "tr");
+  });
+  res.json({ data });
 });
 
 router.get("/leads/distinct-cities", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
