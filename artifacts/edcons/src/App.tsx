@@ -400,6 +400,7 @@ function StudentShell() {
 }
 
 const AgentMyContract = lazy(() => import("@/pages/agent/MyContract"));
+const AgentOnboardingPublic = lazy(() => import("@/pages/agent/Onboarding"));
 
 function AgentShell() {
   return (
@@ -462,6 +463,7 @@ function Router() {
   const isStudentPath = location === "/student" || location.startsWith("/student/");
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
   const isPublicSignPath = location.startsWith("/sign/");
+  const isAgentOnboardingPublic = location === "/agent/onboarding" || location.startsWith("/agent/onboarding?");
 
   // All hooks MUST be declared above any conditional return so hook order stays
   // stable across navigations between /sign/* and other branches.
@@ -473,6 +475,16 @@ function Router() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <PublicSignFlow token={token} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (isAgentOnboardingPublic) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <AgentOnboardingPublic />
         </Suspense>
       </ErrorBoundary>
     );

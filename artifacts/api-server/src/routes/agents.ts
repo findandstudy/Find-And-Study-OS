@@ -925,7 +925,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
     try {
-      const emailContent = ONBOARDING_HELPERS.buildOnboardingVerificationCodeEmail(firstName, code);
+      const emailContent = await ONBOARDING_HELPERS.buildOnboardingVerificationCodeEmail(firstName, code, normalizedEmail);
       await sendEmail(normalizedEmail, emailContent);
     } catch (err) {
       console.error("[agents POST] failed to send verification email:", err);

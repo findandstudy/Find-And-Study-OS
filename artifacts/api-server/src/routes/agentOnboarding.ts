@@ -6,11 +6,15 @@ import { and, eq, gt, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
-import { sendEmail, buildContractSignRequestEmail, getAppBaseUrl } from "../lib/email";
+import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
 import { finalizeSign } from "../lib/signContract";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
+import bcrypt from "bcryptjs";
+import { validatePassword } from "../lib/passwordPolicy";
+import { createSession, SESSION_COOKIE, SESSION_TTL, type SessionData, type SessionUser } from "../lib/replitAuth";
+import { getSessionCookieOptions } from "../lib/cookieOptions";
 
 const router: IRouter = Router();
 
@@ -28,27 +32,10 @@ function generateVerificationCode(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-function buildOnboardingVerificationCodeEmail(firstName: string, code: string): { subject: string; html: string; text: string } {
-  const subject = "Welcome — Verify Your Email / Hoş geldiniz — E-posta Doğrulama";
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);">
-    <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
-      <h1 style="margin:0;color:#fff;font-size:24px;">Find And Study OS</h1>
-      <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Agent Onboarding · Acente Kayıt</p>
-    </div>
-    <div style="padding:32px;">
-      <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Verify your email / E-postanızı doğrulayın</h2>
-      <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
-        Hi ${firstName}, your agent account has been created. Use the code below to verify your email. After verifying you must sign your agency contract before accessing the dashboard. This code expires in 15 minutes.
-      </p>
-      <div style="text-align:center;margin:0 0 24px;">
-        <div style="display:inline-block;background:#f0f0ff;border:2px solid #6366f1;border-radius:12px;padding:16px 32px;letter-spacing:8px;font-size:32px;font-weight:700;color:#6366f1;">${code}</div>
-      </div>
-      <p style="margin:0 0 8px;color:#6b7280;font-size:13px;text-align:center;">If you did not expect this email, you can ignore it.</p>
-    </div>
-  </div></body></html>`;
-  const text = `Hi ${firstName},\n\nYour agent account has been created. Verification code: ${code}\nExpires in 15 minutes.\nAfter verifying you must sign your contract before accessing the dashboard.`;
-  return { subject, html, text };
+async function buildOnboardingVerificationCodeEmail(firstName: string, code: string, email: string): Promise<{ subject: string; html: string; text: string }> {
+  const baseUrl = getAppBaseUrl();
+  const verifyUrl = `${baseUrl}/agent/onboarding?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`;
+  return buildAgentOnboardingEmail({ firstName, email, code, verifyUrl });
 }
 
 async function loadAgentForUser(userId: number, userRole: string) {
@@ -115,9 +102,11 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     else if (session.status === "revoked") contractStatus = "revoked";
     else contractStatus = "pending";
   }
+  const passwordSet = !!user?.passwordHash;
   res.json({
-    requiresOnboarding: !user?.emailVerified || (contractStatus !== "signed" && contractStatus !== "none"),
+    requiresOnboarding: !user?.emailVerified || !passwordSet || (contractStatus !== "signed" && contractStatus !== "none"),
     emailVerified: !!user?.emailVerified,
+    passwordSet,
     email: user?.email || null,
     contractStatus,
     sessionId: session?.id ?? null,
@@ -154,7 +143,7 @@ router.post("/agents/me/resend-verification", requireAuth, async (req: Request, 
     email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
   });
   try {
-    const email = buildOnboardingVerificationCodeEmail(user.firstName || "Agent", code);
+    const email = await buildOnboardingVerificationCodeEmail(user.firstName || "Agent", code, normalizedEmail);
     await sendEmail(normalizedEmail, email);
   } catch (err) {
     console.error("[agent-onboarding] resend code email failed:", err);
@@ -202,6 +191,121 @@ router.post("/agents/me/verify-email", requireAuth, async (req: Request, res: Re
   if (req.user) (req.user as any).emailVerified = true;
   await writeAudit({
     userId: user.id, action: "agent.email_verified", resource: "user", resourceId: user.id, ipAddress: req.ip,
+  });
+  res.json({ success: true });
+});
+
+/**
+ * POST /api/agents/onboarding/verify-with-link — public endpoint hit when the
+ * agent clicks the verify button in their welcome email. Validates the code
+ * against the email, marks the user verified+active, and creates a logged-in
+ * session so the agent can immediately set their password.
+ */
+router.post("/agents/onboarding/verify-with-link", async (req: Request, res: Response): Promise<void> => {
+  const { email, code } = req.body || {};
+  if (!email || typeof email !== "string" || !code || typeof code !== "string") {
+    res.status(400).json({ error: "Email and code are required" });
+    return;
+  }
+  const ip = getRateLimitIp(req);
+  try {
+    await rateLimiter.consume(`agent-verify-link:${ip}`);
+  } catch {
+    res.status(429).json({ error: "Too many attempts. Please try again later." });
+    return;
+  }
+  const normalizedEmail = email.toLowerCase().trim();
+  // Uniform error to prevent enumeration of which emails exist / are verified.
+  const INVALID = { status: 400, body: { error: "Invalid or expired link. Log in and request a new code." } };
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+  if (!user || !AGENT_ROLES.includes(user.role)) {
+    res.status(INVALID.status).json(INVALID.body);
+    return;
+  }
+  // ALWAYS require a valid, unused, unexpired code match — never bypass on
+  // emailVerified=true (that would allow anyone who knows a verified agent's
+  // email to mint a session without a code).
+  const [record] = await db.select().from(emailVerificationCodesTable).where(and(
+    eq(emailVerificationCodesTable.email, normalizedEmail),
+    eq(emailVerificationCodesTable.code, code.trim()),
+    eq(emailVerificationCodesTable.used, false),
+    gt(emailVerificationCodesTable.expiresAt, new Date()),
+  ));
+  if (!record) {
+    res.status(INVALID.status).json(INVALID.body);
+    return;
+  }
+  // Burn the matched code (and any other unused codes for this email) so it
+  // cannot be replayed.
+  await db.update(emailVerificationCodesTable).set({ used: true })
+    .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
+  if (!user.emailVerified || !user.isActive) {
+    await db.update(usersTable).set({ emailVerified: true, isActive: true }).where(eq(usersTable.id, user.id));
+  }
+  const sessionUser: SessionUser = {
+    id: user.id,
+    replitId: user.replitId || `local-${user.id}`,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    avatarUrl: user.avatarUrl,
+    language: user.language,
+    isActive: true,
+    emailVerified: true,
+    phone: user.phone,
+  };
+  const sessionData: SessionData = {
+    user: sessionUser,
+    access_token: `local-${crypto.randomBytes(16).toString("hex")}`,
+  };
+  const sid = await createSession(sessionData, user.id);
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
+  await writeAudit({
+    userId: user.id, action: "agent.email_verified", resource: "user", resourceId: user.id,
+    changes: { via: "link" }, ipAddress: req.ip,
+  });
+  res.json({
+    success: true,
+    user: sessionUser,
+    passwordSet: !!user.passwordHash,
+  });
+});
+
+/**
+ * POST /api/agents/me/set-password — authenticated agent who has not yet set
+ * a password chooses one. Refuses to overwrite an existing password (use the
+ * standard /auth/set-password reset flow for that).
+ */
+router.post("/agents/me/set-password", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (!AGENT_ROLES.includes(req.user!.role)) {
+    res.status(403).json({ error: "Only agents may use this endpoint" });
+    return;
+  }
+  const ip = getRateLimitIp(req);
+  try {
+    await rateLimiter.consume(`agent-setpw:${ip}`);
+    await rateLimiter.consume(`agent-setpw:${req.user!.id}`);
+  } catch {
+    res.status(429).json({ error: "Too many attempts. Please wait before trying again." });
+    return;
+  }
+  const { password } = req.body || {};
+  const pwd = validatePassword(password);
+  if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  if (!user.emailVerified) { res.status(400).json({ error: "Email must be verified first" }); return; }
+  if (user.passwordHash) {
+    res.status(400).json({ error: "Password already set. Use the password reset flow to change it." });
+    return;
+  }
+  const hash = await bcrypt.hash(pwd.value, 10);
+  await db.update(usersTable).set({ passwordHash: hash, isActive: true }).where(eq(usersTable.id, user.id));
+  await writeAudit({
+    userId: user.id, action: "auth.set_password", resource: "user", resourceId: user.id,
+    changes: { via: "agent_onboarding" }, ipAddress: req.ip,
   });
   res.json({ success: true });
 });

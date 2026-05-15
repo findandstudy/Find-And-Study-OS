@@ -306,6 +306,74 @@ The password setup link expires in 48 hours.`;
   return { subject, html, text };
 }
 
+/**
+ * Agent onboarding email — sent when an admin creates a new agent account.
+ * Includes both a CTA button (auto-verify via link) and a 6-digit code box
+ * (manual fallback). Uses the system brand colors via getEmailBranding so it
+ * matches the rest of the system's transactional mail.
+ */
+export async function buildAgentOnboardingEmail(params: {
+  firstName: string;
+  email: string;
+  code: string;
+  verifyUrl: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const { firstName, email, code, verifyUrl } = params;
+  const brand = await getEmailBranding();
+  const subject = `Hesabınızı doğrulayın / Verify your ${brand.companyName} account`;
+
+  const body = `
+      <h2 style="margin:0 0 12px;color:#111827;font-size:20px;">Hesabınızı doğrulayın / Verify your account</h2>
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+        Merhaba ${firstName}, ${brand.companyName} acente hesabınız oluşturuldu. Aşağıdaki butona tıklayarak doğrulamayı tamamlayın, ardından kendi şifrenizi belirleyin ve sözleşmenizi imzalayın.
+      </p>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.6;">
+        Hi ${firstName}, your ${brand.companyName} agent account has been created. Click the button below to verify, then set your password and sign your contract.
+      </p>
+      ${emailButton("Hesabımı doğrula / Verify my account", verifyUrl, brand.buttonColor)}
+      <p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-align:center;word-break:break-all;">
+        Buton çalışmıyorsa: <a href="${verifyUrl}" style="color:${brand.buttonColor};">${verifyUrl}</a>
+      </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+      <p style="margin:0 0 8px;color:#374151;font-size:14px;text-align:center;">
+        Alternatif olarak, giriş yaptıktan sonra aşağıdaki 6 haneli doğrulama kodunu girebilirsiniz.<br/>
+        <span style="color:#6b7280;font-size:12px;">Or enter the 6-digit code below after logging in.</span>
+      </p>
+      <div style="text-align:center;margin:0 0 16px;">
+        <div style="display:inline-block;background:${lightenColor(brand.primaryColor, 45)};border:2px solid ${brand.primaryColor};border-radius:12px;padding:14px 28px;letter-spacing:8px;font-size:28px;font-weight:700;color:${brand.primaryColor};">${code}</div>
+      </div>
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+        Bu link ve kod 15 dakika içinde geçersiz olacaktır. / This link and code expire in 15 minutes.<br/>
+        Bu e-postayı beklemiyorsanız yok sayabilirsiniz. / If you did not expect this email, you can ignore it.
+      </p>`;
+
+  const html = emailShell(brand, "Agent Onboarding · Acente Kayıt", body);
+
+  const text = `Merhaba ${firstName},
+
+${brand.companyName} acente hesabınız oluşturuldu.
+
+Hesabınızı doğrulamak için: ${verifyUrl}
+
+Alternatif olarak giriş yaptıktan sonra şu 6 haneli kodu girin: ${code}
+
+Link ve kod 15 dakika içinde geçersiz olur. Doğrulama sonrası şifrenizi belirleyip sözleşmenizi imzalamanız gerekecek.
+
+—
+
+Hi ${firstName},
+
+Your ${brand.companyName} agent account (${email}) has been created.
+
+Verify your account: ${verifyUrl}
+
+Or log in and enter the 6-digit code: ${code}
+
+The link and code expire in 15 minutes. After verifying, you'll set a password and sign your contract.`;
+
+  return { subject, html, text };
+}
+
 export async function buildExistingAccountEmail(params: {
   firstName: string;
   loginUrl: string;

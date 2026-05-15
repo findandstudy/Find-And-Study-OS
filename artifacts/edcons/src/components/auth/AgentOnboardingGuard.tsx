@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import VerifyEmail from "@/pages/agent/VerifyEmail";
 import SignContract from "@/pages/agent/SignContract";
 import ContractExpired from "@/pages/agent/ContractExpired";
+import SetPasswordStep from "@/components/auth/SetPasswordStep";
 
 import { AGENT_ROLES as _AGENT_ROLES_ARR } from "@workspace/roles";
 const AGENT_ROLES = new Set<string>(_AGENT_ROLES_ARR);
@@ -12,6 +13,7 @@ const AGENT_ROLES = new Set<string>(_AGENT_ROLES_ARR);
 type Status = {
   requiresOnboarding: boolean;
   emailVerified: boolean;
+  passwordSet?: boolean;
   email: string | null;
   contractStatus: "none" | "pending" | "signed" | "expired" | "revoked" | "n/a";
   sessionId: number | null;
@@ -62,6 +64,9 @@ export function AgentOnboardingGuard({ children }: Props) {
   if (!status || !status.requiresOnboarding) return <>{children}</>;
   if (!status.emailVerified) {
     return <VerifyEmail email={status.email || user.email || ""} onVerified={() => { fetched.current = false; void reload(); }} />;
+  }
+  if (status.passwordSet === false) {
+    return <SetPasswordStep onComplete={() => { fetched.current = false; void reload(); }} />;
   }
   if (status.contractStatus === "pending") {
     // Render the dashboard underneath but overlay a non-dismissible signing

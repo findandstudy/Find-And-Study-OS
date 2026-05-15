@@ -156,7 +156,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (
     req.path.startsWith("/api/public/") ||
     req.path.startsWith("/api/course-finder") ||
-    req.path.startsWith("/api/webhooks/")
+    req.path.startsWith("/api/webhooks/") ||
+    // The agent onboarding verify-with-link endpoint is hit by users clicking
+    // an email button before any session/CSRF cookie has been issued. It is
+    // protected by per-IP rate limiting and a single-use, time-bounded
+    // 6-digit code bound to the email.
+    req.path === "/api/agents/onboarding/verify-with-link"
   ) {
     return next();
   }
