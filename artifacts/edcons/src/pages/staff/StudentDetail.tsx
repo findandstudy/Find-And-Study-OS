@@ -1766,15 +1766,32 @@ function DocumentPreviewModal({
           )}
 
           {kind === "pdf" && !error && (
-            <iframe
-              src={`${src}#view=FitH`}
-              title={doc.name}
-              className="w-full h-full bg-white"
-              sandbox="allow-same-origin allow-scripts allow-popups"
-              referrerPolicy="no-referrer"
-              onLoad={() => setLoading(false)}
-              onError={() => { setLoading(false); setError(true); }}
-            />
+            (doc.fileKey || doc.fileData) ? (
+              <object
+                data={`${src}#view=FitH`}
+                type="application/pdf"
+                className="w-full h-full bg-white"
+                onLoad={() => setLoading(false)}
+              >
+                <iframe
+                  src={`${src}#view=FitH`}
+                  title={doc.name}
+                  className="w-full h-full bg-white border-0"
+                  onLoad={() => setLoading(false)}
+                  onError={() => { setLoading(false); setError(true); }}
+                />
+              </object>
+            ) : (
+              <iframe
+                src={`${src}#view=FitH`}
+                title={doc.name}
+                className="w-full h-full bg-white"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                referrerPolicy="no-referrer"
+                onLoad={() => setLoading(false)}
+                onError={() => { setLoading(false); setError(true); }}
+              />
+            )
           )}
 
           {(kind === "other" || error) && (
