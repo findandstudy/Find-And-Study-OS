@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check, Eye, Image as ImageIcon, FileWarning, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
@@ -1643,6 +1643,184 @@ const DETAIL_DOC_TYPE_LABELS: Record<string, string> = {
   diploma_recognition: "Diploma Recognition",
 };
 
+function getPreviewKind(mimeType: string | undefined | null): "image" | "pdf" | "other" {
+  if (!mimeType) return "other";
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType === "application/pdf") return "pdf";
+  return "other";
+}
+
+function DocumentPreviewModal({
+  doc,
+  documents,
+  onClose,
+  onNavigate,
+  onDownload,
+}: {
+  doc: any;
+  documents: any[];
+  onClose: () => void;
+  onNavigate: (next: any) => void;
+  onDownload: (d: any) => void;
+}) {
+  const previewable = documents.filter((d: any) => {
+    if (!(d.fileKey || d.fileData || d.fileUrl)) return false;
+    const k = getPreviewKind(d.mimeType);
+    return k === "image" || k === "pdf";
+  });
+  const idx = previewable.findIndex((d: any) => d.id === doc.id);
+  const prev = idx > 0 ? previewable[idx - 1] : null;
+  const next = idx >= 0 && idx < previewable.length - 1 ? previewable[idx + 1] : null;
+
+  const [zoom, setZoom] = useState(1);
+  const [rotate, setRotate] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setZoom(1);
+    setRotate(0);
+    setLoading(true);
+    setError(false);
+  }, [doc.id]);
+
+  const kind = getPreviewKind(doc.mimeType);
+  const src = doc.fileKey || doc.fileData
+    ? `${BASE_URL}/api/documents/${doc.id}/download?disposition=inline`
+    : (doc.fileUrl ?? "");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && prev) onNavigate(prev);
+      else if (e.key === "ArrowRight" && next) onNavigate(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onNavigate, prev, next]);
+
+  return (
+    <Dialog open={true} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent
+        className="p-0 overflow-hidden gap-0 max-w-6xl w-[95vw] h-[92vh] flex flex-col"
+        data-testid="document-preview-dialog"
+      >
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b bg-card shrink-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${kind === "image" ? "bg-emerald-100 text-emerald-700" : kind === "pdf" ? "bg-red-100 text-red-700" : "bg-secondary text-muted-foreground"}`}>
+              {kind === "image" ? <ImageIcon className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base font-semibold truncate">{doc.name}</DialogTitle>
+              <p className="text-xs text-muted-foreground truncate">
+                {DETAIL_DOC_TYPE_LABELS[doc.type] || doc.type}
+                {doc.mimeType ? ` • ${doc.mimeType}` : ""}
+                {idx >= 0 && previewable.length > 1 ? ` • ${idx + 1} / ${previewable.length}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {kind === "image" && !error && (
+              <>
+                <Button variant="ghost" size="icon" onClick={() => setZoom((z) => Math.max(0.25, +(z - 0.25).toFixed(2)))} title="Zoom out" aria-label="Zoom out">
+                  <ZoomOut className="w-4 h-4" />
+                </Button>
+                <span className="text-xs text-muted-foreground w-12 text-center tabular-nums" aria-live="polite">{Math.round(zoom * 100)}%</span>
+                <Button variant="ghost" size="icon" onClick={() => setZoom((z) => Math.min(4, +(z + 0.25).toFixed(2)))} title="Zoom in" aria-label="Zoom in">
+                  <ZoomIn className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setRotate((r) => (r + 90) % 360)} title="Rotate" aria-label="Rotate image">
+                  <RotateCw className="w-4 h-4" />
+                </Button>
+                <div className="w-px h-5 bg-border mx-1" />
+              </>
+            )}
+            <Button variant="outline" size="sm" onClick={() => onDownload(doc)} aria-label="Download document">
+              <Download className="w-4 h-4 mr-2" />
+              Download
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onClose} title="Close" aria-label="Close preview">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="relative flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-900">
+          {loading && !error && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {kind === "image" && !error && (
+            <div className="min-h-full min-w-full flex items-center justify-center p-6">
+              <img
+                src={src}
+                alt={doc.name}
+                onLoad={() => setLoading(false)}
+                onError={() => { setLoading(false); setError(true); }}
+                style={{ transform: `scale(${zoom}) rotate(${rotate}deg)`, transformOrigin: "center", transition: "transform 150ms ease" }}
+                className="max-w-full max-h-full object-contain shadow-lg rounded bg-white"
+              />
+            </div>
+          )}
+
+          {kind === "pdf" && !error && (
+            <iframe
+              src={`${src}#view=FitH`}
+              title={doc.name}
+              className="w-full h-full bg-white"
+              sandbox="allow-same-origin allow-scripts allow-popups"
+              referrerPolicy="no-referrer"
+              onLoad={() => setLoading(false)}
+              onError={() => { setLoading(false); setError(true); }}
+            />
+          )}
+
+          {(kind === "other" || error) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+              <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-4">
+                <FileWarning className="w-8 h-8" />
+              </div>
+              <p className="font-medium mb-1">Önizleme desteklenmiyor</p>
+              <p className="text-sm text-muted-foreground mb-5 max-w-md">
+                Bu dosya türü tarayıcıda görüntülenemiyor. Dosyayı indirip yerel bilgisayarınızda açabilirsiniz.
+              </p>
+              <Button onClick={() => onDownload(doc)}>
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            </div>
+          )}
+
+          {prev && (
+            <button
+              type="button"
+              onClick={() => onNavigate(prev)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-background/90 border shadow hover:bg-background flex items-center justify-center transition-colors"
+              title="Previous (←)"
+              aria-label="Previous document"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          {next && (
+            <button
+              type="button"
+              onClick={() => onNavigate(next)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-background/90 border shadow hover:bg-background flex items-center justify-center transition-colors"
+              title="Next (→)"
+              aria-label="Next document"
+            >
+              <ArrowLeft className="w-5 h-5 rotate-180" />
+            </button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StudentDocumentsSection({ studentId, student, documents, openUpload, qc }: {
   studentId: number;
   student: any;
@@ -1654,6 +1832,20 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [mergingPdf, setMergingPdf] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<number[]>([]);
+  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
+
+  const downloadDoc = (d: any) => {
+    if (d.fileKey || d.fileData) {
+      const mimeType = d.mimeType || "application/octet-stream";
+      const filename = buildDownloadFilename(d.type, student?.firstName ?? "", student?.lastName ?? "", mimeType);
+      const link = document.createElement("a");
+      link.href = `${BASE_URL}/api/documents/${d.id}/download`;
+      link.download = filename;
+      link.click();
+    } else if (d.fileUrl) {
+      window.open(d.fileUrl, "_blank", "noopener,noreferrer");
+    }
+  };
 
   // Degree-level required-document indicator has been retired — the
   // authoritative list now lives on the program editor and is shown
@@ -1802,27 +1994,34 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                     {new Date(doc.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    {(doc.fileKey || doc.fileData) && (
-                      <button
-                        onClick={() => {
-                          const mimeType = doc.mimeType || "application/octet-stream";
-                          const filename = buildDownloadFilename(doc.type, student?.firstName ?? "", student?.lastName ?? "", mimeType);
-                          const link = document.createElement("a");
-                          link.href = `${BASE_URL}/api/documents/${doc.id}/download`;
-                          link.download = filename;
-                          link.click();
-                        }}
-                        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Download
-                      </button>
-                    )}
-                    {doc.fileUrl && !doc.fileKey && !doc.fileData && (
-                      <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
-                        View
-                      </a>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {(doc.fileKey || doc.fileData || doc.fileUrl) && getPreviewKind(doc.mimeType) !== "other" && (
+                        <button
+                          onClick={() => setPreviewDoc(doc)}
+                          className="flex items-center gap-1.5 text-xs text-foreground/80 hover:text-primary font-medium transition-colors"
+                          title="Preview"
+                          aria-label={`Preview ${doc.name}`}
+                          data-testid={`btn-preview-${doc.id}`}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Preview
+                        </button>
+                      )}
+                      {(doc.fileKey || doc.fileData) && (
+                        <button
+                          onClick={() => downloadDoc(doc)}
+                          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Download
+                        </button>
+                      )}
+                      {doc.fileUrl && !doc.fileKey && !doc.fileData && (
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
+                          View
+                        </a>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -1845,6 +2044,16 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
           </table>
         )}
       </div>
+
+      {previewDoc && (
+        <DocumentPreviewModal
+          doc={previewDoc}
+          documents={documents}
+          onClose={() => setPreviewDoc(null)}
+          onNavigate={(next) => setPreviewDoc(next)}
+          onDownload={downloadDoc}
+        />
+      )}
     </>
     </>
   );
