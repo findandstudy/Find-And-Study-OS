@@ -1739,9 +1739,7 @@ function DocumentPreviewModal({
               <Download className="w-4 h-4 mr-2" />
               Download
             </Button>
-            <Button variant="ghost" size="icon" onClick={onClose} title="Close" aria-label="Close preview">
-              <X className="w-4 h-4" />
-            </Button>
+            <div className="w-8" aria-hidden="true" />
           </div>
         </div>
 
