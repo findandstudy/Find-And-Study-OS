@@ -149,11 +149,25 @@ interface EditStagesDialogProps {
 
 const VARIANT_OPTIONS = [
   { value: "none", label: "—", dotClass: "bg-muted-foreground/40" },
-  { value: "won", label: "Won", dotClass: "bg-emerald-500" },
-  { value: "partial_won", label: "Partial Won", dotClass: "bg-amber-500" },
-  { value: "lost", label: "Lost", dotClass: "bg-rose-500" },
-  { value: "none_finance", label: "None", dotClass: "bg-gray-300" },
+  { value: "won", label: "Kazanıldı", dotClass: "bg-emerald-500" },
+  { value: "partial_won", label: "Kısmi Kazanım", dotClass: "bg-amber-500" },
+  { value: "lost", label: "Kaybedildi", dotClass: "bg-rose-500" },
+  { value: "none_finance", label: "Yok", dotClass: "bg-gray-300" },
 ];
+
+function FormSection({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border bg-card">
+      <header className="px-4 py-2.5 border-b bg-muted/30 rounded-t-lg">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description && <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>}
+      </header>
+      <div className="p-4 space-y-4">
+        {children}
+      </div>
+    </section>
+  );
+}
 
 function getVariantDot(variant: string | null | undefined) {
   const opt = VARIANT_OPTIONS.find(v => v.value === (variant || "none"));
@@ -162,12 +176,12 @@ function getVariantDot(variant: string | null | undefined) {
 
 function RadioGroup({ label, value, onChange, required }: { label: string; value: boolean; onChange: (v: boolean) => void; required?: boolean }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">
+    <div className="flex items-center justify-between gap-4">
+      <Label className="text-sm font-medium flex-1">
         {label}{required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
-      <div className="flex items-center gap-4">
-        <label className="flex items-center gap-2 cursor-pointer">
+      <div className="flex items-center gap-4 shrink-0">
+        <label className="flex items-center gap-1.5 cursor-pointer">
           <input
             type="radio"
             name={label}
@@ -175,9 +189,9 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
             onChange={() => onChange(false)}
             className="w-4 h-4 accent-primary"
           />
-          <span className="text-sm">No</span>
+          <span className="text-sm">Hayır</span>
         </label>
-        <label className="flex items-center gap-2 cursor-pointer">
+        <label className="flex items-center gap-1.5 cursor-pointer">
           <input
             type="radio"
             name={label}
@@ -185,7 +199,7 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
             onChange={() => onChange(true)}
             className="w-4 h-4 accent-primary"
           />
-          <span className="text-sm">Yes</span>
+          <span className="text-sm">Evet</span>
         </label>
       </div>
     </div>
@@ -193,18 +207,18 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
 }
 
 const UPLOAD_PERMISSION_OPTIONS = [
-  { value: "none", label: "None — no uploads allowed" },
-  { value: "admin_only", label: "Admin only (admin / manager)" },
-  { value: "staff_only", label: "All staff" },
-  { value: "staff_and_agent", label: "Staff + Agents" },
-  { value: "everyone", label: "Everyone (Staff + Agents + Students)" },
+  { value: "none", label: "Yok — yükleme kapalı" },
+  { value: "admin_only", label: "Sadece yönetici" },
+  { value: "staff_only", label: "Tüm personel" },
+  { value: "staff_and_agent", label: "Personel + Acenteler" },
+  { value: "everyone", label: "Herkes (Personel + Acente + Öğrenci)" },
 ];
 
 const FINANCE_STATUS_OPTIONS = [
-  { value: "auto", label: "Auto (use Finance Category)" },
-  { value: "potential", label: "Potential" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "excluded", label: "Excluded" },
+  { value: "auto", label: "Otomatik (Finans Kategorisinden)" },
+  { value: "potential", label: "Potansiyel" },
+  { value: "confirmed", label: "Onaylı" },
+  { value: "excluded", label: "Hariç" },
 ];
 
 function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; onChange: (s: PipelineStage) => void; allStages: PipelineStage[] }) {
@@ -234,246 +248,254 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
     onChange({ ...stage, actions: [...actions, newAction] });
   }
   return (
-    <div className="space-y-5">
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium">
-          Name<span className="text-destructive ml-0.5">*</span>
-        </Label>
-        <Input
-          value={stage.label}
-          onChange={e => onChange({ ...stage, label: e.target.value })}
-          placeholder="Stage name"
-        />
-      </div>
-
-      <RadioGroup
-        label="Is Notes mandatory?"
-        value={!!stage.isNotesMandatory}
-        onChange={v => onChange({ ...stage, isNotesMandatory: v })}
-        required
-      />
-
-      <RadioGroup
-        label="Can attach File?"
-        value={!!stage.canAttachFile}
-        onChange={v => onChange({ ...stage, canAttachFile: v, ...(v ? {} : { isFileUploadMandatory: false }) })}
-      />
-
-      {stage.canAttachFile && (
-        <>
-          <div className="space-y-1.5 ml-4 border-l-2 border-muted pl-4">
+    <div className="space-y-4">
+      <FormSection title="Temel Bilgiler">
+        <div className="grid grid-cols-[1fr_auto] gap-3">
+          <div className="space-y-1.5">
             <Label className="text-sm font-medium">
-              No. of files that can be attached<span className="text-destructive ml-0.5">*</span>
+              Aşama Adı<span className="text-destructive ml-0.5">*</span>
             </Label>
-            <Select
-              value={String(stage.maxFiles || 1)}
-              onValueChange={v => onChange({ ...stage, maxFiles: parseInt(v) })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[1, 2, 3, 4, 5, 10, 20].map(n => (
-                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              value={stage.label}
+              onChange={e => onChange({ ...stage, label: e.target.value })}
+              placeholder="örn. Başvuru Alındı"
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">
+              Renk<span className="text-destructive ml-0.5">*</span>
+            </Label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="color"
+                value={stage.color || "#3B82F6"}
+                onChange={e => onChange({ ...stage, color: e.target.value })}
+                className="w-9 h-9 rounded border cursor-pointer p-0.5"
+              />
+              <Input
+                value={stage.color || "#3B82F6"}
+                onChange={e => onChange({ ...stage, color: e.target.value })}
+                placeholder="#3B82F6"
+                className="h-9 w-24 font-mono text-xs"
+              />
+            </div>
+          </div>
+        </div>
 
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Finans Kategorisi</Label>
+          <Select
+            value={stage.variant || "none"}
+            onValueChange={v => onChange({ ...stage, variant: v === "none" ? null : v })}
+          >
+            <SelectTrigger className="w-full h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VARIANT_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${opt.dotClass}`} />
+                    {opt.label}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Kazanıldı = kesin komisyon/servis ücreti. Kısmi Kazanım = potansiyel. Yok = finanstan hariç tutulur.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Ülkeler</Label>
+          <Input
+            value={stage.countries || ""}
+            onChange={e => onChange({ ...stage, countries: e.target.value || null })}
+            placeholder="örn. Türkiye, Almanya, ABD (virgülle ayırın)"
+            className="h-9"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Sadece belirli ülkeler için geçerliyse bu alanı doldurun.
+          </p>
+        </div>
+      </FormSection>
+
+      <FormSection title="Davranış Kuralları">
+        <RadioGroup
+          label="Notlar zorunlu mu?"
+          value={!!stage.isNotesMandatory}
+          onChange={v => onChange({ ...stage, isNotesMandatory: v })}
+          required
+        />
+        <RadioGroup
+          label="Önceki aşamaya dönülebilir mi?"
+          value={stage.canGoBack !== false}
+          onChange={v => onChange({ ...stage, canGoBack: v })}
+          required
+        />
+        <RadioGroup
+          label="Dosya kapatma aşaması mı?"
+          value={!!stage.isCaseClose}
+          onChange={v => onChange({ ...stage, isCaseClose: v })}
+          required
+        />
+      </FormSection>
+
+      <FormSection title="Dosya Ekleri">
+        <RadioGroup
+          label="Dosya eklenebilir mi?"
+          value={!!stage.canAttachFile}
+          onChange={v => onChange({ ...stage, canAttachFile: v, ...(v ? {} : { isFileUploadMandatory: false }) })}
+        />
+        {stage.canAttachFile && (
+          <div className="ml-2 border-l-2 border-primary/30 pl-4 space-y-4">
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">
+                  En fazla dosya sayısı<span className="text-destructive ml-0.5">*</span>
+                </Label>
+                <Select
+                  value={String(stage.maxFiles || 1)}
+                  onValueChange={v => onChange({ ...stage, maxFiles: parseInt(v) })}
+                >
+                  <SelectTrigger className="w-full h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 10, 20].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <RadioGroup
-              label="Is file attachment Upload mandatory?"
+              label="Dosya yüklemek zorunlu mu?"
               value={!!stage.isFileUploadMandatory}
               onChange={v => onChange({ ...stage, isFileUploadMandatory: v })}
               required
             />
           </div>
-        </>
-      )}
-
-      <RadioGroup
-        label="Can go back to previous stage from this stage?"
-        value={stage.canGoBack !== false}
-        onChange={v => onChange({ ...stage, canGoBack: v })}
-        required
-      />
-
-      <RadioGroup
-        label="Is this Case Close stage?"
-        value={!!stage.isCaseClose}
-        onChange={v => onChange({ ...stage, isCaseClose: v })}
-        required
-      />
-
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium">Select Countries</Label>
-        <Input
-          value={stage.countries || ""}
-          onChange={e => onChange({ ...stage, countries: e.target.value || null })}
-          placeholder="e.g. Turkey, Germany, USA (comma-separated)"
-        />
-        <p className="text-xs text-muted-foreground">
-          If University Application Status is for specific country, this status will be shown.
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium">
-          Color<span className="text-destructive ml-0.5">*</span>
-        </Label>
-        <div className="flex items-center gap-2">
-          <Input
-            value={stage.color || "#3B82F6"}
-            onChange={e => onChange({ ...stage, color: e.target.value })}
-            placeholder="#3B82F6"
-            className="flex-1"
-          />
-          <input
-            type="color"
-            value={stage.color || "#3B82F6"}
-            onChange={e => onChange({ ...stage, color: e.target.value })}
-            className="w-10 h-10 rounded border cursor-pointer p-0.5"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium">Finance Category</Label>
-        <Select
-          value={stage.variant || "none"}
-          onValueChange={v => onChange({ ...stage, variant: v === "none" ? null : v })}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {VARIANT_OPTIONS.map(opt => (
-              <SelectItem key={opt.value} value={opt.value}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${opt.dotClass}`} />
-                  {opt.label}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Won = confirmed commission/service fee. Partial Won = potential commission/service fee. None = excluded from finance.
-        </p>
-      </div>
+        )}
+      </FormSection>
 
       {isApplicationStage && (
         <>
-          <div className="pt-2 border-t" />
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Document upload permission</Label>
-            <Select
-              value={stage.uploadPermissionLevel || "none"}
-              onValueChange={v => onChange({ ...stage, uploadPermissionLevel: v })}
-            >
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {UPLOAD_PERMISSION_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Who can upload documents to this stage. "None" hides this stage from the documents panel entirely.
-            </p>
-          </div>
-
-          <RadioGroup
-            label="Track offer expiry (valid-until date)?"
-            value={!!stage.tracksOfferExpiry}
-            onChange={v => onChange({ ...stage, tracksOfferExpiry: v, ...(v ? {} : { requiresValidUntil: false }) })}
-          />
-
-          {stage.tracksOfferExpiry && (
-            <div className="ml-4 border-l-2 border-muted pl-4">
-              <RadioGroup
-                label="Valid-until date is mandatory?"
-                value={!!stage.requiresValidUntil}
-                onChange={v => onChange({ ...stage, requiresValidUntil: v })}
-              />
+          <FormSection title="Başvuru Ayarları">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Belge yükleme yetkisi</Label>
+              <Select
+                value={stage.uploadPermissionLevel || "none"}
+                onValueChange={v => onChange({ ...stage, uploadPermissionLevel: v })}
+              >
+                <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {UPLOAD_PERMISSION_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Bu aşamada kim belge yükleyebilir. "Yok" seçilirse aşama belge panelinde görünmez.
+              </p>
             </div>
-          )}
 
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Commission finance status when reached</Label>
-            <Select
-              value={stage.commissionFinanceStatus || "auto"}
-              onValueChange={v => onChange({ ...stage, commissionFinanceStatus: v === "auto" ? null : v })}
-            >
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {FINANCE_STATUS_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Service fee finance status when reached</Label>
-            <Select
-              value={stage.serviceFeeFinanceStatus || "auto"}
-              onValueChange={v => onChange({ ...stage, serviceFeeFinanceStatus: v === "auto" ? null : v })}
-            >
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {FINANCE_STATUS_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Override the finance status applied to commissions and service fees when an application reaches this stage. "Auto" derives the status from the Finance Category above.
-            </p>
-          </div>
-
-          <RadioGroup
-            label="Auto-cancel sibling applications when reaching this stage?"
-            value={!!stage.autoCancelSiblingsOnWon}
-            onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
-          />
-
-          <div className="pt-2 border-t" />
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-medium">Stage Actions</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Up to 2 action buttons appear on the Applications list for rows in this stage.
-                  Completing an action moves the application to the chosen target stage.
-                </p>
+            <RadioGroup
+              label="Teklif son tarihi takip edilsin mi?"
+              value={!!stage.tracksOfferExpiry}
+              onChange={v => onChange({ ...stage, tracksOfferExpiry: v, ...(v ? {} : { requiresValidUntil: false }) })}
+            />
+            {stage.tracksOfferExpiry && (
+              <div className="ml-2 border-l-2 border-primary/30 pl-4">
+                <RadioGroup
+                  label="Geçerlilik tarihi zorunlu mu?"
+                  value={!!stage.requiresValidUntil}
+                  onChange={v => onChange({ ...stage, requiresValidUntil: v })}
+                />
               </div>
+            )}
+
+            <RadioGroup
+              label="Bu aşamaya gelince diğer başvurular otomatik iptal edilsin mi?"
+              value={!!stage.autoCancelSiblingsOnWon}
+              onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
+            />
+          </FormSection>
+
+          <FormSection
+            title="Finans Durumu Atama"
+            description="Bu aşamaya ulaşıldığında komisyon ve servis ücreti için finans durumu otomatik atanır."
+          >
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Komisyon finans durumu</Label>
+              <Select
+                value={stage.commissionFinanceStatus || "auto"}
+                onValueChange={v => onChange({ ...stage, commissionFinanceStatus: v === "auto" ? null : v })}
+              >
+                <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {FINANCE_STATUS_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Servis ücreti finans durumu</Label>
+              <Select
+                value={stage.serviceFeeFinanceStatus || "auto"}
+                onValueChange={v => onChange({ ...stage, serviceFeeFinanceStatus: v === "auto" ? null : v })}
+              >
+                <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {FINANCE_STATUS_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Aşama Aksiyonları"
+            description="Bu aşamadaki başvurular için Başvurular listesinde en fazla 2 buton görünür. Buton tamamlandığında başvuru seçili hedef aşamaya geçer."
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {actions.length} / 2 buton tanımlı
+              </span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5 h-8 shrink-0"
+                className="gap-1.5 h-8"
                 onClick={addAction}
                 disabled={actions.length >= 2}
               >
-                <Plus className="w-3.5 h-3.5" /> Add
+                <Plus className="w-3.5 h-3.5" /> Buton Ekle
               </Button>
             </div>
             {actions.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">No actions configured.</p>
+              <div className="text-center py-4 text-xs text-muted-foreground italic border border-dashed rounded-md">
+                Henüz aksiyon tanımlanmadı.
+              </div>
             )}
-            {actions.map((a, i) => (
-              <StageActionEditor
-                key={i}
-                action={a}
-                index={i}
-                allStages={allStages}
-                currentStageKey={stage.key}
-                onChange={(u) => updateActionAt(i, u)}
-                onRemove={() => removeActionAt(i)}
-              />
-            ))}
-          </div>
+            <div className="space-y-3">
+              {actions.map((a, i) => (
+                <StageActionEditor
+                  key={i}
+                  action={a}
+                  index={i}
+                  allStages={allStages}
+                  currentStageKey={stage.key}
+                  onChange={(u) => updateActionAt(i, u)}
+                  onRemove={() => removeActionAt(i)}
+                />
+              ))}
+            </div>
+          </FormSection>
         </>
       )}
     </div>
@@ -576,28 +598,36 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent
+        className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
+        onInteractOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
+        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
+          <DialogTitle className="text-base">
             {editingStage ? (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setEditIndex(null)}
                   className="p-1 rounded hover:bg-muted"
+                  title="Listeye dön"
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                Edit Stage: {editingStage.label || "New Stage"}
+                <span className="font-semibold">Aşamayı Düzenle:</span>
+                <span className="text-muted-foreground font-normal truncate">
+                  {editingStage.label || "Yeni Aşama"}
+                </span>
               </div>
             ) : (
-              `${entityLabel} Pipeline Stages`
+              `${entityLabel} Pipeline Aşamaları`
             )}
           </DialogTitle>
         </DialogHeader>
 
         {editingStage && editIndex !== null ? (
-          <div className="flex-1 overflow-y-auto py-2 pr-1">
+          <div className="flex-1 overflow-y-auto px-6 py-5">
             <StageEditForm
               stage={editingStage}
               onChange={updated => updateStageAtIndex(editIndex, updated)}
@@ -605,7 +635,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
             />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto space-y-2 py-2 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-2 px-6 py-4">
             {localStages.map((stage, idx) => (
               <div key={idx} className="flex items-center gap-2 group">
                 <div className="flex flex-col gap-0.5">
@@ -702,35 +732,37 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
           </div>
         )}
 
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            {error}
-          </div>
-        )}
-        <div className="flex items-center justify-between pt-2 border-t">
-          {editingStage ? (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setEditIndex(null)} className="gap-1.5">
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to List
-              </Button>
-              <Button onClick={() => setEditIndex(null)}>
-                <Check className="h-3.5 w-3.5 mr-1.5" /> Done
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" size="sm" onClick={addStage} className="gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Add Stage
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={onClose}>Cancel</Button>
-                <Button onClick={handleSave} disabled={isSaving}>
-                  <Check className="h-3.5 w-3.5 mr-1.5" />{isSaving ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </>
+        <div className="px-6 pb-5 pt-4 border-t shrink-0 space-y-3 bg-muted/20">
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
           )}
+          <div className="flex items-center justify-between">
+            {editingStage ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditIndex(null)} className="gap-1.5">
+                  <ArrowLeft className="w-3.5 h-3.5" /> Listeye Dön
+                </Button>
+                <Button onClick={() => setEditIndex(null)}>
+                  <Check className="h-3.5 w-3.5 mr-1.5" /> Tamam
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={addStage} className="gap-1.5">
+                  <Plus className="w-3.5 h-3.5" /> Aşama Ekle
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={onClose}>İptal</Button>
+                  <Button onClick={handleSave} disabled={isSaving}>
+                    <Check className="h-3.5 w-3.5 mr-1.5" />{isSaving ? "Kaydediliyor..." : "Kaydet"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
