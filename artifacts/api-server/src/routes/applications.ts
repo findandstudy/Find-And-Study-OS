@@ -731,7 +731,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   // stage AND the user passes that action's per-type permission gate
   // (governed transition). Arbitrary stage edits remain blocked.
   let stageGovernedAllowed = false;
-  if (!isAdmin && req.body.stage !== undefined) {
+  if (req.body.stage !== undefined) {
     const [currentApp] = await db.select({ stage: applicationsTable.stage })
       .from(applicationsTable)
       .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
@@ -761,11 +761,9 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
     }
   }
-  // Preserve original behavior: only super_admin can move stage freely.
-  // Other staff regain stage write only when this PATCH is a governed
-  // action-button transition (matches a configured action target on the
-  // current stage AND user passes the action's permission gate).
-  if (user.role !== "super_admin" && isStaff && !stageGovernedAllowed) {
+  // Admin-tier (super_admin/admin/manager) can move stage freely as before.
+  // Lower-tier staff regain stage write only via governed action transitions.
+  if (!isAdmin && isStaff && !stageGovernedAllowed) {
     allowedFields = allowedFields.filter(f => f !== "stage");
   }
   // Agents normally have no patch fields, but governed action transitions
