@@ -229,6 +229,9 @@ interface StageDocumentEntry {
   id: number;
   fileName?: string | null;
   createdAt?: string | null;
+  isMissingDocNote?: boolean | null;
+  hasFileData?: boolean | null;
+  fileUrl?: string | null;
 }
 
 type AppColId =
@@ -1586,9 +1589,12 @@ export default function ApplicationsPage() {
     if (action.type === "download") {
       try {
         const docs = await apiFetch(`${BASE_URL}/api/applications/${app.id}/stage-documents?stage=${encodeURIComponent(app.stage)}`) as StageDocumentEntry[];
-        const list = Array.isArray(docs) ? docs : [];
-        // Match by admin-configured document name (case-insensitive, prefix-aware
-        // to tolerate extensions and "(2)" suffixes). Falls back to all docs.
+        // Exclude missing-doc-note rows and non-file entries — only real
+        // uploaded documents (have either fileData or fileUrl) are
+        // downloadable. Then match by admin-configured Document Name.
+        const list = (Array.isArray(docs) ? docs : []).filter(
+          (d) => !d.isMissingDocNote && (d.hasFileData || d.fileUrl)
+        );
         const wanted = (action.documentName || "").trim().toLowerCase();
         const filtered = wanted
           ? list.filter((d) => (d.fileName || "").toLowerCase().includes(wanted))

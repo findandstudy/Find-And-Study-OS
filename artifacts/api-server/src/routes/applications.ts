@@ -761,7 +761,11 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
     }
   }
-  if (!isAdmin && isStaff && !stageGovernedAllowed) {
+  // Preserve original behavior: only super_admin can move stage freely.
+  // Other staff regain stage write only when this PATCH is a governed
+  // action-button transition (matches a configured action target on the
+  // current stage AND user passes the action's permission gate).
+  if (user.role !== "super_admin" && isStaff && !stageGovernedAllowed) {
     allowedFields = allowedFields.filter(f => f !== "stage");
   }
   // Agents normally have no patch fields, but governed action transitions
