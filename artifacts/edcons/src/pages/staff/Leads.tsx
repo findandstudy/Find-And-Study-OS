@@ -1043,8 +1043,9 @@ export default function LeadsPage() {
 
   const filteredLeads = allLeads.filter((l: any) => {
     if (colFilters.name) {
-      const fullName = `${l.firstName || ""} ${l.lastName || ""}`.toLowerCase();
-      if (!fullName.includes(colFilters.name.toLowerCase())) return false;
+      const fullName = `${l.firstName || ""} ${l.lastName || ""}`.toUpperCase();
+      const needle = toLatinUpper(colFilters.name);
+      if (!fullName.includes(needle)) return false;
     }
     if (colFilters.email && !(l.email || "").toLowerCase().includes(colFilters.email.toLowerCase())) return false;
     if (colFilters.program && !(l.interestedProgram || "").toLowerCase().includes(colFilters.program.toLowerCase())) return false;

@@ -9,7 +9,7 @@ import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { streamDocumentToResponse } from "../lib/documentBytes";
 import { isNull } from "drizzle-orm";
-import { normalizeAndValidateNames, normalizePhoneField, EXTENDED_NAME_FIELDS } from "../lib/textNormalize";
+import { normalizeAndValidateNames, normalizePhoneField, EXTENDED_NAME_FIELDS, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
@@ -180,13 +180,30 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     }
   }
   if (search) {
-    conditions.push(
-      or(
-        ilike(studentsTable.firstName, `%${search}%`),
-        ilike(studentsTable.lastName, `%${search}%`),
-        ilike(studentsTable.email, `%${search}%`)
-      )
-    );
+    const rawTerm = search.trim();
+    const translitTerm = toLatinUpper(rawTerm);
+    const terms = Array.from(new Set([rawTerm, translitTerm].filter(Boolean)));
+    const tokens = translitTerm.split(/\s+/).filter(Boolean);
+    const orParts: any[] = [];
+    for (const t of terms) {
+      orParts.push(
+        ilike(studentsTable.firstName, `%${t}%`),
+        ilike(studentsTable.lastName, `%${t}%`),
+        ilike(studentsTable.email, `%${t}%`),
+        ilike(studentsTable.phone, `%${t}%`),
+        sql`(coalesce(${studentsTable.firstName},'') || ' ' || coalesce(${studentsTable.lastName},'')) ILIKE ${'%' + t + '%'}`,
+        sql`(coalesce(${studentsTable.lastName},'') || ' ' || coalesce(${studentsTable.firstName},'')) ILIKE ${'%' + t + '%'}`,
+      );
+    }
+    if (tokens.length > 1) {
+      orParts.push(and(
+        ...tokens.map((tok: string) => or(
+          ilike(studentsTable.firstName, `%${tok}%`),
+          ilike(studentsTable.lastName, `%${tok}%`),
+        )!)
+      )!);
+    }
+    conditions.push(or(...orParts)!);
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

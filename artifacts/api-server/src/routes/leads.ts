@@ -218,13 +218,30 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   }
 
   if (search) {
-    conditions.push(
-      or(
-        ilike(leadsTable.firstName, `%${search}%`),
-        ilike(leadsTable.lastName, `%${search}%`),
-        ilike(leadsTable.email, `%${search}%`)
-      )
-    );
+    const rawTerm = search.trim();
+    const translitTerm = toLatinUpper(rawTerm);
+    const terms = Array.from(new Set([rawTerm, translitTerm].filter(Boolean)));
+    const tokens = translitTerm.split(/\s+/).filter(Boolean);
+    const orParts: any[] = [];
+    for (const t of terms) {
+      orParts.push(
+        ilike(leadsTable.firstName, `%${t}%`),
+        ilike(leadsTable.lastName, `%${t}%`),
+        ilike(leadsTable.email, `%${t}%`),
+        ilike(leadsTable.phone, `%${t}%`),
+        sql`(coalesce(${leadsTable.firstName},'') || ' ' || coalesce(${leadsTable.lastName},'')) ILIKE ${'%' + t + '%'}`,
+        sql`(coalesce(${leadsTable.lastName},'') || ' ' || coalesce(${leadsTable.firstName},'')) ILIKE ${'%' + t + '%'}`,
+      );
+    }
+    if (tokens.length > 1) {
+      orParts.push(and(
+        ...tokens.map((tok: string) => or(
+          ilike(leadsTable.firstName, `%${tok}%`),
+          ilike(leadsTable.lastName, `%${tok}%`),
+        )!)
+      )!);
+    }
+    conditions.push(or(...orParts)!);
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

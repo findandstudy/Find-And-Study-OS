@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { toLatinUpper } from "@/lib/textTransform";
 import { useLocation } from "wouter";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { QuickContactDialog } from "@/components/QuickContact";
@@ -2184,8 +2185,9 @@ export default function StudentsPage() {
 
   const filteredStudents = allStudents.filter((s: any) => {
     if (colFilters.name) {
-      const fullName = `${s.firstName || ""} ${s.lastName || ""}`.toLowerCase();
-      if (!fullName.includes(colFilters.name.toLowerCase())) return false;
+      const fullName = `${s.firstName || ""} ${s.lastName || ""}`.toUpperCase();
+      const needle = toLatinUpper(colFilters.name);
+      if (!fullName.includes(needle)) return false;
     }
     if (colFilters.email && !(s.email || "").toLowerCase().includes(colFilters.email.toLowerCase())) return false;
     if (colFilters.passport && !(s.passportNumber || s.passport || "").toLowerCase().includes(colFilters.passport.toLowerCase())) return false;
