@@ -1886,9 +1886,9 @@ export default function ApplicationsPage() {
                         />
                       );
                     case "button1":
-                      return <TableHead key={id} className="w-28 text-xs font-semibold">Button 1</TableHead>;
+                      return <TableHead key={id} className="w-28 text-xs font-semibold" />;
                     case "button2":
-                      return <TableHead key={id} className="w-28 text-xs font-semibold">Button 2</TableHead>;
+                      return <TableHead key={id} className="w-28 text-xs font-semibold" />;
                     case "created":
                       return (
                         <ColumnHeader

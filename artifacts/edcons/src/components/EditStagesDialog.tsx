@@ -1,74 +1,20 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Check, AlertCircle, Pencil, ArrowLeft, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Check, AlertCircle, Pencil, ArrowLeft } from "lucide-react";
 import type { PipelineStage, StageAction, StageActionType } from "@/hooks/use-pipeline-stages";
 import { useToast } from "@/hooks/use-toast";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-
 type ActionTypeOrNone = StageActionType | "none";
 const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; label: string; defaultLabel: string; defaultColor: string }[] = [
-  { value: "none", label: "— None —", defaultLabel: "", defaultColor: "#3b82f6" },
-  { value: "upload", label: "Upload Document", defaultLabel: "Upload", defaultColor: "#3b82f6" },
-  { value: "download", label: "Download Document", defaultLabel: "Download", defaultColor: "#10b981" },
-  { value: "missing_docs", label: "Missing Documents", defaultLabel: "Missing Docs", defaultColor: "#f59e0b" },
+  { value: "none", label: "Yok", defaultLabel: "", defaultColor: "#3b82f6" },
+  { value: "upload", label: "Belge Yükle", defaultLabel: "Yükle", defaultColor: "#3b82f6" },
+  { value: "download", label: "Belge İndir", defaultLabel: "İndir", defaultColor: "#10b981" },
+  { value: "missing_docs", label: "Eksik Belgeler", defaultLabel: "Eksik Belgeler", defaultColor: "#f59e0b" },
 ];
-
-function humanizeDocType(t: string): string {
-  return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function DocTypePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const { data: docTypes = [] } = useQuery<string[]>({
-    queryKey: ["document-types"],
-    queryFn: async () => {
-      const r = await fetch(`${BASE_URL}/api/document-types`, { credentials: "include" });
-      if (!r.ok) return [];
-      return r.json();
-    },
-    staleTime: 5 * 60_000,
-  });
-  const summary = value.length === 0 ? "Tümü" : value.length === 1 ? humanizeDocType(value[0]) : `${value.length} belge türü`;
-  function toggle(t: string) {
-    onChange(value.includes(t) ? value.filter((x) => x !== t) : [...value, t]);
-  }
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full justify-between h-8 font-normal">
-          <span className="truncate text-xs">{summary}</span>
-          <ChevronDown className="w-3.5 h-3.5 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-2" align="start">
-        <div className="flex items-center justify-between px-1 pb-1.5">
-          <span className="text-xs font-semibold">Required Documents</span>
-          {value.length > 0 && (
-            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange([])}>Clear</Button>
-          )}
-        </div>
-        <div className="max-h-64 overflow-auto pr-1">
-          {docTypes.length === 0 && (
-            <p className="text-xs text-muted-foreground px-1 py-2">No document types available</p>
-          )}
-          {docTypes.map((t) => (
-            <label key={t} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted/60 cursor-pointer">
-              <Checkbox checked={value.includes(t)} onCheckedChange={() => toggle(t)} />
-              <span className="text-xs flex-1">{humanizeDocType(t)}</span>
-            </label>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 function StageActionEditor({
   action,
@@ -87,114 +33,96 @@ function StageActionEditor({
 }) {
   const typeOpt = ACTION_TYPE_OPTIONS.find((o) => o.value === action.type);
   const targetOptions = allStages.filter((s) => s.key && s.key !== currentStageKey);
-  const requiresDocs = action.type === "missing_docs";
-  const docsMissing = requiresDocs && (!action.requiredDocTypes || action.requiredDocTypes.length === 0);
+  const showDocName = action.type === "upload" || action.type === "download";
   return (
-    <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground">Button {index + 1}</span>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRemove} title="Remove action">
-          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+    <div className="rounded-lg border border-border/70 bg-card p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <div
+          className="w-3 h-3 rounded-full border"
+          style={{ backgroundColor: action.color || typeOpt?.defaultColor || "#3b82f6" }}
+        />
+        <span className="text-sm font-medium flex-1">Buton {index + 1}</span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove} title="Sil">
+          <Trash2 className="w-4 h-4 text-destructive" />
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Type</Label>
-          <Select
-            value={action.type}
-            onValueChange={(v) => {
-              if (v === "none") {
-                onRemove();
-                return;
-              }
-              const opt = ACTION_TYPE_OPTIONS.find((o) => o.value === v);
-              onChange({
-                ...action,
-                type: v as StageActionType,
-                label: action.label || opt?.defaultLabel || null,
-                color: action.color || opt?.defaultColor || null,
-              });
-            }}
-          >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {ACTION_TYPE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">After action → Stage</Label>
-          <Select
-            value={action.targetStageKey || "__none__"}
-            onValueChange={(v) => onChange({ ...action, targetStageKey: v === "__none__" ? null : v })}
-          >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">— Don't change —</SelectItem>
-              {targetOptions.map((s) => (
-                <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Aksiyon tipi</Label>
+        <Select
+          value={action.type}
+          onValueChange={(v) => {
+            if (v === "none") { onRemove(); return; }
+            const opt = ACTION_TYPE_OPTIONS.find((o) => o.value === v);
+            onChange({
+              ...action,
+              type: v as StageActionType,
+              label: action.label || opt?.defaultLabel || null,
+              color: action.color || opt?.defaultColor || null,
+            });
+          }}
+        >
+          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ACTION_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Button label</Label>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Buton üzerinde görünecek yazı</Label>
+        <div className="flex items-center gap-2">
           <Input
             value={action.label || ""}
             onChange={(e) => onChange({ ...action, label: e.target.value })}
-            placeholder={typeOpt?.defaultLabel || "Button"}
-            className="h-8 text-xs"
+            placeholder={typeOpt?.defaultLabel || "Buton"}
+            className="h-9 flex-1"
             maxLength={32}
           />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Color</Label>
           <input
             type="color"
             value={action.color || typeOpt?.defaultColor || "#3b82f6"}
             onChange={(e) => onChange({ ...action, color: e.target.value.toLowerCase() })}
-            className="h-8 w-12 rounded border cursor-pointer p-0.5"
+            className="h-9 w-10 rounded border cursor-pointer p-0.5"
+            title="Buton rengi"
           />
         </div>
       </div>
 
-      {(action.type === "upload" || action.type === "download") && (
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">
-            Document Name
-            <span className="ml-1 text-muted-foreground/70">
-              ({action.type === "upload" ? "yüklenen dosya bu adla kaydedilir" : "bu adla eşleşen belge indirilir"})
-            </span>
-          </Label>
+      {showDocName && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Belge adı</Label>
           <Input
             value={action.documentName || ""}
             onChange={(e) => onChange({ ...action, documentName: e.target.value })}
-            placeholder="örn. Offer Letter"
-            className="h-8 text-xs"
+            placeholder={action.type === "upload" ? "örn. Teklif Mektubu" : "indirilecek belgenin adı"}
+            className="h-9"
             maxLength={64}
           />
+          <p className="text-[11px] text-muted-foreground">
+            {action.type === "upload"
+              ? "Yüklenen dosya bu adla kaydedilir."
+              : "Bu adla eşleşen belge indirilir."}
+          </p>
         </div>
       )}
 
-      <div className="space-y-1">
-        <Label className="text-[11px] text-muted-foreground">
-          {requiresDocs
-            ? <>Required documents <span className="text-destructive">*</span></>
-            : <>Required documents (informational)</>}
-        </Label>
-        <DocTypePicker
-          value={action.requiredDocTypes || []}
-          onChange={(v) => onChange({ ...action, requiredDocTypes: v })}
-        />
-        {docsMissing && (
-          <p className="text-[11px] text-destructive">Missing Documents için en az bir belge türü seçilmeli.</p>
-        )}
+      <div className="space-y-1.5">
+        <Label className="text-xs">İşlem bittiğinde aşamayı değiştir</Label>
+        <Select
+          value={action.targetStageKey || "__none__"}
+          onValueChange={(v) => onChange({ ...action, targetStageKey: v === "__none__" ? null : v })}
+        >
+          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">Değiştirme</SelectItem>
+            {targetOptions.map((s) => (
+              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

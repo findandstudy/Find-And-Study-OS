@@ -244,9 +244,6 @@ function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: strin
         .map((s) => s.trim())
         .slice(0, 20);
     }
-    if (rawType === "missing_docs" && requiredDocTypes.length === 0) {
-      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: "Missing Documents" requires at least one document type`);
-    }
     out.push({ type: rawType as StageAction["type"], label, documentName, color, targetStageKey, requiredDocTypes });
   }
   return out;
