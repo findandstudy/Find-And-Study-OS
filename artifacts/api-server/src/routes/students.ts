@@ -196,11 +196,17 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
       );
     }
     if (tokens.length > 1) {
+      // Çok-kelimeli aramada her token'ı KELİME SINIRINDA eşleştir.
+      // Aksi halde "murat vural" araması "MURATL VURAL"ı da getirir.
+      const esc = (s: string) => s.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
       orParts.push(and(
-        ...tokens.map((tok: string) => or(
-          ilike(studentsTable.firstName, `%${tok}%`),
-          ilike(studentsTable.lastName, `%${tok}%`),
-        )!)
+        ...tokens.map((tok: string) => {
+          const pat = `\\m${esc(tok)}\\M`;
+          return or(
+            sql`${studentsTable.firstName} ~* ${pat}`,
+            sql`${studentsTable.lastName} ~* ${pat}`,
+          )!;
+        })
       )!);
     }
     conditions.push(or(...orParts)!);

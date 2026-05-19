@@ -234,11 +234,18 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
       );
     }
     if (tokens.length > 1) {
+      // Çok-kelimeli aramada her token'ı KELİME SINIRINDA eşleştir.
+      // Aksi halde "murat vural" araması "MURATL VURAL"ı da getirir.
+      // Postgres `~*` + `\m...\M` word boundary; regex meta karakterleri escape.
+      const esc = (s: string) => s.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
       orParts.push(and(
-        ...tokens.map((tok: string) => or(
-          ilike(leadsTable.firstName, `%${tok}%`),
-          ilike(leadsTable.lastName, `%${tok}%`),
-        )!)
+        ...tokens.map((tok: string) => {
+          const pat = `\\m${esc(tok)}\\M`;
+          return or(
+            sql`${leadsTable.firstName} ~* ${pat}`,
+            sql`${leadsTable.lastName} ~* ${pat}`,
+          )!;
+        })
       )!);
     }
     conditions.push(or(...orParts)!);
