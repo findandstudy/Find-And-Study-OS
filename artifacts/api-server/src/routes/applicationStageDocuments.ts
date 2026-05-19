@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import express from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable } from "@workspace/db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -10,6 +11,13 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 
 const router: IRouter = Router();
+
+// Stage-document uploads carry base64-encoded files in the JSON body. The
+// global parser caps requests at 1MB which fails even small PDFs; allow up
+// to ~25MB (~18MB raw file) for the upload route specifically. The global
+// parser is skipped for this path via app.ts LARGE_BODY_PATH_REGEXES.
+const stageDocsJsonParser = express.json({ limit: "25mb" });
+router.post("/applications/:id/stage-documents", stageDocsJsonParser, (_req, _res, next) => next());
 
 interface StageBehavior {
   uploadPermissionLevel: string;

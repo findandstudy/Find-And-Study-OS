@@ -130,9 +130,19 @@ const LARGE_BODY_PATHS = [
   "/api/ai/extract-document",
   "/api/ai/extract-bulk-csv",
 ];
+// Stage-document uploads send the file as base64 inside a JSON body. A 1MB
+// file balloons to ~1.4MB after base64 + JSON envelope, so the global 1MB
+// cap rejects perfectly legitimate uploads. The route at
+// /api/applications/:id/stage-documents installs its own 25MB parser.
+const LARGE_BODY_PATH_REGEXES: RegExp[] = [
+  /^\/api\/applications\/\d+\/stage-documents(\/|$)/,
+];
 function isLargeBodyPath(path: string): boolean {
   for (const p of LARGE_BODY_PATHS) {
     if (path === p || path.startsWith(p + "/")) return true;
+  }
+  for (const re of LARGE_BODY_PATH_REGEXES) {
+    if (re.test(path)) return true;
   }
   return false;
 }
