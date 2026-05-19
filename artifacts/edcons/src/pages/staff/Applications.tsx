@@ -6,6 +6,7 @@ import { RowActionsMenu } from "@/components/RowActionsMenu";
 import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
+import { isStaffRole, isAgentRole } from "@workspace/roles";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2003,8 +2004,8 @@ export default function ApplicationsPage() {
                       // missing_docs is admin-only. download is staff+admin (no agents).
                       const permLevel = stageDef?.uploadPermissionLevel || "none";
                       const role = user?.role || "";
-                      const isAgent = role === "agent" || role === "sub_agent";
-                      const isStaff = role === "super_admin" || role === "admin" || role === "manager" || role === "staff" || role === "support";
+                      const isAgent = isAgentRole(role);
+                      const isStaff = isStaffRole(role);
                       let allowed = true;
                       let denyReason = "";
                       if (action.type === "upload") {
