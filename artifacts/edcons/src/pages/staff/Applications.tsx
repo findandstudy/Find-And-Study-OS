@@ -261,8 +261,8 @@ const APP_COLUMN_DEFS: { id: AppColId; label: string }[] = [
   { id: "assigned", label: "Assigned" },
   { id: "created", label: "Created" },
   // Task #167 — admin-configurable per-stage action buttons (always visible).
-  { id: "button1", label: "Aksiyon 1" },
-  { id: "button2", label: "Aksiyon 2" },
+  { id: "button1", label: "Quick Button 1" },
+  { id: "button2", label: "Quick Button 2" },
 ];
 
 const APP_ALWAYS_VISIBLE_COLS: AppColId[] = ["button1", "button2"];
@@ -1886,9 +1886,9 @@ export default function ApplicationsPage() {
                         />
                       );
                     case "button1":
-                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">Aksiyon 1</TableHead>;
+                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">Quick Button</TableHead>;
                     case "button2":
-                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">Aksiyon 2</TableHead>;
+                      return <TableHead key={id} className="w-28 text-xs font-semibold text-muted-foreground">Quick Button</TableHead>;
                     case "created":
                       return (
                         <ColumnHeader
