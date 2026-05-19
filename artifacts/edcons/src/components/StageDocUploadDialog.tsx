@@ -38,9 +38,18 @@ interface StageDocUploadDialogProps {
    * change" target). Defaults to true to preserve drag-and-drop behavior.
    */
   moveAfterUpload?: boolean;
+  /**
+   * Task #167 — quick-button mode. When true, the dialog acts as a
+   * standalone "upload a specific document and (optionally) move stage"
+   * flow. It bypasses the stage's tracksOfferExpiry / requiresValidUntil
+   * checks (those belong to the stage-entry flow, not to ad-hoc admin
+   * actions configured via Quick Button) and uses neutral wording instead
+   * of the "stage requires a document" message.
+   */
+  quickMode?: boolean;
 }
 
-export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded, uploadStage, documentNameOverride, moveAfterUpload = true }: StageDocUploadDialogProps) {
+export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded, uploadStage, documentNameOverride, moveAfterUpload = true, quickMode = false }: StageDocUploadDialogProps) {
   const docStage = uploadStage || targetStage;
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -49,8 +58,11 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   const { toast } = useToast();
   const { stages: pipelineStages } = usePipelineStages("application");
   const targetStageMeta = pipelineStages.find(s => s.key === docStage);
-  const supportsValidUntil = targetStageMeta?.tracksOfferExpiry === true;
-  const requiresValidUntil = targetStageMeta?.requiresValidUntil === true;
+  // In quick-button mode the validity-date field is intentionally hidden:
+  // the admin's button is meant to be a discrete action, not the formal
+  // stage-entry that records offer expiry.
+  const supportsValidUntil = !quickMode && targetStageMeta?.tracksOfferExpiry === true;
+  const requiresValidUntil = !quickMode && targetStageMeta?.requiresValidUntil === true;
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
@@ -161,14 +173,29 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            Document Required
+            {quickMode ? (
+              <Upload className="w-5 h-5 text-primary" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            )}
+            {quickMode
+              ? (documentNameOverride ? `${documentNameOverride} Yükle` : "Belge Yükle")
+              : "Document Required"}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <p className="text-sm text-muted-foreground">
-            The <strong>{targetStageLabel}</strong> stage requires at least one document to be uploaded before the application can be moved.
-          </p>
+          {quickMode ? (
+            <p className="text-sm text-muted-foreground">
+              {documentNameOverride
+                ? <>Bu başvuru için <strong>{documentNameOverride}</strong> belgesini yükleyin.</>
+                : "Bu başvuru için belge yükleyin."}
+              {moveAfterUpload && <> Yükleme tamamlandığında başvuru <strong>{targetStageLabel}</strong> aşamasına geçecek.</>}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The <strong>{targetStageLabel}</strong> stage requires at least one document to be uploaded before the application can be moved.
+            </p>
+          )}
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Upload Documents</Label>

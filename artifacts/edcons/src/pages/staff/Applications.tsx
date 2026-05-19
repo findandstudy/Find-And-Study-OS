@@ -1333,7 +1333,7 @@ export default function ApplicationsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean } | null>(null);
+  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean; quickMode?: boolean } | null>(null);
   // Task #167 — admin-only Missing Documents action dialog state.
   const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; sourceStage: string; targetStage: string | null; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
   const [missingDocsText, setMissingDocsText] = useState("");
@@ -1584,6 +1584,7 @@ export default function ApplicationsPage() {
         targetStageLabel: targetLabel || (pipelineStages.find((s) => s.key === app.stage)?.label ?? app.stage),
         documentNameOverride: action.documentName ?? null,
         moveAfterUpload: !!targetKey,
+        quickMode: true,
       });
       return;
     }
@@ -2117,6 +2118,7 @@ export default function ApplicationsPage() {
           targetStageLabel={docUploadDialog.targetStageLabel}
           documentNameOverride={docUploadDialog.documentNameOverride ?? null}
           moveAfterUpload={docUploadDialog.moveAfterUpload !== false}
+          quickMode={docUploadDialog.quickMode === true}
           onUploaded={() => {
             queryClient.invalidateQueries({ queryKey: ["applications"] });
             queryClient.invalidateQueries({ queryKey: [`/api/applications/${docUploadDialog.appId}`] });
