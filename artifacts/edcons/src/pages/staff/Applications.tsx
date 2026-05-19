@@ -15,6 +15,8 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { OriginBadge } from "@/components/OriginBadge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColumnHeader } from "@/components/ui/column-header";
+import { ColumnSettingsMenu } from "@/components/ColumnSettingsMenu";
+import { useTablePrefs } from "@/hooks/use-table-prefs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -215,6 +217,36 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
 }
 
 type ColVariant = "won" | "lost" | undefined;
+
+type AppColId =
+  | "student"
+  | "stage"
+  | "country"
+  | "university"
+  | "program"
+  | "level"
+  | "intake"
+  | "commission"
+  | "assigned"
+  | "created";
+
+const APP_COLUMN_DEFS: { id: AppColId; label: string }[] = [
+  { id: "student", label: "Student" },
+  { id: "stage", label: "Stage" },
+  { id: "country", label: "Country" },
+  { id: "university", label: "University" },
+  { id: "program", label: "Program" },
+  { id: "level", label: "Level" },
+  { id: "intake", label: "Intake" },
+  { id: "commission", label: "Commission" },
+  { id: "assigned", label: "Assigned" },
+  { id: "created", label: "Created" },
+];
+
+const APP_DEFAULT_PREFS = {
+  order: APP_COLUMN_DEFS.map((c) => c.id),
+  hidden: [] as string[],
+};
 
 function ensureUrl(u?: string | null) {
   if (!u) return null;
@@ -1241,6 +1273,14 @@ export default function ApplicationsPage() {
   const { season } = useSeason();
   const { user } = useAuth(true, ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"]);
 
+  const {
+    prefs: colPrefs,
+    visibleOrdered: visibleAppCols,
+    toggleHidden: toggleAppCol,
+    moveColumn: moveAppCol,
+    reset: resetAppCols,
+  } = useTablePrefs("applications-table", APP_DEFAULT_PREFS, user?.id);
+
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
@@ -1510,6 +1550,16 @@ export default function ApplicationsPage() {
               entityLabel="applications"
               moveLabel="Move Stage"
             />
+            {viewMode === "list" && (
+              <ColumnSettingsMenu
+                columns={APP_COLUMN_DEFS}
+                order={colPrefs.order}
+                hidden={colPrefs.hidden}
+                onToggle={toggleAppCol}
+                onMove={moveAppCol}
+                onReset={resetAppCols}
+              />
+            )}
             {isAdmin && (
               <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); a.href = `${BASE_URL}/api/export/applications?season=${encodeURIComponent(season || "")}`; a.click(); }}>
                 <Download className="w-3.5 h-3.5" /> Excel
@@ -1569,104 +1619,182 @@ export default function ApplicationsPage() {
         {viewMode === "list" && (
           <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-2xl border">
             <div className="flex-1 overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
-                    <ColumnHeader
-                      label="Student"
-                      sort={{ sortKey: "student", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.student, onChange: v => setColFilters(f => ({ ...f, student: v })), placeholder: "Filter by student…", label: "Student contains" }}
-                    />
-                    <ColumnHeader
-                      label="Stage"
-                      sort={{ sortKey: "stage", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.stage, onChange: v => setFilters(f => ({ ...f, stage: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: "Stage" }}
-                    />
-                    <ColumnHeader
-                      label="Country"
-                      sort={{ sortKey: "country", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.country, onChange: v => setFilters(f => ({ ...f, country: v })), options: uniqueAppCountries.map(c => ({ value: c, label: c })), label: "Country" }}
-                    />
-                    <ColumnHeader
-                      label="University"
-                      sort={{ sortKey: "university", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.university, onChange: v => setFilters(f => ({ ...f, university: v })), options: uniqueAppUniversities.map(([id, name]) => ({ value: String(id), label: name || `#${id}` })), label: "University" }}
-                    />
-                    <ColumnHeader
-                      label="Program"
-                      sort={{ sortKey: "program", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: "Filter by program…", label: "Program contains" }}
-                    />
-                    <ColumnHeader
-                      label="Level"
-                      sort={{ sortKey: "level", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: colFilters.level, onChange: v => setColFilters(f => ({ ...f, level: v })), options: studyLevels.map(l => ({ value: l.key, label: l.label })), label: "Level" }}
-                    />
-                    <ColumnHeader
-                      label="Intake"
-                      sort={{ sortKey: "intake", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.intake, onChange: v => setColFilters(f => ({ ...f, intake: v })), placeholder: "Filter by intake…", label: "Intake contains" }}
-                    />
-                    <ColumnHeader
-                      label="Commission"
-                      sort={{ sortKey: "fee", current: sort, onSort: handleSort }}
-                    />
-                    <ColumnHeader
-                      label="Assigned"
-                      filter={{
-                        type: "select",
-                        value: filters.assignedTo,
-                        onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
-                        options: [
-                          { value: "unassigned", label: "Unassigned" },
-                          ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
-                        ],
-                        label: "Assigned to",
-                      }}
-                    />
-                    <ColumnHeader
-                      label="Created"
-                      sort={{ sortKey: "date", current: sort, onSort: handleSort }}
-                      filter={{
-                        type: "select",
-                        value: filters.dateRange,
-                        onChange: v => setFilters(f => ({ ...f, dateRange: v })),
-                        options: [
-                          { value: "today", label: "Today" },
-                          { value: "yesterday", label: "Yesterday" },
-                          { value: "last7", label: "Last 7 Days" },
-                          { value: "thisMonth", label: "This Month" },
-                          { value: "thisYear", label: "This Year" },
-                        ],
-                        label: "Created date",
-                      }}
-                    />
-                    <TableHead className="w-20 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow><TableCell colSpan={12} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
-                  ) : pagedApps.length === 0 ? (
-                    <TableRow><TableCell colSpan={12} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
-                  ) : pagedApps.map((app: any) => {
-                    const sm = stageMap[app.stage];
-                    const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
-                    const stageLabel = sm?.label || app.stage;
-                    const levelLabel = studyLabelOf(app.level) || app.level || "-";
-                    return (
-                      <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/staff/applications/${app.id}`)}>
-                        <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
-                        <TableCell className="font-medium"><div className="flex items-center gap-1.5"><span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>{app.studentFirstName} {app.studentLastName}</span><OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} /></div></TableCell>
-                        <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
-                        <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
-                        <TableCell className="max-w-[250px]">{app.universityId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.universityName || ""} onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>{app.universityName || "-"}</span> : <span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span>}</TableCell>
-                        <TableCell className="max-w-[250px]">{app.programId ? <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.programName || ""} onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>{app.programName || "-"}</span> : <span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span>}</TableCell>
-                        <TableCell>{levelLabel}</TableCell>
-                        <TableCell>{app.intake || "-"}</TableCell>
-                        <TableCell>{app.commissionAmount && parseFloat(app.commissionAmount) > 0 ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span> : "-"}</TableCell>
-                        <TableCell onClick={e => e.stopPropagation()}>
+              {(() => {
+                const renderHeaderCell = (id: AppColId) => {
+                  switch (id) {
+                    case "student":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Student"
+                          sort={{ sortKey: "student", current: sort, onSort: handleSort }}
+                          filter={{ type: "text", value: colFilters.student, onChange: v => setColFilters(f => ({ ...f, student: v })), placeholder: "Filter by student…", label: "Student contains" }}
+                        />
+                      );
+                    case "stage":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Stage"
+                          sort={{ sortKey: "stage", current: sort, onSort: handleSort }}
+                          filter={{ type: "select", value: filters.stage, onChange: v => setFilters(f => ({ ...f, stage: v })), options: pipelineStages.map(s => ({ value: s.key, label: s.label })), label: "Stage" }}
+                        />
+                      );
+                    case "country":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Country"
+                          sort={{ sortKey: "country", current: sort, onSort: handleSort }}
+                          filter={{ type: "select", value: filters.country, onChange: v => setFilters(f => ({ ...f, country: v })), options: uniqueAppCountries.map(c => ({ value: c, label: c })), label: "Country" }}
+                        />
+                      );
+                    case "university":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="University"
+                          sort={{ sortKey: "university", current: sort, onSort: handleSort }}
+                          filter={{ type: "select", value: filters.university, onChange: v => setFilters(f => ({ ...f, university: v })), options: uniqueAppUniversities.map(([uid, name]) => ({ value: String(uid), label: name || `#${uid}` })), label: "University" }}
+                        />
+                      );
+                    case "program":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Program"
+                          sort={{ sortKey: "program", current: sort, onSort: handleSort }}
+                          filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: "Filter by program…", label: "Program contains" }}
+                        />
+                      );
+                    case "level":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Level"
+                          sort={{ sortKey: "level", current: sort, onSort: handleSort }}
+                          filter={{ type: "select", value: colFilters.level, onChange: v => setColFilters(f => ({ ...f, level: v })), options: studyLevels.map(l => ({ value: l.key, label: l.label })), label: "Level" }}
+                        />
+                      );
+                    case "intake":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Intake"
+                          sort={{ sortKey: "intake", current: sort, onSort: handleSort }}
+                          filter={{ type: "text", value: colFilters.intake, onChange: v => setColFilters(f => ({ ...f, intake: v })), placeholder: "Filter by intake…", label: "Intake contains" }}
+                        />
+                      );
+                    case "commission":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Commission"
+                          sort={{ sortKey: "fee", current: sort, onSort: handleSort }}
+                        />
+                      );
+                    case "assigned":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Assigned"
+                          filter={{
+                            type: "select",
+                            value: filters.assignedTo,
+                            onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
+                            options: [
+                              { value: "unassigned", label: "Unassigned" },
+                              ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
+                            ],
+                            label: "Assigned to",
+                          }}
+                        />
+                      );
+                    case "created":
+                      return (
+                        <ColumnHeader
+                          key={id}
+                          label="Created"
+                          sort={{ sortKey: "date", current: sort, onSort: handleSort }}
+                          filter={{
+                            type: "select",
+                            value: filters.dateRange,
+                            onChange: v => setFilters(f => ({ ...f, dateRange: v })),
+                            options: [
+                              { value: "today", label: "Today" },
+                              { value: "yesterday", label: "Yesterday" },
+                              { value: "last7", label: "Last 7 Days" },
+                              { value: "thisMonth", label: "This Month" },
+                              { value: "thisYear", label: "This Year" },
+                            ],
+                            label: "Created date",
+                          }}
+                        />
+                      );
+                    default:
+                      return null;
+                  }
+                };
+                const renderBodyCell = (id: AppColId, app: any, stageLabel: string, stageColor: string, levelLabel: string) => {
+                  switch (id) {
+                    case "student":
+                      return (
+                        <TableCell key={id} className="font-medium">
+                          <div className="flex items-center gap-1.5">
+                            <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>
+                              {app.studentFirstName} {app.studentLastName}
+                            </span>
+                            <OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} />
+                          </div>
+                        </TableCell>
+                      );
+                    case "stage":
+                      return (
+                        <TableCell key={id}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span>
+                        </TableCell>
+                      );
+                    case "country":
+                      return <TableCell key={id} className="text-muted-foreground">{app.country || "-"}</TableCell>;
+                    case "university":
+                      return (
+                        <TableCell key={id} className="max-w-[250px]">
+                          {app.universityId ? (
+                            <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.universityName || ""} onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>
+                              {app.universityName || "-"}
+                            </span>
+                          ) : (
+                            <span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span>
+                          )}
+                        </TableCell>
+                      );
+                    case "program":
+                      return (
+                        <TableCell key={id} className="max-w-[250px]">
+                          {app.programId ? (
+                            <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.programName || ""} onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>
+                              {app.programName || "-"}
+                            </span>
+                          ) : (
+                            <span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span>
+                          )}
+                        </TableCell>
+                      );
+                    case "level":
+                      return <TableCell key={id}>{levelLabel}</TableCell>;
+                    case "intake":
+                      return <TableCell key={id}>{app.intake || "-"}</TableCell>;
+                    case "commission":
+                      return (
+                        <TableCell key={id}>
+                          {app.commissionAmount && parseFloat(app.commissionAmount) > 0
+                            ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span>
+                            : "-"}
+                        </TableCell>
+                      );
+                    case "assigned":
+                      return (
+                        <TableCell key={id} onClick={e => e.stopPropagation()}>
                           <AssignPopover
                             assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
                             staffUsers={staffUsersList}
@@ -1675,30 +1803,62 @@ export default function ApplicationsPage() {
                             size="list"
                           />
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>
-                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                          <RowActionsMenu
-                            entityType="application"
-                            entityId={app.id}
-                            entityName={`${app.studentFirstName} ${app.studentLastName}`}
-                            currentAgentId={app.agentId}
-                            currentAgentName={app.agentName}
-                            currentAssignedToId={app.assignedToId}
-                            staffUsersMap={staffUsersMap}
-                            staffUsersList={staffUsersList}
-                            currentUserId={user?.id}
-                            isAdmin={isAdmin}
-                            onEdit={() => setEditApp(app)}
-                            onDelete={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }}
-                            onAssign={(uid) => handleAssign(app.id, uid)}
-                            onRefresh={() => queryClient.invalidateQueries({ queryKey: ["applications"] })}
-                          />
-                        </TableCell>
+                      );
+                    case "created":
+                      return <TableCell key={id} className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>;
+                    default:
+                      return null;
+                  }
+                };
+                const totalColSpan = visibleAppCols.length + 2; // +select +actions
+                return (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-10"><Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} /></TableHead>
+                        {visibleAppCols.map((id) => renderHeaderCell(id as AppColId))}
+                        <TableHead className="w-20 text-right">Actions</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoading ? (
+                        <TableRow><TableCell colSpan={totalColSpan} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                      ) : pagedApps.length === 0 ? (
+                        <TableRow><TableCell colSpan={totalColSpan} className="text-center py-12 text-muted-foreground">No applications found</TableCell></TableRow>
+                      ) : pagedApps.map((app: any) => {
+                        const sm = stageMap[app.stage];
+                        const stageColor = sm ? getStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
+                        const stageLabel = sm?.label || app.stage;
+                        const levelLabel = studyLabelOf(app.level) || app.level || "-";
+                        return (
+                          <TableRow key={app.id} className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`} onClick={() => setLocation(`/staff/applications/${app.id}`)}>
+                            <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
+                            {visibleAppCols.map((id) => renderBodyCell(id as AppColId, app, stageLabel, stageColor, levelLabel))}
+                            <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                              <RowActionsMenu
+                                entityType="application"
+                                entityId={app.id}
+                                entityName={`${app.studentFirstName} ${app.studentLastName}`}
+                                currentAgentId={app.agentId}
+                                currentAgentName={app.agentName}
+                                currentAssignedToId={app.assignedToId}
+                                staffUsersMap={staffUsersMap}
+                                staffUsersList={staffUsersList}
+                                currentUserId={user?.id}
+                                isAdmin={isAdmin}
+                                onEdit={() => setEditApp(app)}
+                                onDelete={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }}
+                                onAssign={(uid) => handleAssign(app.id, uid)}
+                                onRefresh={() => queryClient.invalidateQueries({ queryKey: ["applications"] })}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                );
+              })()}
             </div>
             <TablePagination
               currentPage={pg.page}
