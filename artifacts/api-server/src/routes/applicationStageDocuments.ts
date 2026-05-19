@@ -101,11 +101,22 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes, validUntil } = req.body;
+  const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes, validUntil, documentNameOverride } = req.body;
 
   if (!stage || !fileName) {
     res.status(400).json({ error: "stage and fileName are required" });
     return;
+  }
+
+  // Task #167 — when admin configured a Document Name on a stage-action
+  // upload button, that name takes priority over the descriptive default.
+  // Keep original extension from the uploaded file.
+  let overrideBase: string | null = null;
+  if (typeof documentNameOverride === "string" && documentNameOverride.trim()) {
+    const trimmed = documentNameOverride.trim().slice(0, 64);
+    const dot = String(fileName).lastIndexOf(".");
+    const ext = dot > 0 ? String(fileName).slice(dot) : "";
+    overrideBase = `${trimmed}${ext}`;
   }
 
   const behavior = await getStageBehavior(stage);
@@ -146,7 +157,10 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   } catch (e) {
     console.error("[STAGE-DOC] failed to resolve student name for descriptive doc name:", e);
   }
-  const safeName = descriptiveName ?? sanitizeFileName(fileName);
+  // Priority: admin-configured Document Name > descriptive student name > raw upload name.
+  const safeName = overrideBase
+    ? sanitizeFileName(overrideBase)
+    : (descriptiveName ?? sanitizeFileName(fileName));
 
   if (fileData) {
     if (!mimeType) {

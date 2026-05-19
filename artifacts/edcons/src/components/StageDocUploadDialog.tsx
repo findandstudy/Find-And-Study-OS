@@ -86,16 +86,14 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           reader.readAsDataURL(file);
         });
 
-        // When admin configured a Document Name for the action, rename the
-        // uploaded file (preserving the extension). Multiple files get a
-        // numeric suffix to avoid collisions.
-        let fileName = file.name;
-        if (documentNameOverride) {
-          const dot = file.name.lastIndexOf(".");
-          const ext = dot > 0 ? file.name.slice(dot) : "";
-          const suffix = files.length > 1 ? ` (${idx + 1})` : "";
-          fileName = `${documentNameOverride}${suffix}${ext}`;
-        }
+        // When admin configured a Document Name, send it as
+        // documentNameOverride so backend persists it as the canonical
+        // filename (priority over descriptive student name). Multi-upload
+        // gets a numeric suffix appended to the override.
+        const suffix = documentNameOverride && files.length > 1 ? ` (${idx + 1})` : "";
+        const overrideForRequest = documentNameOverride
+          ? `${documentNameOverride}${suffix}`
+          : undefined;
 
         const res = await fetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents`, {
           method: "POST",
@@ -106,10 +104,11 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           credentials: "include",
           body: JSON.stringify({
             stage: docStage,
-            fileName,
+            fileName: file.name,
             fileData: base64,
             mimeType: file.type,
             sizeBytes: file.size,
+            ...(overrideForRequest ? { documentNameOverride: overrideForRequest } : {}),
             ...(supportsValidUntil && validUntil ? { validUntil } : {}),
           }),
         });

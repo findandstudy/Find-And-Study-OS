@@ -725,14 +725,49 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const AGENT_PATCH_FIELDS: string[] = [];
   let allowedFields = isStaff ? [...APP_PATCH_FIELDS] : [...AGENT_PATCH_FIELDS];
-  // Task #167 — allow manager-tier roles (super_admin/admin/manager) to
-  // transition stage via PATCH so admin-defined stage action buttons can
-  // complete their transition. Non-manager staff still cannot move stage
-  // freely; they must use action buttons that the manager configured (and
-  // those buttons hit the same endpoint under the admin's permission gate
-  // on the client, while server still enforces ADMIN_ROLES here).
-  if (!isAdmin && isStaff) {
+  // Task #167 — admin-tier (super_admin/admin/manager) can always move stage.
+  // Lower-tier staff and agents can move stage ONLY when the requested
+  // transition matches a configured action on the application's current
+  // stage AND the user passes that action's per-type permission gate
+  // (governed transition). Arbitrary stage edits remain blocked.
+  let stageGovernedAllowed = false;
+  if (!isAdmin && req.body.stage !== undefined) {
+    const [currentApp] = await db.select({ stage: applicationsTable.stage })
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+    if (currentApp) {
+      const [stageRow] = await db.select({ actions: pipelineStagesTable.actions, uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel })
+        .from(pipelineStagesTable)
+        .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, currentApp.stage)));
+      const actions = Array.isArray(stageRow?.actions) ? stageRow!.actions : [];
+      const permLevel = stageRow?.uploadPermissionLevel || "none";
+      const isAgent = isAgentRole(user.role);
+      for (const act of actions as Array<{ type?: string; targetStageKey?: string | null }>) {
+        if (!act || act.targetStageKey !== req.body.stage) continue;
+        let ok = false;
+        if (act.type === "upload") {
+          ok = (
+            (permLevel === "admin_only" && isAdmin) ||
+            (permLevel === "staff_only" && isStaff) ||
+            (permLevel === "staff_and_agent" && (isStaff || isAgent)) ||
+            (permLevel === "everyone")
+          );
+        } else if (act.type === "download") {
+          ok = isStaff || isAgent;
+        } else if (act.type === "missing_docs") {
+          ok = isAdmin;
+        }
+        if (ok) { stageGovernedAllowed = true; break; }
+      }
+    }
+  }
+  if (!isAdmin && isStaff && !stageGovernedAllowed) {
     allowedFields = allowedFields.filter(f => f !== "stage");
+  }
+  // Agents normally have no patch fields, but governed action transitions
+  // need stage to be writable for them too.
+  if (!isStaff && isAgentRole(user.role) && stageGovernedAllowed) {
+    allowedFields = ["stage"];
   }
 
   if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
