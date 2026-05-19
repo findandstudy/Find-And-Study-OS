@@ -37,7 +37,7 @@ import {
   UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe, DollarSign,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { usePipelineStages, type PipelineStage, type StageAction } from "@/hooks/use-pipeline-stages";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import {
   DndContext,
@@ -217,6 +217,19 @@ function StudentSearchInput({ value, onChange }: { value: Student | null; onChan
 }
 
 type ColVariant = "won" | "lost" | undefined;
+
+// Task #167 — minimal row/document shapes used by stage-action handlers.
+// Avoids `any` casts inside the button render and download paths.
+interface ApplicationRow {
+  id: number;
+  stage: string;
+  [key: string]: unknown;
+}
+interface StageDocumentEntry {
+  id: number;
+  fileName?: string | null;
+  createdAt?: string | null;
+}
 
 type AppColId =
   | "student"
@@ -1316,9 +1329,9 @@ export default function ApplicationsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string } | null>(null);
+  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean } | null>(null);
   // Task #167 — admin-only Missing Documents action dialog state.
-  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
+  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; targetStage: string | null; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
   const [missingDocsText, setMissingDocsText] = useState("");
   const [missingDocsChecked, setMissingDocsChecked] = useState<Record<string, boolean>>({});
   const [missingDocsSaving, setMissingDocsSaving] = useState(false);
@@ -1518,7 +1531,10 @@ export default function ApplicationsPage() {
   // Task #167 — generic stage transition used by stage action buttons. Returns
   // true on success so callers can chain follow-up UI (close dialogs, reset
   // state). Surfaces the same DOCS_REQUIRED upload flow as drag-drop.
-  async function moveAppToStage(appId: number, targetStage: string): Promise<boolean> {
+  async function moveAppToStage(appId: number, targetStage: string | null | undefined): Promise<boolean> {
+    // Task #167 — "Don't change" semantics: empty/null target means the
+    // action completed without a stage transition. Treat as success.
+    if (!targetStage) return true;
     const colLabel = pipelineStages.find((s) => s.key === targetStage)?.label ?? targetStage;
     const csrfRaw = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1];
     const csrf = csrfRaw ? decodeURIComponent(csrfRaw) : "";
@@ -1547,31 +1563,53 @@ export default function ApplicationsPage() {
     return false;
   }
 
-  async function handleStageAction(app: any, action: import("@/hooks/use-pipeline-stages").StageAction) {
-    const targetLabel = pipelineStages.find((s) => s.key === action.targetStageKey)?.label ?? action.targetStageKey;
+  async function handleStageAction(app: ApplicationRow, action: StageAction) {
+    const targetKey = action.targetStageKey ?? null;
+    const targetLabel = targetKey
+      ? (pipelineStages.find((s) => s.key === targetKey)?.label ?? targetKey)
+      : "";
     const buttonLabel = action.label || (action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs");
     if (action.type === "upload") {
       // Task #167 — upload document against the CURRENT stage (where the
-      // action lives); after success move to the configured target stage.
-      setDocUploadDialog({ appId: app.id, uploadStage: app.stage, targetStage: action.targetStageKey, targetStageLabel: targetLabel });
+      // action lives); after success move to the configured target stage
+      // (or stay if target is "Don't change").
+      setDocUploadDialog({
+        appId: app.id,
+        uploadStage: app.stage,
+        targetStage: targetKey ?? app.stage,
+        targetStageLabel: targetLabel || (pipelineStages.find((s) => s.key === app.stage)?.label ?? app.stage),
+        documentNameOverride: action.documentName ?? null,
+        moveAfterUpload: !!targetKey,
+      });
       return;
     }
     if (action.type === "download") {
       try {
-        const docs = await apiFetch(`${BASE_URL}/api/applications/${app.id}/stage-documents?stage=${encodeURIComponent(app.stage)}`) as any[];
+        const docs = await apiFetch(`${BASE_URL}/api/applications/${app.id}/stage-documents?stage=${encodeURIComponent(app.stage)}`) as StageDocumentEntry[];
         const list = Array.isArray(docs) ? docs : [];
-        if (list.length === 0) {
-          toast({ title: "Belge bulunamadı", description: "Bu aşamada indirilebilecek bir belge yok.", variant: "destructive" });
+        // Match by admin-configured document name (case-insensitive, prefix-aware
+        // to tolerate extensions and "(2)" suffixes). Falls back to all docs.
+        const wanted = (action.documentName || "").trim().toLowerCase();
+        const filtered = wanted
+          ? list.filter((d) => (d.fileName || "").toLowerCase().includes(wanted))
+          : list;
+        if (filtered.length === 0) {
+          toast({
+            title: "Belge bulunamadı",
+            description: wanted
+              ? `"${action.documentName}" adlı belge bu aşamada yok.`
+              : "Bu aşamada indirilebilecek bir belge yok.",
+            variant: "destructive",
+          });
           return;
         }
-        // Latest by id (or createdAt fallback).
-        const latest = list.slice().sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
-        const a = document.createElement("a");
-        a.href = `${BASE_URL}/api/applications/${app.id}/stage-documents/${latest.id}/download`;
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.click();
-        await moveAppToStage(app.id, action.targetStageKey);
+        const latest = filtered.slice().sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
+        const link = document.createElement("a");
+        link.href = `${BASE_URL}/api/applications/${app.id}/stage-documents/${latest.id}/download`;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.click();
+        await moveAppToStage(app.id, targetKey);
       } catch {
         toast({ title: "Error", description: "Belge indirilemedi", variant: "destructive" });
       }
@@ -1585,7 +1623,7 @@ export default function ApplicationsPage() {
       const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];
       setMissingDocsText("");
       setMissingDocsChecked(Object.fromEntries(required.map((t) => [t, true])));
-      setMissingDocsDialog({ appId: app.id, targetStage: action.targetStageKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
+      setMissingDocsDialog({ appId: app.id, targetStage: targetKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
       return;
     }
   }
@@ -1947,16 +1985,17 @@ export default function ApplicationsPage() {
                     case "button1":
                     case "button2": {
                       const slot = id === "button1" ? 0 : 1;
-                      const sm2 = stageMap[app.stage];
-                      const action = (sm2 as any)?.actions?.[slot] as import("@/hooks/use-pipeline-stages").StageAction | undefined;
+                      const stageDef: PipelineStage | undefined = stageMap[app.stage];
+                      const action: StageAction | undefined = stageDef?.actions?.[slot];
                       if (!action) {
-                        return <TableCell key={id} className="text-muted-foreground text-xs">-</TableCell>;
+                        // Task #167 — empty cell (not "-") when slot is None / unconfigured.
+                        return <TableCell key={id} />;
                       }
                       // Task #167 — gate by role.
                       // Upload action follows the stage's uploadPermissionLevel so
                       // admin/staff/agent visibility matches the document upload rules.
                       // missing_docs is admin-only. download is staff+admin (no agents).
-                      const permLevel = (sm2 as any)?.uploadPermissionLevel || "none";
+                      const permLevel = stageDef?.uploadPermissionLevel || "none";
                       const role = user?.role || "";
                       const isAgent = role === "agent" || role === "sub_agent";
                       const isStaff = role === "super_admin" || role === "admin" || role === "manager" || role === "staff" || role === "support";
@@ -1984,7 +2023,7 @@ export default function ApplicationsPage() {
                             style={color ? { borderColor: color, color } : undefined}
                             disabled={!allowed}
                             title={!allowed ? denyReason : undefined}
-                            onClick={() => { if (allowed) void handleStageAction(app, action); }}
+                            onClick={() => { if (allowed) void handleStageAction(app as ApplicationRow, action); }}
                           >
                             {label}
                           </Button>
@@ -2067,6 +2106,8 @@ export default function ApplicationsPage() {
           uploadStage={docUploadDialog.uploadStage}
           targetStage={docUploadDialog.targetStage}
           targetStageLabel={docUploadDialog.targetStageLabel}
+          documentNameOverride={docUploadDialog.documentNameOverride ?? null}
+          moveAfterUpload={docUploadDialog.moveAfterUpload !== false}
           onUploaded={() => {
             queryClient.invalidateQueries({ queryKey: ["applications"] });
             queryClient.invalidateQueries({ queryKey: [`/api/applications/${docUploadDialog.appId}`] });

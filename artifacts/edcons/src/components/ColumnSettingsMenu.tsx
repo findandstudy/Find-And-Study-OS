@@ -85,10 +85,15 @@ export function ColumnSettingsMenu({
                 />
                 <label
                   htmlFor={`col-${id}`}
-                  className={`flex-1 text-sm select-none truncate ${locked ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
+                  className={`flex-1 text-sm select-none truncate flex items-center gap-1.5 ${locked ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
                   title={locked ? "Bu sütun her zaman görünür" : undefined}
                 >
-                  {labelOf(id)}
+                  <span className="truncate">{labelOf(id)}</span>
+                  {locked && (
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground border border-border/70">
+                      Her zaman görünür
+                    </span>
+                  )}
                 </label>
                 <Button
                   variant="ghost"

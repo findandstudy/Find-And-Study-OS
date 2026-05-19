@@ -126,13 +126,14 @@ function StageActionEditor({
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Move to stage</Label>
+          <Label className="text-[11px] text-muted-foreground">After action → Stage</Label>
           <Select
-            value={action.targetStageKey || ""}
-            onValueChange={(v) => onChange({ ...action, targetStageKey: v })}
+            value={action.targetStageKey || "__none__"}
+            onValueChange={(v) => onChange({ ...action, targetStageKey: v === "__none__" ? null : v })}
           >
-            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select stage…" /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="__none__">— Don't change —</SelectItem>
               {targetOptions.map((s) => (
                 <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
               ))}
@@ -149,18 +150,37 @@ function StageActionEditor({
             onChange={(e) => onChange({ ...action, label: e.target.value })}
             placeholder={typeOpt?.defaultLabel || "Button"}
             className="h-8 text-xs"
+            maxLength={32}
           />
         </div>
         <div className="space-y-1">
           <Label className="text-[11px] text-muted-foreground">Color</Label>
           <input
             type="color"
-            value={action.color || typeOpt?.defaultColor || "#3B82F6"}
-            onChange={(e) => onChange({ ...action, color: e.target.value })}
+            value={action.color || typeOpt?.defaultColor || "#3b82f6"}
+            onChange={(e) => onChange({ ...action, color: e.target.value.toLowerCase() })}
             className="h-8 w-12 rounded border cursor-pointer p-0.5"
           />
         </div>
       </div>
+
+      {(action.type === "upload" || action.type === "download") && (
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">
+            Document Name
+            <span className="ml-1 text-muted-foreground/70">
+              ({action.type === "upload" ? "yüklenen dosya bu adla kaydedilir" : "bu adla eşleşen belge indirilir"})
+            </span>
+          </Label>
+          <Input
+            value={action.documentName || ""}
+            onChange={(e) => onChange({ ...action, documentName: e.target.value })}
+            placeholder="örn. Offer Letter"
+            className="h-8 text-xs"
+            maxLength={64}
+          />
+        </div>
+      )}
 
       <div className="space-y-1">
         <Label className="text-[11px] text-muted-foreground">
@@ -274,12 +294,13 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
     if (actions.length >= 2) return;
     // Default to "upload" (first non-"none" option) when adding a new slot.
     const opt = ACTION_TYPE_OPTIONS.find((o) => o.value !== "none")!;
-    const fallbackTarget = allStages.find((s) => s.key && s.key !== stage.key)?.key || stage.key;
     const newAction: StageAction = {
       type: opt.value as StageActionType,
       label: opt.defaultLabel,
+      documentName: null,
       color: opt.defaultColor,
-      targetStageKey: fallbackTarget,
+      // "Don't change" by default — admin opts in to a transition.
+      targetStageKey: null,
       requiredDocTypes: [],
     };
     onChange({ ...stage, actions: [...actions, newAction] });

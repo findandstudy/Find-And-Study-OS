@@ -191,15 +191,17 @@ function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: strin
     if (!ALLOWED_ACTION_TYPES.has(rawType)) {
       throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: invalid type "${rawType}"`);
     }
-    const targetStageKey = String(a.targetStageKey || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    if (!targetStageKey) {
-      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage is required`);
-    }
-    if (!validStageKeys.has(targetStageKey)) {
-      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage "${targetStageKey}" does not exist`);
-    }
-    if (targetStageKey === ownStageKey) {
-      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage cannot be the same stage`);
+    // targetStageKey is optional: empty/null = "Don't change" (no stage transition).
+    let targetStageKey: string | null = null;
+    if (a.targetStageKey !== undefined && a.targetStageKey !== null && a.targetStageKey !== "") {
+      const t = String(a.targetStageKey).toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      if (!validStageKeys.has(t)) {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage "${t}" does not exist`);
+      }
+      if (t === ownStageKey) {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage cannot be the same stage`);
+      }
+      targetStageKey = t;
     }
     let label: string | null = null;
     if (a.label !== undefined && a.label !== null) {
@@ -211,6 +213,19 @@ function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: strin
         throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: label too long (max 32)`);
       }
       label = trimmed || null;
+    }
+    // Document Name — independent of button label. Used for stored filename
+    // (upload) and selecting matching document (download). Max 64 chars.
+    let documentName: string | null = null;
+    if (a.documentName !== undefined && a.documentName !== null) {
+      if (typeof a.documentName !== "string") {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: documentName must be a string`);
+      }
+      const trimmed = a.documentName.trim();
+      if (trimmed.length > 64) {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: documentName too long (max 64)`);
+      }
+      documentName = trimmed || null;
     }
     let color: string | null = null;
     if (a.color !== undefined && a.color !== null && a.color !== "") {
@@ -232,7 +247,7 @@ function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: strin
     if (rawType === "missing_docs" && requiredDocTypes.length === 0) {
       throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: "Missing Documents" requires at least one document type`);
     }
-    out.push({ type: rawType as StageAction["type"], label, color, targetStageKey, requiredDocTypes });
+    out.push({ type: rawType as StageAction["type"], label, documentName, color, targetStageKey, requiredDocTypes });
   }
   return out;
 }

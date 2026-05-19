@@ -6,11 +6,16 @@ import { pgTable, serial, text, integer, timestamp, uniqueIndex, boolean, jsonb 
 export type StageActionType = "upload" | "download" | "missing_docs";
 export interface StageAction {
   type: StageActionType;
+  // Button label (display text). Falls back to type-default when empty.
   label?: string | null;
+  // Document Name — for upload/download actions only. On upload this is
+  // used as the stored filename (extension preserved); on download it is
+  // used to select the matching stage document. Independent of `label`.
+  documentName?: string | null;
   color?: string | null;
-  targetStageKey: string;
-  // Optional document-type whitelist used by upload/download/missing_docs
-  // to narrow which doc types the action applies to. Empty = any.
+  // Empty / null = "Don't change" — action runs without transitioning.
+  targetStageKey?: string | null;
+  // For missing_docs (required) and upload/download (informational).
   requiredDocTypes?: string[];
 }
 

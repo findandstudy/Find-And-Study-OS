@@ -7,8 +7,10 @@ export type StageActionType = "upload" | "download" | "missing_docs";
 export interface StageAction {
   type: StageActionType;
   label?: string | null;
+  documentName?: string | null;
   color?: string | null;
-  targetStageKey: string;
+  // Empty / null = "Don't change" — no stage transition after action.
+  targetStageKey?: string | null;
   requiredDocTypes?: string[];
 }
 

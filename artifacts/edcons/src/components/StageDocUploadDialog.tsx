@@ -27,9 +27,20 @@ interface StageDocUploadDialogProps {
    * preserving the original DOCS_REQUIRED behavior used by drag-and-drop.
    */
   uploadStage?: string;
+  /**
+   * Task #167 — when set, uploaded files are renamed to this document name
+   * (extension preserved). Used by stage-action buttons so the saved file
+   * matches the admin-configured Document Name.
+   */
+  documentNameOverride?: string | null;
+  /**
+   * Task #167 — when false, skip the stage PATCH after upload ("Don't
+   * change" target). Defaults to true to preserve drag-and-drop behavior.
+   */
+  moveAfterUpload?: boolean;
 }
 
-export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded, uploadStage }: StageDocUploadDialogProps) {
+export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded, uploadStage, documentNameOverride, moveAfterUpload = true }: StageDocUploadDialogProps) {
   const docStage = uploadStage || targetStage;
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -63,7 +74,8 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
     }
     setUploading(true);
     try {
-      for (const file of files) {
+      for (let idx = 0; idx < files.length; idx++) {
+        const file = files[idx];
         const reader = new FileReader();
         const base64 = await new Promise<string>((resolve, reject) => {
           reader.onload = () => {
@@ -74,6 +86,17 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           reader.readAsDataURL(file);
         });
 
+        // When admin configured a Document Name for the action, rename the
+        // uploaded file (preserving the extension). Multiple files get a
+        // numeric suffix to avoid collisions.
+        let fileName = file.name;
+        if (documentNameOverride) {
+          const dot = file.name.lastIndexOf(".");
+          const ext = dot > 0 ? file.name.slice(dot) : "";
+          const suffix = files.length > 1 ? ` (${idx + 1})` : "";
+          fileName = `${documentNameOverride}${suffix}${ext}`;
+        }
+
         const res = await fetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents`, {
           method: "POST",
           headers: {
@@ -83,7 +106,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           credentials: "include",
           body: JSON.stringify({
             stage: docStage,
-            fileName: file.name,
+            fileName,
             fileData: base64,
             mimeType: file.type,
             sizeBytes: file.size,
@@ -96,22 +119,25 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
         }
       }
 
-      const stageRes = await fetch(`${BASE_URL}/api/applications/${applicationId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": getCsrfToken(),
-        },
-        credentials: "include",
-        body: JSON.stringify({ stage: targetStage }),
-      });
+      if (moveAfterUpload) {
+        const stageRes = await fetch(`${BASE_URL}/api/applications/${applicationId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": getCsrfToken(),
+          },
+          credentials: "include",
+          body: JSON.stringify({ stage: targetStage }),
+        });
 
-      if (!stageRes.ok) {
-        const err = await stageRes.json().catch(() => ({ error: "Stage update failed" }));
-        throw new Error(err.error || "Stage update failed");
+        if (!stageRes.ok) {
+          const err = await stageRes.json().catch(() => ({ error: "Stage update failed" }));
+          throw new Error(err.error || "Stage update failed");
+        }
+        toast({ title: `Documents uploaded and moved to ${targetStageLabel}` });
+      } else {
+        toast({ title: "Belge yüklendi" });
       }
-
-      toast({ title: `Documents uploaded and moved to ${targetStageLabel}` });
       setFiles([]);
       setValidUntil("");
       onUploaded();
