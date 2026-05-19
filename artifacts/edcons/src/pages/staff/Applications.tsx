@@ -1335,7 +1335,7 @@ export default function ApplicationsPage() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean } | null>(null);
   // Task #167 — admin-only Missing Documents action dialog state.
-  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; targetStage: string | null; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
+  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; sourceStage: string; targetStage: string | null; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
   const [missingDocsText, setMissingDocsText] = useState("");
   const [missingDocsChecked, setMissingDocsChecked] = useState<Record<string, boolean>>({});
   const [missingDocsSaving, setMissingDocsSaving] = useState(false);
@@ -1623,14 +1623,10 @@ export default function ApplicationsPage() {
       return;
     }
     if (action.type === "missing_docs") {
-      if (!isAdmin) {
-        toast({ title: "İzin yok", description: "Bu aksiyon yalnızca yöneticilere açıktır.", variant: "destructive" });
-        return;
-      }
       const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];
       setMissingDocsText("");
       setMissingDocsChecked(Object.fromEntries(required.map((t) => [t, true])));
-      setMissingDocsDialog({ appId: app.id, targetStage: targetKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
+      setMissingDocsDialog({ appId: app.id, sourceStage: app.stage, targetStage: targetKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
       return;
     }
   }
@@ -1652,7 +1648,7 @@ export default function ApplicationsPage() {
       await apiFetch(`${BASE_URL}/api/applications/${missingDocsDialog.appId}/missing-doc-notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ notes, stage: missingDocsDialog.sourceStage }),
       });
       const moved = await moveAppToStage(missingDocsDialog.appId, missingDocsDialog.targetStage);
       if (moved) {

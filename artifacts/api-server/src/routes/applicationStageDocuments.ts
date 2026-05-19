@@ -325,13 +325,33 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
-  // Task #167 — follow stage upload permission level (admin_only/staff_only/
-  // staff_and_agent/everyone) so non-admin staff and eligible agents can
-  // complete the Missing Documents action when the stage allows it.
+  // Task #167 — row-level authz before any read/write.
+  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
+
+  const { notes, stage: stageParam } = req.body as { notes?: unknown; stage?: string };
+  if (!notes || !Array.isArray(notes)) {
+    res.status(400).json({ error: "notes array is required" });
+    return;
+  }
+
+  // Determine the action's source stage from the request, falling back to
+  // the application's current stage. Notes are tied to that stage so custom
+  // pipeline workflows (not just a hardcoded "missing_docs" key) work.
+  let stageKey = typeof stageParam === "string" && stageParam.trim() ? stageParam.trim() : "";
+  if (!stageKey) {
+    const [appRow] = await db.select({ stage: applicationsTable.stage })
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
+    if (!appRow) { res.status(404).json({ error: "Application not found" }); return; }
+    stageKey = appRow.stage;
+  }
+
+  // Authorize against THAT stage's uploadPermissionLevel (not a hardcoded key).
   const isAdmin = ADMIN_ROLES.includes(user.role as any);
   const [stageRow] = await db.select({ uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel })
     .from(pipelineStagesTable)
-    .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, "missing_docs")));
+    .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, stageKey)));
   const permLevel = stageRow?.uploadPermissionLevel || "admin_only";
   const isStaff = isStaffRole(user.role);
   const isAgent = isAgentRole(user.role);
@@ -345,23 +365,17 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
     return;
   }
 
-  const { notes } = req.body;
-  if (!notes || !Array.isArray(notes)) {
-    res.status(400).json({ error: "notes array is required" });
-    return;
-  }
-
   await db.delete(applicationStageDocumentsTable).where(and(
     eq(applicationStageDocumentsTable.applicationId, applicationId),
-    eq(applicationStageDocumentsTable.stage, "missing_docs"),
+    eq(applicationStageDocumentsTable.stage, stageKey),
     eq(applicationStageDocumentsTable.isMissingDocNote, true),
   ));
 
   const uploaderName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email;
 
-  const insertValues = notes.filter((n: string) => n.trim()).map((note: string) => ({
+  const insertValues = notes.filter((n: string) => typeof n === "string" && n.trim()).map((note: string) => ({
     applicationId,
-    stage: "missing_docs",
+    stage: stageKey,
     fileName: note.trim(),
     uploadedBy: user.id,
     uploadedByRole: user.role,
@@ -375,11 +389,11 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
 
   const result = await db.select().from(applicationStageDocumentsTable).where(and(
     eq(applicationStageDocumentsTable.applicationId, applicationId),
-    eq(applicationStageDocumentsTable.stage, "missing_docs"),
+    eq(applicationStageDocumentsTable.stage, stageKey),
     eq(applicationStageDocumentsTable.isMissingDocNote, true),
   )).orderBy(desc(applicationStageDocumentsTable.createdAt));
 
-  await logAudit(user.id, "update_missing_doc_notes", "application", applicationId, { count: result.length }, req.ip);
+  await logAudit(user.id, "update_missing_doc_notes", "application", applicationId, { count: result.length, stage: stageKey }, req.ip);
   res.json(result);
 });
 
