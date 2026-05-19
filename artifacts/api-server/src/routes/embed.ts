@@ -1100,7 +1100,12 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-cc-trigger img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0;display:block}
 .ew-cc-trigger .ew-cc-code{flex:1;text-align:left;font-weight:500}
 .ew-cc-trigger .ew-cc-caret{margin-left:auto;font-size:0.7rem;opacity:.6}
-.ew-cc-list{position:absolute;top:calc(100% + 4px);left:0;right:0;min-width:240px;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:1000;padding:4px;display:none}
+.ew-cc-list{position:absolute;top:calc(100% + 4px);left:0;right:0;min-width:260px;max-height:300px;overflow-y:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:1000;padding:4px;display:none}
+.ew-cc-search{position:sticky;top:0;display:block;width:calc(100% - 4px);margin:0 2px 4px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#1f2937;font-size:0.85rem;outline:none;box-sizing:border-box;z-index:2}
+.ew-cc-search:focus{border-color:${primaryColor};box-shadow:0 0 0 3px ${primaryColor}22}
+.ew-cc-item.ew-cc-hidden{display:none}
+.ew-cc-empty{display:none;padding:10px;text-align:center;color:#94a3b8;font-size:0.8rem}
+.ew-cc-empty.ew-cc-empty-show{display:block}
 .ew-cc-list.open{display:block}
 .ew-cc-list.ew-cc-list-up{top:auto;bottom:calc(100% + 4px)}
 .ew-cc-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:0.85rem;color:#1f2937}
@@ -1686,7 +1691,7 @@ function renderFormContent(prog){
       var o=ops[pj];
       var lc=o[1].toLowerCase();
       var act=o[0]===sel?' active':'';
-      listHtml+='<div class="ew-cc-item'+act+'" role="option" tabindex="-1" aria-selected="'+(o[0]===sel?'true':'false')+'" data-cc="'+o[0]+'" data-iso="'+o[1]+'">'+
+      listHtml+='<div class="ew-cc-item'+act+'" role="option" tabindex="-1" aria-selected="'+(o[0]===sel?'true':'false')+'" data-cc="'+o[0]+'" data-iso="'+o[1]+'" data-name="'+esc(String(o[2]||'').toLowerCase())+'">'+
         '<img src="https://flagcdn.com/24x18/'+lc+'.png" srcset="https://flagcdn.com/48x36/'+lc+'.png 2x" alt="">'+
         '<span class="ew-cc-item-code">'+o[0]+'</span>'+
         '<span class="ew-cc-item-name">'+o[2]+'</span>'+
@@ -1694,7 +1699,11 @@ function renderFormContent(prog){
     }
     return '<div class="ew-cc"><input type="hidden" name="countryCode" value="'+esc(sel)+'">'+
       '<button type="button" class="ew-cc-trigger" aria-haspopup="listbox" aria-expanded="false">'+trigInner+'</button>'+
-      '<div class="ew-cc-list" role="listbox">'+listHtml+'</div>'+
+      '<div class="ew-cc-list" role="listbox">'+
+        '<input type="text" class="ew-cc-search" placeholder="Search country or code" autocomplete="off">'+
+        listHtml+
+        '<div class="ew-cc-empty">No matches</div>'+
+      '</div>'+
     '</div>';
   }
   if(formStep==='personal'){
@@ -2083,11 +2092,44 @@ function wireNameAndPhoneNormalizers(scope){
   for(var k=0;k<phones.length;k++){(function(el){
     if(el.__ewPhoneBound)return; el.__ewPhoneBound=true;
     el.setAttribute('inputmode','tel');
+    el.setAttribute('pattern','[0-9]*');
     if(el.value)el.value=el.value.replace(/\D/g,'');
+    // beforeinput: yazılan/yapıştırılan metinden rakam dışı her şeyi at, yine de
+    // izin verilen rakamları manuel yerleştir. silme/ok tuşları etkilenmez.
+    el.addEventListener('beforeinput',function(e){
+      var data=e.data; if(data==null)return;
+      if(/[^\d]/.test(data)){
+        e.preventDefault();
+        var cleaned=String(data).replace(/\D/g,'');
+        var start=el.selectionStart||0, end=el.selectionEnd||0;
+        el.value=el.value.slice(0,start)+cleaned+el.value.slice(end);
+        var np=start+cleaned.length;
+        try{el.setSelectionRange(np,np);}catch(_){}
+        try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}
+      }
+    });
+    el.addEventListener('paste',function(e){
+      try{
+        var cd=e.clipboardData||(window.clipboardData);
+        if(!cd)return;
+        var txt=cd.getData('text');
+        if(txt==null)return;
+        e.preventDefault();
+        var cleaned=String(txt).replace(/\D/g,'');
+        var start=el.selectionStart||0, end=el.selectionEnd||0;
+        el.value=el.value.slice(0,start)+cleaned+el.value.slice(end);
+        var np=start+cleaned.length;
+        try{el.setSelectionRange(np,np);}catch(_){}
+      }catch(_){}
+    });
     el.addEventListener('input',function(){
       var pos=null; try{pos=el.selectionStart;}catch(e){}
       var v=el.value; var nv=v.replace(/\D/g,'');
       if(v!==nv){el.value=nv; var delta=v.length-nv.length; if(pos!=null){var np=Math.max(0,pos-delta);try{el.setSelectionRange(np,np);}catch(e){}}}
+    });
+    el.addEventListener('blur',function(){
+      var v=el.value; var nv=v.replace(/\D/g,'');
+      if(v!==nv)el.value=nv;
     });
   })(phones[k]);}
 }
@@ -2182,12 +2224,30 @@ function wireCcDropdown(scope){
     var trig=cc.querySelector('.ew-cc-trigger');
     var list=cc.querySelector('.ew-cc-list');
     var hidden=cc.querySelector('input[type="hidden"]');
+    var search=cc.querySelector('.ew-cc-search');
+    var empty=cc.querySelector('.ew-cc-empty');
     if(!trig||!list||!hidden)return;
     function items(){return list.querySelectorAll('.ew-cc-item');}
+    function visibleItems(){return list.querySelectorAll('.ew-cc-item:not(.ew-cc-hidden)');}
+    function applyFilter(){
+      if(!search)return;
+      var q=(search.value||'').toLowerCase().trim();
+      var its=items(); var shown=0;
+      for(var k=0;k<its.length;k++){
+        var nm=its[k].getAttribute('data-name')||'';
+        var cd=(its[k].getAttribute('data-cc')||'').toLowerCase();
+        var iso=(its[k].getAttribute('data-iso')||'').toLowerCase();
+        var match=!q||nm.indexOf(q)>=0||cd.indexOf(q)>=0||iso.indexOf(q)>=0;
+        its[k].classList.toggle('ew-cc-hidden',!match);
+        if(match)shown++;
+      }
+      if(empty)empty.classList.toggle('ew-cc-empty-show',shown===0);
+    }
     function close(){
       list.classList.remove('open');list.classList.remove('ew-cc-list-up');
       list.style.top='';list.style.bottom='';
       trig.setAttribute('aria-expanded','false');
+      if(search){search.value='';applyFilter();}
       // Let the iframe shrink back to its idle height once the dropdown
       // is gone — its open state was contributing to the reported height.
       if(typeof resizeParent==='function')resizeParent();
@@ -2216,8 +2276,12 @@ function wireCcDropdown(scope){
       // Ensure the iframe is tall enough to show the full dropdown without
       // clipping at its boundary (cross-origin iframes can't escape).
       if(typeof resizeParent==='function')resizeParent();
-      var act=list.querySelector('.ew-cc-item.active')||items()[0];
-      if(act){act.focus({preventScroll:false});if(act.scrollIntoView)act.scrollIntoView({block:'nearest'});}
+      if(search){
+        try{search.focus({preventScroll:false});}catch(_){try{search.focus();}catch(__){}}
+      } else {
+        var act=list.querySelector('.ew-cc-item.active')||items()[0];
+        if(act){act.focus({preventScroll:false});if(act.scrollIntoView)act.scrollIntoView({block:'nearest'});}
+      }
     }
     function commit(item){
       if(!item)return;
@@ -2246,8 +2310,23 @@ function wireCcDropdown(scope){
       var item=e.target.closest?e.target.closest('.ew-cc-item'):null;
       commit(item);
     });
+    if(search){
+      search.addEventListener('click',function(e){e.stopPropagation();});
+      search.addEventListener('input',function(){applyFilter();});
+      search.addEventListener('keydown',function(e){
+        if(e.key==='ArrowDown'){
+          e.preventDefault();
+          var v=visibleItems(); if(v.length){v[0].focus();v[0].scrollIntoView({block:'nearest'});}
+        } else if(e.key==='Enter'){
+          e.preventDefault();
+          var v2=visibleItems(); if(v2.length)commit(v2[0]);
+        } else if(e.key==='Escape'){
+          e.preventDefault();close();trig.focus();
+        }
+      });
+    }
     list.addEventListener('keydown',function(e){
-      var its=items();if(!its.length)return;
+      var its=visibleItems();if(!its.length)return;
       var cur=document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('ew-cc-item')?document.activeElement:null;
       var idx=-1;for(var k=0;k<its.length;k++)if(its[k]===cur){idx=k;break;}
       if(e.key==='ArrowDown'){e.preventDefault();var n=its[Math.min(its.length-1,idx+1)]||its[0];n.focus();n.scrollIntoView({block:'nearest'});}
@@ -2260,12 +2339,22 @@ function wireCcDropdown(scope){
   })(ccs[i]);}
 }
 
+function sanitizeSavedFormData(){
+  // Belt-and-suspenders: telefonu her zaman digits-only, name benzerlerini TR→Latin UPPER yap.
+  if(savedFormData.phone){savedFormData.phone=String(savedFormData.phone).replace(/\D/g,'');}
+  var NLF=['firstName','lastName','motherName','fatherName','highSchool','address'];
+  for(var ni=0;ni<NLF.length;ni++){
+    var key=NLF[ni];
+    if(savedFormData[key]){savedFormData[key]=ewToLatinUpper(savedFormData[key]);}
+  }
+}
 function snapshotForm(scope){
   var ids=['ew-personal-form','ew-form'];
   for(var i=0;i<ids.length;i++){
     var f=scope?$('#'+ids[i],scope):$('#'+ids[i]);
     if(f){new FormData(f).forEach(function(v,k){savedFormData[k]=v});}
   }
+  sanitizeSavedFormData();
 }
 
 // Capture the personal-info form values into savedFormData and advance to
@@ -2276,6 +2365,7 @@ function handleNextPersonal(scope){
   if(form){
     new FormData(form).forEach(function(v,k){savedFormData[k]=v});
   }
+  sanitizeSavedFormData();
   if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email||!savedFormData.phone||!savedFormData.countryCode){
     alert('Please fill in all required fields, including the phone country code.');
     return;
