@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable } from "@workspace/db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, isAgentRole, isStaffRole } from "../lib/roles";
 import { canUploadStageDocument } from "../lib/stagePermissions";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
@@ -325,9 +325,23 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
+  // Task #167 — follow stage upload permission level (admin_only/staff_only/
+  // staff_and_agent/everyone) so non-admin staff and eligible agents can
+  // complete the Missing Documents action when the stage allows it.
   const isAdmin = ADMIN_ROLES.includes(user.role as any);
-  if (!isAdmin) {
-    res.status(403).json({ error: "Only administrators can manage missing document notes" });
+  const [stageRow] = await db.select({ uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel })
+    .from(pipelineStagesTable)
+    .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, "missing_docs")));
+  const permLevel = stageRow?.uploadPermissionLevel || "admin_only";
+  const isStaff = isStaffRole(user.role);
+  const isAgent = isAgentRole(user.role);
+  let allowed = false;
+  if (permLevel === "everyone") allowed = true;
+  else if (permLevel === "staff_and_agent") allowed = isStaff || isAgent;
+  else if (permLevel === "staff_only") allowed = isStaff;
+  else if (permLevel === "admin_only") allowed = isAdmin;
+  if (!allowed) {
+    res.status(403).json({ error: "Bu aşamada eksik belge notu eklemeye yetkiniz yok" });
     return;
   }
 

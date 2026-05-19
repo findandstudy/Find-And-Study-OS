@@ -755,7 +755,12 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         } else if (act.type === "download") {
           ok = isStaff || isAgent;
         } else if (act.type === "missing_docs") {
-          ok = isAdmin;
+          ok = (
+            (permLevel === "admin_only" && isAdmin) ||
+            (permLevel === "staff_only" && isStaff) ||
+            (permLevel === "staff_and_agent" && (isStaff || isAgent)) ||
+            (permLevel === "everyone")
+          );
         }
         if (ok) { stageGovernedAllowed = true; break; }
       }

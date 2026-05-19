@@ -2014,7 +2014,10 @@ export default function ApplicationsPage() {
                         else if (permLevel === "staff_only" && !isStaff) { allowed = false; denyReason = "Yalnızca personel"; }
                         else if (permLevel === "staff_and_agent" && !isStaff && !isAgent) { allowed = false; denyReason = "Yalnızca personel/acente"; }
                       } else if (action.type === "missing_docs") {
-                        if (!isAdmin) { allowed = false; denyReason = "Yalnızca yönetici"; }
+                        if (permLevel === "none") { allowed = false; denyReason = "Bu aşamada kapalı"; }
+                        else if (permLevel === "admin_only" && !isAdmin) { allowed = false; denyReason = "Yalnızca yönetici"; }
+                        else if (permLevel === "staff_only" && !isStaff) { allowed = false; denyReason = "Yalnızca personel"; }
+                        else if (permLevel === "staff_and_agent" && !isStaff && !isAgent) { allowed = false; denyReason = "Yalnızca personel/acente"; }
                       } else if (action.type === "download") {
                         // Download follows backend stage-documents visibility:
                         // staff + agents (who can already see the application
