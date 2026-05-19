@@ -954,7 +954,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             </div>
           </TabsContent>
 
-          <TabsContent value="documents" className="mt-4">
+          <TabsContent value="documents" className="mt-4 space-y-4">
+            <ApplicationStageDocumentsSection studentId={id} basePath={basePath} />
             <StudentDocumentsSection
               studentId={id}
               student={student}
@@ -2072,5 +2073,105 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
       )}
     </>
     </>
+  );
+}
+
+function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: number; basePath: string }) {
+  const [, setLocation] = useLocation();
+  const { data: docs = [], isLoading } = useQuery<any[]>({
+    queryKey: [`/api/students/${studentId}/application-documents`],
+    queryFn: () => customFetch(`${BASE_URL}/api/students/${studentId}/application-documents`),
+    staleTime: 15_000,
+  });
+
+  const grouped = useMemo(() => {
+    const map = new Map<number, { applicationId: number; universityName?: string; programName?: string; docs: any[] }>();
+    for (const d of docs) {
+      const key = d.applicationId;
+      if (!map.has(key)) {
+        map.set(key, {
+          applicationId: d.applicationId,
+          universityName: d.universityName,
+          programName: d.programName,
+          docs: [],
+        });
+      }
+      map.get(key)!.docs.push(d);
+    }
+    return Array.from(map.values());
+  }, [docs]);
+
+  const handleDownload = (d: any) => {
+    const link = document.createElement("a");
+    link.href = `${BASE_URL}/api/applications/${d.applicationId}/stage-documents/${d.id}/download`;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.click();
+  };
+
+  return (
+    <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <FileText className="w-4 h-4 text-muted-foreground" />
+        <h2 className="font-semibold text-foreground">Başvuru Belgeleri</h2>
+        {docs.length > 0 && (
+          <Badge variant="secondary" className="text-xs px-1.5 py-0">{docs.length}</Badge>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+        </div>
+      ) : docs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Bu öğrencinin başvurularına henüz belge yüklenmemiş.</p>
+      ) : (
+        <div className="space-y-4">
+          {grouped.map((g) => (
+            <div key={g.applicationId} className="border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between p-3 bg-secondary/40">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {g.universityName ?? "—"} <span className="text-muted-foreground">·</span> {g.programName ?? "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Başvuru #{g.applicationId}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setLocation(`${basePath}/applications/${g.applicationId}`)}
+                >
+                  Başvuruyu Aç
+                </Button>
+              </div>
+              <div className="divide-y">
+                {g.docs.map((d: any) => (
+                  <div key={d.id} className="flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors">
+                    <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{d.fileName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="inline-block px-1.5 py-0 rounded-full bg-secondary text-foreground/80 mr-1.5">
+                          {d.stageLabel ?? d.stage?.replace(/_/g, " ") ?? "—"}
+                        </span>
+                        {new Date(d.createdAt).toLocaleString()}
+                        {d.uploadedByName && <> · {d.uploadedByName}</>}
+                        {d.sizeBytes ? ` · ${(d.sizeBytes / 1024).toFixed(0)} KB` : ""}
+                        {d.validUntil && <> · Geçerlilik: {new Date(d.validUntil).toLocaleDateString()}</>}
+                      </p>
+                    </div>
+                    {(d.hasFileData || d.fileUrl) && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(d)} title="İndir">
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

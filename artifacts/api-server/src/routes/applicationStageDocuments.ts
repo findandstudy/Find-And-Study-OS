@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable } from "@workspace/db";
+import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable } from "@workspace/db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole, isStaffRole } from "../lib/roles";
@@ -7,6 +7,7 @@ import { canUploadStageDocument } from "../lib/stagePermissions";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
+import { assertCanAccessStudent } from "../lib/studentAccess";
 
 const router: IRouter = Router();
 
@@ -395,6 +396,52 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
 
   await logAudit(user.id, "update_missing_doc_notes", "application", applicationId, { count: result.length, stage: stageKey }, req.ip);
   res.json(result);
+});
+
+// Task #167 — aggregate every stage-document across all of a student's
+// applications, with university/program/stage context. Powers the
+// "Başvuru Belgeleri" section on the student detail page.
+router.get("/students/:id/application-documents", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+  const studentId = parseInt(req.params.id, 10);
+  const access = await assertCanAccessStudent(req, studentId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+
+  const rows = await db
+    .select({
+      id: applicationStageDocumentsTable.id,
+      applicationId: applicationStageDocumentsTable.applicationId,
+      stage: applicationStageDocumentsTable.stage,
+      fileName: applicationStageDocumentsTable.fileName,
+      mimeType: applicationStageDocumentsTable.mimeType,
+      sizeBytes: applicationStageDocumentsTable.sizeBytes,
+      uploadedBy: applicationStageDocumentsTable.uploadedBy,
+      uploadedByRole: applicationStageDocumentsTable.uploadedByRole,
+      uploadedByName: applicationStageDocumentsTable.uploadedByName,
+      validUntil: applicationStageDocumentsTable.validUntil,
+      hasFileData: sql<boolean>`${applicationStageDocumentsTable.fileData} IS NOT NULL`.as("has_file_data"),
+      fileUrl: applicationStageDocumentsTable.fileUrl,
+      isMissingDocNote: applicationStageDocumentsTable.isMissingDocNote,
+      createdAt: applicationStageDocumentsTable.createdAt,
+      universityName: universitiesTable.name,
+      programName: programsTable.name,
+      stageLabel: pipelineStagesTable.label,
+    })
+    .from(applicationStageDocumentsTable)
+    .innerJoin(applicationsTable, eq(applicationsTable.id, applicationStageDocumentsTable.applicationId))
+    .leftJoin(universitiesTable, eq(universitiesTable.id, applicationsTable.universityId))
+    .leftJoin(programsTable, eq(programsTable.id, applicationsTable.programId))
+    .leftJoin(pipelineStagesTable, and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.key, applicationStageDocumentsTable.stage),
+    ))
+    .where(and(
+      eq(applicationsTable.studentId, studentId),
+      isNull(applicationsTable.deletedAt),
+      eq(applicationStageDocumentsTable.isMissingDocNote, false),
+    ))
+    .orderBy(desc(applicationStageDocumentsTable.createdAt));
+
+  res.json(rows);
 });
 
 router.get("/applications/:id/stage-documents/:docId/download", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
