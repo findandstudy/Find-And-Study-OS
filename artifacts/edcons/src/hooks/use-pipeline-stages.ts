@@ -3,6 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+export type StageActionType = "upload" | "download" | "missing_docs";
+export interface StageAction {
+  type: StageActionType;
+  label?: string | null;
+  color?: string | null;
+  targetStageKey: string;
+  requiredDocTypes?: string[];
+}
+
 export interface PipelineStage {
   id?: number;
   entityType: string;
@@ -27,6 +36,8 @@ export interface PipelineStage {
   commissionFinanceStatus?: string | null;
   serviceFeeFinanceStatus?: string | null;
   autoCancelSiblingsOnWon?: boolean;
+  // Task #167 — up to 2 admin-defined action buttons (application only).
+  actions?: StageAction[];
 }
 
 async function fetchStages(entityType: string): Promise<PipelineStage[]> {

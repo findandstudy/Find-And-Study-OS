@@ -1,4 +1,18 @@
-import { pgTable, serial, text, integer, timestamp, uniqueIndex, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, uniqueIndex, boolean, jsonb } from "drizzle-orm/pg-core";
+
+// Task #167 — admin-configurable stage action buttons (max 2 per stage).
+// Each action defines a button that appears on the application list rows;
+// completing the action moves the application into `targetStageKey`.
+export type StageActionType = "upload" | "download" | "missing_docs";
+export interface StageAction {
+  type: StageActionType;
+  label?: string | null;
+  color?: string | null;
+  targetStageKey: string;
+  // Optional document-type whitelist used by upload/download/missing_docs
+  // to narrow which doc types the action applies to. Empty = any.
+  requiredDocTypes?: string[];
+}
 
 export const pipelineStagesTable = pgTable("pipeline_stages", {
   id: serial("id").primaryKey(),
@@ -35,6 +49,8 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   // When transitioning into this stage, automatically cancel sibling
   // applications for the same student.
   autoCancelSiblingsOnWon: boolean("auto_cancel_siblings_on_won").notNull().default(false),
+  // Task #167 — up to 2 admin-defined action buttons per stage (application only).
+  actions: jsonb("actions").$type<StageAction[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

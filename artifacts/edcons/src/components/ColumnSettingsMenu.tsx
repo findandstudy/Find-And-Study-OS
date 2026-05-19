@@ -17,6 +17,12 @@ export interface ColumnSettingsMenuProps {
   onReset: () => void;
   triggerLabel?: string;
   title?: string;
+  /**
+   * IDs of columns that must always remain visible — the show/hide
+   * checkbox is disabled for these, so admins can't accidentally hide
+   * mandatory action columns (Task #167).
+   */
+  alwaysVisibleIds?: string[];
 }
 
 export function ColumnSettingsMenu({
@@ -28,9 +34,11 @@ export function ColumnSettingsMenu({
   onReset,
   triggerLabel = "Sütunlar",
   title = "Sütunları Yönet",
+  alwaysVisibleIds = [],
 }: ColumnSettingsMenuProps) {
   const labelOf = (id: string) => columns.find((c) => c.id === id)?.label || id;
-  const visibleCount = order.filter((id) => !hidden.includes(id)).length;
+  const alwaysVisible = new Set(alwaysVisibleIds);
+  const visibleCount = order.filter((id) => alwaysVisible.has(id) || !hidden.includes(id)).length;
 
   return (
     <Popover>
@@ -62,7 +70,8 @@ export function ColumnSettingsMenu({
         </p>
         <div className="max-h-80 overflow-auto pr-1">
           {order.map((id, idx) => {
-            const isHidden = hidden.includes(id);
+            const locked = alwaysVisible.has(id);
+            const isHidden = !locked && hidden.includes(id);
             return (
               <div
                 key={id}
@@ -71,11 +80,13 @@ export function ColumnSettingsMenu({
                 <Checkbox
                   id={`col-${id}`}
                   checked={!isHidden}
-                  onCheckedChange={() => onToggle(id)}
+                  disabled={locked}
+                  onCheckedChange={() => { if (!locked) onToggle(id); }}
                 />
                 <label
                   htmlFor={`col-${id}`}
-                  className="flex-1 text-sm cursor-pointer select-none truncate"
+                  className={`flex-1 text-sm select-none truncate ${locked ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
+                  title={locked ? "Bu sütun her zaman görünür" : undefined}
                 >
                   {labelOf(id)}
                 </label>

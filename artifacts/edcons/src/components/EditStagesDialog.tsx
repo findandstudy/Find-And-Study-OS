@@ -1,12 +1,171 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Check, AlertCircle, Pencil, ArrowLeft } from "lucide-react";
-import type { PipelineStage } from "@/hooks/use-pipeline-stages";
+import { Plus, Trash2, Check, AlertCircle, Pencil, ArrowLeft, ChevronDown } from "lucide-react";
+import type { PipelineStage, StageAction, StageActionType } from "@/hooks/use-pipeline-stages";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const ACTION_TYPE_OPTIONS: { value: StageActionType; label: string; defaultLabel: string; defaultColor: string }[] = [
+  { value: "upload", label: "Upload Document", defaultLabel: "Upload", defaultColor: "#3B82F6" },
+  { value: "download", label: "Download Document", defaultLabel: "Download", defaultColor: "#10B981" },
+  { value: "missing_docs", label: "Missing Documents", defaultLabel: "Missing Docs", defaultColor: "#F59E0B" },
+];
+
+function humanizeDocType(t: string): string {
+  return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function DocTypePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { data: docTypes = [] } = useQuery<string[]>({
+    queryKey: ["document-types"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE_URL}/api/document-types`, { credentials: "include" });
+      if (!r.ok) return [];
+      return r.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+  const summary = value.length === 0 ? "Tümü" : value.length === 1 ? humanizeDocType(value[0]) : `${value.length} belge türü`;
+  function toggle(t: string) {
+    onChange(value.includes(t) ? value.filter((x) => x !== t) : [...value, t]);
+  }
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full justify-between h-8 font-normal">
+          <span className="truncate text-xs">{summary}</span>
+          <ChevronDown className="w-3.5 h-3.5 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-2" align="start">
+        <div className="flex items-center justify-between px-1 pb-1.5">
+          <span className="text-xs font-semibold">Required Documents</span>
+          {value.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange([])}>Clear</Button>
+          )}
+        </div>
+        <div className="max-h-64 overflow-auto pr-1">
+          {docTypes.length === 0 && (
+            <p className="text-xs text-muted-foreground px-1 py-2">No document types available</p>
+          )}
+          {docTypes.map((t) => (
+            <label key={t} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted/60 cursor-pointer">
+              <Checkbox checked={value.includes(t)} onCheckedChange={() => toggle(t)} />
+              <span className="text-xs flex-1">{humanizeDocType(t)}</span>
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function StageActionEditor({
+  action,
+  allStages,
+  currentStageKey,
+  onChange,
+  onRemove,
+  index,
+}: {
+  action: StageAction;
+  allStages: PipelineStage[];
+  currentStageKey: string;
+  onChange: (a: StageAction) => void;
+  onRemove: () => void;
+  index: number;
+}) {
+  const typeOpt = ACTION_TYPE_OPTIONS.find((o) => o.value === action.type);
+  const targetOptions = allStages.filter((s) => s.key && s.key !== currentStageKey);
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">Button {index + 1}</span>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRemove} title="Remove action">
+          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Type</Label>
+          <Select
+            value={action.type}
+            onValueChange={(v) => {
+              const opt = ACTION_TYPE_OPTIONS.find((o) => o.value === v);
+              onChange({
+                ...action,
+                type: v as StageActionType,
+                label: action.label || opt?.defaultLabel || null,
+                color: action.color || opt?.defaultColor || null,
+              });
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ACTION_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Move to stage</Label>
+          <Select
+            value={action.targetStageKey || ""}
+            onValueChange={(v) => onChange({ ...action, targetStageKey: v })}
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select stage…" /></SelectTrigger>
+            <SelectContent>
+              {targetOptions.map((s) => (
+                <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Button label</Label>
+          <Input
+            value={action.label || ""}
+            onChange={(e) => onChange({ ...action, label: e.target.value })}
+            placeholder={typeOpt?.defaultLabel || "Button"}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Color</Label>
+          <input
+            type="color"
+            value={action.color || typeOpt?.defaultColor || "#3B82F6"}
+            onChange={(e) => onChange({ ...action, color: e.target.value })}
+            className="h-8 w-12 rounded border cursor-pointer p-0.5"
+          />
+        </div>
+      </div>
+
+      {(action.type === "upload" || action.type === "missing_docs" || action.type === "download") && (
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Required documents (informational)</Label>
+          <DocTypePicker
+            value={action.requiredDocTypes || []}
+            onChange={(v) => onChange({ ...action, requiredDocTypes: v })}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface EditStagesDialogProps {
   open: boolean;
@@ -87,8 +246,29 @@ const FINANCE_STATUS_OPTIONS = [
   { value: "excluded", label: "Excluded" },
 ];
 
-function StageEditForm({ stage, onChange }: { stage: PipelineStage; onChange: (s: PipelineStage) => void }) {
+function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; onChange: (s: PipelineStage) => void; allStages: PipelineStage[] }) {
   const isApplicationStage = stage.entityType === "application";
+  const actions: StageAction[] = Array.isArray(stage.actions) ? stage.actions : [];
+  function updateActionAt(i: number, a: StageAction) {
+    const next = actions.slice();
+    next[i] = a;
+    onChange({ ...stage, actions: next });
+  }
+  function removeActionAt(i: number) {
+    onChange({ ...stage, actions: actions.filter((_, idx) => idx !== i) });
+  }
+  function addAction() {
+    if (actions.length >= 2) return;
+    const opt = ACTION_TYPE_OPTIONS[0];
+    const fallbackTarget = allStages.find((s) => s.key && s.key !== stage.key)?.key || stage.key;
+    onChange({
+      ...stage,
+      actions: [
+        ...actions,
+        { type: opt.value, label: opt.defaultLabel, color: opt.defaultColor, targetStageKey: fallbackTarget, requiredDocTypes: [] },
+      ],
+    });
+  }
   return (
     <div className="space-y-5">
       <div className="space-y-1.5">
@@ -292,6 +472,44 @@ function StageEditForm({ stage, onChange }: { stage: PipelineStage; onChange: (s
             value={!!stage.autoCancelSiblingsOnWon}
             onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
           />
+
+          <div className="pt-2 border-t" />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Stage Actions</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Up to 2 action buttons appear on the Applications list for rows in this stage.
+                  Completing an action moves the application to the chosen target stage.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-8 shrink-0"
+                onClick={addAction}
+                disabled={actions.length >= 2}
+              >
+                <Plus className="w-3.5 h-3.5" /> Add
+              </Button>
+            </div>
+            {actions.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">No actions configured.</p>
+            )}
+            {actions.map((a, i) => (
+              <StageActionEditor
+                key={i}
+                action={a}
+                index={i}
+                allStages={allStages}
+                currentStageKey={stage.key}
+                onChange={(u) => updateActionAt(i, u)}
+                onRemove={() => removeActionAt(i)}
+              />
+            ))}
+          </div>
         </>
       )}
     </div>
@@ -419,6 +637,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
             <StageEditForm
               stage={editingStage}
               onChange={updated => updateStageAtIndex(editIndex, updated)}
+              allStages={localStages}
             />
           </div>
         ) : (

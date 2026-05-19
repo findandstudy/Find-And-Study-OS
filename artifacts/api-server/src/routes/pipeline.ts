@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, pipelineStagesTable } from "@workspace/db";
-import { eq, and, asc, sql } from "drizzle-orm";
+import { db, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
+import type { StageAction } from "@workspace/db";
+import { eq, asc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { clearStageFinanceCache } from "../lib/stageFinance";
@@ -22,6 +23,11 @@ const router: IRouter = Router();
     await db.execute(sql`
       CREATE UNIQUE INDEX IF NOT EXISTS pipeline_stages_entity_key_uniq
       ON pipeline_stages(entity_type, key)
+    `);
+    // Task #167 — admin-defined per-stage action buttons. Idempotent.
+    await db.execute(sql`
+      ALTER TABLE pipeline_stages
+      ADD COLUMN IF NOT EXISTS actions jsonb NOT NULL DEFAULT '[]'::jsonb
     `);
   } catch {}
 
@@ -161,6 +167,56 @@ const DEFAULT_STAGES: Record<string, DefaultStage[]> = {
 
 const ALLOWED_PERMISSION_LEVELS = new Set(["none", "admin_only", "staff_only", "staff_and_agent", "everyone"]);
 const ALLOWED_FINANCE_STATUS = new Set(["potential", "confirmed", "excluded"]);
+const ALLOWED_ACTION_TYPES = new Set(["upload", "download", "missing_docs"]);
+
+function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: string): StageAction[] {
+  if (!Array.isArray(v)) return [];
+  const out: StageAction[] = [];
+  for (const raw of v) {
+    if (out.length >= 2) break;
+    if (!raw || typeof raw !== "object") continue;
+    const a = raw as Record<string, unknown>;
+    const type = String(a.type || "");
+    if (!ALLOWED_ACTION_TYPES.has(type)) continue;
+    const targetStageKey = String(a.targetStageKey || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    if (!targetStageKey || !validStageKeys.has(targetStageKey)) continue;
+    // Reject self-targeting (length-1 cycle) — moving to the same stage is a no-op.
+    if (targetStageKey === ownStageKey) continue;
+    const label = typeof a.label === "string" ? a.label.slice(0, 32) || null : null;
+    const color = typeof a.color === "string" ? a.color.slice(0, 16) || null : null;
+    const requiredDocTypes = Array.isArray(a.requiredDocTypes)
+      ? (a.requiredDocTypes as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 20)
+      : [];
+    out.push({ type: type as StageAction["type"], label, color, targetStageKey, requiredDocTypes });
+  }
+  return out;
+}
+
+// Task #167 — surface the catalog of document types admins can pick from when
+// configuring "Missing Documents" / "Upload" actions. Combines the built-in
+// catalog (used in StudentDocChecklist) with any custom types referenced in
+// program_document_requirements so the picker matches real-world data.
+const BUILTIN_DOC_TYPES = [
+  "high_school_diploma_translation","class_10th_ssc_marks_sheet","class_12th_hsc_certificate",
+  "class_12th_hsc_marks_sheet","diploma_certificate","diploma_transcript",
+  "bachelors_certificate","bachelors_transcript","bachelors_provisional_certificate",
+  "bachelors_transcript_all_semesters","masters_certificate","masters_transcript",
+  "masters_provisional_certificate","masters_transcript_all_semesters",
+  "passport","cv","lor","sop","essay","experience_letters",
+  "other_certificates_documents","ielts_pte_gre_gmat_toefl_duolingo","photo","diploma_recognition",
+];
+
+router.get("/document-types", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (_req, res): Promise<void> => {
+  let extra: string[] = [];
+  try {
+    const rows = await db
+      .selectDistinct({ documentType: programDocumentRequirementsTable.documentType })
+      .from(programDocumentRequirementsTable);
+    extra = rows.map(r => r.documentType).filter((s): s is string => !!s);
+  } catch {}
+  const set = new Set<string>([...BUILTIN_DOC_TYPES, ...extra]);
+  res.json([...set].sort());
+});
 
 router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const { entityType } = req.params;
@@ -256,6 +312,9 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           commissionFinanceStatus: entityType === "application" ? normFinance(s.commissionFinanceStatus) : null,
           serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
           autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,
+          actions: entityType === "application"
+            ? normActions(s.actions, new Set(normalizedKeys), String(s.key || "").toLowerCase().replace(/[^a-z0-9_]/g, "_"))
+            : [],
         })))
         .returning();
 

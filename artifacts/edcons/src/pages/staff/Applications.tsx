@@ -228,7 +228,9 @@ type AppColId =
   | "intake"
   | "commission"
   | "assigned"
-  | "created";
+  | "created"
+  | "button1"
+  | "button2";
 
 const APP_COLUMN_DEFS: { id: AppColId; label: string }[] = [
   { id: "student", label: "Student" },
@@ -241,7 +243,12 @@ const APP_COLUMN_DEFS: { id: AppColId; label: string }[] = [
   { id: "commission", label: "Commission" },
   { id: "assigned", label: "Assigned" },
   { id: "created", label: "Created" },
+  // Task #167 — admin-configurable per-stage action buttons (always visible).
+  { id: "button1", label: "Button 1" },
+  { id: "button2", label: "Button 2" },
 ];
+
+const APP_ALWAYS_VISIBLE_COLS: AppColId[] = ["button1", "button2"];
 
 const APP_DEFAULT_PREFS = {
   order: APP_COLUMN_DEFS.map((c) => c.id),
@@ -1275,11 +1282,25 @@ export default function ApplicationsPage() {
 
   const {
     prefs: colPrefs,
-    visibleOrdered: visibleAppCols,
-    toggleHidden: toggleAppCol,
+    toggleHidden: toggleAppColRaw,
     moveColumn: moveAppCol,
     reset: resetAppCols,
   } = useTablePrefs("applications-table", APP_DEFAULT_PREFS, user?.id);
+
+  // Task #167 — button1/button2 are always visible even if saved prefs hide them.
+  const visibleAppCols = useMemo(() => {
+    const alwaysSet = new Set<string>(APP_ALWAYS_VISIBLE_COLS);
+    const knownIds = new Set<string>(APP_COLUMN_DEFS.map((c) => c.id));
+    const ordered = colPrefs.order.filter((id) => knownIds.has(id));
+    // Ensure always-visible cols exist in the order (append missing at end).
+    APP_ALWAYS_VISIBLE_COLS.forEach((id) => { if (!ordered.includes(id)) ordered.push(id); });
+    return ordered.filter((id) => alwaysSet.has(id) || !colPrefs.hidden.includes(id));
+  }, [colPrefs.order, colPrefs.hidden]);
+
+  const toggleAppCol = (id: string) => {
+    if ((APP_ALWAYS_VISIBLE_COLS as string[]).includes(id)) return;
+    toggleAppColRaw(id);
+  };
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -1296,6 +1317,10 @@ export default function ApplicationsPage() {
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string } | null>(null);
+  // Task #167 — admin-only Missing Documents action dialog state.
+  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string; actionLabel: string } | null>(null);
+  const [missingDocsText, setMissingDocsText] = useState("");
+  const [missingDocsSaving, setMissingDocsSaving] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1489,6 +1514,104 @@ export default function ApplicationsPage() {
     });
   };
 
+  // Task #167 — generic stage transition used by stage action buttons. Returns
+  // true on success so callers can chain follow-up UI (close dialogs, reset
+  // state). Surfaces the same DOCS_REQUIRED upload flow as drag-drop.
+  async function moveAppToStage(appId: number, targetStage: string): Promise<boolean> {
+    const colLabel = pipelineStages.find((s) => s.key === targetStage)?.label ?? targetStage;
+    const csrfRaw = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1];
+    const csrf = csrfRaw ? decodeURIComponent(csrfRaw) : "";
+    try {
+      const res = await fetch(`${BASE_URL}/api/applications/${appId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrf },
+        credentials: "include",
+        body: JSON.stringify({ stage: targetStage }),
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["applications"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
+        toast({ title: `Application moved → ${colLabel}` });
+        return true;
+      }
+      const body = await res.json().catch(() => ({} as any));
+      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        setDocUploadDialog({ appId, targetStage, targetStageLabel: colLabel });
+      } else {
+        toast({ title: "Error", description: body.error || "Could not move application", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Could not move application", variant: "destructive" });
+    }
+    return false;
+  }
+
+  async function handleStageAction(app: any, action: import("@/hooks/use-pipeline-stages").StageAction) {
+    const targetLabel = pipelineStages.find((s) => s.key === action.targetStageKey)?.label ?? action.targetStageKey;
+    const buttonLabel = action.label || (action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs");
+    if (action.type === "upload") {
+      setDocUploadDialog({ appId: app.id, targetStage: action.targetStageKey, targetStageLabel: targetLabel });
+      return;
+    }
+    if (action.type === "download") {
+      try {
+        const docs = await apiFetch(`${BASE_URL}/api/applications/${app.id}/stage-documents?stage=${encodeURIComponent(app.stage)}`) as any[];
+        const list = Array.isArray(docs) ? docs : [];
+        if (list.length === 0) {
+          toast({ title: "Belge bulunamadı", description: "Bu aşamada indirilebilecek bir belge yok.", variant: "destructive" });
+          return;
+        }
+        // Latest by id (or createdAt fallback).
+        const latest = list.slice().sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0];
+        const a = document.createElement("a");
+        a.href = `${BASE_URL}/api/applications/${app.id}/stage-documents/${latest.id}/download`;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
+        await moveAppToStage(app.id, action.targetStageKey);
+      } catch {
+        toast({ title: "Error", description: "Belge indirilemedi", variant: "destructive" });
+      }
+      return;
+    }
+    if (action.type === "missing_docs") {
+      if (!isAdmin) {
+        toast({ title: "İzin yok", description: "Bu aksiyon yalnızca yöneticilere açıktır.", variant: "destructive" });
+        return;
+      }
+      setMissingDocsText("");
+      setMissingDocsDialog({ appId: app.id, targetStage: action.targetStageKey, targetStageLabel: targetLabel, actionLabel: buttonLabel });
+      return;
+    }
+  }
+
+  async function submitMissingDocs() {
+    if (!missingDocsDialog) return;
+    const text = missingDocsText.trim();
+    if (!text) {
+      toast({ title: "Lütfen eksik belgeleri yazın", variant: "destructive" });
+      return;
+    }
+    setMissingDocsSaving(true);
+    try {
+      const notes = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      await apiFetch(`${BASE_URL}/api/applications/${missingDocsDialog.appId}/missing-doc-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      const moved = await moveAppToStage(missingDocsDialog.appId, missingDocsDialog.targetStage);
+      if (moved) {
+        setMissingDocsDialog(null);
+        setMissingDocsText("");
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Could not save notes", variant: "destructive" });
+    } finally {
+      setMissingDocsSaving(false);
+    }
+  }
+
   const deleteApp = useMutation({ mutationFn: (id: number) => apiFetch(`${BASE_URL}/api/applications/${id}`, { method: "DELETE" }) });
 
   async function handleBulkDelete() {
@@ -1558,6 +1681,7 @@ export default function ApplicationsPage() {
                 onToggle={toggleAppCol}
                 onMove={moveAppCol}
                 onReset={resetAppCols}
+                alwaysVisibleIds={APP_ALWAYS_VISIBLE_COLS}
               />
             )}
             {isAdmin && (
@@ -1710,6 +1834,10 @@ export default function ApplicationsPage() {
                           }}
                         />
                       );
+                    case "button1":
+                      return <TableHead key={id} className="w-28 text-xs font-semibold">Button 1</TableHead>;
+                    case "button2":
+                      return <TableHead key={id} className="w-28 text-xs font-semibold">Button 2</TableHead>;
                     case "created":
                       return (
                         <ColumnHeader
@@ -1806,6 +1934,34 @@ export default function ApplicationsPage() {
                       );
                     case "created":
                       return <TableCell key={id} className="text-muted-foreground text-xs">{formatDate(app.createdAt)}</TableCell>;
+                    case "button1":
+                    case "button2": {
+                      const slot = id === "button1" ? 0 : 1;
+                      const sm2 = stageMap[app.stage];
+                      const action = (sm2 as any)?.actions?.[slot] as import("@/hooks/use-pipeline-stages").StageAction | undefined;
+                      if (!action) {
+                        return <TableCell key={id} className="text-muted-foreground text-xs">-</TableCell>;
+                      }
+                      const lockedForRole = action.type === "missing_docs" && !isAdmin;
+                      const fallbackLabel = action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs";
+                      const label = action.label || fallbackLabel;
+                      const color = action.color || undefined;
+                      return (
+                        <TableCell key={id} onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs font-medium"
+                            style={color ? { borderColor: color, color } : undefined}
+                            disabled={lockedForRole}
+                            title={lockedForRole ? "Yalnızca yönetici" : undefined}
+                            onClick={() => { if (!lockedForRole) void handleStageAction(app, action); }}
+                          >
+                            {label}
+                          </Button>
+                        </TableCell>
+                      );
+                    }
                     default:
                       return null;
                   }
@@ -1893,6 +2049,35 @@ export default function ApplicationsPage() {
       {tableProgInfoId && (
         <ProgramInfoPopup programId={tableProgInfoId} onClose={() => setTableProgInfoId(null)} />
       )}
+      {/* Task #167 — admin-only Missing Documents action dialog */}
+      <Dialog open={!!missingDocsDialog} onOpenChange={(o) => { if (!o) { setMissingDocsDialog(null); setMissingDocsText(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{missingDocsDialog?.actionLabel || "Missing Documents"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Eksik olan belgeleri her satıra bir tane gelecek şekilde yazın. Kaydedildiğinde
+              başvuru otomatik olarak <span className="font-medium text-foreground">{missingDocsDialog?.targetStageLabel}</span> aşamasına geçecek.
+            </p>
+            <textarea
+              className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder={"Pasaport fotoğrafı\nLise diploması çevirisi"}
+              value={missingDocsText}
+              onChange={(e) => setMissingDocsText(e.target.value)}
+              disabled={missingDocsSaving}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMissingDocsDialog(null); setMissingDocsText(""); }} disabled={missingDocsSaving}>
+              İptal
+            </Button>
+            <Button onClick={submitMissingDocs} disabled={missingDocsSaving || !missingDocsText.trim()}>
+              {missingDocsSaving ? "Kaydediliyor…" : "Kaydet ve Aşamaya Geç"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
