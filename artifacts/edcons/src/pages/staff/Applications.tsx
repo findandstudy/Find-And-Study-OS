@@ -1574,12 +1574,15 @@ export default function ApplicationsPage() {
       : "";
     const buttonLabel = action.label || (action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs");
     if (action.type === "upload") {
-      // Task #167 — upload document against the CURRENT stage (where the
-      // action lives); after success move to the configured target stage
-      // (or stay if target is "Don't change").
+      // Task #167 — when the action moves to a different stage, attach the
+      // uploaded document to that TARGET stage so it satisfies any
+      // file-upload-mandatory rule on the target and the PATCH /stage
+      // transition is not blocked by DOCS_REQUIRED. When the target is
+      // "Don't change" (stay), attach to the current stage.
+      const uploadStageKey = targetKey ?? app.stage;
       setDocUploadDialog({
         appId: app.id,
-        uploadStage: app.stage,
+        uploadStage: uploadStageKey,
         targetStage: targetKey ?? app.stage,
         targetStageLabel: targetLabel || (pipelineStages.find((s) => s.key === app.stage)?.label ?? app.stage),
         documentNameOverride: action.documentName ?? null,
