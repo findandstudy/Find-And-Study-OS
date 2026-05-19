@@ -13,10 +13,12 @@ import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-const ACTION_TYPE_OPTIONS: { value: StageActionType; label: string; defaultLabel: string; defaultColor: string }[] = [
-  { value: "upload", label: "Upload Document", defaultLabel: "Upload", defaultColor: "#3B82F6" },
-  { value: "download", label: "Download Document", defaultLabel: "Download", defaultColor: "#10B981" },
-  { value: "missing_docs", label: "Missing Documents", defaultLabel: "Missing Docs", defaultColor: "#F59E0B" },
+type ActionTypeOrNone = StageActionType | "none";
+const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; label: string; defaultLabel: string; defaultColor: string }[] = [
+  { value: "none", label: "— None —", defaultLabel: "", defaultColor: "#3b82f6" },
+  { value: "upload", label: "Upload Document", defaultLabel: "Upload", defaultColor: "#3b82f6" },
+  { value: "download", label: "Download Document", defaultLabel: "Download", defaultColor: "#10b981" },
+  { value: "missing_docs", label: "Missing Documents", defaultLabel: "Missing Docs", defaultColor: "#f59e0b" },
 ];
 
 function humanizeDocType(t: string): string {
@@ -85,6 +87,8 @@ function StageActionEditor({
 }) {
   const typeOpt = ACTION_TYPE_OPTIONS.find((o) => o.value === action.type);
   const targetOptions = allStages.filter((s) => s.key && s.key !== currentStageKey);
+  const requiresDocs = action.type === "missing_docs";
+  const docsMissing = requiresDocs && (!action.requiredDocTypes || action.requiredDocTypes.length === 0);
   return (
     <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
       <div className="flex items-center justify-between">
@@ -100,6 +104,10 @@ function StageActionEditor({
           <Select
             value={action.type}
             onValueChange={(v) => {
+              if (v === "none") {
+                onRemove();
+                return;
+              }
               const opt = ACTION_TYPE_OPTIONS.find((o) => o.value === v);
               onChange({
                 ...action,
@@ -154,15 +162,20 @@ function StageActionEditor({
         </div>
       </div>
 
-      {(action.type === "upload" || action.type === "missing_docs" || action.type === "download") && (
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Required documents (informational)</Label>
-          <DocTypePicker
-            value={action.requiredDocTypes || []}
-            onChange={(v) => onChange({ ...action, requiredDocTypes: v })}
-          />
-        </div>
-      )}
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground">
+          {requiresDocs
+            ? <>Required documents <span className="text-destructive">*</span></>
+            : <>Required documents (informational)</>}
+        </Label>
+        <DocTypePicker
+          value={action.requiredDocTypes || []}
+          onChange={(v) => onChange({ ...action, requiredDocTypes: v })}
+        />
+        {docsMissing && (
+          <p className="text-[11px] text-destructive">Missing Documents için en az bir belge türü seçilmeli.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -259,15 +272,17 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
   }
   function addAction() {
     if (actions.length >= 2) return;
-    const opt = ACTION_TYPE_OPTIONS[0];
+    // Default to "upload" (first non-"none" option) when adding a new slot.
+    const opt = ACTION_TYPE_OPTIONS.find((o) => o.value !== "none")!;
     const fallbackTarget = allStages.find((s) => s.key && s.key !== stage.key)?.key || stage.key;
-    onChange({
-      ...stage,
-      actions: [
-        ...actions,
-        { type: opt.value, label: opt.defaultLabel, color: opt.defaultColor, targetStageKey: fallbackTarget, requiredDocTypes: [] },
-      ],
-    });
+    const newAction: StageAction = {
+      type: opt.value as StageActionType,
+      label: opt.defaultLabel,
+      color: opt.defaultColor,
+      targetStageKey: fallbackTarget,
+      requiredDocTypes: [],
+    };
+    onChange({ ...stage, actions: [...actions, newAction] });
   }
   return (
     <div className="space-y-5">

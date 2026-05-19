@@ -168,26 +168,71 @@ const DEFAULT_STAGES: Record<string, DefaultStage[]> = {
 const ALLOWED_PERMISSION_LEVELS = new Set(["none", "admin_only", "staff_only", "staff_and_agent", "everyone"]);
 const ALLOWED_FINANCE_STATUS = new Set(["potential", "confirmed", "excluded"]);
 const ALLOWED_ACTION_TYPES = new Set(["upload", "download", "missing_docs"]);
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: string): StageAction[] {
-  if (!Array.isArray(v)) return [];
+class ActionValidationError extends Error {}
+
+function normActions(v: unknown, validStageKeys: Set<string>, ownStageKey: string, stageLabel: string): StageAction[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) {
+    throw new ActionValidationError(`Stage "${stageLabel}": actions must be an array`);
+  }
   const out: StageAction[] = [];
-  for (const raw of v) {
-    if (out.length >= 2) break;
+  for (let i = 0; i < v.length; i++) {
+    const raw = v[i];
     if (!raw || typeof raw !== "object") continue;
     const a = raw as Record<string, unknown>;
-    const type = String(a.type || "");
-    if (!ALLOWED_ACTION_TYPES.has(type)) continue;
+    const rawType = String(a.type || "none");
+    // "none" / empty slots are treated as no-op and skipped (Task #167).
+    if (rawType === "none" || rawType === "") continue;
+    if (out.length >= 2) {
+      throw new ActionValidationError(`Stage "${stageLabel}": at most 2 action buttons allowed`);
+    }
+    if (!ALLOWED_ACTION_TYPES.has(rawType)) {
+      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: invalid type "${rawType}"`);
+    }
     const targetStageKey = String(a.targetStageKey || "").toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    if (!targetStageKey || !validStageKeys.has(targetStageKey)) continue;
-    // Reject self-targeting (length-1 cycle) — moving to the same stage is a no-op.
-    if (targetStageKey === ownStageKey) continue;
-    const label = typeof a.label === "string" ? a.label.slice(0, 32) || null : null;
-    const color = typeof a.color === "string" ? a.color.slice(0, 16) || null : null;
-    const requiredDocTypes = Array.isArray(a.requiredDocTypes)
-      ? (a.requiredDocTypes as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 20)
-      : [];
-    out.push({ type: type as StageAction["type"], label, color, targetStageKey, requiredDocTypes });
+    if (!targetStageKey) {
+      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage is required`);
+    }
+    if (!validStageKeys.has(targetStageKey)) {
+      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage "${targetStageKey}" does not exist`);
+    }
+    if (targetStageKey === ownStageKey) {
+      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: target stage cannot be the same stage`);
+    }
+    let label: string | null = null;
+    if (a.label !== undefined && a.label !== null) {
+      if (typeof a.label !== "string") {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: label must be a string`);
+      }
+      const trimmed = a.label.trim();
+      if (trimmed.length > 32) {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: label too long (max 32)`);
+      }
+      label = trimmed || null;
+    }
+    let color: string | null = null;
+    if (a.color !== undefined && a.color !== null && a.color !== "") {
+      if (typeof a.color !== "string" || !HEX_COLOR.test(a.color)) {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: color must be a #RRGGBB hex value`);
+      }
+      color = a.color;
+    }
+    let requiredDocTypes: string[] = [];
+    if (a.requiredDocTypes !== undefined && a.requiredDocTypes !== null) {
+      if (!Array.isArray(a.requiredDocTypes)) {
+        throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: requiredDocTypes must be an array`);
+      }
+      requiredDocTypes = (a.requiredDocTypes as unknown[])
+        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+        .map((s) => s.trim())
+        .slice(0, 20);
+    }
+    if (rawType === "missing_docs" && requiredDocTypes.length === 0) {
+      throw new ActionValidationError(`Stage "${stageLabel}" action ${i + 1}: "Missing Documents" requires at least one document type`);
+    }
+    out.push({ type: rawType as StageAction["type"], label, color, targetStageKey, requiredDocTypes });
   }
   return out;
 }
@@ -313,7 +358,12 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
           autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,
           actions: entityType === "application"
-            ? normActions(s.actions, new Set(normalizedKeys), String(s.key || "").toLowerCase().replace(/[^a-z0-9_]/g, "_"))
+            ? normActions(
+                s.actions,
+                new Set(normalizedKeys),
+                String(s.key || "").toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+                String(s.label || s.key || ""),
+              )
             : [],
         })))
         .returning();
@@ -343,6 +393,10 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       warnings,
     });
   } catch (err: any) {
+    if (err instanceof ActionValidationError) {
+      res.status(400).json({ error: err.message, code: "INVALID_ACTION" });
+      return;
+    }
     console.error("Failed to save pipeline stages:", err);
     res.status(500).json({ error: "Failed to save pipeline stages" });
   }

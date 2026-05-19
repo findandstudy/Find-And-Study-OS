@@ -21,16 +21,23 @@ interface StageDocUploadDialogProps {
   targetStage: string;
   targetStageLabel: string;
   onUploaded: () => void;
+  /**
+   * Task #167 — stage the document is stored against (the "from" stage in
+   * a stage-action button flow). When omitted, defaults to targetStage,
+   * preserving the original DOCS_REQUIRED behavior used by drag-and-drop.
+   */
+  uploadStage?: string;
 }
 
-export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded }: StageDocUploadDialogProps) {
+export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded, uploadStage }: StageDocUploadDialogProps) {
+  const docStage = uploadStage || targetStage;
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [validUntil, setValidUntil] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { stages: pipelineStages } = usePipelineStages("application");
-  const targetStageMeta = pipelineStages.find(s => s.key === targetStage);
+  const targetStageMeta = pipelineStages.find(s => s.key === docStage);
   const supportsValidUntil = targetStageMeta?.tracksOfferExpiry === true;
   const requiresValidUntil = targetStageMeta?.requiresValidUntil === true;
 
@@ -75,7 +82,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           },
           credentials: "include",
           body: JSON.stringify({
-            stage: targetStage,
+            stage: docStage,
             fileName: file.name,
             fileData: base64,
             mimeType: file.type,

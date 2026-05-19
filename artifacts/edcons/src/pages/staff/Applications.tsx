@@ -1316,10 +1316,11 @@ export default function ApplicationsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string } | null>(null);
+  const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string } | null>(null);
   // Task #167 — admin-only Missing Documents action dialog state.
-  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string; actionLabel: string } | null>(null);
+  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; targetStage: string; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
   const [missingDocsText, setMissingDocsText] = useState("");
+  const [missingDocsChecked, setMissingDocsChecked] = useState<Record<string, boolean>>({});
   const [missingDocsSaving, setMissingDocsSaving] = useState(false);
 
   const sensors = useSensors(
@@ -1505,7 +1506,7 @@ export default function ApplicationsPage() {
       }
       const body = await res.json().catch(() => ({}));
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
-        setDocUploadDialog({ appId, targetStage, targetStageLabel: colLabel });
+        setDocUploadDialog({ appId, uploadStage: targetStage, targetStage, targetStageLabel: colLabel });
       } else {
         toast({ title: "Error", description: body.error || "Could not move application", variant: "destructive" });
       }
@@ -1536,7 +1537,7 @@ export default function ApplicationsPage() {
       }
       const body = await res.json().catch(() => ({} as any));
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
-        setDocUploadDialog({ appId, targetStage, targetStageLabel: colLabel });
+        setDocUploadDialog({ appId, uploadStage: targetStage, targetStage, targetStageLabel: colLabel });
       } else {
         toast({ title: "Error", description: body.error || "Could not move application", variant: "destructive" });
       }
@@ -1550,7 +1551,9 @@ export default function ApplicationsPage() {
     const targetLabel = pipelineStages.find((s) => s.key === action.targetStageKey)?.label ?? action.targetStageKey;
     const buttonLabel = action.label || (action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs");
     if (action.type === "upload") {
-      setDocUploadDialog({ appId: app.id, targetStage: action.targetStageKey, targetStageLabel: targetLabel });
+      // Task #167 — upload document against the CURRENT stage (where the
+      // action lives); after success move to the configured target stage.
+      setDocUploadDialog({ appId: app.id, uploadStage: app.stage, targetStage: action.targetStageKey, targetStageLabel: targetLabel });
       return;
     }
     if (action.type === "download") {
@@ -1579,22 +1582,28 @@ export default function ApplicationsPage() {
         toast({ title: "İzin yok", description: "Bu aksiyon yalnızca yöneticilere açıktır.", variant: "destructive" });
         return;
       }
+      const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];
       setMissingDocsText("");
-      setMissingDocsDialog({ appId: app.id, targetStage: action.targetStageKey, targetStageLabel: targetLabel, actionLabel: buttonLabel });
+      setMissingDocsChecked(Object.fromEntries(required.map((t) => [t, true])));
+      setMissingDocsDialog({ appId: app.id, targetStage: action.targetStageKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
       return;
     }
   }
 
   async function submitMissingDocs() {
     if (!missingDocsDialog) return;
-    const text = missingDocsText.trim();
-    if (!text) {
-      toast({ title: "Lütfen eksik belgeleri yazın", variant: "destructive" });
+    const required = missingDocsDialog.requiredDocTypes || [];
+    // Checklist-derived notes (one per selected required type) take priority;
+    // free-text fallback applies only when admin did not preconfigure types.
+    const checklistNotes = required.filter((t) => missingDocsChecked[t]).map((t) => t.replace(/_/g, " "));
+    const freeNotes = missingDocsText.trim().split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    const notes = required.length > 0 ? checklistNotes : freeNotes;
+    if (notes.length === 0) {
+      toast({ title: required.length > 0 ? "Lütfen en az bir belge işaretleyin" : "Lütfen eksik belgeleri yazın", variant: "destructive" });
       return;
     }
     setMissingDocsSaving(true);
     try {
-      const notes = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       await apiFetch(`${BASE_URL}/api/applications/${missingDocsDialog.appId}/missing-doc-notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1604,6 +1613,7 @@ export default function ApplicationsPage() {
       if (moved) {
         setMissingDocsDialog(null);
         setMissingDocsText("");
+        setMissingDocsChecked({});
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message || "Could not save notes", variant: "destructive" });
@@ -1942,7 +1952,26 @@ export default function ApplicationsPage() {
                       if (!action) {
                         return <TableCell key={id} className="text-muted-foreground text-xs">-</TableCell>;
                       }
-                      const lockedForRole = action.type === "missing_docs" && !isAdmin;
+                      // Task #167 — gate by role.
+                      // Upload action follows the stage's uploadPermissionLevel so
+                      // admin/staff/agent visibility matches the document upload rules.
+                      // missing_docs is admin-only. download is staff+admin (no agents).
+                      const permLevel = (sm2 as any)?.uploadPermissionLevel || "none";
+                      const role = user?.role || "";
+                      const isAgent = role === "agent" || role === "sub_agent";
+                      const isStaff = role === "super_admin" || role === "admin" || role === "manager" || role === "staff" || role === "support";
+                      let allowed = true;
+                      let denyReason = "";
+                      if (action.type === "upload") {
+                        if (permLevel === "none") { allowed = false; denyReason = "Bu aşamada yükleme kapalı"; }
+                        else if (permLevel === "admin_only" && !isAdmin) { allowed = false; denyReason = "Yalnızca yönetici"; }
+                        else if (permLevel === "staff_only" && !isStaff) { allowed = false; denyReason = "Yalnızca personel"; }
+                        else if (permLevel === "staff_and_agent" && !isStaff && !isAgent) { allowed = false; denyReason = "Yalnızca personel/acente"; }
+                      } else if (action.type === "missing_docs") {
+                        if (!isAdmin) { allowed = false; denyReason = "Yalnızca yönetici"; }
+                      } else if (action.type === "download") {
+                        if (!isStaff) { allowed = false; denyReason = "Yalnızca personel"; }
+                      }
                       const fallbackLabel = action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs";
                       const label = action.label || fallbackLabel;
                       const color = action.color || undefined;
@@ -1953,9 +1982,9 @@ export default function ApplicationsPage() {
                             variant="outline"
                             className="h-7 px-2 text-xs font-medium"
                             style={color ? { borderColor: color, color } : undefined}
-                            disabled={lockedForRole}
-                            title={lockedForRole ? "Yalnızca yönetici" : undefined}
-                            onClick={() => { if (!lockedForRole) void handleStageAction(app, action); }}
+                            disabled={!allowed}
+                            title={!allowed ? denyReason : undefined}
+                            onClick={() => { if (allowed) void handleStageAction(app, action); }}
                           >
                             {label}
                           </Button>
@@ -2035,6 +2064,7 @@ export default function ApplicationsPage() {
           open={!!docUploadDialog}
           onClose={() => setDocUploadDialog(null)}
           applicationId={docUploadDialog.appId}
+          uploadStage={docUploadDialog.uploadStage}
           targetStage={docUploadDialog.targetStage}
           targetStageLabel={docUploadDialog.targetStageLabel}
           onUploaded={() => {
@@ -2049,30 +2079,56 @@ export default function ApplicationsPage() {
       {tableProgInfoId && (
         <ProgramInfoPopup programId={tableProgInfoId} onClose={() => setTableProgInfoId(null)} />
       )}
-      {/* Task #167 — admin-only Missing Documents action dialog */}
-      <Dialog open={!!missingDocsDialog} onOpenChange={(o) => { if (!o) { setMissingDocsDialog(null); setMissingDocsText(""); } }}>
+      {/* Task #167 — admin-only Missing Documents action dialog.
+          When admin pre-configured requiredDocTypes for the action, render a
+          checklist seeded from those types; otherwise fall back to a free
+          textarea (one missing item per line). */}
+      <Dialog open={!!missingDocsDialog} onOpenChange={(o) => { if (!o) { setMissingDocsDialog(null); setMissingDocsText(""); setMissingDocsChecked({}); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{missingDocsDialog?.actionLabel || "Missing Documents"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-xs text-muted-foreground">
-              Eksik olan belgeleri her satıra bir tane gelecek şekilde yazın. Kaydedildiğinde
-              başvuru otomatik olarak <span className="font-medium text-foreground">{missingDocsDialog?.targetStageLabel}</span> aşamasına geçecek.
+              Kaydedildiğinde başvuru otomatik olarak <span className="font-medium text-foreground">{missingDocsDialog?.targetStageLabel}</span> aşamasına geçecek.
             </p>
-            <textarea
-              className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder={"Pasaport fotoğrafı\nLise diploması çevirisi"}
-              value={missingDocsText}
-              onChange={(e) => setMissingDocsText(e.target.value)}
-              disabled={missingDocsSaving}
-            />
+            {missingDocsDialog && missingDocsDialog.requiredDocTypes.length > 0 ? (
+              <div className="space-y-2 max-h-[260px] overflow-y-auto rounded-md border border-border/70 bg-muted/20 p-3">
+                <p className="text-xs font-medium text-foreground">Eksik belgeleri işaretleyin</p>
+                {missingDocsDialog.requiredDocTypes.map((dt) => (
+                  <label key={dt} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={!!missingDocsChecked[dt]}
+                      onCheckedChange={(v) => setMissingDocsChecked((prev) => ({ ...prev, [dt]: !!v }))}
+                      disabled={missingDocsSaving}
+                    />
+                    <span>{dt.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <textarea
+                className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={"Pasaport fotoğrafı\nLise diploması çevirisi"}
+                value={missingDocsText}
+                onChange={(e) => setMissingDocsText(e.target.value)}
+                disabled={missingDocsSaving}
+              />
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setMissingDocsDialog(null); setMissingDocsText(""); }} disabled={missingDocsSaving}>
+            <Button variant="outline" onClick={() => { setMissingDocsDialog(null); setMissingDocsText(""); setMissingDocsChecked({}); }} disabled={missingDocsSaving}>
               İptal
             </Button>
-            <Button onClick={submitMissingDocs} disabled={missingDocsSaving || !missingDocsText.trim()}>
+            <Button
+              onClick={submitMissingDocs}
+              disabled={
+                missingDocsSaving ||
+                (missingDocsDialog?.requiredDocTypes.length
+                  ? !Object.values(missingDocsChecked).some(Boolean)
+                  : !missingDocsText.trim())
+              }
+            >
               {missingDocsSaving ? "Kaydediliyor…" : "Kaydet ve Aşamaya Geç"}
             </Button>
           </DialogFooter>

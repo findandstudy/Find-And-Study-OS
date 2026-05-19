@@ -36,6 +36,13 @@
       "when": 1778852662806,
       "tag": "0010_staff_cards",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779205500000,
+      "tag": "0011_pipeline_stage_actions",
+      "breakpoints": true
     }
   ]
 }
