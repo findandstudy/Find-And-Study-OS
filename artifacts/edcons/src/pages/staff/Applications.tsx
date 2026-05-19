@@ -1551,7 +1551,7 @@ export default function ApplicationsPage() {
         toast({ title: `Application moved → ${colLabel}` });
         return true;
       }
-      const body = await res.json().catch(() => ({} as any));
+      const body: { code?: string; error?: string } = await res.json().catch(() => ({}));
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
         setDocUploadDialog({ appId, uploadStage: targetStage, targetStage, targetStageLabel: colLabel });
       } else {
@@ -2009,7 +2009,10 @@ export default function ApplicationsPage() {
                       } else if (action.type === "missing_docs") {
                         if (!isAdmin) { allowed = false; denyReason = "Yalnızca yönetici"; }
                       } else if (action.type === "download") {
-                        if (!isStaff) { allowed = false; denyReason = "Yalnızca personel"; }
+                        // Download follows backend stage-documents visibility:
+                        // staff + agents (who can already see the application
+                        // via row-level access). Students never see this column.
+                        if (!isStaff && !isAgent) { allowed = false; denyReason = "Erişim yok"; }
                       }
                       const fallbackLabel = action.type === "upload" ? "Upload" : action.type === "download" ? "Download" : "Missing Docs";
                       const label = action.label || fallbackLabel;

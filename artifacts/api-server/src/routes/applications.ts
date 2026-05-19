@@ -725,7 +725,13 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const AGENT_PATCH_FIELDS: string[] = [];
   let allowedFields = isStaff ? [...APP_PATCH_FIELDS] : [...AGENT_PATCH_FIELDS];
-  if (user.role !== "super_admin" && isStaff) {
+  // Task #167 — allow manager-tier roles (super_admin/admin/manager) to
+  // transition stage via PATCH so admin-defined stage action buttons can
+  // complete their transition. Non-manager staff still cannot move stage
+  // freely; they must use action buttons that the manager configured (and
+  // those buttons hit the same endpoint under the admin's permission gate
+  // on the client, while server still enforces ADMIN_ROLES here).
+  if (!isAdmin && isStaff) {
     allowedFields = allowedFields.filter(f => f !== "stage");
   }
 
