@@ -6,7 +6,7 @@ import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
-import { normalizeAndValidateNames, normalizePhoneField } from "../lib/textNormalize";
+import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";

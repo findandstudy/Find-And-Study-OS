@@ -13,6 +13,32 @@ import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceG
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 
+const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
+function tlu(v: any, max: number): string | null {
+  if (v === undefined || v === null) return null;
+  const str = String(v).replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_MAP[c] || c).toUpperCase().trim();
+  if (!str) return null;
+  return str.slice(0, max);
+}
+function pn(raw: any, cc: any, max: number): string | null {
+  const phoneRaw = raw ? String(raw) : "";
+  if (!phoneRaw) return null;
+  const ccRaw = cc ? String(cc) : "";
+  const combined = (ccRaw + phoneRaw).trim();
+  const hasPlus = combined.startsWith("+");
+  const digits = combined.replace(/\D/g, "");
+  if (!digits) return null;
+  return (hasPlus ? "+" + digits : digits).slice(0, max);
+}
+function pnOnly(raw: any, max: number): string | null {
+  if (!raw) return null;
+  const str = String(raw).trim();
+  const hasPlus = str.startsWith("+");
+  const digits = str.replace(/\D/g, "");
+  if (!digits) return null;
+  return (hasPlus ? "+" + digits : digits).slice(0, max);
+}
+
 const router: IRouter = Router();
 
 // Embed widget /apply submissions include base64-encoded PDF/image documents
@@ -435,10 +461,10 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
 
   try {
     const [lead] = await db.insert(leadsTable).values({
-      firstName: s(firstName, 100)!,
-      lastName: s(lastName, 100)!,
+      firstName: tlu(firstName, 100)!,
+      lastName: tlu(lastName, 100)!,
       email: s(email, 255),
-      phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+      phone: pn(phone, countryCode, 50),
       source: `embed:${widget.slug}`,
       status: "new",
       interestedProgram: s(programName, 255),
@@ -552,10 +578,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     let lead;
     if (leadRow) {
       const [updated] = await tx.update(leadsTable).set({
-        firstName: s(firstName, 100)!,
-        lastName: s(lastName, 100)!,
+        firstName: tlu(firstName, 100)!,
+        lastName: tlu(lastName, 100)!,
         email: s(email, 255),
-        phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+        phone: pn(phone, countryCode, 50),
         nationality: s(nationality, 100),
         interestedProgram: s(programName || desiredProgram, 255),
         notes: s(message, 2000),
@@ -563,10 +589,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
       lead = updated;
     } else {
       const [inserted] = await tx.insert(leadsTable).values({
-        firstName: s(firstName, 100)!,
-        lastName: s(lastName, 100)!,
+        firstName: tlu(firstName, 100)!,
+        lastName: tlu(lastName, 100)!,
         email: s(email, 255),
-        phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+        phone: pn(phone, countryCode, 50),
         nationality: s(nationality, 100),
         source: `embed:${widget.slug}`,
         status: "new",
@@ -580,10 +606,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
 
     const [submission] = await tx.insert(embedSubmissionsTable).values({
       widgetId: widget.id,
-      firstName: s(firstName, 100)!,
-      lastName: s(lastName, 100)!,
+      firstName: tlu(firstName, 100)!,
+      lastName: tlu(lastName, 100)!,
       email: s(email, 255)!,
-      phone: s(phone, 50),
+      phone: pnOnly(phone, 50),
       countryCode: s(countryCode, 10),
       nationality: s(nationality, 100),
       desiredLevel: s(desiredLevel, 100),
@@ -653,9 +679,9 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         const verificationToken = generateSecureToken();
         const [newUser] = await db.insert(usersTable).values({
           email: normalizedEmail,
-          firstName: s(firstName, 100)!,
-          lastName: s(lastName, 100)!,
-          phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+          firstName: tlu(firstName, 100)!,
+          lastName: tlu(lastName, 100)!,
+          phone: pn(phone, countryCode, 50),
           role: "student",
           isActive: false,
           emailVerified: false,
@@ -681,20 +707,20 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         const safeGender = (normalizedGender === "female" || normalizedGender === "male") ? normalizedGender : null;
         [newStudent] = await db.insert(studentsTable).values({
           userId,
-          firstName: s(firstName, 100)!,
-          lastName: s(lastName, 100)!,
+          firstName: tlu(firstName, 100)!,
+          lastName: tlu(lastName, 100)!,
           email: normalizedEmail,
-          phone: phone ? `${countryCode || ""}${phone}`.slice(0, 50) : null,
+          phone: pn(phone, countryCode, 50),
           nationality: s(nationality, 100),
           dateOfBirth: s(dateOfBirth, 20),
           gender: safeGender,
-          motherName: s(motherName, 100),
-          fatherName: s(fatherName, 100),
+          motherName: tlu(motherName, 100),
+          fatherName: tlu(fatherName, 100),
           passportNumber: s(passportNumber, 50),
           passportIssueDate: s(passportIssueDate, 20),
           passportExpiry: s(passportExpiry, 20),
-          address: s(address, 300),
-          highSchool: s(highSchool, 200),
+          address: tlu(address, 300),
+          highSchool: tlu(highSchool, 200),
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),
@@ -2036,7 +2062,37 @@ function renderDetailContent(p){
   return h;
 }
 
+var EW_TR_MAP={'ç':'C','Ç':'C','ğ':'G','Ğ':'G','ı':'I','İ':'I','ö':'O','Ö':'O','ş':'S','Ş':'S','ü':'U','Ü':'U'};
+function ewToLatinUpper(v){return String(v==null?'':v).replace(/[çÇğĞıİöÖşŞüÜ]/g,function(c){return EW_TR_MAP[c]||c;}).toUpperCase();}
+function wireNameAndPhoneNormalizers(scope){
+  var root=scope||document;
+  var NAMES=['firstName','lastName','motherName','fatherName','highSchool','address'];
+  for(var i=0;i<NAMES.length;i++){
+    var nodes=root.querySelectorAll?root.querySelectorAll('[name="'+NAMES[i]+'"]'):[];
+    for(var j=0;j<nodes.length;j++){(function(el){
+      if(el.__ewNameBound)return; el.__ewNameBound=true;
+      if(el.value)el.value=ewToLatinUpper(el.value);
+      el.addEventListener('input',function(){
+        var pos=null; try{pos=el.selectionStart;}catch(e){}
+        var v=el.value; var nv=ewToLatinUpper(v);
+        if(v!==nv){el.value=nv; if(pos!=null){try{el.setSelectionRange(pos,pos);}catch(e){}}}
+      });
+    })(nodes[j]);}
+  }
+  var phones=root.querySelectorAll?root.querySelectorAll('input[name="phone"]'):[];
+  for(var k=0;k<phones.length;k++){(function(el){
+    if(el.__ewPhoneBound)return; el.__ewPhoneBound=true;
+    el.setAttribute('inputmode','tel');
+    if(el.value)el.value=el.value.replace(/\D/g,'');
+    el.addEventListener('input',function(){
+      var pos=null; try{pos=el.selectionStart;}catch(e){}
+      var v=el.value; var nv=v.replace(/\D/g,'');
+      if(v!==nv){el.value=nv; var delta=v.length-nv.length; if(pos!=null){var np=Math.max(0,pos-delta);try{el.setSelectionRange(np,np);}catch(e){}}}
+    });
+  })(phones[k]);}
+}
 function bindModalEvents(modal,overlay){
+  wireNameAndPhoneNormalizers(modal);
   var closeBtn=$('#ew-modal-close',modal);
   if(closeBtn)closeBtn.addEventListener('click',function(){closeModal();});
   var cancelBtn=$('#ew-cancel',modal);
@@ -2467,6 +2523,7 @@ function bindEvents(){
   var inlineNextPersonalBtn=$('#ew-next-personal');
   if(inlineNextPersonalBtn&&!formOpen)inlineNextPersonalBtn.addEventListener('click',function(){handleNextPersonal(null);});
   if(!formOpen)wireCcDropdown(null);
+  if(!formOpen)wireNameAndPhoneNormalizers(null);
   $$('[data-doc-input]').forEach(function(input){
     if(formOpen)return;
     input.addEventListener('change',function(e){
