@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -300,11 +301,11 @@ export default function AgentAccount() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">First Name</Label>
-                      <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-10" />
+                      <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))} className="h-10 uppercase" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Last Name</Label>
-                      <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-10" />
+                      <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))} className="h-10 uppercase" />
                     </div>
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -334,7 +335,8 @@ export default function AgentAccount() {
                         </Select>
                         <Input
                           value={form.phoneNumber}
-                          onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
+                          onChange={e => setForm(f => ({ ...f, phoneNumber: digitsOnly(e.target.value) }))}
+                          inputMode="numeric"
                           placeholder="555 123 4567"
                           className="h-10 flex-1"
                         />

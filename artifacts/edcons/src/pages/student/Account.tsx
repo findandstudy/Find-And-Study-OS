@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { toLatinUpper } from "@/lib/textTransform";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -279,11 +280,11 @@ export default function StudentAccount() {
               <div className="grid sm:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <Label>First Name</Label>
-                  <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} className="rounded-xl uppercase" />
+                  <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))} className="rounded-xl uppercase" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Last Name</Label>
-                  <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} className="rounded-xl uppercase" />
+                  <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))} className="rounded-xl uppercase" />
                 </div>
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
@@ -333,11 +334,11 @@ export default function StudentAccount() {
                       </div>
                       <div className="space-y-1.5">
                         <Label>Mother's Name</Label>
-                        <Input value={studentForm.motherName} onChange={e => setStudentForm(f => ({ ...f, motherName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} placeholder="Mother's full name" className="rounded-xl uppercase" />
+                        <Input value={studentForm.motherName} onChange={e => setStudentForm(f => ({ ...f, motherName: toLatinUpper(e.target.value) }))} placeholder="Mother's full name" className="rounded-xl uppercase" />
                       </div>
                       <div className="space-y-1.5">
                         <Label>Father's Name</Label>
-                        <Input value={studentForm.fatherName} onChange={e => setStudentForm(f => ({ ...f, fatherName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") }))} placeholder="Father's full name" className="rounded-xl uppercase" />
+                        <Input value={studentForm.fatherName} onChange={e => setStudentForm(f => ({ ...f, fatherName: toLatinUpper(e.target.value) }))} placeholder="Father's full name" className="rounded-xl uppercase" />
                       </div>
                       <div className="sm:col-span-2 space-y-1.5">
                         <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Address</Label>

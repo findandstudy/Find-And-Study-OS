@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -493,12 +494,12 @@ function UsersTab() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name *</Label>
-                <Input value={createForm.firstName} onChange={e => setCreateForm(f => ({ ...f, firstName: e.target.value }))}
+                <Input value={createForm.firstName} onChange={e => setCreateForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
                   placeholder="John" />
               </div>
               <div className="space-y-2">
                 <Label>Last Name *</Label>
-                <Input value={createForm.lastName} onChange={e => setCreateForm(f => ({ ...f, lastName: e.target.value }))}
+                <Input value={createForm.lastName} onChange={e => setCreateForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
                   placeholder="Doe" />
               </div>
             </div>
@@ -553,7 +554,7 @@ function UsersTab() {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
                   placeholder="555 123 4567" className="flex-1" />
               </div>
             </div>
@@ -584,12 +585,12 @@ function UsersTab() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name *</Label>
-                <Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
+                <Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
                   placeholder="John" />
               </div>
               <div className="space-y-2">
                 <Label>Last Name *</Label>
-                <Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
+                <Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
                   placeholder="Doe" />
               </div>
             </div>
@@ -644,7 +645,7 @@ function UsersTab() {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
                   placeholder="555 123 4567" className="flex-1" />
               </div>
             </div>

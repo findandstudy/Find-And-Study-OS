@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { toLatinUpper } from "@/lib/textTransform";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
@@ -45,7 +46,7 @@ function stripHtml(val: string): string {
 }
 
 function latinOnly(val: string): string {
-  return stripHtml(val).replace(/[^A-Za-zÀ-ÖØ-öø-ÿĀ-ſ\s'-]/g, "").toUpperCase();
+  return toLatinUpper(stripHtml(val));
 }
 
 function latinMsgOnly(val: string): string {

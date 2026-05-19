@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useProgramDocRequirements, resolveDocMeta } from "@/lib/programDocTypes";
+import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -799,15 +800,15 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 <Label className="text-sm font-semibold">
                   {t("apply.firstName")} <span className="text-destructive ml-0.5">*</span>
                 </Label>
-                <Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder={t("apply.firstNamePlaceholder")} className="rounded-xl" />
+                <Input value={form.firstName} onChange={(e) => setForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
+                  placeholder={t("apply.firstNamePlaceholder")} className="rounded-xl uppercase" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">
                   {t("apply.lastName")} <span className="text-destructive ml-0.5">*</span>
                 </Label>
-                <Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))}
-                  placeholder={t("apply.lastNamePlaceholder")} className="rounded-xl" />
+                <Input value={form.lastName} onChange={(e) => setForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
+                  placeholder={t("apply.lastNamePlaceholder")} className="rounded-xl uppercase" />
               </div>
             </div>
 
@@ -835,8 +836,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                   onChange={(code) => setForm(f => ({ ...f, phoneCode: code }))}
                   className="w-[110px] shrink-0"
                 />
-                <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder={t("apply.phonePlaceholder")} className="rounded-xl flex-1" />
+                <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
+                  inputMode="numeric" placeholder={t("apply.phonePlaceholder")} className="rounded-xl flex-1" />
               </div>
             </div>
 
@@ -1053,7 +1054,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                           {t("apply.firstName")} <span className="text-destructive ml-0.5">*</span>
                           {extracted.has("firstName") && <AiBadge />}
                         </Label>
-                        <Input value={form.firstName} onChange={(e) => setField("firstName", e.target.value)}
+                        <Input value={form.firstName} onChange={(e) => setField("firstName", toLatinUpper(e.target.value))}
                           placeholder={t("apply.firstNamePlaceholder")} className={fieldClass("firstName")} />
                       </div>
                       <div className="space-y-1.5">
@@ -1061,7 +1062,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                           {t("apply.lastName")} <span className="text-destructive ml-0.5">*</span>
                           {extracted.has("lastName") && <AiBadge />}
                         </Label>
-                        <Input value={form.lastName} onChange={(e) => setField("lastName", e.target.value)}
+                        <Input value={form.lastName} onChange={(e) => setField("lastName", toLatinUpper(e.target.value))}
                           placeholder={t("apply.lastNamePlaceholder")} className={fieldClass("lastName")} />
                       </div>
                     </div>
@@ -1095,7 +1096,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                             className="w-[110px] shrink-0"
                             triggerClassName={extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}
                           />
-                          <Input value={form.phone} onChange={(e) => setField("phone", e.target.value)}
+                          <Input value={form.phone} onChange={(e) => setField("phone", digitsOnly(e.target.value))}
                             placeholder={t("apply.phonePlaceholder")} className={`rounded-xl flex-1 ${extracted.has("phone") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
                         </div>
                       </div>

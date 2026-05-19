@@ -15,6 +15,7 @@ import {
 import { and, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { ExternalContact } from "@workspace/db";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { resolveIdentity } from "../lib/inbox/identityResolver";
 import {
@@ -353,10 +354,10 @@ router.post(
     const [lead] = await db
       .insert(leadsTable)
       .values({
-        firstName: firstName.toUpperCase().slice(0, 100),
-        lastName: lastName.toUpperCase().slice(0, 100),
+        firstName: toLatinUpper(firstName).slice(0, 100),
+        lastName: toLatinUpper(lastName).slice(0, 100),
         email: contact.email || null,
-        phone: contact.phone || null,
+        phone: contact.phone ? normalizePhoneField(contact.phone) : null,
         phoneE164: contact.phoneE164 || null,
         source: conv.channel,
         status: "new",

@@ -6,7 +6,7 @@ import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
-import { normalizeAndValidateNames } from "../lib/textNormalize";
+import { normalizeAndValidateNames, normalizePhoneField } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
@@ -87,7 +87,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
-  const { error: nameErr } = normalizeAndValidateNames({ firstName, lastName }, ["firstName", "lastName"]);
+  const { error: nameErr, normalized: normLead } = normalizeAndValidateNames({ firstName, lastName }, ["firstName", "lastName"]);
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
@@ -95,10 +95,10 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     return;
   }
   const origin = directOrigin();
-  const phoneStr = phone ? String(phone).slice(0, 30) : null;
+  const phoneStr = phone ? normalizePhoneField(phone).slice(0, 30) : null;
   const [lead] = await db.insert(leadsTable).values({
-    firstName: String(firstName).trim().toUpperCase().slice(0, 100),
-    lastName: String(lastName).trim().toUpperCase().slice(0, 100),
+    firstName: String(normLead.firstName).slice(0, 100),
+    lastName: String(normLead.lastName).slice(0, 100),
     email: String(email).slice(0, 255),
     phone: phoneStr,
     phoneE164: toE164(phoneStr),
@@ -134,7 +134,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
   }
-  const { error: nameErr } = normalizeAndValidateNames({ firstName, lastName }, ["firstName", "lastName"]);
+  const { error: nameErr, normalized: normAgentLead } = normalizeAndValidateNames({ firstName, lastName }, ["firstName", "lastName"]);
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
@@ -144,10 +144,10 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 
   const origin = await inferOriginFromAgentId(agent.id);
 
-  const phoneStr2 = String(phone).slice(0, 30);
+  const phoneStr2 = normalizePhoneField(phone).slice(0, 30);
   const [agentLead] = await db.insert(leadsTable).values({
-    firstName: String(firstName).trim().toUpperCase().slice(0, 100),
-    lastName: String(lastName).trim().toUpperCase().slice(0, 100),
+    firstName: String(normAgentLead.firstName).slice(0, 100),
+    lastName: String(normAgentLead.lastName).slice(0, 100),
     email: String(email).slice(0, 255),
     phone: phoneStr2,
     phoneE164: toE164(phoneStr2),
@@ -293,7 +293,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   const [lead] = await db.insert(leadsTable).values({
     branchId: inheritedBranchId,
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status, email,
-    phone, phoneE164: toE164(phone),
+    phone: phone ? normalizePhoneField(phone) : phone, phoneE164: toE164(phone ? normalizePhoneField(phone) : phone),
     nationality: nationality || null,
     interestedProgram: interestedProgram || null,
     interestedCountry: interestedCountry || null,
@@ -459,6 +459,8 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const { error: nameErr, normalized: normUpdates } = normalizeAndValidateNames(updates, ["firstName", "lastName"]);
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   if (Object.prototype.hasOwnProperty.call(normUpdates, "phone")) {
+    const rawPhone = (normUpdates as any).phone;
+    (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
   const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();

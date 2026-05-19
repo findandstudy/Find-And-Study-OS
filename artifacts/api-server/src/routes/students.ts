@@ -9,7 +9,7 @@ import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { streamDocumentToResponse } from "../lib/documentBytes";
 import { isNull } from "drizzle-orm";
-import { normalizeAndValidateNames } from "../lib/textNormalize";
+import { normalizeAndValidateNames, normalizePhoneField, EXTENDED_NAME_FIELDS } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
@@ -71,6 +71,14 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
   for (const k of SELF_FIELDS) {
     if (req.body[k] !== undefined) data[k] = req.body[k];
   }
+  const { error: meNameErr, normalized: normData } = normalizeAndValidateNames(data, EXTENDED_NAME_FIELDS);
+  if (meNameErr) { res.status(400).json({ error: meNameErr }); return; }
+  if (Object.prototype.hasOwnProperty.call(normData, "phone")) {
+    const rawPhone = (normData as any).phone;
+    (normData as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
+    (normData as any).phoneE164 = toE164((normData as any).phone);
+  }
+  Object.assign(data, normData);
 
   const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
   if (existing) {
@@ -231,11 +239,10 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     res.status(400).json({ error: "firstName and lastName are required" });
     return;
   }
-  const nameFields = ["firstName", "lastName"];
-  if (motherName) nameFields.push("motherName");
-  if (fatherName) nameFields.push("fatherName");
   const { error: nameErr, normalized: normBody } = normalizeAndValidateNames(
-    { firstName, lastName, motherName, fatherName }, nameFields
+    { firstName, lastName, motherName, fatherName, highSchool, address,
+      universityBachelor: req.body.universityBachelor, universityMaster: req.body.universityMaster },
+    EXTENDED_NAME_FIELDS,
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
 
@@ -285,8 +292,8 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     branchId: inheritedBranchId,
     firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
     email: email ? email.toLowerCase().trim() : null,
-    phone: phone || null,
-    phoneE164: toE164(phone || null),
+    phone: phone ? normalizePhoneField(phone) : null,
+    phoneE164: toE164(phone ? normalizePhoneField(phone) : null),
     nationality: nationality || null,
     dateOfBirth: dateOfBirth || null,
     gender: gender || null,
@@ -295,11 +302,13 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     passportExpiry: passportExpiry || null,
     motherName: normBody.motherName ? (normBody.motherName as string) : null,
     fatherName: normBody.fatherName ? (normBody.fatherName as string) : null,
-    address: address || null,
+    address: normBody.address ? (normBody.address as string) : null,
     agentId: resolvedAgentId,
     userId: userId || null,
     notes: notes || null,
-    highSchool: highSchool || null,
+    highSchool: normBody.highSchool ? (normBody.highSchool as string) : null,
+    universityBachelor: normBody.universityBachelor ? (normBody.universityBachelor as string) : null,
+    universityMaster: normBody.universityMaster ? (normBody.universityMaster as string) : null,
     graduationYear: graduationYear ? parseInt(String(graduationYear), 10) : null,
     gpa: gpa || null,
     languageScore: languageScore || null,
@@ -341,21 +350,20 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
       errors.push({ index: i, error: "firstName and lastName are required", row: s });
       continue;
     }
-    const bulkNameFields = ["firstName", "lastName"];
-    if (s.motherName) bulkNameFields.push("motherName");
-    if (s.fatherName) bulkNameFields.push("fatherName");
-    const { error: bNameErr, normalized: ns } = normalizeAndValidateNames(s, bulkNameFields);
+    const { error: bNameErr, normalized: ns } = normalizeAndValidateNames(s, EXTENDED_NAME_FIELDS);
     if (bNameErr) {
       errors.push({ index: i, error: bNameErr, row: s });
       continue;
     }
+    const normBulkPhone = s.phone ? normalizePhoneField(s.phone) : null;
     try {
       const [student] = await db.insert(studentsTable).values({
         firstName: ns.firstName as string,
         lastName: ns.lastName as string,
         status: s.status || "active",
         email: s.email || null,
-        phone: s.phone || null,
+        phone: normBulkPhone,
+        phoneE164: toE164(normBulkPhone),
         nationality: s.nationality || null,
         dateOfBirth: s.dateOfBirth || null,
         gender: s.gender || null,
@@ -364,9 +372,9 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
         passportExpiry: s.passportExpiry || null,
         motherName: ns.motherName ? (ns.motherName as string) : null,
         fatherName: ns.fatherName ? (ns.fatherName as string) : null,
-        address: s.address || null,
+        address: (ns.address as string) || s.address || null,
         notes: s.notes || null,
-        highSchool: s.highSchool || null,
+        highSchool: (ns.highSchool as string) || s.highSchool || null,
         graduationYear: s.graduationYear ? parseInt(String(s.graduationYear), 10) : null,
         gpa: s.gpa || null,
         languageScore: s.languageScore || null,
@@ -482,10 +490,12 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     }
   }
   const { error: nameErr, normalized: normUpdates } = normalizeAndValidateNames(
-    updates, ["firstName", "lastName", "motherName", "fatherName"]
+    updates, EXTENDED_NAME_FIELDS
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   if (Object.prototype.hasOwnProperty.call(normUpdates, "phone")) {
+    const rawPhone = (normUpdates as any).phone;
+    (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
   const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();

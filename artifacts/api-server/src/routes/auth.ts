@@ -3,6 +3,7 @@ import { getRateLimitIp } from "../lib/clientIp";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
+import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
 import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable } from "@workspace/db";
 import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
@@ -239,7 +240,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     const [archivedStudent] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, existing.id), isNotNull(studentsTable.deletedAt)));
     if (archivedStudent) {
       const hash = await bcrypt.hash(password, 10);
-      await db.update(usersTable).set({ passwordHash: hash, isActive: false, emailVerified: false, firstName: firstName.trim(), lastName: lastName.trim(), phone: phone?.trim() || null }).where(eq(usersTable.id, existing.id));
+      await db.update(usersTable).set({ passwordHash: hash, isActive: false, emailVerified: false, firstName: toLatinUpper(firstName.trim()), lastName: toLatinUpper(lastName.trim()), phone: phone ? normalizePhoneField(phone) : null }).where(eq(usersTable.id, existing.id));
       await db.update(studentsTable).set({ deletedAt: null }).where(eq(studentsTable.id, archivedStudent.id));
 
       const code = generateVerificationCode();
@@ -264,9 +265,9 @@ router.post("/auth/register", async (req: Request, res: Response) => {
   const hash = await bcrypt.hash(password, 10);
   const [user] = await db.insert(usersTable).values({
     email: normalizedEmail,
-    firstName: firstName.trim(),
-    lastName: lastName.trim(),
-    phone: phone?.trim() || null,
+    firstName: toLatinUpper(firstName.trim()),
+    lastName: toLatinUpper(lastName.trim()),
+    phone: phone ? normalizePhoneField(phone) : null,
     passwordHash: hash,
     role: "student",
     isActive: false,
@@ -364,10 +365,10 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
         .where(and(eq(leadsTable.email, user.email), isNull(leadsTable.deletedAt)))
         .limit(1);
       if (!existingLead) {
-        const phone = user.phone ? String(user.phone).slice(0, 30) : null;
+        const phone = user.phone ? normalizePhoneField(user.phone).slice(0, 30) : null;
         const [createdLead] = await db.insert(leadsTable).values({
-          firstName: (user.firstName || "").trim().toUpperCase().slice(0, 100) || "STUDENT",
-          lastName: (user.lastName || "").trim().toUpperCase().slice(0, 100) || "REGISTRATION",
+          firstName: toLatinUpper((user.firstName || "").trim()).slice(0, 100) || "STUDENT",
+          lastName: toLatinUpper((user.lastName || "").trim()).slice(0, 100) || "REGISTRATION",
           email: user.email.slice(0, 255),
           phone,
           phoneE164: toE164(phone),

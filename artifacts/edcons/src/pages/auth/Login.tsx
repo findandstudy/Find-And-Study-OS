@@ -7,6 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { PasswordStrengthIndicator, validatePasswordPolicy } from "@/components/PasswordStrengthIndicator";
+import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -533,7 +534,7 @@ export default function Login() {
                       <Label className="text-sm font-semibold">{t("login.firstName")}</Label>
                       <Input
                         value={registerForm.firstName}
-                        onChange={e => setRegisterForm(f => ({ ...f, firstName: e.target.value }))}
+                        onChange={e => setRegisterForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))}
                         placeholder="John"
                         className="rounded-xl h-11"
                         required
@@ -543,7 +544,7 @@ export default function Login() {
                       <Label className="text-sm font-semibold">{t("login.lastName")}</Label>
                       <Input
                         value={registerForm.lastName}
-                        onChange={e => setRegisterForm(f => ({ ...f, lastName: e.target.value }))}
+                        onChange={e => setRegisterForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))}
                         placeholder="Doe"
                         className="rounded-xl h-11"
                         required
@@ -596,7 +597,7 @@ export default function Login() {
                       </Select>
                       <Input
                         value={registerForm.phone}
-                        onChange={e => setRegisterForm(f => ({ ...f, phone: e.target.value.replace(/[^\d\s]/g, "") }))}
+                        onChange={e => setRegisterForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
                         placeholder="555 123 4567"
                         className="rounded-xl h-11 flex-1"
                         required

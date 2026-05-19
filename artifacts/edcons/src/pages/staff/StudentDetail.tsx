@@ -21,6 +21,7 @@ import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Cal
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -1407,7 +1408,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   }) => (
     <div className={`space-y-1.5 ${className}`}>
       <Label className="font-semibold text-sm">{label}{required && <span className="text-destructive ml-0.5">*</span>}</Label>
-      <Input type={type} value={value} onChange={e => { let v = e.target.value; if (latinUppercase) v = v.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, ""); onChange(v); }} placeholder={placeholder} className={`rounded-xl h-9 ${latinUppercase ? "uppercase" : ""}`} />
+      <Input type={type} value={value} onChange={e => { let v = e.target.value; if (latinUppercase) v = toLatinUpper(v); onChange(v); }} placeholder={placeholder} className={`rounded-xl h-9 ${latinUppercase ? "uppercase" : ""}`} />
     </div>
   );
 
@@ -1441,7 +1442,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
+                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
                 </div>
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
@@ -1496,9 +1497,9 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
                   </SelectContent>
                 </Select>
               </div>
-              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
-              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
-              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. ANKARA FEN LISESI" className="col-span-2" latinUppercase />
+              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. ISTANBUL UNIVERSITY" className="col-span-2" latinUppercase />
+              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. BOGAZICI UNIVERSITY" className="col-span-2" latinUppercase />
               <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">GPA</Label>

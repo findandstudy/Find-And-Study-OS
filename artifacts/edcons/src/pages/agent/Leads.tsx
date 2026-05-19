@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
+import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -519,11 +520,11 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
             <Label>First Name *</Label>
-            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
+            <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
             <Label>Last Name *</Label>
-            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} className="uppercase" />
+            <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
             <Label>Email *</Label>
@@ -542,7 +543,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
                   ))}
                 </SelectContent>
               </Select>
-              <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+              <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: digitsOnly(e.target.value) })} placeholder="555 000 0000" />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -1228,11 +1229,11 @@ export default function AgentLeadsPage() {
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
               <Label>First Name *</Label>
-              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} placeholder="First name" className="uppercase" />
+              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} placeholder="First name" className="uppercase" />
             </div>
             <div className="space-y-1.5">
               <Label>Last Name *</Label>
-              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ\s'-]/g, "") })} placeholder="Last name" className="uppercase" />
+              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} placeholder="Last name" className="uppercase" />
             </div>
             <div className="space-y-1.5">
               <Label>Email *</Label>
@@ -1251,7 +1252,7 @@ export default function AgentLeadsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input className="flex-1 min-w-0" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
+                <Input className="flex-1 min-w-0" value={form.phone} onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })} placeholder="555 000 0000" />
               </div>
             </div>
             <div className="space-y-1.5">
