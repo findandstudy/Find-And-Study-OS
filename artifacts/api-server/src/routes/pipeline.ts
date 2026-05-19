@@ -24,12 +24,22 @@ const router: IRouter = Router();
       CREATE UNIQUE INDEX IF NOT EXISTS pipeline_stages_entity_key_uniq
       ON pipeline_stages(entity_type, key)
     `);
-    // Task #167 — admin-defined per-stage action buttons. Idempotent.
+  } catch (e) {
+    console.error("[pipeline] startup dedup/index migration failed:", e);
+  }
+
+  // Task #167 — admin-defined per-stage action buttons. Idempotent.
+  // Kept in its own try-block so a failure here is visible (previously
+  // bundled with dedup migration and swallowed silently, leaving the
+  // column missing and admin-saved actions silently dropped).
+  try {
     await db.execute(sql`
       ALTER TABLE pipeline_stages
       ADD COLUMN IF NOT EXISTS actions jsonb NOT NULL DEFAULT '[]'::jsonb
     `);
-  } catch {}
+  } catch (e) {
+    console.error("[pipeline] failed to ensure actions column (Task #167):", e);
+  }
 
   try {
     await db.execute(sql`
