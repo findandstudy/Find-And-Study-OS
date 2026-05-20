@@ -12,6 +12,7 @@ import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginM
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
+import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 
 const router: IRouter = Router();
@@ -96,27 +97,45 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
   }
   const origin = directOrigin();
   const phoneStr = phone ? normalizePhoneField(phone).slice(0, 30) : null;
-  const [lead] = await db.insert(leadsTable).values({
-    firstName: String(normLead.firstName).slice(0, 100),
-    lastName: String(normLead.lastName).slice(0, 100),
-    email: String(email).slice(0, 255),
-    phone: phoneStr,
-    phoneE164: toE164(phoneStr),
-    nationality: nationality ? String(nationality).slice(0, 100) : null,
-    interestedProgram: interestedProgram ? String(interestedProgram).slice(0, 255) : null,
-    interestedCountry: interestedCountry ? String(interestedCountry).slice(0, 100) : null,
-    notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
-    source: bodySource ? String(bodySource).slice(0, 100) : "website",
-    status: "new",
-    sourcePageUrl: sourcePageUrl ? String(sourcePageUrl).slice(0, 500) : null,
-    utmSource: utmSource ? String(utmSource).slice(0, 100) : null,
-    utmMedium: utmMedium ? String(utmMedium).slice(0, 100) : null,
-    utmCampaign: utmCampaign ? String(utmCampaign).slice(0, 100) : null,
-    utmTerm: utmTerm ? String(utmTerm).slice(0, 100) : null,
-    utmContent: utmContent ? String(utmContent).slice(0, 100) : null,
-    ...origin,
-  }).returning();
-  await applyLeadAssignmentRules(lead, req.ip);
+  // Guard against cross-channel lead overwrite via untrusted body.source.
+  // /public/lead now dedupes by (lower(email), source); accepting reserved
+  // channel strings would let an unauthenticated caller update leads
+  // belonging to embed widgets, agent web forms, or website builder forms.
+  const rawSource = bodySource ? String(bodySource).slice(0, 100) : "website";
+  const lcSource = rawSource.toLowerCase().trim();
+  const isReservedSource =
+    lcSource === "web_form" ||
+    lcSource.startsWith("embed:") ||
+    lcSource.startsWith("website-form:");
+  const resolvedSource = isReservedSource ? "website" : rawSource;
+  const { lead } = await findOrUpsertPublicLead({
+    source: resolvedSource,
+    uniqueKey: { kind: "emailSource" },
+    fields: {
+      firstName: String(normLead.firstName).slice(0, 100),
+      lastName: String(normLead.lastName).slice(0, 100),
+      email: String(email).slice(0, 255),
+      phone: phoneStr,
+      phoneE164: toE164(phoneStr),
+      nationality: nationality ? String(nationality).slice(0, 100) : null,
+      interestedProgram: interestedProgram ? String(interestedProgram).slice(0, 255) : null,
+      interestedCountry: interestedCountry ? String(interestedCountry).slice(0, 100) : null,
+      notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
+      sourcePageUrl: sourcePageUrl ? String(sourcePageUrl).slice(0, 500) : null,
+      utmSource: utmSource ? String(utmSource).slice(0, 100) : null,
+      utmMedium: utmMedium ? String(utmMedium).slice(0, 100) : null,
+      utmCampaign: utmCampaign ? String(utmCampaign).slice(0, 100) : null,
+      utmTerm: utmTerm ? String(utmTerm).slice(0, 100) : null,
+      utmContent: utmContent ? String(utmContent).slice(0, 100) : null,
+    },
+    extras: {
+      originType: origin.originType,
+      originEntityType: origin.originEntityType,
+      originEntityId: origin.originEntityId,
+      originDisplayName: origin.originDisplayName,
+    },
+    ip: req.ip,
+  });
   res.status(201).json({ success: true, message: "Inquiry submitted successfully", leadId: lead.id });
 });
 
@@ -145,18 +164,25 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
   const origin = await inferOriginFromAgentId(agent.id);
 
   const phoneStr2 = normalizePhoneField(phone).slice(0, 30);
-  const [agentLead] = await db.insert(leadsTable).values({
-    firstName: String(normAgentLead.firstName).slice(0, 100),
-    lastName: String(normAgentLead.lastName).slice(0, 100),
-    email: String(email).slice(0, 255),
-    phone: phoneStr2,
-    phoneE164: toE164(phoneStr2),
+  await findOrUpsertPublicLead({
     source: "web_form",
-    status: "new",
-    agentId: agent.id,
-    ...origin,
-  }).returning();
-  if (agentLead) await applyLeadAssignmentRules(agentLead, req.ip);
+    uniqueKey: { kind: "emailSourceAgent", agentId: agent.id },
+    fields: {
+      firstName: String(normAgentLead.firstName).slice(0, 100),
+      lastName: String(normAgentLead.lastName).slice(0, 100),
+      email: String(email).slice(0, 255),
+      phone: phoneStr2,
+      phoneE164: toE164(phoneStr2),
+    },
+    extras: {
+      agentId: agent.id,
+      originType: origin.originType,
+      originEntityType: origin.originEntityType,
+      originEntityId: origin.originEntityId,
+      originDisplayName: origin.originDisplayName,
+    },
+    ip: req.ip,
+  });
 
   const accept = req.headers.accept || "";
   if (accept.includes("application/json")) {

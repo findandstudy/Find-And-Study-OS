@@ -31,6 +31,7 @@ import {
 import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
+import { findOrUpsertPublicLead } from "../lib/leadDedup";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -545,16 +546,20 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
           ));
         if (stage) initialStatus = stage.key;
       }
-      const [lead] = await db.insert(leadsTable).values({
-        firstName: String(formData.firstName).slice(0, 100),
-        lastName: String(formData.lastName || "").slice(0, 100),
-        email: String(formData.email).slice(0, 255),
-        phone: formData.phone ? String(formData.phone).slice(0, 50) : null,
-        source: form.crmSource || `website-form:${form.slug}`,
-        status: initialStatus,
-      }).returning();
+      const resolvedSource = form.crmSource || `website-form:${form.slug}`;
+      const { lead } = await findOrUpsertPublicLead({
+        source: resolvedSource,
+        uniqueKey: { kind: "emailSource" },
+        fields: {
+          firstName: String(formData.firstName).slice(0, 100),
+          lastName: String(formData.lastName || "").slice(0, 100),
+          email: String(formData.email).slice(0, 255),
+          phone: formData.phone ? String(formData.phone).slice(0, 50) : null,
+        },
+        extras: { initialStatus },
+        ip: req.ip,
+      });
       leadId = lead.id;
-      await applyLeadAssignmentRules(lead, req.ip);
     }
 
     const submissionData = { ...formData };

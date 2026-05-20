@@ -48,6 +48,16 @@ export const leadsTable = pgTable("leads", {
   index("leads_season_idx").on(table.season),
   index("leads_origin_type_idx").on(table.originType),
   index("leads_phone_e164_idx").on(table.phoneE164),
+  // NOTE: Partial unique indexes for public-lead dedup are managed by
+  // `artifacts/api-server/scripts/cleanup-{embed,public-lead}-duplicates.ts`
+  // (run from post-merge.sh) because drizzle-kit cannot express the
+  // `WHERE source ILIKE 'embed:%'` etc. predicates portably. The
+  // installed indexes are:
+  //   - leads_embed_email_source_uniq        (lower(email), source) WHERE source ILIKE 'embed:%'
+  //   - leads_website_email_source_uniq      (lower(email), source) WHERE source = 'website'
+  //   - leads_webform_email_agent_uniq       (lower(email), agent_id) WHERE source='web_form' AND agent_id IS NOT NULL
+  //   - leads_webform_email_uniq             (lower(email))         WHERE source='web_form' AND agent_id IS NULL
+  //   - leads_websiteform_email_source_uniq  (lower(email), source) WHERE source LIKE 'website-form:%'
 ]);
 
 export const followUpsTable = pgTable("follow_ups", {
