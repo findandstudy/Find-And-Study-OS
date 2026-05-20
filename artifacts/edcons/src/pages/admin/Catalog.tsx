@@ -54,11 +54,20 @@ async function exportToExcel(rows: Record<string, any>[], sheetName: string, fil
   XLSX.writeFile(wb, filename);
 }
 
-async function downloadExcelTemplate(templateRows: Record<string, any>[], sheetName: string, filename: string) {
+async function downloadExcelTemplate(
+  templateRows: Record<string, any>[],
+  sheetName: string,
+  filename: string,
+  notesRows?: Record<string, any>[],
+) {
   const XLSX = await import("xlsx");
-  const ws = XLSX.utils.json_to_sheet(templateRows);
   const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(templateRows);
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  if (notesRows && notesRows.length > 0) {
+    const wsNotes = XLSX.utils.json_to_sheet(notesRows);
+    XLSX.utils.book_append_sheet(wb, wsNotes, "Instructions");
+  }
   XLSX.writeFile(wb, filename);
 }
 
@@ -104,9 +113,11 @@ type Program = { id: number; universityId: number; name: string; degree?: string
 
 type BulkImportResult = { inserted: number; skipped: number; updated?: number; invalidDocCells?: number; docsTouched?: number };
 
-function BulkImportModal({ open, onClose, title, templateRows, onImport }: {
+function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport }: {
   open: boolean; onClose: () => void; title: string;
-  templateRows: Record<string, any>[]; onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
+  templateRows: Record<string, any>[];
+  notesRows?: Record<string, any>[];
+  onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
 }) {
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [error, setError] = useState("");
@@ -149,7 +160,7 @@ function BulkImportModal({ open, onClose, title, templateRows, onImport }: {
       <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>Bulk Import — {title}</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <Button variant="outline" size="sm" onClick={() => downloadExcelTemplate(templateRows, title, `${title.toLowerCase().replace(/\s/g, "_")}_template.xlsx`)}>
+          <Button variant="outline" size="sm" onClick={() => downloadExcelTemplate(templateRows, title, `${title.toLowerCase().replace(/\s/g, "_")}_template.xlsx`, notesRows)}>
             <Download className="h-4 w-4 mr-2" /> Download Template (.xlsx)
           </Button>
           <div>
@@ -1381,16 +1392,11 @@ function ProgramsTab() {
   const docColumnsAll = (val: string) =>
     Object.fromEntries(PROGRAM_DOC_TYPE_KEYS.map(k => [k, val])) as Record<string, string>;
 
+  // Clean template: 3 valid, ready-to-import example rows. Empty doc cells
+  // default to "not required" — fill a cell with "mandatory" or "optional"
+  // only for the document types that program actually needs. The
+  // Instructions sheet documents every column and accepted value.
   const templateRows = [
-    {
-      universityName: "// Each doc column accepts:", name: "mandatory / optional / (blank)",
-      degree: "(inline guide row — delete before importing)",
-      field: "", language: "", duration: "", tuitionFee: "", currency: "", scholarship: "",
-      intakes: "", requirements: "", commissionRate: "", applicationFee: "", advancedFee: "",
-      depositFee: "", serviceFeeAmount: "", discountedFee: "", languageFee: "", feeType: "",
-      minGpa: "", minLanguageScore: "", quota: "", isActive: "",
-      ...docColumnsAll("mandatory|optional|(blank)"),
-    },
     {
       universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc",
       field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000,
@@ -1417,6 +1423,42 @@ function ProgramsTab() {
       bachelors_transcript: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "mandatory",
       sop: "optional", lor: "optional", cv: "optional",
     },
+    {
+      universityName: "Trakya University", name: "Mechanical Engineering", degree: "BSc",
+      field: "Engineering", language: "Turkish", duration: "4 years", tuitionFee: 3500,
+      currency: "USD", scholarship: 500, intakes: "Fall",
+      requirements: "High school diploma, TR-YOS or SAT", commissionRate: 8,
+      applicationFee: 100, advancedFee: 0, depositFee: 300, serviceFeeAmount: 200,
+      discountedFee: 3000, languageFee: 0, feeType: "per year", minGpa: 2.0,
+      minLanguageScore: 0, quota: 40, isActive: "Yes",
+      ...docColumnsAll(""),
+      passport: "mandatory", class_12th_hsc_certificate: "mandatory",
+      class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
+    },
+  ];
+
+  const notesRows: Record<string, string>[] = [
+    { Column: "universityName", Required: "Yes", Notes: "Exact name as it appears in the Universities tab. Case-insensitive but spelling must match." },
+    { Column: "name", Required: "Yes", Notes: "Program name (e.g. Computer Engineering)." },
+    { Column: "degree", Required: "No", Notes: "BSc, MSc, MBA, PhD, Diploma, etc." },
+    { Column: "field", Required: "No", Notes: "Field of study (Engineering, Business, Arts, ...)." },
+    { Column: "language", Required: "No", Notes: "Language of instruction (English, Turkish, ...)." },
+    { Column: "duration", Required: "No", Notes: "Free text: '4 years', '2 years', '18 months'." },
+    { Column: "tuitionFee", Required: "No", Notes: "Numeric value only (no currency symbol)." },
+    { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
+    { Column: "scholarship", Required: "No", Notes: "Numeric — scholarship amount in the chosen currency." },
+    { Column: "intakes", Required: "No", Notes: "Comma-separated: 'Fall, Spring, Summer'." },
+    { Column: "requirements", Required: "No", Notes: "Free text shown to students." },
+    { Column: "commissionRate", Required: "No", Notes: "Agent commission percent (numeric, e.g. 10)." },
+    { Column: "applicationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "All numeric (no currency symbol). Leave blank if not applicable." },
+    { Column: "feeType", Required: "No", Notes: "Free text: 'per year', 'per semester', 'one-time'." },
+    { Column: "minGpa", Required: "No", Notes: "Numeric on a 4.0 scale (e.g. 2.5, 3.0)." },
+    { Column: "minLanguageScore", Required: "No", Notes: "Numeric — IELTS / TOEFL / Duolingo equivalent." },
+    { Column: "quota", Required: "No", Notes: "Integer — number of seats per intake." },
+    { Column: "isActive", Required: "No", Notes: "Yes / No (defaults to Yes)." },
+    { Column: "— Document columns —", Required: "", Notes: "Every column from 'passport' onwards is a required-document marker." },
+    { Column: "Allowed cell values", Required: "", Notes: "'mandatory' = student MUST upload before applying. 'optional' = shown but not required. (blank) = not requested." },
+    { Column: "Removed columns", Required: "", Notes: "Any document column that you delete from the sheet is left UNCHANGED on existing programs (only filled cells overwrite)." },
   ];
 
   return (
@@ -1780,7 +1822,7 @@ function ProgramsTab() {
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} notesRows={notesRows} onImport={handleBulkImport} />
 
       <Dialog open={delAllOpen} onOpenChange={o => !o && setDelAllOpen(false)}>
         <DialogContent className="max-w-sm">
