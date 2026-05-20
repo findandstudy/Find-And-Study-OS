@@ -1392,48 +1392,51 @@ function ProgramsTab() {
   const docColumnsAll = (val: string) =>
     Object.fromEntries(PROGRAM_DOC_TYPE_KEYS.map(k => [k, val])) as Record<string, string>;
 
-  // Clean template: 3 valid, ready-to-import example rows. Empty doc cells
-  // default to "not required" — fill a cell with "mandatory" or "optional"
-  // only for the document types that program actually needs. The
+  // Clean template seeded from REAL programs already in this system so admins
+  // see the exact value formats (university spelling, degree label, duration
+  // syntax, intake codes, fee shape, doc-requirement mix) that the importer
+  // accepts. One row per education level (Associate / Bachelor / Master).
+  // Empty doc cells default to "not required" — fill with "mandatory" or
+  // "optional" only for the document types that program actually needs. The
   // Instructions sheet documents every column and accepted value.
   const templateRows = [
     {
-      universityName: "Istanbul University", name: "Computer Engineering", degree: "BSc",
-      field: "Engineering", language: "English", duration: "4 years", tuitionFee: 5000,
-      currency: "USD", scholarship: 0, intakes: "Fall, Spring",
-      requirements: "High school diploma, English proficiency", commissionRate: 10,
-      applicationFee: 200, advancedFee: 0, depositFee: 500, serviceFeeAmount: 300,
-      discountedFee: 4500, languageFee: 0, feeType: "per year", minGpa: 2.5,
-      minLanguageScore: 5.5, quota: 50, isActive: "Yes",
-      ...docColumnsAll(""),
-      passport: "mandatory", high_school_diploma_translation: "mandatory",
-      class_12th_hsc_certificate: "mandatory", class_12th_hsc_marks_sheet: "mandatory",
-      ielts_pte_gre_gmat_toefl_duolingo: "optional", sop: "optional", photo: "optional",
-    },
-    {
-      universityName: "Istanbul University", name: "Business Administration", degree: "MBA",
-      field: "Business", language: "English", duration: "2 years", tuitionFee: 8000,
-      currency: "USD", scholarship: 2000, intakes: "Fall",
-      requirements: "Bachelor's degree, GMAT 550+", commissionRate: 12, applicationFee: 150,
-      advancedFee: 0, depositFee: 500, serviceFeeAmount: 300, discountedFee: 7000,
-      languageFee: 0, feeType: "per year", minGpa: 3.0, minLanguageScore: 6.5, quota: 30,
+      universityName: "Antalya Bilim University", name: "Associate of Cookery (Turkish)",
+      degree: "Associate", field: "Business", language: "Turkish", duration: "24 Months",
+      tuitionFee: 5200, currency: "USD", scholarship: 2860, intakes: "Sep",
+      requirements: "High school diploma", commissionRate: 13, applicationFee: 0,
+      advancedFee: 0, depositFee: 1000, serviceFeeAmount: 0, discountedFee: 2340,
+      languageFee: 0, feeType: "Per Year", minGpa: 0, minLanguageScore: 0, quota: "",
       isActive: "Yes",
       ...docColumnsAll(""),
-      passport: "mandatory", bachelors_certificate: "mandatory",
-      bachelors_transcript: "mandatory", ielts_pte_gre_gmat_toefl_duolingo: "mandatory",
-      sop: "optional", lor: "optional", cv: "optional",
+      passport: "mandatory", high_school_diploma_translation: "mandatory",
+      class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
     },
     {
-      universityName: "Trakya University", name: "Mechanical Engineering", degree: "BSc",
-      field: "Engineering", language: "Turkish", duration: "4 years", tuitionFee: 3500,
-      currency: "USD", scholarship: 500, intakes: "Fall",
-      requirements: "High school diploma, TR-YOS or SAT", commissionRate: 8,
-      applicationFee: 100, advancedFee: 0, depositFee: 300, serviceFeeAmount: 200,
-      discountedFee: 3000, languageFee: 0, feeType: "per year", minGpa: 2.0,
-      minLanguageScore: 0, quota: 40, isActive: "Yes",
+      universityName: "Antalya Bilim University", name: "Bachelor of Dentistry (Turkish)",
+      degree: "Bachelor", field: "Medicine", language: "Turkish", duration: "60 Months",
+      tuitionFee: 14000, currency: "USD", scholarship: 2100, intakes: "Sep",
+      requirements: "High school diploma, TR-YOS or equivalent",
+      commissionRate: 9, applicationFee: 0, advancedFee: 0, depositFee: 2000,
+      serviceFeeAmount: 0, discountedFee: 11900, languageFee: 0, feeType: "Per Year",
+      minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
       ...docColumnsAll(""),
-      passport: "mandatory", class_12th_hsc_certificate: "mandatory",
+      passport: "mandatory", high_school_diploma_translation: "mandatory",
       class_12th_hsc_marks_sheet: "mandatory", photo: "mandatory",
+    },
+    {
+      universityName: "Antalya Bilim University",
+      name: "Master of Business Administration (Thesis) (English)",
+      degree: "Master", field: "Business", language: "English", duration: "12 Months",
+      tuitionFee: 5400, currency: "USD", scholarship: 810, intakes: "Feb, Sep",
+      requirements: "Bachelor's degree, English proficiency",
+      commissionRate: 13, applicationFee: 0, advancedFee: 0, depositFee: 1000,
+      serviceFeeAmount: 0, discountedFee: 4590, languageFee: 0, feeType: "Per Year",
+      minGpa: 0, minLanguageScore: 0, quota: "", isActive: "Yes",
+      ...docColumnsAll(""),
+      passport: "mandatory", bachelors_certificate: "mandatory",
+      bachelors_transcript: "mandatory", photo: "mandatory",
+      ielts_pte_gre_gmat_toefl_duolingo: "optional",
     },
   ];
 
