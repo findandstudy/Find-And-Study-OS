@@ -12,6 +12,7 @@ import { createApplicationForStudent } from "./public-apply";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
+import { findOrUpsertEmbedLead } from "../lib/embedLeadDedup";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
 function tlu(v: any, max: number): string | null {
@@ -460,23 +461,29 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
 
   try {
-    const [lead] = await db.insert(leadsTable).values({
-      firstName: tlu(firstName, 100)!,
-      lastName: tlu(lastName, 100)!,
-      email: s(email, 255),
-      phone: pn(phone, countryCode, 50),
-      source: `embed:${widget.slug}`,
-      status: "new",
-      interestedProgram: s(programName, 255),
-      interestedCountry: s(universityName, 255),
-      sourcePageUrl: s(sourcePageUrl, 500),
-      utmSource: s(utmSource, 100),
-      utmMedium: s(utmMedium, 100),
-      utmCampaign: s(utmCampaign, 100),
-      utmTerm: s(utmTerm, 100),
-      utmContent: s(utmContent, 100),
-    }).returning();
-    await applyLeadAssignmentRules(lead, req.ip);
+    // Dedup-aware insert: if the same email already submitted to this
+    // widget within the dedup window, the existing lead row is reused
+    // and refreshed with the latest payload. Prevents duplicates when
+    // the visitor clicks Continue twice, refreshes, or reopens the
+    // widget in another tab.
+    const { lead } = await findOrUpsertEmbedLead({
+      slug: widget.slug,
+      ip: req.ip,
+      fields: {
+        firstName: tlu(firstName, 100)!,
+        lastName: tlu(lastName, 100)!,
+        email: s(email, 255)!,
+        phone: pn(phone, countryCode, 50),
+        interestedProgram: s(programName, 255),
+        interestedCountry: s(universityName, 255),
+        sourcePageUrl: s(sourcePageUrl, 500),
+        utmSource: s(utmSource, 100),
+        utmMedium: s(utmMedium, 100),
+        utmCampaign: s(utmCampaign, 100),
+        utmTerm: s(utmTerm, 100),
+        utmContent: s(utmContent, 100),
+      },
+    });
     res.status(201).json({ success: true, leadId: lead.id });
   } catch (err: any) {
     console.error("[embed/lead] failed:", err?.message || err);
@@ -588,20 +595,25 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
       }).where(eq(leadsTable.id, leadRow.id)).returning();
       lead = updated;
     } else {
-      const [inserted] = await tx.insert(leadsTable).values({
-        firstName: tlu(firstName, 100)!,
-        lastName: tlu(lastName, 100)!,
-        email: s(email, 255),
-        phone: pn(phone, countryCode, 50),
-        nationality: s(nationality, 100),
-        source: `embed:${widget.slug}`,
-        status: "new",
-        interestedProgram: s(programName || desiredProgram, 255),
-        interestedCountry: null,
-        notes: s(message, 2000),
-      }).returning();
-      lead = inserted;
-      if (lead) await applyLeadAssignmentRules(lead, req.ip);
+      // No verified leadId from Step-1 (cookie cleared, new tab, etc.).
+      // Use the dedup helper so the same email submitting the same widget
+      // again does not create another row alongside the Step-1 lead that
+      // already exists.
+      const upsertResult = await findOrUpsertEmbedLead({
+        slug: widget.slug,
+        ip: req.ip,
+        tx,
+        fields: {
+          firstName: tlu(firstName, 100)!,
+          lastName: tlu(lastName, 100)!,
+          email: s(email, 255)!,
+          phone: pn(phone, countryCode, 50),
+          nationality: s(nationality, 100),
+          interestedProgram: s(programName || desiredProgram, 255),
+          notes: s(message, 2000),
+        },
+      });
+      lead = upsertResult.lead;
     }
 
     const [submission] = await tx.insert(embedSubmissionsTable).values({
