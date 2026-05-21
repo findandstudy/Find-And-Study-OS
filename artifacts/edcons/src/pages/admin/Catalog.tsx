@@ -112,7 +112,15 @@ type Program = { id: number; universityId: number; name: string; degree?: string
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
-type BulkImportResult = { inserted: number; skipped: number; updated?: number; invalidDocCells?: number; docsTouched?: number };
+type BulkImportResult = {
+  inserted: number;
+  skipped: number;
+  updated?: number;
+  invalidDocCells?: number;
+  docsTouched?: number;
+  unknownDocColumns?: string[];
+  unknownDocColumnsMessage?: string;
+};
 
 function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport }: {
   open: boolean; onClose: () => void; title: string;
@@ -182,6 +190,27 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
                   )}
                 </p>
               )}
+            </div>
+          )}
+          {result && result.unknownDocColumns && result.unknownDocColumns.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
+              <p className="font-medium text-amber-800 flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4" />
+                Bu sütunlar katalogda yok, atlandı:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {result.unknownDocColumns.map(col => (
+                  <code key={col} className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-xs font-mono break-all">
+                    {col}
+                  </code>
+                ))}
+              </div>
+              <a
+                href="/admin/catalog"
+                className="inline-flex items-center gap-1 text-amber-900 underline hover:no-underline text-xs font-medium"
+              >
+                Belge kataloğuna git <ExternalLink className="h-3 w-3" />
+              </a>
             </div>
           )}
         </div>
