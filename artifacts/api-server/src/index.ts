@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getCurrentSeason } from "./lib/season";
+import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -615,6 +616,10 @@ async function seedClaudeIntegration() {
       await backfillStudentAppStatus();
       await backfillLeadConversion();
     }
+
+    // Documents catalog seeder runs on every boot (idempotent per-row).
+    // Outside the bootstrap_done lock so it can backfill existing envs.
+    await seedDocumentTypes(pool);
 
     // One-shot data cleanup (idempotent via system_flags). Runs on every
     // boot but exits early once the version flag is set. This ensures

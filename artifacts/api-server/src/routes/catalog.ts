@@ -434,7 +434,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
 
 /* ─── CATALOG OPTIONS ──────────────────────────────────────── */
 
-const VALID_CATEGORIES = ["degree", "language", "duration", "fee_type", "intake", "field", "university_type"];
+const VALID_CATEGORIES = ["degree", "language", "duration", "fee_type", "intake", "field", "university_type", "documents"];
 
 router.get("/catalog-options", async (_req, res): Promise<void> => {
   const data = await db.select().from(catalogOptionsTable).orderBy(asc(catalogOptionsTable.category), asc(catalogOptionsTable.sortOrder));

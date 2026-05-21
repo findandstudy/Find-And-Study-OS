@@ -1858,10 +1858,9 @@ const OPTION_CATEGORIES = [
   { key: "intake", label: "Intake Periods", description: "Enrollment periods" },
   { key: "field", label: "Field", description: "Academic fields / study areas" },
   { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
-  { key: "documents", label: "Documents", description: "Her derece için istenecek belgeleri seçin" },
+  { key: "documents", label: "Documents", description: "Tüm belge türlerinin ana listesi — buraya eklediğiniz belgeler, başvuru ve derece sayfalarında seçenek olarak görünür" },
 ];
 
-const DOCUMENTS_SECTION_KEY = "documents";
 
 const PROGRAM_DOC_TYPE_KEYS = [
   "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
@@ -2105,24 +2104,11 @@ function OptionsTab() {
             className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
           >
             {cat.label}
-            {cat.key !== DOCUMENTS_SECTION_KEY && (
-              <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
-            )}
+            <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
           </button>
         ))}
       </div>
 
-      {activeCategory === DOCUMENTS_SECTION_KEY ? (
-        <div className="border rounded-lg">
-          <div className="px-4 py-3 border-b bg-muted/30">
-            <h3 className="text-sm font-semibold">{catMeta.label}</h3>
-            <p className="text-xs text-muted-foreground">{catMeta.description}</p>
-          </div>
-          <div className="p-3">
-            <DegreeDocumentsSection />
-          </div>
-        </div>
-      ) : (
       <div className="border rounded-lg">
         <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
           <div>
@@ -2200,7 +2186,6 @@ function OptionsTab() {
           ))}
         </div>
       </div>
-      )}
     </div>
     {docsForOption && (
       <DegreeDocsDialog option={docsForOption} onClose={() => setDocsForOption(null)} />
@@ -2443,88 +2428,6 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
   );
 }
 
-function DegreeDocumentsSection() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
-
-  const { data: optionsResp, isLoading } = useQuery({
-    queryKey: ["catalog-options"],
-    queryFn: () => api("/api/catalog-options"),
-  });
-  const grouped: Record<string, CatalogOption[]> = (optionsResp as any)?.grouped || {};
-  const degrees = grouped["degree"] || [];
-
-  const filtered = degrees
-    .filter(d => !search.trim() || d.value.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => {
-      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-      return a.sortOrder - b.sortOrder;
-    });
-
-  const selected = filtered.find(d => d.id === selectedId)
-    ?? degrees.find(d => d.id === selectedId)
-    ?? null;
-
-  useEffect(() => {
-    if (!selected && filtered.length > 0) setSelectedId(filtered[0].id);
-  }, [selected, filtered]);
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
-  }
-
-  if (degrees.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground text-sm py-12">
-        No degree options yet. Add one from the Degree section first.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-3 h-[72vh]">
-      <div className="border rounded-lg flex flex-col min-h-0">
-        <div className="p-2 border-b">
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search degree…"
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="flex-1 overflow-y-auto divide-y">
-          {filtered.length === 0 && (
-            <p className="text-center text-muted-foreground text-xs py-6">No matches</p>
-          )}
-          {filtered.map(d => (
-            <button
-              key={d.id}
-              onClick={() => setSelectedId(d.id)}
-              className={cn(
-                "w-full text-left px-3 py-2 text-sm hover:bg-muted/40 transition-colors flex items-center gap-2",
-                selected?.id === d.id && "bg-primary/10 text-primary font-medium",
-              )}
-            >
-              <FileText className="w-3.5 h-3.5 shrink-0 opacity-60" />
-              <span className={cn("flex-1 truncate", !d.isActive && "line-through text-muted-foreground")}>{d.value}</span>
-              {!d.isActive && <Badge variant="outline" className="text-[10px] bg-muted">Inactive</Badge>}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="border rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
-        {selected ? (
-          <DegreeDocsEditor key={selected.id} option={selected} variant="inline" />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Select a degree from the list to manage its documents.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════════
    MAIN PAGE
