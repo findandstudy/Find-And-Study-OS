@@ -918,6 +918,15 @@ async function loadDocCatalogForEmbed(): Promise<Record<string, DocCatalogEntry>
 // Warm the cache on module load (best-effort, errors swallowed).
 void loadDocCatalogForEmbed();
 
+// Public hook so other routes (catalog mutation handlers) can drop the
+// in-memory cache the moment an admin adds, edits, deactivates or deletes a
+// document type. Without this the widget would lag up to 5 minutes behind
+// admin changes.
+export function invalidateDocCatalogCache(): void {
+  docCatalogCache = null;
+  docCatalogCacheUntil = 0;
+}
+
 router.get("/public/embed/embed.js", async (_req, res): Promise<void> => {
   const baseUrl = getBaseUrl(_req);
   const js = generateEmbedScript(baseUrl);

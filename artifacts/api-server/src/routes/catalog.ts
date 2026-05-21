@@ -1,8 +1,9 @@
 import { Router, type IRouter, json } from "express";
-import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable } from "@workspace/db";
-import { eq, ilike, sql, and, asc, inArray } from "drizzle-orm";
+import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable } from "@workspace/db";
+import { eq, ilike, sql, and, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
+import { invalidateDocCatalogCache } from "./embed";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
 // (Excel imports). The global body limit is intentionally small (1mb) for
@@ -454,6 +455,7 @@ router.post("/catalog-options", requireAuth, requireRole(...MANAGER_ROLES), asyn
   if (metadata !== undefined) insertValues.metadata = metadata;
   const [opt] = await db.insert(catalogOptionsTable).values(insertValues as never).returning();
   await logAudit(req.user!.id, "create_catalog_option", "catalog_option", opt.id, { category, value }, req.ip);
+  if (category === "documents") invalidateDocCatalogCache();
   res.status(201).json(opt);
 });
 
@@ -467,13 +469,308 @@ router.patch("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES),
   if (metadata !== undefined) updates.metadata = metadata;
   const [opt] = await db.update(catalogOptionsTable).set(updates).where(eq(catalogOptionsTable.id, id)).returning();
   if (!opt) { res.status(404).json({ error: "Not found" }); return; }
+  if (opt.category === "documents") invalidateDocCatalogCache();
   res.json(opt);
+});
+
+/* ─── Usage / orphan tooling for documents & degree catalog options ─────
+ *
+ * Belge tipi (catalog_options where category='documents') ve akademik
+ * derece (category='degree') seçenekleri sistemde başka tablolardan
+ * referans alıyor:
+ *   - program_document_requirements.document_type (text, FK yok)
+ *   - degree_document_requirements.document_type   (text, FK yok)
+ *   - degree_document_requirements.catalog_option_id (FK CASCADE — sessiz
+ *     veri kaybı riski; bu yüzden silmeden önce burada uyarıyoruz)
+ *
+ * `RESTRICT` davranışını uygulama katmanında uyguluyoruz: önce referans
+ * sayımı, varsa 409 + nerede kullanıldığını söyleyen payload. CASCADE
+ * istemiyoruz çünkü 47 programın zorunlu belgesinin sessizce silinmesi
+ * domain için kabul edilemez.
+ *
+ * `getDocumentUsage()` belge anahtarı için, `getDegreeUsage()` derece
+ * option id'si için kullanılır; yetim taraması da bu helper'lara dayanır.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+type DocumentUsage = {
+  programs: { id: number; name: string; universityName: string; mandatory: boolean }[];
+  degrees: { id: number; value: string; mandatory: boolean }[];
+  totals: { programs: number; degrees: number; total: number };
+};
+
+// Accepts an optional drizzle transaction client so the delete handler can
+// read usage on the same snapshot/locks as its FOR UPDATE; outside a tx
+// (proactive usage, orphan scan) the default `db` client is fine.
+type DbOrTx = typeof db;
+async function getDocumentUsage(documentType: string, dbx: DbOrTx = db): Promise<DocumentUsage> {
+  const programRows = await dbx
+    .select({
+      id: programsTable.id,
+      name: programsTable.name,
+      universityName: universitiesTable.name,
+      mandatory: programDocumentRequirementsTable.mandatory,
+    })
+    .from(programDocumentRequirementsTable)
+    .innerJoin(programsTable, eq(programDocumentRequirementsTable.programId, programsTable.id))
+    .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+    .where(eq(programDocumentRequirementsTable.documentType, documentType))
+    .orderBy(asc(universitiesTable.name), asc(programsTable.name));
+
+  const degreeRows = await dbx
+    .select({
+      id: catalogOptionsTable.id,
+      value: catalogOptionsTable.value,
+      mandatory: degreeDocumentRequirementsTable.mandatory,
+    })
+    .from(degreeDocumentRequirementsTable)
+    .innerJoin(catalogOptionsTable, eq(degreeDocumentRequirementsTable.catalogOptionId, catalogOptionsTable.id))
+    .where(eq(degreeDocumentRequirementsTable.documentType, documentType))
+    .orderBy(asc(catalogOptionsTable.value));
+
+  return {
+    programs: programRows,
+    degrees: degreeRows,
+    totals: {
+      programs: programRows.length,
+      degrees: degreeRows.length,
+      total: programRows.length + degreeRows.length,
+    },
+  };
+}
+
+type DegreeUsage = {
+  documents: { documentType: string; mandatory: boolean; sortOrder: number }[];
+  totals: { documents: number };
+};
+
+async function getDegreeUsage(catalogOptionId: number, dbx: DbOrTx = db): Promise<DegreeUsage> {
+  const rows = await dbx
+    .select({
+      documentType: degreeDocumentRequirementsTable.documentType,
+      mandatory: degreeDocumentRequirementsTable.mandatory,
+      sortOrder: degreeDocumentRequirementsTable.sortOrder,
+    })
+    .from(degreeDocumentRequirementsTable)
+    .where(eq(degreeDocumentRequirementsTable.catalogOptionId, catalogOptionId))
+    .orderBy(asc(degreeDocumentRequirementsTable.sortOrder));
+  return { documents: rows, totals: { documents: rows.length } };
+}
+
+// GET /api/catalog-options/:id/usage — proactive lookup for the UI so
+// admins see "kullanılıyor mu?" before they even click delete.
+router.get("/catalog-options/:id/usage", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [opt] = await db.select().from(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
+  if (!opt) { res.status(404).json({ error: "Not found" }); return; }
+  if (opt.category === "documents") {
+    const usage = await getDocumentUsage(opt.value);
+    res.json({ category: opt.category, value: opt.value, ...usage });
+    return;
+  }
+  if (opt.category === "degree") {
+    const usage = await getDegreeUsage(opt.id);
+    res.json({ category: opt.category, value: opt.value, ...usage });
+    return;
+  }
+  res.json({ category: opt.category, value: opt.value, totals: { total: 0 } });
+});
+
+// GET /api/catalog-options/orphans?category=documents
+// Lists document_type values that are referenced by program / degree
+// requirements but no longer exist in catalog_options (any active state).
+// Includes a usage breakdown per orphan so the admin can decide whether to
+// purge the references or restore the catalog entry.
+router.get("/catalog-options/orphans", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const category = String(req.query.category || "documents");
+  if (category !== "documents") {
+    // Degree orphans don't exist: degree_document_requirements.catalog_option_id
+    // is FK ON DELETE CASCADE, so a deleted degree takes its rows with it.
+    // We surface an empty list for forward-compat with the UI.
+    res.json({ category, orphans: [] });
+    return;
+  }
+
+  const validValuesRows = await db
+    .select({ value: catalogOptionsTable.value })
+    .from(catalogOptionsTable)
+    .where(eq(catalogOptionsTable.category, "documents"));
+  const validValues = validValuesRows.map((r) => r.value);
+
+  const fromPrograms = await db
+    .select({ documentType: programDocumentRequirementsTable.documentType })
+    .from(programDocumentRequirementsTable)
+    .where(validValues.length > 0
+      ? notInArray(programDocumentRequirementsTable.documentType, validValues)
+      : isNotNull(programDocumentRequirementsTable.documentType));
+
+  const fromDegrees = await db
+    .select({ documentType: degreeDocumentRequirementsTable.documentType })
+    .from(degreeDocumentRequirementsTable)
+    .where(validValues.length > 0
+      ? notInArray(degreeDocumentRequirementsTable.documentType, validValues)
+      : isNotNull(degreeDocumentRequirementsTable.documentType));
+
+  const orphanKeys = Array.from(new Set([
+    ...fromPrograms.map((r) => r.documentType),
+    ...fromDegrees.map((r) => r.documentType),
+  ])).sort();
+
+  const orphans = await Promise.all(orphanKeys.map(async (key) => {
+    const usage = await getDocumentUsage(key);
+    return {
+      documentType: key,
+      programCount: usage.totals.programs,
+      degreeCount: usage.totals.degrees,
+      total: usage.totals.total,
+    };
+  }));
+
+  res.json({ category, orphans });
+});
+
+// POST /api/catalog-options/orphans/cleanup
+// Body: { documentType, action: "delete_refs" | "restore_to_catalog" }
+//   delete_refs       → drop the orphan rows from both requirement tables
+//   restore_to_catalog → re-insert the document_type as a (humanised) entry
+//                        in catalog_options so existing program/degree
+//                        config keeps working.
+router.post("/catalog-options/orphans/cleanup", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const { documentType, action } = (req.body || {}) as { documentType?: unknown; action?: unknown };
+  if (typeof documentType !== "string" || !documentType.trim()) {
+    res.status(400).json({ error: "documentType is required" }); return;
+  }
+  const key = documentType.trim();
+  // Reuse the embed-widget key whitelist so we can't pass shady payloads
+  // (incl. __proto__) through this endpoint.
+  if (!/^[a-z0-9_\-]{1,64}$/i.test(key)
+      || /^(?:__proto__|constructor|prototype)$/i.test(key)) {
+    res.status(400).json({ error: "Invalid document type key" }); return;
+  }
+  if (action !== "delete_refs" && action !== "restore_to_catalog") {
+    res.status(400).json({ error: "action must be delete_refs or restore_to_catalog" }); return;
+  }
+
+  if (action === "delete_refs") {
+    let removed = 0;
+    await db.transaction(async (tx) => {
+      const p = await tx.delete(programDocumentRequirementsTable)
+        .where(eq(programDocumentRequirementsTable.documentType, key))
+        .returning({ id: programDocumentRequirementsTable.id });
+      const d = await tx.delete(degreeDocumentRequirementsTable)
+        .where(eq(degreeDocumentRequirementsTable.documentType, key))
+        .returning({ id: degreeDocumentRequirementsTable.id });
+      removed = p.length + d.length;
+    });
+    await logAudit(req.user!.id, "cleanup_orphan_document_refs", "catalog_option", null, { documentType: key, removed }, req.ip);
+    res.json({ ok: true, action, documentType: key, removed });
+    return;
+  }
+
+  // restore_to_catalog: don't clobber an existing entry if one is somehow
+  // already there (race with another admin); re-activate it instead.
+  const [existing] = await db.select().from(catalogOptionsTable)
+    .where(and(eq(catalogOptionsTable.category, "documents"), eq(catalogOptionsTable.value, key)));
+  if (existing) {
+    if (!existing.isActive) {
+      await db.update(catalogOptionsTable).set({ isActive: true }).where(eq(catalogOptionsTable.id, existing.id));
+    }
+    invalidateDocCatalogCache();
+    await logAudit(req.user!.id, "restore_orphan_document_to_catalog", "catalog_option", existing.id, { documentType: key, reactivated: !existing.isActive }, req.ip);
+    res.json({ ok: true, action, documentType: key, restoredId: existing.id });
+    return;
+  }
+
+  const humanised = key
+    .replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+    .split(" ").map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
+  const [opt] = await db.insert(catalogOptionsTable).values({
+    category: "documents",
+    value: key,
+    sortOrder: 9999,
+    metadata: { label: humanised, icon: "📎", accept: ".pdf,.jpg,.jpeg,.png" },
+  } as never).returning();
+  invalidateDocCatalogCache();
+  await logAudit(req.user!.id, "restore_orphan_document_to_catalog", "catalog_option", opt.id, { documentType: key, created: true }, req.ip);
+  res.json({ ok: true, action, documentType: key, restoredId: opt.id });
 });
 
 router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  await db.delete(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
-  await logAudit(req.user!.id, "delete_catalog_option", "catalog_option", id, {}, req.ip);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  // Atomic check + delete: a previous version did `select → check → delete`
+  // as separate statements, which left a TOCTOU window where a concurrent
+  // staff request could insert a new requirement row between the check and
+  // the delete. For category='degree', this is particularly bad because
+  // degree_document_requirements.catalog_option_id is FK ON DELETE CASCADE,
+  // so the racing row would be silently wiped.
+  //
+  // Fix:
+  // 1) Wrap everything in a single transaction.
+  // 2) SELECT ... FOR UPDATE on the catalog_options row. For 'degree' this
+  //    is the FK parent, so PG blocks concurrent INSERT into
+  //    degree_document_requirements (which needs FOR KEY SHARE on the
+  //    parent) until we commit. For 'documents' there's no FK; we still
+  //    serialise admin-initiated mutations on the same option and accept
+  //    the small remaining race against staff inserts of new program
+  //    requirements (the orphan scanner is the safety net for that case).
+  type BlockedReason =
+    | { kind: "documents"; usage: DocumentUsage }
+    | { kind: "degree"; usage: DegreeUsage };
+
+  let opt: typeof catalogOptionsTable.$inferSelect | undefined;
+  let blocked: BlockedReason | null = null;
+
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(catalogOptionsTable)
+      .where(eq(catalogOptionsTable.id, id))
+      .for("update");
+    if (!row) return; // already gone — idempotent
+    opt = row;
+
+    if (row.category === "documents") {
+      const usage = await getDocumentUsage(row.value, tx as DbOrTx);
+      if (usage.totals.total > 0) { blocked = { kind: "documents", usage }; return; }
+    } else if (row.category === "degree") {
+      const usage = await getDegreeUsage(row.id, tx as DbOrTx);
+      if (usage.totals.documents > 0) { blocked = { kind: "degree", usage }; return; }
+    }
+
+    await tx.delete(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
+  });
+
+  if (!opt) { res.sendStatus(204); return; }
+
+  if (blocked) {
+    await logAudit(req.user!.id, "delete_catalog_option_blocked", "catalog_option", id, {
+      category: opt.category, value: opt.value,
+      totals: blocked.kind === "documents" ? blocked.usage.totals : blocked.usage.totals,
+    }, req.ip);
+    if (blocked.kind === "documents") {
+      res.status(409).json({
+        error: "in_use",
+        message: "Bu belge tipi şu programlarda veya derecelerde kullanılıyor. Önce buralardan kaldırın, sonra silmeyi tekrar deneyin.",
+        category: opt.category,
+        value: opt.value,
+        ...blocked.usage,
+      });
+    } else {
+      res.status(409).json({
+        error: "in_use",
+        message: "Bu dereceye bağlı belge gereksinimleri var. Önce bunları temizleyin, sonra silmeyi tekrar deneyin.",
+        category: opt.category,
+        value: opt.value,
+        ...blocked.usage,
+      });
+    }
+    return;
+  }
+
+  await logAudit(req.user!.id, "delete_catalog_option", "catalog_option", id, { category: opt.category, value: opt.value }, req.ip);
+  if (opt.category === "documents") invalidateDocCatalogCache();
   res.sendStatus(204);
 });
 

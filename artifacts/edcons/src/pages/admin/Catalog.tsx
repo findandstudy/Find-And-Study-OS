@@ -2022,6 +2022,23 @@ const DEGREE_DOC_TYPE_LABELS: Record<string, string> = {
   gdpr_consent_form: "GDPR Consent Form",
   fraud_declaration: "Fraud Declaration",
 };
+type DeleteBlockedDocPayload = {
+  message?: string;
+  category: "documents";
+  value: string;
+  programs: { id: number; name: string; universityName: string; mandatory: boolean }[];
+  degrees: { id: number; value: string; mandatory: boolean }[];
+  totals: { programs: number; degrees: number; total: number };
+};
+type DeleteBlockedDegreePayload = {
+  message?: string;
+  category: "degree";
+  value: string;
+  documents: { documentType: string; mandatory: boolean; sortOrder: number }[];
+  totals: { documents: number };
+};
+type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload;
+
 function OptionsTab() {
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
@@ -2031,6 +2048,9 @@ function OptionsTab() {
   const [saving, setSaving] = useState(false);
   const [docsForOption, setDocsForOption] = useState<CatalogOption | null>(null);
   const [docMetaItem, setDocMetaItem] = useState<CatalogOption | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<CatalogOption | null>(null);
+  const [deleteBlocked, setDeleteBlocked] = useState<DeleteBlockedPayload | null>(null);
+  const [orphanModalOpen, setOrphanModalOpen] = useState(false);
   const qc = useQueryClient();
 
   const { data: optionsResp, isLoading } = useQuery({
@@ -2083,14 +2103,33 @@ function OptionsTab() {
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm("Are you sure you want to delete this option?")) return;
+  async function handleDelete(item: CatalogOption) {
+    // We bypass the throw-on-error `api()` helper so we can inspect the
+    // structured 409 payload the backend returns when a delete is blocked
+    // by existing program/degree references.
     try {
-      await api(`/api/catalog-options/${id}`, { method: "DELETE" });
+      const r = await apiFetch(`/api/catalog-options/${item.id}`, { method: "DELETE" });
+      if (r.status === 409) {
+        const body = await r.json().catch(() => null) as DeleteBlockedPayload | null;
+        if (body && (body.category === "documents" || body.category === "degree")) {
+          setDeleteBlocked(body);
+          setConfirmDelete(null);
+          return;
+        }
+        toast({ title: "Silinemedi", description: "Bu kayıt başka yerlerde kullanılıyor.", variant: "destructive" });
+        return;
+      }
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        throw new Error(text || `HTTP ${r.status}`);
+      }
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
-      toast({ title: "Deleted", description: `Option removed from ${catMeta.label}.` });
+      qc.invalidateQueries({ queryKey: ["catalog-orphans"] });
+      qc.invalidateQueries({ queryKey: ["document-type-catalog"] });
+      setConfirmDelete(null);
+      toast({ title: "Silindi", description: `${catMeta.label} listesinden kaldırıldı.` });
     } catch (err: any) {
-      toast({ title: "Delete failed", description: err?.message || "Try again.", variant: "destructive" });
+      toast({ title: "Silme başarısız", description: err?.message || "Tekrar deneyin.", variant: "destructive" });
     }
   }
 
@@ -2200,7 +2239,7 @@ function OptionsTab() {
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(item, { isActive: !item.isActive })}>
                       {item.isActive ? <Lock className="w-3.5 h-3.5 text-orange-500" /> : <Check className="w-3.5 h-3.5 text-green-600" />}
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setConfirmDelete(item)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
                   </>
                 )}
               </div>
@@ -2216,6 +2255,260 @@ function OptionsTab() {
     {docMetaItem && (
       <DocumentMetaDialog option={docMetaItem} onClose={() => setDocMetaItem(null)} />
     )}
+    {activeCategory === "documents" && (
+      <OrphanDocumentsCard
+        open={orphanModalOpen}
+        setOpen={setOrphanModalOpen}
+      />
+    )}
+    <DeleteCatalogOptionDialog
+      item={confirmDelete}
+      onCancel={() => setConfirmDelete(null)}
+      onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+    />
+    <DeleteBlockedDialog payload={deleteBlocked} onClose={() => setDeleteBlocked(null)} />
+    </>
+  );
+}
+
+function DeleteCatalogOptionDialog({ item, onCancel, onConfirm }: {
+  item: CatalogOption | null; onCancel: () => void; onConfirm: () => void;
+}) {
+  const isDoc = item?.category === "documents";
+  const isDegree = item?.category === "degree";
+  const label = isDoc ? "belge tipini" : isDegree ? "akademik dereceyi" : "seçeneği";
+  // Proactive usage preview: only fetched when the option is documents/degree
+  // (the only two categories that can be blocked server-side). Saves the
+  // admin from clicking Delete just to learn it's in use.
+  const { data: usage, isLoading: usageLoading } = useQuery<{
+    totals?: { total?: number; programs?: number; degrees?: number; documents?: number };
+  }>({
+    queryKey: ["catalog-options", item?.id, "usage"],
+    queryFn: () => api(`/api/catalog-options/${item!.id}/usage`),
+    enabled: !!item && (isDoc || isDegree),
+    staleTime: 0,
+  });
+  const blockedCount = isDoc
+    ? (usage?.totals?.total ?? 0)
+    : isDegree
+      ? (usage?.totals?.documents ?? 0)
+      : 0;
+  const willBeBlocked = (isDoc || isDegree) && blockedCount > 0;
+  return (
+    <Dialog open={item !== null} onOpenChange={o => !o && onCancel()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Silme onayı</DialogTitle></DialogHeader>
+        <div className="text-sm text-muted-foreground space-y-2">
+          <p>"<strong>{item?.value}</strong>" {label} silmek istediğinize emin misiniz?</p>
+          {(isDoc || isDegree) && (
+            usageLoading ? (
+              <p className="text-xs flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Kullanım kontrol ediliyor…</p>
+            ) : willBeBlocked ? (
+              <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Bu kayıt {isDoc ? `${usage?.totals?.programs ?? 0} program ve ${usage?.totals?.degrees ?? 0} derecede` : `${blockedCount} belge gereksiniminde`} kullanılıyor.
+                </div>
+                <p className="mt-1">Silmeye çalışırsanız bloklanacak ve nerede kullanıldığı listelenecek.</p>
+              </div>
+            ) : (
+              <p className="text-xs">Aktif kullanım bulunamadı.</p>
+            )
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>İptal</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={usageLoading}>Sil</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteBlockedDialog({ payload, onClose }: {
+  payload: DeleteBlockedPayload | null; onClose: () => void;
+}) {
+  return (
+    <Dialog open={payload !== null} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Silme bloklandı
+          </DialogTitle>
+        </DialogHeader>
+        {payload && (
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              {payload.message || "Bu kayıt sistemde başka yerlerde kullanıldığı için silinemez."}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Anahtar:</span>{" "}
+              <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">{payload.value}</code>
+            </p>
+            {payload.category === "documents" && (
+              <>
+                {payload.programs.length > 0 && (
+                  <div>
+                    <p className="font-medium mb-1.5">Programlar ({payload.programs.length})</p>
+                    <div className="max-h-48 overflow-auto rounded border bg-muted/30 divide-y">
+                      {payload.programs.slice(0, 50).map(p => (
+                        <div key={p.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                          <span className="truncate">
+                            <span className="text-muted-foreground">{p.universityName}</span> — {p.name}
+                          </span>
+                          <Badge variant={p.mandatory ? "default" : "secondary"} className="ml-2 shrink-0 text-[10px]">
+                            {p.mandatory ? "Zorunlu" : "Opsiyonel"}
+                          </Badge>
+                        </div>
+                      ))}
+                      {payload.programs.length > 50 && (
+                        <div className="px-3 py-1.5 text-[10px] text-muted-foreground italic">
+                          ve {payload.programs.length - 50} program daha…
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {payload.degrees.length > 0 && (
+                  <div>
+                    <p className="font-medium mb-1.5">Akademik dereceler ({payload.degrees.length})</p>
+                    <div className="rounded border bg-muted/30 divide-y">
+                      {payload.degrees.map(d => (
+                        <div key={d.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                          <span>{d.value}</span>
+                          <Badge variant={d.mandatory ? "default" : "secondary"} className="text-[10px]">
+                            {d.mandatory ? "Zorunlu" : "Opsiyonel"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {payload.category === "degree" && (
+              <div>
+                <p className="font-medium mb-1.5">Bu dereceye bağlı belge gereksinimleri ({payload.documents.length})</p>
+                <div className="max-h-48 overflow-auto rounded border bg-muted/30 divide-y">
+                  {payload.documents.map(d => (
+                    <div key={d.documentType} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                      <code className="font-mono">{d.documentType}</code>
+                      <Badge variant={d.mandatory ? "default" : "secondary"} className="text-[10px]">
+                        {d.mandatory ? "Zorunlu" : "Opsiyonel"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground border-t pt-3">
+              Silmek için önce yukarıdaki yerlerden bu kaydı kaldırın.
+            </p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Kapat</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type OrphanRow = { documentType: string; programCount: number; degreeCount: number; total: number };
+
+function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<{ orphans: OrphanRow[] }>({
+    queryKey: ["catalog-orphans", "documents"],
+    queryFn: () => api("/api/catalog-options/orphans?category=documents"),
+  });
+  const orphans = data?.orphans || [];
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function act(documentType: string, action: "delete_refs" | "restore_to_catalog") {
+    setBusy(documentType);
+    try {
+      const res = await api("/api/catalog-options/orphans/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentType, action }),
+      });
+      qc.invalidateQueries({ queryKey: ["catalog-orphans"] });
+      qc.invalidateQueries({ queryKey: ["catalog-options"] });
+      qc.invalidateQueries({ queryKey: ["document-type-catalog"] });
+      if (action === "delete_refs") {
+        toast({ title: "Referanslar temizlendi", description: `${documentType}: ${res?.removed ?? 0} kayıt silindi.` });
+      } else {
+        toast({ title: "Kataloğa eklendi", description: `${documentType} geri yüklendi.` });
+      }
+    } catch (err: any) {
+      toast({ title: "İşlem başarısız", description: err?.message || "Tekrar deneyin.", variant: "destructive" });
+    }
+    setBusy(null);
+  }
+
+  return (
+    <>
+      {orphans.length > 0 && (
+        <div className="md:col-span-2 -mt-2">
+          <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm">
+            <div className="flex items-center gap-2 text-amber-900">
+              <AlertTriangle className="h-4 w-4" />
+              <span><strong>{orphans.length}</strong> yetim belge tipi var — katalogda yok ama programlarda/derecelerde hâlâ kullanılıyor.</span>
+            </div>
+            <Button size="sm" variant="outline" className="border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => setOpen(true)}>
+              İncele
+            </Button>
+          </div>
+        </div>
+      )}
+      <Dialog open={open} onOpenChange={o => !o && setOpen(false)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Yetim belge tipleri
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Bu belge tipleri katalogda yok ama program veya derece kayıtlarında referansları var. Ya katalog'a geri ekleyin (mevcut programlar çalışmaya devam etsin) ya da tüm referanslarını silin.
+            </p>
+          </DialogHeader>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : orphans.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">Yetim belge yok.</p>
+          ) : (
+            <div className="rounded-lg border divide-y max-h-[60vh] overflow-auto">
+              {orphans.map(o => (
+                <div key={o.documentType} className="flex items-center gap-2 px-3 py-2 text-sm">
+                  <code className="flex-1 font-mono text-xs truncate">{o.documentType}</code>
+                  <Badge variant="outline" className="text-[10px]">
+                    {o.programCount} program / {o.degreeCount} derece
+                  </Badge>
+                  <Button
+                    size="sm" variant="outline" className="h-7 text-xs"
+                    disabled={busy === o.documentType}
+                    onClick={() => act(o.documentType, "restore_to_catalog")}
+                  >
+                    Kataloğa ekle
+                  </Button>
+                  <Button
+                    size="sm" variant="destructive" className="h-7 text-xs"
+                    disabled={busy === o.documentType}
+                    onClick={() => act(o.documentType, "delete_refs")}
+                  >
+                    {busy === o.documentType ? <Loader2 className="h-3 w-3 animate-spin" /> : "Referansları sil"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Kapat</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
