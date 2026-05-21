@@ -3,7 +3,7 @@ import { db, countriesTable, citiesTable, universitiesTable, programsTable, cata
 import { eq, ilike, sql, and, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
-import { invalidateDocCatalogCache } from "./embed";
+import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalogKeySet } from "../lib/docCatalog";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
 // (Excel imports). The global body limit is intentionally small (1mb) for
@@ -11,57 +11,18 @@ import { invalidateDocCatalogCache } from "./embed";
 // limit. They are already gated by requireAuth + MANAGER_ROLES.
 const bulkJson = json({ limit: "20mb" });
 
-const PROGRAM_DOC_TYPES = [
-  "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
-  "class_12th_hsc_certificate", "class_12th_hsc_marks_sheet",
-  "diploma_certificate", "diploma_transcript",
-  "bachelors_certificate", "bachelors_transcript",
-  "bachelors_provisional_certificate", "bachelors_transcript_all_semesters",
-  "masters_certificate", "masters_transcript",
-  "masters_provisional_certificate", "masters_transcript_all_semesters",
-  "passport", "cv", "lor", "sop", "essay", "experience_letters",
-  "other_certificates_documents", "ielts_pte_gre_gmat_toefl_duolingo",
-  "photo", "diploma_recognition",
-  // A. Akademik
-  "portfolio", "research_proposal", "publication_list", "writing_sample",
-  "subject_specific_test_score", "transcript_evaluation_report",
-  "medium_of_instruction_letter", "predicted_grades",
-  "gap_year_explanation_letter", "academic_reference_form",
-  // B. Finansal
-  "bank_statement", "financial_evidence_28_days", "financial_documents_3_months",
-  "gic_certificate", "sponsor_letter", "affidavit_of_support",
-  "sponsor_id_proof", "sponsor_relationship_proof", "sponsor_employment_letter",
-  "sponsor_tax_returns", "scholarship_award_letter", "proof_of_tuition_payment",
-  "education_loan_approval_letter", "fixed_deposit_receipt",
-  // C. Sağlık
-  "medical_examination_report", "hiv_test_certificate", "tb_test_certificate",
-  "hepatitis_b_test", "hepatitis_c_test", "vaccination_record",
-  "covid_vaccination_certificate", "panel_physician_medical_exam",
-  "mental_health_clearance", "physical_fitness_certificate",
-  // D. Vize ve Göçmenlik
-  "visa_application_form", "i20_form", "ds160_confirmation", "sevis_fee_receipt",
-  "cas_letter", "atas_certificate", "pal_tal_letter", "letter_of_acceptance_dli",
-  "biometrics_appointment_receipt", "previous_visa_copies", "visa_refusal_history",
-  "travel_history", "residence_permit", "police_clearance_certificate",
-  "good_conduct_certificate",
-  // E. Kimlik
-  "birth_certificate", "national_id_card", "family_book", "marriage_certificate",
-  "name_change_affidavit", "passport_size_photo_specifications",
-  // F. Çalışma ve Ara Yıl
-  "no_objection_certificate", "employer_letter", "work_experience_certificate",
-  "internship_certificates", "professional_license", "business_registration",
-  // G. Ülkeye Özel
-  "military_status_document", "yos_score_report", "sat_score_report",
-  "gaokao_score_report", "abitur_certificate", "a_level_certificate",
-  "ib_diploma", "olympiad_certificates",
-  // H. Konaklama ve Refakatçi
-  "accommodation_proof", "custodian_declaration", "parental_consent",
-  "dependents_documents",
-  // I. Dil ve Beyan
-  "ukvi_approved_english_test", "statement_of_finance", "personal_statement",
-  "diversity_statement", "ai_usage_declaration", "gdpr_consent_form",
-  "fraud_declaration",
-];
+// PROGRAM_DOC_TYPES'ı kaldırdık (Task #179). Belge sütun anahtarları artık
+// admin-managed `catalog_options` (category='documents') tablosundan dinamik
+// olarak okunuyor — kataloğa yeni eklenen tipler import'ta otomatik tanınır,
+// silinen tipler "Tanımsız belge sütunları" uyarısına düşer. Cache, in-flight
+// dedupe ve fallback davranışı `src/lib/docCatalog.ts` içinde.
+//
+// Bilinen önemli farklar:
+//  - sortOrder eskiden hardcoded dizinin index'iydi (deterministik). Artık
+//    katalog satırlarının döndüğü sırada index alıyoruz; admin-managed
+//    sort_order ile uyumlu olması için içerideki `docCatalog.ts` SQL'i
+//    isteğe bağlı olarak ORDER BY eklenebilir. Şu an aynı tipler için
+//    sortOrder kararlı (Set/Object.keys ekleme sırasını korur).
 
 function parseDocCellValue(v: any): { value: "mandatory" | "optional" | null; invalid: boolean } {
   if (v === undefined || v === null) return { value: null, invalid: false };
@@ -271,6 +232,41 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
   const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.toLowerCase(), u.id]));
 
+  // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
+  // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
+  // koyuyoruz ki tüm satırlar için sortOrder deterministik kalsın — eski
+  // hardcoded dizinin sağladığı garanti.
+  // loadDocCatalogKeySet() preserves the admin-managed `sort_order` from
+  // catalog_options (loader SELECTs ORDER BY sort_order, id). Spreading
+  // the Set keeps that order, so the importer's `sortOrder` field matches
+  // what the widget/UI uses elsewhere.
+  const docKeySet = await loadDocCatalogKeySet();
+  const docKeys = [...docKeySet];
+  if (docKeys.length === 0) {
+    // Katalog tamamen boş veya DB hiç ulaşılamadı ve cache de yok: import
+    // sessizce belge sütunlarını yok sayarsa kullanıcı sebebini anlayamaz.
+    res.status(503).json({
+      error: "Belge kataloğu yüklenemedi, lütfen tekrar deneyin.",
+    });
+    return;
+  }
+  const docKeyOrder = new Map(docKeys.map((k, i) => [k, i]));
+  // Set of column header names from the incoming payload that we tried to
+  // match against the catalog but didn't recognise. Reported back so the
+  // admin sees "you imported a column called `xyz_form` that isn't in the
+  // catalog — was it renamed or removed?" instead of it silently dropping.
+  const unknownDocCols = new Set<string>();
+  // Well-known non-document column names from the program payload schema;
+  // anything that's neither a known doc key nor one of these gets flagged
+  // as an unknown doc-column candidate.
+  const NON_DOC_COLUMNS = new Set<string>([
+    "universityId", "universityName", "name", "degree", "field", "language",
+    "duration", "tuitionFee", "currency", "scholarship", "intakes",
+    "requirements", "commissionRate", "applicationFee", "advancedFee",
+    "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
+    "feeType", "minGpa", "minLanguageScore", "quota", "isActive",
+  ]);
+
   const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
   const rowIdxByParsedIdx: number[] = [];
   let invalidDocCells = 0;
@@ -296,17 +292,37 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     }
     let docList: { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined;
     let sawAnyDocCol = false;
-    PROGRAM_DOC_TYPES.forEach((dt, idx) => {
-      if (Object.prototype.hasOwnProperty.call(r, dt)) {
+    // Iterate the row's OWN keys (not the catalog) so we can detect
+    // "this column looks like a doc column but isn't in the catalog
+    // anymore" — that's the case Task #179 is about. We still validate
+    // membership with `docKeySet` so unknown keys never land in the DB.
+    for (const colKey of Object.keys(r)) {
+      if (NON_DOC_COLUMNS.has(colKey)) continue;
+      if (docKeySet.has(colKey)) {
         sawAnyDocCol = true;
-        const { value, invalid } = parseDocCellValue((r as any)[dt]);
+        const { value, invalid } = parseDocCellValue((r as Record<string, unknown>)[colKey]);
         if (invalid) invalidDocCells++;
         if (value !== null) {
           if (!docList) docList = [];
-          docList.push({ documentType: dt, mandatory: value === "mandatory", sortOrder: idx });
+          docList.push({
+            documentType: colKey,
+            mandatory: value === "mandatory",
+            sortOrder: docKeyOrder.get(colKey) ?? 9999,
+          });
+        }
+      } else {
+        // Looks like a doc-column shape but unknown to the catalog.
+        // Only flag it if the cell value PARSES as a doc marker
+        // (mandatory/optional/yes/no/etc.). Random extra columns that
+        // happen to be in the sheet but contain unrelated text would
+        // otherwise spam the warning list with false positives.
+        const v = (r as Record<string, unknown>)[colKey];
+        const parsed = parseDocCellValue(v);
+        if (parsed.value !== null || parsed.invalid) {
+          unknownDocCols.add(colKey);
         }
       }
-    });
+    }
     if (sawAnyDocCol) docColsByRowIdx.set(rowIdx, docList ?? []);
     rowIdxByParsedIdx.push(rowIdx);
     return {
@@ -420,8 +436,20 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     }
   }
 
-  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, { inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size, invalidDocCells }, req.ip);
-  res.json({ inserted: insertedCount, updated: updatedCount, skipped: rows.length - parsed.length, docsTouched: docsToReplace.size, invalidDocCells });
+  const unknownDocColumns = [...unknownDocCols].sort();
+  await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, {
+    inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size,
+    invalidDocCells, unknownDocColumns,
+  }, req.ip);
+  res.json({
+    inserted: insertedCount, updated: updatedCount,
+    skipped: rows.length - parsed.length,
+    docsTouched: docsToReplace.size, invalidDocCells,
+    unknownDocColumns,
+    ...(unknownDocColumns.length > 0
+      ? { unknownDocColumnsMessage: `Tanımsız belge sütunları (katalogda yok, atlandı): ${unknownDocColumns.join(", ")}` }
+      : {}),
+  });
   } catch (err: any) {
     console.error("[programs/bulk] failed:", err?.message || err, err?.code, err?.detail, err?.stack?.split("\n").slice(0, 4).join(" | "));
     res.status(500).json({

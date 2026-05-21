@@ -837,95 +837,13 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   res.send(html);
 });
 
-/**
- * In-memory cache of the admin-managed document-type catalog
- * (catalog_options where category='documents'). Refreshed lazily every
- * 5 minutes so widget renders don't hit the DB on every request. On
- * failure we serve the last good cache (or {}), keeping the widget alive.
- */
-type DocCatalogEntry = { label: string; icon: string; accept: string };
-let docCatalogCache: Record<string, DocCatalogEntry> | null = null;
-let docCatalogCacheUntil = 0;
-const DOC_CATALOG_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_ACCEPT = ".pdf,.jpg,.jpeg,.png";
-
-function humaniseKey(k: string): string {
-  return String(k || "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
-
-const ACCEPT_RE = /^(\.[a-z0-9]{1,8})(,\.[a-z0-9]{1,8})*$/i;
-const KEY_RE = /^[a-z0-9_\-]{1,64}$/i;
-const RESERVED_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-function isSafeDocKey(k: unknown): k is string {
-  return typeof k === "string" && KEY_RE.test(k) && !RESERVED_KEYS.has(k.toLowerCase());
-}
-function normaliseAccept(raw: unknown): string {
-  const v = typeof raw === "string" ? raw.trim() : "";
-  return ACCEPT_RE.test(v) ? v : DEFAULT_ACCEPT;
-}
-function normaliseShort(raw: unknown, fallback: string, max: number): string {
-  const v = typeof raw === "string" ? raw.trim().slice(0, max) : "";
-  return v || fallback;
-}
-
-let inflightDocCatalog: Promise<Record<string, DocCatalogEntry>> | null = null;
-async function loadDocCatalogForEmbed(): Promise<Record<string, DocCatalogEntry>> {
-  const now = Date.now();
-  if (docCatalogCache && now < docCatalogCacheUntil) return docCatalogCache;
-  // Dedupe concurrent cache-miss refreshes so we don't stampede the DB.
-  if (inflightDocCatalog) return inflightDocCatalog;
-  inflightDocCatalog = (async () => {
-    try {
-      const result = await db.execute(sql`SELECT value, metadata FROM catalog_options WHERE category = 'documents' AND is_active = true`);
-      const rows = (result as { rows?: Array<{ value: string; metadata: { label?: unknown; icon?: unknown; accept?: unknown } | null }> }).rows ?? [];
-      // Null-prototype map so untrusted catalog keys can't shadow built-in
-      // object properties (e.g. a row with value="__proto__" can't pollute).
-      const map: Record<string, DocCatalogEntry> = Object.create(null);
-      for (const row of rows) {
-        const rawKey = String(row.value);
-        if (!isSafeDocKey(rawKey)) continue;
-        const key = rawKey;
-        const md = row.metadata || {};
-        // Server-side normalisation: label/icon length-bound, accept must
-        // match the allowed extension-list shape. This keeps admin-managed
-        // metadata from breaking the widget or smuggling odd payloads,
-        // even though the widget also escapes at render time.
-        map[key] = {
-          label: normaliseShort(md.label, humaniseKey(key), 80),
-          icon: normaliseShort(md.icon, "📎", 8),
-          accept: normaliseAccept(md.accept),
-        };
-      }
-      docCatalogCache = map;
-      docCatalogCacheUntil = Date.now() + DOC_CATALOG_TTL_MS;
-      return map;
-    } catch {
-      docCatalogCache = docCatalogCache || {};
-      docCatalogCacheUntil = Date.now() + DOC_CATALOG_TTL_MS;
-      return docCatalogCache;
-    } finally {
-      inflightDocCatalog = null;
-    }
-  })();
-  return inflightDocCatalog;
-}
-// Warm the cache on module load (best-effort, errors swallowed).
-void loadDocCatalogForEmbed();
-
-// Public hook so other routes (catalog mutation handlers) can drop the
-// in-memory cache the moment an admin adds, edits, deactivates or deletes a
-// document type. Without this the widget would lag up to 5 minutes behind
-// admin changes.
-export function invalidateDocCatalogCache(): void {
-  docCatalogCache = null;
-  docCatalogCacheUntil = 0;
-}
+// Doc-catalog loader/invalidator now lives in `src/lib/docCatalog.ts` so
+// both the embed widget (this file) and the bulk-program Excel importer
+// (`catalog.ts`) share a single cache, key-whitelist and invalidation hook
+// — see Task #179.
+import { loadDocCatalog as loadDocCatalogForEmbed, invalidateDocCatalog as invalidateDocCatalogCache, type DocCatalogEntry } from "../lib/docCatalog";
+export { invalidateDocCatalogCache };
+export type { DocCatalogEntry };
 
 router.get("/public/embed/embed.js", async (_req, res): Promise<void> => {
   const baseUrl = getBaseUrl(_req);
