@@ -831,10 +831,92 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   if (!widget) { res.status(404).send("Widget not found"); return; }
 
   const baseUrl = getBaseUrl(req);
-  const html = generateWidgetHTML(slug, baseUrl, widget);
+  const docMeta = await loadDocCatalogForEmbed();
+  const html = generateWidgetHTML(slug, baseUrl, widget, docMeta);
   res.setHeader("Content-Type", "text/html");
   res.send(html);
 });
+
+/**
+ * In-memory cache of the admin-managed document-type catalog
+ * (catalog_options where category='documents'). Refreshed lazily every
+ * 5 minutes so widget renders don't hit the DB on every request. On
+ * failure we serve the last good cache (or {}), keeping the widget alive.
+ */
+type DocCatalogEntry = { label: string; icon: string; accept: string };
+let docCatalogCache: Record<string, DocCatalogEntry> | null = null;
+let docCatalogCacheUntil = 0;
+const DOC_CATALOG_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_ACCEPT = ".pdf,.jpg,.jpeg,.png";
+
+function humaniseKey(k: string): string {
+  return String(k || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+const ACCEPT_RE = /^(\.[a-z0-9]{1,8})(,\.[a-z0-9]{1,8})*$/i;
+const KEY_RE = /^[a-z0-9_\-]{1,64}$/i;
+const RESERVED_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+function isSafeDocKey(k: unknown): k is string {
+  return typeof k === "string" && KEY_RE.test(k) && !RESERVED_KEYS.has(k.toLowerCase());
+}
+function normaliseAccept(raw: unknown): string {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return ACCEPT_RE.test(v) ? v : DEFAULT_ACCEPT;
+}
+function normaliseShort(raw: unknown, fallback: string, max: number): string {
+  const v = typeof raw === "string" ? raw.trim().slice(0, max) : "";
+  return v || fallback;
+}
+
+let inflightDocCatalog: Promise<Record<string, DocCatalogEntry>> | null = null;
+async function loadDocCatalogForEmbed(): Promise<Record<string, DocCatalogEntry>> {
+  const now = Date.now();
+  if (docCatalogCache && now < docCatalogCacheUntil) return docCatalogCache;
+  // Dedupe concurrent cache-miss refreshes so we don't stampede the DB.
+  if (inflightDocCatalog) return inflightDocCatalog;
+  inflightDocCatalog = (async () => {
+    try {
+      const result = await db.execute(sql`SELECT value, metadata FROM catalog_options WHERE category = 'documents' AND is_active = true`);
+      const rows = (result as { rows?: Array<{ value: string; metadata: { label?: unknown; icon?: unknown; accept?: unknown } | null }> }).rows ?? [];
+      // Null-prototype map so untrusted catalog keys can't shadow built-in
+      // object properties (e.g. a row with value="__proto__" can't pollute).
+      const map: Record<string, DocCatalogEntry> = Object.create(null);
+      for (const row of rows) {
+        const rawKey = String(row.value);
+        if (!isSafeDocKey(rawKey)) continue;
+        const key = rawKey;
+        const md = row.metadata || {};
+        // Server-side normalisation: label/icon length-bound, accept must
+        // match the allowed extension-list shape. This keeps admin-managed
+        // metadata from breaking the widget or smuggling odd payloads,
+        // even though the widget also escapes at render time.
+        map[key] = {
+          label: normaliseShort(md.label, humaniseKey(key), 80),
+          icon: normaliseShort(md.icon, "📎", 8),
+          accept: normaliseAccept(md.accept),
+        };
+      }
+      docCatalogCache = map;
+      docCatalogCacheUntil = Date.now() + DOC_CATALOG_TTL_MS;
+      return map;
+    } catch {
+      docCatalogCache = docCatalogCache || {};
+      docCatalogCacheUntil = Date.now() + DOC_CATALOG_TTL_MS;
+      return docCatalogCache;
+    } finally {
+      inflightDocCatalog = null;
+    }
+  })();
+  return inflightDocCatalog;
+}
+// Warm the cache on module load (best-effort, errors swallowed).
+void loadDocCatalogForEmbed();
 
 router.get("/public/embed/embed.js", async (_req, res): Promise<void> => {
   const baseUrl = getBaseUrl(_req);
@@ -997,7 +1079,7 @@ function generateEmbedScript(baseUrl: string): string {
 })();`;
 }
 
-function generateWidgetHTML(slug: string, baseUrl: string, widget: any): string {
+function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>): string {
   const theme = sanitizeTheme(widget.theme);
   const primaryColor = theme.primaryColor || "#2563eb";
   const secondaryColor = theme.secondaryColor || "#1e40af";
@@ -1214,43 +1296,11 @@ var MODE='${safeMode}';
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
 var programDocs=null;
-// Mirrors the canonical document type keys configured in the staff panel
-// (artifacts/edcons/src/lib/programDocTypes.ts PROGRAM_DOC_META). Keep
-// these labels in sync with the panel so applicants see the same names
-// in the widget and in the public-apply form.
-var DOC_META={
-  passport:{label:'Passport',icon:'\\ud83d\\udec2'},
-  photo:{label:'Photograph',icon:'\\ud83d\\udcf7'},
-  cv:{label:'CV / Resume',icon:'\\ud83d\\udcc4'},
-  sop:{label:'Statement of Purpose',icon:'\\u270d\\ufe0f'},
-  lor:{label:'Recommendation Letter',icon:'\\u270d\\ufe0f'},
-  essay:{label:'Essay',icon:'\\u270d\\ufe0f'},
-  experience_letters:{label:'Experience Letters',icon:'\\ud83d\\udcbc'},
-  other_certificates_documents:{label:'Other Certificates',icon:'\\ud83d\\udcd1'},
-  ielts_pte_gre_gmat_toefl_duolingo:{label:'Language / Test Score',icon:'\\ud83c\\udf10'},
-  diploma_recognition:{label:'Diploma Recognition',icon:'\\ud83d\\udcdc'},
-  high_school_diploma_translation:{label:'HS Diploma (Translation)',icon:'\\ud83c\\udf93'},
-  class_10th_ssc_marks_sheet:{label:'Class 10 / SSC Marks Sheet',icon:'\\ud83d\\udccb'},
-  class_12th_hsc_certificate:{label:'Class 12 / HSC Certificate',icon:'\\ud83c\\udf93'},
-  class_12th_hsc_marks_sheet:{label:'Class 12 / HSC Marks Sheet',icon:'\\ud83d\\udccb'},
-  diploma_certificate:{label:'Diploma Certificate',icon:'\\ud83c\\udf93'},
-  diploma_transcript:{label:'Diploma Transcript',icon:'\\ud83d\\udccb'},
-  bachelors_certificate:{label:"Bachelor's Certificate",icon:'\\ud83c\\udf93'},
-  bachelors_transcript:{label:"Bachelor's Transcript",icon:'\\ud83d\\udccb'},
-  bachelors_provisional_certificate:{label:"Bachelor's Provisional Cert.",icon:'\\ud83c\\udf93'},
-  bachelors_transcript_all_semesters:{label:"Bachelor's Transcript (All Sem.)",icon:'\\ud83d\\udccb'},
-  masters_certificate:{label:"Master's Certificate",icon:'\\ud83c\\udf93'},
-  masters_transcript:{label:"Master's Transcript",icon:'\\ud83d\\udccb'},
-  masters_provisional_certificate:{label:"Master's Provisional Cert.",icon:'\\ud83c\\udf93'},
-  masters_transcript_all_semesters:{label:"Master's Transcript (All Sem.)",icon:'\\ud83d\\udccb'},
-  portfolio:{label:'Portfolio',icon:'\\ud83c\\udfa8'},
-  research_proposal:{label:'Research Proposal',icon:'\\ud83d\\udd2c'},
-  publication_list:{label:'Publication List',icon:'\\ud83d\\udcda'},
-  writing_sample:{label:'Writing Sample',icon:'\\u270d\\ufe0f'},
-  bank_statement:{label:'Bank Statement',icon:'\\ud83c\\udfe6'},
-  sponsor_letter:{label:'Sponsor Letter',icon:'\\ud83d\\udcb0'},
-  scholarship_award_letter:{label:'Scholarship Award Letter',icon:'\\ud83c\\udfc6'}
-};
+// Document-type metadata is injected server-side from the admin-managed
+// catalog_options table (category='documents'). Adding/editing a document
+// type in the staff panel (Catalog > Options > Documents) shows up in this
+// widget after the server's 5-minute cache refresh.
+var DOC_META=${JSON.stringify(docMeta).replace(/<\/script/gi, "<\\/script").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")};
 function humanizeDocKey(k){
   return String(k||'').replace(/([A-Z])/g,' $1').replace(/[_-]+/g,' ').replace(/\\s+/g,' ').trim().replace(/^./,function(c){return c.toUpperCase();});
 }
@@ -1263,9 +1313,15 @@ function loadProgramDocs(pid,cb){
   }).then(function(rows){
     if(Array.isArray(rows)&&rows.length>0){
       programDocs=rows.slice().sort(function(a,b){return (a.sortOrder||0)-(b.sortOrder||0);}).map(function(r){
-        var key=String(r.documentType||'other');
-        var meta=DOC_META[key]||{label:humanizeDocKey(key),icon:'\\ud83d\\udcce'};
-        return {key:key,label:meta.label,icon:meta.icon,accept:'.pdf,.jpg,.jpeg,.png',required:!!r.mandatory};
+        var rawKey=String(r.documentType||'other');
+        // Whitelist key shape and reject reserved property names so a
+        // malicious documentType can't break out of HTML attributes
+        // downstream or pollute object prototypes. esc() at sinks is a
+        // second line of defence.
+        var lowerKey=rawKey.toLowerCase();
+        var key=(/^[a-z0-9_\\-]{1,64}$/i.test(rawKey)&&lowerKey!=='__proto__'&&lowerKey!=='prototype'&&lowerKey!=='constructor')?rawKey:'other';
+        var meta=DOC_META[key]||{label:humanizeDocKey(key),icon:'\\ud83d\\udcce',accept:'.pdf,.jpg,.jpeg,.png'};
+        return {key:key,label:meta.label,icon:meta.icon,accept:meta.accept||'.pdf,.jpg,.jpeg,.png',required:!!r.mandatory};
       });
     }
   }).catch(function(){}).finally(function(){if(cb)cb();});
@@ -1775,10 +1831,10 @@ function renderFormContent(prog){
     for(var i=0;i<docTypes.length;i++){
       var d=docTypes[i];
       var isUploaded=!!uploadedDocs[d.key];
-      h+='<div class="ew-doc-slot'+(isUploaded?' uploaded':'')+'" data-doc-key="'+d.key+'">';
-      h+='<input type="file" accept="'+d.accept+'" data-doc-input="'+d.key+'">';
-      h+='<div class="ew-doc-icon">'+d.icon+'</div>';
-      h+='<div class="ew-doc-label">'+d.label+'</div>';
+      h+='<div class="ew-doc-slot'+(isUploaded?' uploaded':'')+'" data-doc-key="'+esc(d.key)+'">';
+      h+='<input type="file" accept="'+esc(safeAccept(d.accept))+'" data-doc-input="'+esc(d.key)+'">';
+      h+='<div class="ew-doc-icon">'+esc(d.icon)+'</div>';
+      h+='<div class="ew-doc-label">'+esc(d.label)+'</div>';
       if(isUploaded){
         h+='<div class="ew-doc-status">\\u2713 Uploaded</div>';
       } else {
@@ -2642,7 +2698,8 @@ function bindEvents(){
   });
 }
 
-function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function esc(s){if(s===undefined||s===null)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function safeAccept(s){var v=String(s||'').trim();return /^(\\.[a-z0-9]{1,8})(,\\.[a-z0-9]{1,8})*$/i.test(v)?v:'.pdf,.jpg,.jpeg,.png';}
 
 function resizeParent(){
   try{
