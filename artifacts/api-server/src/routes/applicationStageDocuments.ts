@@ -367,18 +367,35 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next)
   type IncomingItem = { documentType?: unknown; customTitle?: unknown; note?: unknown };
   const { notes, items, stage: stageParam } = req.body as { notes?: unknown; items?: unknown; stage?: string };
 
+  // Validate catalog `documentType` values against the live admin-managed
+  // catalog (catalog_options category=documents). Unknown keys would
+  // never auto-fulfill, so we reject them up front instead of silently
+  // creating a row that can only be closed manually.
+  const { loadDocCatalogKeySet } = await import("../lib/docCatalog");
+  let catalogKeys: Set<string> = new Set();
+  try { catalogKeys = await loadDocCatalogKeySet(); } catch { /* serve open if catalog unavailable */ }
+
   let normalizedItems: { fileName: string; isCustom: boolean; note: string | null }[] = [];
   if (Array.isArray(items)) {
+    const rejected: string[] = [];
     for (const raw of items as IncomingItem[]) {
       if (!raw || typeof raw !== "object") continue;
       const docType = typeof raw.documentType === "string" ? raw.documentType.trim() : "";
       const custom = typeof raw.customTitle === "string" ? raw.customTitle.trim() : "";
       const note = typeof raw.note === "string" ? raw.note.trim() : "";
       if (docType) {
+        if (catalogKeys.size > 0 && !catalogKeys.has(docType)) {
+          rejected.push(docType);
+          continue;
+        }
         normalizedItems.push({ fileName: docType.slice(0, 128), isCustom: false, note: note ? note.slice(0, 500) : null });
       } else if (custom) {
         normalizedItems.push({ fileName: custom.slice(0, 128), isCustom: true, note: note ? note.slice(0, 500) : null });
       }
+    }
+    if (rejected.length > 0) {
+      res.status(400).json({ error: `Geçersiz katalog belgesi: ${rejected.join(", ")}` });
+      return;
     }
   } else if (Array.isArray(notes)) {
     // Legacy free-text payload — every line is a custom request.

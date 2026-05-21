@@ -61,61 +61,68 @@ export async function handleMissingDocFulfillment(
         .set({ fulfilledAt: new Date() })
         .where(sql`${applicationStageDocumentsTable.id} = ANY(${matchedIds})`);
 
-      // For each affected stage, check if any open catalog requests remain
-      // on that stage. If none, and the stage has an auto-advance target,
-      // move the application — but only if the application is still on
-      // that same stage (avoid surprise jumps if staff already moved it).
+      // Each request row is tied to the SOURCE stage where staff
+      // originated the missing-doc action. Staff typically moves the
+      // application to a "waiting" stage right after creating requests,
+      // so by the time the student uploads, `app.stage` is no longer
+      // the source. Iterate every affected source stage independently
+      // and advance the app once if its source has all catalog requests
+      // closed AND a target stage configured.
       const [app] = await tx.select({ stage: applicationsTable.stage })
         .from(applicationsTable)
         .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
       if (!app) return;
 
-      if (!affectedStages.has(app.stage)) return;
+      for (const sourceStageKey of affectedStages) {
+        const stillOpen = await tx
+          .select({ id: applicationStageDocumentsTable.id })
+          .from(applicationStageDocumentsTable)
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, applicationId),
+            eq(applicationStageDocumentsTable.stage, sourceStageKey),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+            eq(applicationStageDocumentsTable.isCustom, false),
+            isNull(applicationStageDocumentsTable.fulfilledAt),
+          ))
+          .limit(1);
+        if (stillOpen.length > 0) continue;
 
-      const stillOpen = await tx
-        .select({ id: applicationStageDocumentsTable.id })
-        .from(applicationStageDocumentsTable)
-        .where(and(
-          eq(applicationStageDocumentsTable.applicationId, applicationId),
-          eq(applicationStageDocumentsTable.stage, app.stage),
-          eq(applicationStageDocumentsTable.isMissingDocNote, true),
-          eq(applicationStageDocumentsTable.isCustom, false),
-          isNull(applicationStageDocumentsTable.fulfilledAt),
-        ))
-        .limit(1);
-      if (stillOpen.length > 0) return;
+        const [sourceStageRow] = await tx
+          .select({
+            id: pipelineStagesTable.id,
+            targetId: pipelineStagesTable.missingDocsFulfilledTargetStageId,
+          })
+          .from(pipelineStagesTable)
+          .where(and(
+            eq(pipelineStagesTable.entityType, "application"),
+            eq(pipelineStagesTable.key, sourceStageKey),
+          ));
+        if (!sourceStageRow?.targetId) continue;
 
-      const [sourceStageRow] = await tx
-        .select({
-          id: pipelineStagesTable.id,
-          targetId: pipelineStagesTable.missingDocsFulfilledTargetStageId,
-        })
-        .from(pipelineStagesTable)
-        .where(and(
-          eq(pipelineStagesTable.entityType, "application"),
-          eq(pipelineStagesTable.key, app.stage),
-        ));
-      if (!sourceStageRow?.targetId) return;
+        const [targetStageRow] = await tx
+          .select({ key: pipelineStagesTable.key })
+          .from(pipelineStagesTable)
+          .where(eq(pipelineStagesTable.id, sourceStageRow.targetId));
+        if (!targetStageRow) continue;
 
-      const [targetStageRow] = await tx
-        .select({ key: pipelineStagesTable.key })
-        .from(pipelineStagesTable)
-        .where(eq(pipelineStagesTable.id, sourceStageRow.targetId));
-      if (!targetStageRow) return;
+        // Already at target? Nothing to advance.
+        if (app.stage === targetStageRow.key) continue;
 
-      await tx.update(applicationsTable)
-        .set({ stage: targetStageRow.key, updatedAt: new Date() })
-        .where(eq(applicationsTable.id, applicationId));
+        await tx.update(applicationsTable)
+          .set({ stage: targetStageRow.key, updatedAt: new Date() })
+          .where(eq(applicationsTable.id, applicationId));
 
-      // Audit outside transaction would race; logAudit uses its own
-      // connection so we run it after commit instead.
-      setImmediate(() => {
-        logAudit(triggerUserId, "auto_stage_advance_missing_docs_fulfilled", "application", applicationId, {
-          fromStage: app.stage,
-          toStage: targetStageRow.key,
-          fulfilledCount: matchedIds.length,
-        }).catch(() => {});
-      });
+        const fromStageForAudit = app.stage;
+        setImmediate(() => {
+          logAudit(triggerUserId, "auto_stage_advance_missing_docs_fulfilled", "application", applicationId, {
+            fromStage: fromStageForAudit,
+            sourceStage: sourceStageKey,
+            toStage: targetStageRow.key,
+            fulfilledCount: matchedIds.length,
+          }).catch(() => {});
+        });
+        break;
+      }
     });
   } catch (err) {
     // Never block the upload on fulfillment side-effects.

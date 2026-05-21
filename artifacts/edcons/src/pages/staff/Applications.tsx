@@ -7,7 +7,7 @@ import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { isStaffRole, isAgentRole } from "@workspace/roles";
-import { DOC_EQUIVALENCE_GROUPS } from "@workspace/doc-equivalence";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1344,6 +1344,27 @@ export default function ApplicationsPage() {
   const [missingDocsItems, setMissingDocsItems] = useState<MissingDocItem[]>([]);
   const [missingDocsSaving, setMissingDocsSaving] = useState(false);
 
+  // Task #187 — live admin-managed document catalog
+  // (catalog_options category=documents) for the dialog dropdown.
+  const { data: catalogResp } = useQuery<any>({
+    queryKey: ["catalog-options"],
+    queryFn: () => apiFetch(`${BASE_URL}/api/catalog-options`),
+    staleTime: 5 * 60_000,
+  });
+  const docCatalogOptions = useMemo(() => {
+    const grouped = (catalogResp as any)?.grouped || {};
+    const rows: any[] = grouped["documents"] || [];
+    return rows
+      .filter((r: any) => r.isActive !== false)
+      .map((r: any) => {
+        const md = r.metadata || {};
+        const label = (typeof md.label === "string" && md.label.trim())
+          ? md.label.trim()
+          : String(r.value).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+        return { value: r.value, label };
+      });
+  }, [catalogResp]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
@@ -2175,17 +2196,16 @@ export default function ApplicationsPage() {
                         disabled={missingDocsSaving}
                       />
                     ) : (
-                      <select
-                        value={it.documentType}
-                        onChange={(e) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, documentType: e.target.value } : p))}
-                        className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
-                        disabled={missingDocsSaving}
-                      >
-                        <option value="">— Belge seçin —</option>
-                        {DOC_EQUIVALENCE_GROUPS.flatMap((g) => g.canonicalTypes).map((t) => (
-                          <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
-                        ))}
-                      </select>
+                      <div className="flex-1">
+                        <SearchableSelect
+                          value={it.documentType}
+                          onChange={(v) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, documentType: v } : p))}
+                          options={docCatalogOptions}
+                          placeholder="— Belge seçin —"
+                          searchPlaceholder="Belge ara…"
+                          disabled={missingDocsSaving}
+                        />
+                      </div>
                     )}
                     <Badge variant={it.isCustom ? "secondary" : "outline"} className="text-[10px] mt-1">
                       {it.isCustom ? "Özel" : "Katalog"}

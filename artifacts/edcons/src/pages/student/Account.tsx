@@ -19,7 +19,7 @@ import {
   User, Globe, Shield, Save, Check, GraduationCap,
   Loader2, FileText, MapPin, Phone, Mail, Calendar, Camera,
   BookOpen, Languages, Award, Upload, FolderOpen, Download,
-  CheckCircle2, X,
+  CheckCircle2, X, AlertTriangle,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -477,7 +477,7 @@ export default function StudentAccount() {
 // missing-doc request across the student's applications. Catalog items
 // close automatically when the matching document is uploaded; custom
 // items need staff to close them.
-function PendingMissingDocRequests() {
+function PendingMissingDocRequests({ onUploadFor }: { onUploadFor: (row: any) => void }) {
   const { data: rows = [], isLoading } = useQuery<any[]>({
     queryKey: ["student-missing-docs"],
     queryFn: () => customFetch("/api/students/me/missing-docs"),
@@ -520,6 +520,14 @@ function PendingMissingDocRequests() {
                   {r.stageLabel ? ` • ${r.stageLabel}` : ""}
                 </p>
               </div>
+              <Button
+                size="sm"
+                className="rounded-lg h-7 px-2 gap-1 text-xs shrink-0"
+                onClick={() => onUploadFor(r)}
+              >
+                <Upload className="w-3 h-3" />
+                Yükle
+              </Button>
             </div>
           </li>
         ))}
@@ -574,6 +582,29 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
     setUploadOpen(true);
   }
 
+  // Task #187 — prefill upload dialog from a pending missing-doc request.
+  // Catalog rows seed the doc type so the backend matches via the
+  // doc-equivalence groups and auto-fulfills the request; custom rows
+  // fall back to "other" with the requested title as the file name.
+  function openUploadForRequest(row: any) {
+    const first = (user?.firstName ?? "").toLowerCase();
+    const last = (user?.lastName ?? "").toLowerCase();
+    if (row.isCustom) {
+      setUploadType("other");
+      setUploadName(`${String(row.fileName).toLowerCase().replace(/\s+/g, "-")}-${first}-${last}`);
+    } else {
+      // Task #187 — forward the canonical catalog key as-is (even if not
+      // in the legacy static DOC_TYPES list); the backend matches it
+      // against the live catalog + doc-equivalence groups to auto-fulfill
+      // the pending request.
+      const type = String(row.fileName || "other");
+      setUploadType(type);
+      setUploadName(`${type.replace(/_/g, "-")}-${first}-${last}`);
+    }
+    setUploadFile(null);
+    setUploadOpen(true);
+  }
+
   function handleFileSelect(file: File) {
     const validation = validateFile(file);
     if (!validation.valid) {
@@ -608,6 +639,9 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
         }),
       });
       await qc.invalidateQueries({ queryKey: ["student-documents"] });
+      // Task #187 — refresh pending missing-doc requests so any
+      // auto-fulfilled rows disappear from the panel immediately.
+      await qc.invalidateQueries({ queryKey: ["student-missing-docs"] });
       toast({ title: "Document uploaded" });
       setUploadOpen(false);
     } catch (err: any) {
@@ -652,7 +686,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
         </div>
       )}
 
-      {studentProfile?.id && <PendingMissingDocRequests />}
+      {studentProfile?.id && <PendingMissingDocRequests onUploadFor={openUploadForRequest} />}
 
       {isLoading ? (
         <div className="space-y-3">
