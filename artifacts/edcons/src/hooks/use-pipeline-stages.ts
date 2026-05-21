@@ -40,6 +40,12 @@ export interface PipelineStage {
   autoCancelSiblingsOnWon?: boolean;
   // Task #167 — up to 2 admin-defined action buttons (application only).
   actions?: StageAction[];
+  // Task #187 — id of the stage the application auto-advances to once
+  // every catalog-based missing-doc request on this stage is fulfilled.
+  missingDocsFulfilledTargetStageId?: number | null;
+  // Convenience key form derived/used by the admin UI; the server accepts
+  // this on PUT (preferred over id, since ids change across resaves).
+  missingDocsFulfilledTargetStageKey?: string | null;
 }
 
 async function fetchStages(entityType: string): Promise<PipelineStage[]> {

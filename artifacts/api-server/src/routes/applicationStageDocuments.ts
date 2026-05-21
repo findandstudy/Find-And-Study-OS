@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import express from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable } from "@workspace/db";
+import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole, isStaffRole } from "../lib/roles";
@@ -233,6 +234,15 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   }).returning();
 
   await logAudit(user.id, "upload_stage_document", "application", applicationId, { stage, fileName, docId: doc.id }, req.ip);
+
+  // Task #187 — stage uploads may fulfil an open missing-doc request.
+  // Use the override name (admin-configured Document Name) when present,
+  // otherwise the stage key as the document-type signal.
+  const fulfilmentSignal = (typeof documentNameOverride === "string" && documentNameOverride.trim())
+    ? documentNameOverride.trim()
+    : stage;
+  void handleMissingDocFulfillment(applicationId, fulfilmentSignal, user.id);
+
   res.status(201).json(doc);
 });
 
@@ -310,19 +320,26 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaff
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { page = "1", limit = "200", stage } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
+
+  // Task #187 — notes are now created on whichever stage the
+  // missing_docs action originates from (no longer hardcoded to
+  // "missing_docs"). Default = all stages; optional ?stage= filter.
+  const wheres = [
+    eq(applicationStageDocumentsTable.applicationId, applicationId),
+    eq(applicationStageDocumentsTable.isMissingDocNote, true),
+  ];
+  if (stage && typeof stage === "string") {
+    wheres.push(eq(applicationStageDocumentsTable.stage, stage));
+  }
 
   const notes = await db
     .select()
     .from(applicationStageDocumentsTable)
-    .where(and(
-      eq(applicationStageDocumentsTable.applicationId, applicationId),
-      eq(applicationStageDocumentsTable.stage, "missing_docs"),
-      eq(applicationStageDocumentsTable.isMissingDocNote, true),
-    ))
+    .where(and(...wheres))
     .orderBy(desc(applicationStageDocumentsTable.createdAt))
     .limit(limitNum)
     .offset(offset);
@@ -330,7 +347,13 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaff
   res.json(notes);
 });
 
-router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next) => {
+  // Task #187 — block students from creating missing-doc requests on
+  // their own application. The pre-existing handler only protected via
+  // verifyApplicationAccess, which returns true for the student owner.
+  if (req.user && req.user.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+  next();
+}, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const applicationId = parseInt(req.params.id, 10);
   const user = req.user!;
 
@@ -338,9 +361,32 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { notes, stage: stageParam } = req.body as { notes?: unknown; stage?: string };
-  if (!notes || !Array.isArray(notes)) {
-    res.status(400).json({ error: "notes array is required" });
+  // Task #187 — new payload shape `items: [{documentType?, customTitle?, note?}]`
+  // with backwards-compat for the legacy `notes: string[]`. At least one of
+  // documentType / customTitle must be present per item.
+  type IncomingItem = { documentType?: unknown; customTitle?: unknown; note?: unknown };
+  const { notes, items, stage: stageParam } = req.body as { notes?: unknown; items?: unknown; stage?: string };
+
+  let normalizedItems: { fileName: string; isCustom: boolean; note: string | null }[] = [];
+  if (Array.isArray(items)) {
+    for (const raw of items as IncomingItem[]) {
+      if (!raw || typeof raw !== "object") continue;
+      const docType = typeof raw.documentType === "string" ? raw.documentType.trim() : "";
+      const custom = typeof raw.customTitle === "string" ? raw.customTitle.trim() : "";
+      const note = typeof raw.note === "string" ? raw.note.trim() : "";
+      if (docType) {
+        normalizedItems.push({ fileName: docType.slice(0, 128), isCustom: false, note: note ? note.slice(0, 500) : null });
+      } else if (custom) {
+        normalizedItems.push({ fileName: custom.slice(0, 128), isCustom: true, note: note ? note.slice(0, 500) : null });
+      }
+    }
+  } else if (Array.isArray(notes)) {
+    // Legacy free-text payload — every line is a custom request.
+    normalizedItems = (notes as unknown[])
+      .filter((n): n is string => typeof n === "string" && !!n.trim())
+      .map(n => ({ fileName: n.trim().slice(0, 128), isCustom: true, note: null }));
+  } else {
+    res.status(400).json({ error: "items or notes array is required" });
     return;
   }
 
@@ -382,14 +428,16 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
 
   const uploaderName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email;
 
-  const insertValues = notes.filter((n: string) => typeof n === "string" && n.trim()).map((note: string) => ({
+  const insertValues = normalizedItems.map((it) => ({
     applicationId,
     stage: stageKey,
-    fileName: note.trim(),
+    fileName: it.fileName,
     uploadedBy: user.id,
     uploadedByRole: user.role,
     uploadedByName: uploaderName,
     isMissingDocNote: true,
+    isCustom: it.isCustom,
+    note: it.note,
   }));
 
   if (insertValues.length > 0) {
@@ -404,6 +452,66 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaf
 
   await logAudit(user.id, "update_missing_doc_notes", "application", applicationId, { count: result.length, stage: stageKey }, req.ip);
   res.json(result);
+});
+
+// Task #187 — manual close (admin / staff) for a single missing-doc request
+// row, used to mark custom requests fulfilled. Catalog rows are normally
+// closed automatically by the upload hook but can also be closed manually.
+// Explicit role gate: only staff/admin/agent_staff (with `documents` perm)
+// may mutate — never students, even on their own application.
+const STAFF_AGENT_ROLES = new Set([...STAFF_ROLES, ...ADMIN_ROLES, "agent", "agent_staff"]);
+function requireStaffOrAdmin(req: any, res: any, next: any) {
+  if (!req.user) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (!STAFF_AGENT_ROLES.has(req.user.role)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+}
+router.patch("/applications/:id/missing-doc-notes/:noteId", requireAuth, requireStaffOrAdmin, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const applicationId = parseInt(req.params.id, 10);
+  const noteId = parseInt(req.params.noteId, 10);
+  const user = req.user!;
+
+  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
+
+  const [row] = await db.select().from(applicationStageDocumentsTable).where(and(
+    eq(applicationStageDocumentsTable.id, noteId),
+    eq(applicationStageDocumentsTable.applicationId, applicationId),
+    eq(applicationStageDocumentsTable.isMissingDocNote, true),
+  ));
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+
+  const fulfilled = !!req.body?.fulfilled;
+  const [updated] = await db.update(applicationStageDocumentsTable)
+    .set({ fulfilledAt: fulfilled ? new Date() : null })
+    .where(eq(applicationStageDocumentsTable.id, noteId))
+    .returning();
+
+  await logAudit(user.id, "update_missing_doc_note_fulfilled", "application", applicationId, { noteId, fulfilled }, req.ip);
+  res.json(updated);
+});
+
+// Task #187 — delete a single missing-doc request row (admin / staff).
+router.delete("/applications/:id/missing-doc-notes/:noteId", requireAuth, requireStaffOrAdmin, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const applicationId = parseInt(req.params.id, 10);
+  const noteId = parseInt(req.params.noteId, 10);
+  const user = req.user!;
+
+  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
+
+  const [row] = await db.select().from(applicationStageDocumentsTable).where(and(
+    eq(applicationStageDocumentsTable.id, noteId),
+    eq(applicationStageDocumentsTable.applicationId, applicationId),
+    eq(applicationStageDocumentsTable.isMissingDocNote, true),
+  ));
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+
+  await db.delete(applicationStageDocumentsTable).where(eq(applicationStageDocumentsTable.id, noteId));
+  await logAudit(user.id, "delete_missing_doc_note", "application", applicationId, { noteId }, req.ip);
+  res.sendStatus(204);
 });
 
 // Task #167 — aggregate every stage-document across all of a student's

@@ -36,6 +36,54 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   res.json(student);
 });
 
+// Task #187 — list every open missing-doc request across all of the
+// signed-in student's applications, with stage/university/program context
+// for the student portal "Bekleyen Talepler" section.
+router.get("/students/me/missing-docs", requireAuth, async (req, res): Promise<void> => {
+  const user = req.user!;
+  if (user.role !== "student") {
+    res.status(403).json({ error: "Only students can call this endpoint" });
+    return;
+  }
+  const { db, applicationStageDocumentsTable, applicationsTable, studentsTable: stdT, universitiesTable, programsTable, pipelineStagesTable } = await import("@workspace/db");
+  const { eq, and, isNull, desc, sql } = await import("drizzle-orm");
+
+  const [studentRec] = await db.select({ id: stdT.id }).from(stdT).where(eq(stdT.userId, user.id));
+  if (!studentRec) { res.json([]); return; }
+
+  const rows = await db
+    .select({
+      id: applicationStageDocumentsTable.id,
+      applicationId: applicationStageDocumentsTable.applicationId,
+      stage: applicationStageDocumentsTable.stage,
+      stageLabel: pipelineStagesTable.label,
+      fileName: applicationStageDocumentsTable.fileName,
+      isCustom: applicationStageDocumentsTable.isCustom,
+      note: applicationStageDocumentsTable.note,
+      fulfilledAt: applicationStageDocumentsTable.fulfilledAt,
+      createdAt: applicationStageDocumentsTable.createdAt,
+      universityName: universitiesTable.name,
+      programName: programsTable.name,
+    })
+    .from(applicationStageDocumentsTable)
+    .innerJoin(applicationsTable, eq(applicationsTable.id, applicationStageDocumentsTable.applicationId))
+    .leftJoin(universitiesTable, eq(universitiesTable.id, applicationsTable.universityId))
+    .leftJoin(programsTable, eq(programsTable.id, applicationsTable.programId))
+    .leftJoin(pipelineStagesTable, and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.key, applicationStageDocumentsTable.stage),
+    ))
+    .where(and(
+      eq(applicationsTable.studentId, studentRec.id),
+      isNull(applicationsTable.deletedAt),
+      eq(applicationStageDocumentsTable.isMissingDocNote, true),
+      isNull(applicationStageDocumentsTable.fulfilledAt),
+    ))
+    .orderBy(desc(applicationStageDocumentsTable.createdAt));
+
+  res.json(rows);
+});
+
 router.get("/students/my-advisor", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), isNull(studentsTable.deletedAt)));

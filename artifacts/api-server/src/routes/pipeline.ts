@@ -41,6 +41,52 @@ const router: IRouter = Router();
     console.error("[pipeline] failed to ensure actions column (Task #167):", e);
   }
 
+  // Task #187 — pipeline + missing-doc-notes schema extensions. Idempotent.
+  try {
+    await db.execute(sql`
+      ALTER TABLE pipeline_stages
+      ADD COLUMN IF NOT EXISTS missing_docs_fulfilled_target_stage_id integer
+        REFERENCES pipeline_stages(id) ON DELETE SET NULL
+    `);
+    await db.execute(sql`
+      ALTER TABLE application_stage_documents
+      ADD COLUMN IF NOT EXISTS note text
+    `);
+    await db.execute(sql`
+      ALTER TABLE application_stage_documents
+      ADD COLUMN IF NOT EXISTS is_custom boolean NOT NULL DEFAULT false
+    `);
+    await db.execute(sql`
+      ALTER TABLE application_stage_documents
+      ADD COLUMN IF NOT EXISTS fulfilled_at timestamptz
+    `);
+    // Pre-existing missing-doc rows used `fileName` as free-text — treat
+    // them as custom (one-shot, gated by pipeline_migrations marker so we
+    // don't reclassify newly-created catalog rows on every restart).
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS pipeline_migrations (
+        name text PRIMARY KEY,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    const marker = await db.execute(sql`
+      SELECT 1 FROM pipeline_migrations WHERE name = 'task_187_backfill_is_custom'
+    `);
+    if ((marker as any).rows?.length === 0) {
+      await db.execute(sql`
+        UPDATE application_stage_documents
+        SET is_custom = true
+        WHERE is_missing_doc_note = true AND is_custom = false
+      `);
+      await db.execute(sql`
+        INSERT INTO pipeline_migrations (name) VALUES ('task_187_backfill_is_custom')
+        ON CONFLICT (name) DO NOTHING
+      `);
+    }
+  } catch (e) {
+    console.error("[pipeline] failed to ensure Task #187 columns:", e);
+  }
+
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS pipeline_migrations (
@@ -352,6 +398,17 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     return ALLOWED_FINANCE_STATUS.has(s) ? s : null;
   }
 
+  // Task #187 — `missingDocsFulfilledTargetStageKey` is sent by the UI
+  // (keys survive the delete-and-reinsert cycle, ids do not). Map each
+  // key to the new stage id after insert.
+  const targetKeyByStageIdx: (string | null)[] = stages.map((s: any) => {
+    if (entityType !== "application") return null;
+    const raw = s.missingDocsFulfilledTargetStageKey;
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    const k = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    return normalizedKeys.includes(k) ? k : null;
+  });
+
   try {
     const inserted = await db.transaction(async (tx) => {
       await tx.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
@@ -389,6 +446,20 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
             : [],
         })))
         .returning();
+
+      // Task #187 — second pass to set FK ids now that all new rows exist.
+      if (entityType === "application") {
+        const idByKey = new Map(rows.map(r => [r.key, r.id]));
+        for (let i = 0; i < rows.length; i++) {
+          const targetKey = targetKeyByStageIdx[i];
+          const targetId = targetKey ? idByKey.get(targetKey) : null;
+          if (!targetId || targetId === rows[i].id) continue;
+          await tx.update(pipelineStagesTable)
+            .set({ missingDocsFulfilledTargetStageId: targetId })
+            .where(eq(pipelineStagesTable.id, rows[i].id));
+          rows[i].missingDocsFulfilledTargetStageId = targetId;
+        }
+      }
 
       return rows;
     });

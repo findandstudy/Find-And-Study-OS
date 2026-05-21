@@ -9,6 +9,7 @@ import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isP
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
 
@@ -251,6 +252,26 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
       templateVars: { documentName: doc.name, documentType: doc.type },
     }).catch(() => {});
+  }
+
+  // Task #187 — auto-match against open missing-doc requests on any
+  // active application(s) for the resolved student, and auto-advance the
+  // source stage when all catalog requests are fulfilled.
+  if (resolvedStudentId && type) {
+    try {
+      const targetAppIds = applicationId
+        ? [applicationId as number]
+        : (await db
+            .select({ id: applicationsTable.id })
+            .from(applicationsTable)
+            .where(and(eq(applicationsTable.studentId, resolvedStudentId), isNull(applicationsTable.deletedAt))))
+            .map(r => r.id);
+      for (const appId of targetAppIds) {
+        void handleMissingDocFulfillment(appId, type, user.id);
+      }
+    } catch (e) {
+      console.error("[DOCUMENTS] missing-doc fulfillment trigger failed:", e);
+    }
   }
 
   res.status(201).json(doc);

@@ -7,6 +7,7 @@ import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { isStaffRole, isAgentRole } from "@workspace/roles";
+import { DOC_EQUIVALENCE_GROUPS } from "@workspace/doc-equivalence";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1336,8 +1337,11 @@ export default function ApplicationsPage() {
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean; quickMode?: boolean } | null>(null);
   // Task #167 — admin-only Missing Documents action dialog state.
   const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; sourceStage: string; targetStage: string | null; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
-  const [missingDocsText, setMissingDocsText] = useState("");
-  const [missingDocsChecked, setMissingDocsChecked] = useState<Record<string, boolean>>({});
+  // Task #187 — `items` is the new dialog state: each row is either a
+  // catalog document type (documentType) or a free-text custom request
+  // (customTitle), plus an optional per-item note.
+  type MissingDocItem = { id: string; documentType: string; customTitle: string; note: string; isCustom: boolean };
+  const [missingDocsItems, setMissingDocsItems] = useState<MissingDocItem[]>([]);
   const [missingDocsSaving, setMissingDocsSaving] = useState(false);
 
   const sensors = useSensors(
@@ -1628,8 +1632,12 @@ export default function ApplicationsPage() {
     }
     if (action.type === "missing_docs") {
       const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];
-      setMissingDocsText("");
-      setMissingDocsChecked(Object.fromEntries(required.map((t) => [t, true])));
+      // Seed with admin-preconfigured required types (catalog) so staff
+      // can immediately tweak / add notes, or start blank when none.
+      const seeded: MissingDocItem[] = required.length > 0
+        ? required.map((dt, i) => ({ id: `s${i}`, documentType: dt, customTitle: "", note: "", isCustom: false }))
+        : [{ id: "s0", documentType: "", customTitle: "", note: "", isCustom: false }];
+      setMissingDocsItems(seeded);
       setMissingDocsDialog({ appId: app.id, sourceStage: app.stage, targetStage: targetKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
       return;
     }
@@ -1637,14 +1645,18 @@ export default function ApplicationsPage() {
 
   async function submitMissingDocs() {
     if (!missingDocsDialog) return;
-    const required = missingDocsDialog.requiredDocTypes || [];
-    // Checklist-derived notes (one per selected required type) take priority;
-    // free-text fallback applies only when admin did not preconfigure types.
-    const checklistNotes = required.filter((t) => missingDocsChecked[t]).map((t) => t.replace(/_/g, " "));
-    const freeNotes = missingDocsText.trim().split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const notes = required.length > 0 ? checklistNotes : freeNotes;
-    if (notes.length === 0) {
-      toast({ title: required.length > 0 ? "Lütfen en az bir belge işaretleyin" : "Lütfen eksik belgeleri yazın", variant: "destructive" });
+    const items = missingDocsItems
+      .map((it) => {
+        if (it.isCustom) {
+          const title = it.customTitle.trim();
+          return title ? { customTitle: title, note: it.note.trim() || undefined } : null;
+        }
+        const dt = it.documentType.trim();
+        return dt ? { documentType: dt, note: it.note.trim() || undefined } : null;
+      })
+      .filter(Boolean);
+    if (items.length === 0) {
+      toast({ title: "En az bir belge eklemelisiniz", variant: "destructive" });
       return;
     }
     setMissingDocsSaving(true);
@@ -1652,13 +1664,12 @@ export default function ApplicationsPage() {
       await apiFetch(`${BASE_URL}/api/applications/${missingDocsDialog.appId}/missing-doc-notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes, stage: missingDocsDialog.sourceStage }),
+        body: JSON.stringify({ items, stage: missingDocsDialog.sourceStage }),
       });
       const moved = await moveAppToStage(missingDocsDialog.appId, missingDocsDialog.targetStage);
       if (moved) {
         setMissingDocsDialog(null);
-        setMissingDocsText("");
-        setMissingDocsChecked({});
+        setMissingDocsItems([]);
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message || "Could not save notes", variant: "destructive" });
@@ -2138,52 +2149,83 @@ export default function ApplicationsPage() {
           When admin pre-configured requiredDocTypes for the action, render a
           checklist seeded from those types; otherwise fall back to a free
           textarea (one missing item per line). */}
-      <Dialog open={!!missingDocsDialog} onOpenChange={(o) => { if (!o) { setMissingDocsDialog(null); setMissingDocsText(""); setMissingDocsChecked({}); } }}>
-        <DialogContent className="max-w-md">
+      {/* Task #187 — staff missing-doc request dialog. Each row is either
+          a catalog dropdown entry (auto-fulfilled when student uploads an
+          equivalent doc) or a free-text custom entry (must be closed
+          manually). Per-item notes are optional. */}
+      <Dialog open={!!missingDocsDialog} onOpenChange={(o) => { if (!o) { setMissingDocsDialog(null); setMissingDocsItems([]); } }}>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{missingDocsDialog?.actionLabel || "Missing Documents"}</DialogTitle>
+            <DialogTitle>{missingDocsDialog?.actionLabel || "Eksik Belgeler"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-xs text-muted-foreground">
-              Kaydedildiğinde başvuru otomatik olarak <span className="font-medium text-foreground">{missingDocsDialog?.targetStageLabel}</span> aşamasına geçecek.
+              Kaydedildiğinde başvuru otomatik olarak <span className="font-medium text-foreground">{missingDocsDialog?.targetStageLabel || missingDocsDialog?.sourceStage}</span> aşamasına geçecek. Öğrenci katalog belgesini yüklediğinde talep otomatik kapanır; özel belge taleplerini elle kapatmanız gerekir.
             </p>
-            {missingDocsDialog && missingDocsDialog.requiredDocTypes.length > 0 ? (
-              <div className="space-y-2 max-h-[260px] overflow-y-auto rounded-md border border-border/70 bg-muted/20 p-3">
-                <p className="text-xs font-medium text-foreground">Eksik belgeleri işaretleyin</p>
-                {missingDocsDialog.requiredDocTypes.map((dt) => (
-                  <label key={dt} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={!!missingDocsChecked[dt]}
-                      onCheckedChange={(v) => setMissingDocsChecked((prev) => ({ ...prev, [dt]: !!v }))}
-                      disabled={missingDocsSaving}
-                    />
-                    <span>{dt.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <textarea
-                className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder={"Pasaport fotoğrafı\nLise diploması çevirisi"}
-                value={missingDocsText}
-                onChange={(e) => setMissingDocsText(e.target.value)}
+            <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+              {missingDocsItems.map((it, idx) => (
+                <div key={it.id} className="border rounded-md p-2.5 space-y-2 bg-muted/20">
+                  <div className="flex items-start gap-2">
+                    {it.isCustom ? (
+                      <Input
+                        value={it.customTitle}
+                        onChange={(e) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, customTitle: e.target.value } : p))}
+                        placeholder="Özel belge adı"
+                        className="h-9"
+                        disabled={missingDocsSaving}
+                      />
+                    ) : (
+                      <select
+                        value={it.documentType}
+                        onChange={(e) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, documentType: e.target.value } : p))}
+                        className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                        disabled={missingDocsSaving}
+                      >
+                        <option value="">— Belge seçin —</option>
+                        {DOC_EQUIVALENCE_GROUPS.flatMap((g) => g.canonicalTypes).map((t) => (
+                          <option key={t} value={t}>{t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                        ))}
+                      </select>
+                    )}
+                    <Badge variant={it.isCustom ? "secondary" : "outline"} className="text-[10px] mt-1">
+                      {it.isCustom ? "Özel" : "Katalog"}
+                    </Badge>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setMissingDocsItems(prev => prev.filter((_, i) => i !== idx))} disabled={missingDocsSaving}>
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <Input
+                    value={it.note}
+                    onChange={(e) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, note: e.target.value } : p))}
+                    placeholder="Not (opsiyonel) — örn. son 6 ay içinde alınmış olmalı"
+                    className="h-8 text-xs"
+                    disabled={missingDocsSaving}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button" variant="outline" size="sm" className="gap-1.5"
+                onClick={() => setMissingDocsItems(prev => [...prev, { id: `n${Date.now()}`, documentType: "", customTitle: "", note: "", isCustom: false }])}
                 disabled={missingDocsSaving}
-              />
-            )}
+              >
+                <Plus className="w-3.5 h-3.5" /> Katalog Belgesi Ekle
+              </Button>
+              <Button
+                type="button" variant="outline" size="sm" className="gap-1.5"
+                onClick={() => setMissingDocsItems(prev => [...prev, { id: `c${Date.now()}`, documentType: "", customTitle: "", note: "", isCustom: true }])}
+                disabled={missingDocsSaving}
+              >
+                <Plus className="w-3.5 h-3.5" /> Özel Belge Ekle
+              </Button>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setMissingDocsDialog(null); setMissingDocsText(""); setMissingDocsChecked({}); }} disabled={missingDocsSaving}>
+            <Button variant="outline" onClick={() => { setMissingDocsDialog(null); setMissingDocsItems([]); }} disabled={missingDocsSaving}>
               İptal
             </Button>
-            <Button
-              onClick={submitMissingDocs}
-              disabled={
-                missingDocsSaving ||
-                (missingDocsDialog?.requiredDocTypes.length
-                  ? !Object.values(missingDocsChecked).some(Boolean)
-                  : !missingDocsText.trim())
-              }
-            >
+            <Button onClick={submitMissingDocs} disabled={missingDocsSaving}>
               {missingDocsSaving ? "Kaydediliyor…" : "Kaydet ve Aşamaya Geç"}
             </Button>
           </DialogFooter>

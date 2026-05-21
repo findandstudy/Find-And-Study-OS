@@ -473,6 +473,61 @@ export default function StudentAccount() {
   );
 }
 
+// Task #187 — student-facing "Bekleyen Talepler" panel: every open
+// missing-doc request across the student's applications. Catalog items
+// close automatically when the matching document is uploaded; custom
+// items need staff to close them.
+function PendingMissingDocRequests() {
+  const { data: rows = [], isLoading } = useQuery<any[]>({
+    queryKey: ["student-missing-docs"],
+    queryFn: () => customFetch("/api/students/me/missing-docs"),
+    staleTime: 30_000,
+  });
+  if (isLoading || !Array.isArray(rows) || rows.length === 0) return null;
+
+  function humanize(s: string) {
+    return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  return (
+    <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle className="w-4 h-4 text-amber-600" />
+        <h3 className="font-display font-bold text-base text-amber-900">Bekleyen Talepler</h3>
+        <span className="text-xs text-amber-700">({rows.length})</span>
+      </div>
+      <p className="text-xs text-amber-800 mb-3">
+        Aşağıdaki belgeler danışmanınız tarafından sizden istenmiştir. Katalog belgelerini yükledikçe talep otomatik kapanır.
+      </p>
+      <ul className="space-y-2">
+        {rows.map((r) => (
+          <li key={r.id} className="rounded-xl bg-white/70 border border-amber-200 px-3 py-2 text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-semibold text-foreground">
+                    {r.isCustom ? r.fileName : humanize(r.fileName)}
+                  </span>
+                  <Badge variant={r.isCustom ? "secondary" : "outline"} className="text-[10px] h-4 px-1">
+                    {r.isCustom ? "Özel" : "Katalog"}
+                  </Badge>
+                </div>
+                {r.note && (
+                  <p className="text-xs text-muted-foreground mt-1">{r.note}</p>
+                )}
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {r.universityName ? `${r.universityName} • ` : ""}{r.programName || ""}
+                  {r.stageLabel ? ` • ${r.stageLabel}` : ""}
+                </p>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfile: any }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -596,6 +651,8 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
           />
         </div>
       )}
+
+      {studentProfile?.id && <PendingMissingDocRequests />}
 
       {isLoading ? (
         <div className="space-y-3">

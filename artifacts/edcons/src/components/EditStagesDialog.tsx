@@ -422,6 +422,44 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
               value={!!stage.autoCancelSiblingsOnWon}
               onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
             />
+
+            {/* Task #187 — when every catalog-based missing-doc request on
+                this stage is fulfilled, auto-advance the application to
+                the selected stage. */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Eksik belgeler tamamlanınca geçilecek aşama
+              </Label>
+              <Select
+                value={(() => {
+                  const k = stage.missingDocsFulfilledTargetStageKey;
+                  if (k) return k;
+                  const id = stage.missingDocsFulfilledTargetStageId;
+                  if (id) {
+                    const found = allStages.find((s) => s.id === id);
+                    if (found?.key) return found.key;
+                  }
+                  return "none";
+                })()}
+                onValueChange={(v) => onChange({
+                  ...stage,
+                  missingDocsFulfilledTargetStageKey: v === "none" ? null : v,
+                })}
+              >
+                <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Değişme —</SelectItem>
+                  {allStages
+                    .filter((s) => s.entityType === "application" && s.key !== stage.key && !!s.key)
+                    .map((s) => (
+                      <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Bu aşamadaki tüm katalog tabanlı eksik belge talepleri öğrenci tarafından karşılandığında başvuru otomatik olarak seçili aşamaya geçer. Özel (serbest metin) talepler bu hesaba dahil değildir.
+              </p>
+            </div>
           </FormSection>
 
           <FormSection

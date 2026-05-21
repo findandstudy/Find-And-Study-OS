@@ -56,6 +56,12 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   autoCancelSiblingsOnWon: boolean("auto_cancel_siblings_on_won").notNull().default(false),
   // Task #167 — up to 2 admin-defined action buttons per stage (application only).
   actions: jsonb("actions").$type<StageAction[]>().notNull().default([]),
+  // Task #187 — when all catalog-based missing-doc requests on an
+  // application have been fulfilled, the application is automatically
+  // moved to this stage. NULL = no auto-advance configured.
+  // Stored as a foreign-key id (not a key) to survive renames of the
+  // target stage; resolved to a key at advance-time.
+  missingDocsFulfilledTargetStageId: integer("missing_docs_fulfilled_target_stage_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

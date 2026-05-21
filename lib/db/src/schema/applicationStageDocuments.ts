@@ -15,6 +15,18 @@ export const applicationStageDocumentsTable = pgTable("application_stage_documen
   uploadedByRole: text("uploaded_by_role").notNull(),
   uploadedByName: text("uploaded_by_name"),
   isMissingDocNote: boolean("is_missing_doc_note").default(false),
+  // Task #187 — per-item note attached to a missing-doc request row,
+  // separate from `fileName` so the UI can show the catalog/custom title
+  // distinctly from any free-text instructions.
+  note: text("note"),
+  // Task #187 — false = `fileName` is a document-catalog key (auto-matched
+  // against student uploads via doc-equivalence); true = free-text custom
+  // title (must be fulfilled manually).
+  isCustom: boolean("is_custom").default(false).notNull(),
+  // Task #187 — set when the student (or equivalent uploader) provides the
+  // requested document. Used to drive the missing-docs-fulfilled auto-stage
+  // transition; NULL = still open.
+  fulfilledAt: timestamp("fulfilled_at", { withTimezone: true }),
   validUntil: timestamp("valid_until", { withTimezone: true }),
   expiryNotifiedThresholds: text("expiry_notified_thresholds"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

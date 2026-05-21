@@ -1,0 +1,124 @@
+import { db, applicationStageDocumentsTable, applicationsTable, pipelineStagesTable } from "@workspace/db";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { areEquivalentDocTypes } from "@workspace/doc-equivalence";
+import { logAudit } from "./auth";
+
+/**
+ * Task #187 — Missing-doc fulfillment + auto stage-advance.
+ *
+ * When a student (or any uploader) provides a document that satisfies an
+ * open catalog-based missing-doc request on an application:
+ *   1. Mark every matching open catalog request as fulfilled (stamp
+ *      `fulfilledAt`). Custom (free-text) requests are NEVER auto-matched;
+ *      they must be closed manually.
+ *   2. If all *catalog* requests on the application's source stage are now
+ *      fulfilled AND the source stage has `missingDocsFulfilledTargetStageId`
+ *      configured, advance the application to that target stage.
+ *
+ * Wrapped in an advisory lock + transaction so concurrent uploads can't
+ * each "see" 0 open requests and double-advance.
+ *
+ * `triggerUserId` is used for the audit row; pass the uploader's user id.
+ */
+export async function handleMissingDocFulfillment(
+  applicationId: number,
+  uploadedDocType: string,
+  triggerUserId: number,
+): Promise<void> {
+  if (!applicationId || !uploadedDocType) return;
+  try {
+    await db.transaction(async (tx) => {
+      // Serialize concurrent uploads on the same application so the
+      // "all fulfilled?" check is consistent. pg_advisory_xact_lock is
+      // released automatically at commit/rollback.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${applicationId})`);
+
+      const openRequests = await tx
+        .select({
+          id: applicationStageDocumentsTable.id,
+          stage: applicationStageDocumentsTable.stage,
+          fileName: applicationStageDocumentsTable.fileName,
+        })
+        .from(applicationStageDocumentsTable)
+        .where(and(
+          eq(applicationStageDocumentsTable.applicationId, applicationId),
+          eq(applicationStageDocumentsTable.isMissingDocNote, true),
+          eq(applicationStageDocumentsTable.isCustom, false),
+          isNull(applicationStageDocumentsTable.fulfilledAt),
+        ));
+
+      const matchedIds: number[] = [];
+      const affectedStages = new Set<string>();
+      for (const r of openRequests) {
+        if (areEquivalentDocTypes(r.fileName, uploadedDocType)) {
+          matchedIds.push(r.id);
+          affectedStages.add(r.stage);
+        }
+      }
+      if (matchedIds.length === 0) return;
+
+      await tx.update(applicationStageDocumentsTable)
+        .set({ fulfilledAt: new Date() })
+        .where(sql`${applicationStageDocumentsTable.id} = ANY(${matchedIds})`);
+
+      // For each affected stage, check if any open catalog requests remain
+      // on that stage. If none, and the stage has an auto-advance target,
+      // move the application — but only if the application is still on
+      // that same stage (avoid surprise jumps if staff already moved it).
+      const [app] = await tx.select({ stage: applicationsTable.stage })
+        .from(applicationsTable)
+        .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
+      if (!app) return;
+
+      if (!affectedStages.has(app.stage)) return;
+
+      const stillOpen = await tx
+        .select({ id: applicationStageDocumentsTable.id })
+        .from(applicationStageDocumentsTable)
+        .where(and(
+          eq(applicationStageDocumentsTable.applicationId, applicationId),
+          eq(applicationStageDocumentsTable.stage, app.stage),
+          eq(applicationStageDocumentsTable.isMissingDocNote, true),
+          eq(applicationStageDocumentsTable.isCustom, false),
+          isNull(applicationStageDocumentsTable.fulfilledAt),
+        ))
+        .limit(1);
+      if (stillOpen.length > 0) return;
+
+      const [sourceStageRow] = await tx
+        .select({
+          id: pipelineStagesTable.id,
+          targetId: pipelineStagesTable.missingDocsFulfilledTargetStageId,
+        })
+        .from(pipelineStagesTable)
+        .where(and(
+          eq(pipelineStagesTable.entityType, "application"),
+          eq(pipelineStagesTable.key, app.stage),
+        ));
+      if (!sourceStageRow?.targetId) return;
+
+      const [targetStageRow] = await tx
+        .select({ key: pipelineStagesTable.key })
+        .from(pipelineStagesTable)
+        .where(eq(pipelineStagesTable.id, sourceStageRow.targetId));
+      if (!targetStageRow) return;
+
+      await tx.update(applicationsTable)
+        .set({ stage: targetStageRow.key, updatedAt: new Date() })
+        .where(eq(applicationsTable.id, applicationId));
+
+      // Audit outside transaction would race; logAudit uses its own
+      // connection so we run it after commit instead.
+      setImmediate(() => {
+        logAudit(triggerUserId, "auto_stage_advance_missing_docs_fulfilled", "application", applicationId, {
+          fromStage: app.stage,
+          toStage: targetStageRow.key,
+          fulfilledCount: matchedIds.length,
+        }).catch(() => {});
+      });
+    });
+  } catch (err) {
+    // Never block the upload on fulfillment side-effects.
+    console.error("[MISSING-DOCS] fulfillment hook failed:", err);
+  }
+}

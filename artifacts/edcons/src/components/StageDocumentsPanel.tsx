@@ -79,10 +79,20 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
     .filter(s => (s.uploadPermissionLevel ?? "none") !== "none")
     .map(s => s.key);
 
+  // Task #187 — notes can now live on any stage (the stage from which the
+  // staff requested missing docs), so group them by stage instead of
+  // hardcoding to "missing_docs".
+  const notesByStage = new Map<string, any[]>();
+  for (const n of (missingNotes as any[])) {
+    const s = (n.stage as string) || "missing_docs";
+    if (!notesByStage.has(s)) notesByStage.set(s, []);
+    notesByStage.get(s)!.push(n);
+  }
+
   const relevantStages = docStages.filter(stage => {
     if (excludeStages?.includes(stage)) return false;
     const docs = (allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote);
-    const notes = stage === "missing_docs" ? (missingNotes as any[]) : [];
+    const notes = notesByStage.get(stage) ?? [];
     if (restrictFuture && isFutureStage(stage) && docs.length === 0 && notes.length === 0) {
       return false;
     }
@@ -112,7 +122,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
               tracksOfferExpiry={stageMeta?.tracksOfferExpiry === true}
               requiresValidUntilFlag={stageMeta?.requiresValidUntil === true}
               docs={(allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote)}
-              missingNotes={stage === "missing_docs" ? (missingNotes as any[]) : []}
+              missingNotes={notesByStage.get(stage) ?? []}
               userRole={userRole}
               userId={userId}
               isAdmin={isAdmin}
@@ -286,7 +296,7 @@ function StageSection({
 
       {expanded && (
         <div className="px-3 pb-3 space-y-2">
-          {stage === "missing_docs" && (
+          {missingNotes.length > 0 && (
             <MissingDocsSection
               applicationId={applicationId}
               notes={missingNotes}
@@ -454,104 +464,101 @@ function MissingDocsSection({
   notes: any[];
   isAdmin: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [items, setItems] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  function startEdit() {
-    setItems(notes.length > 0 ? notes.map((n: any) => n.fileName) : [""]);
-    setEditing(true);
+  function humanize(s: string) {
+    return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  function addItem() {
-    setItems([...items, ""]);
-  }
-
-  function removeItem(idx: number) {
-    setItems(items.filter((_, i) => i !== idx));
-  }
-
-  function updateItem(idx: number, val: string) {
-    const updated = [...items];
-    updated[idx] = val;
-    setItems(updated);
-  }
-
-  async function handleSave() {
-    const filtered = items.filter(i => i.trim());
-    if (filtered.length === 0) {
-      toast({ title: "Add at least one missing document note", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
+  async function toggleFulfilled(noteId: number, fulfilled: boolean) {
     try {
-      await customFetch(`${BASE_URL}/api/applications/${applicationId}/missing-doc-notes`, {
-        method: "POST",
+      await customFetch(`${BASE_URL}/api/applications/${applicationId}/missing-doc-notes/${noteId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: filtered }),
+        body: JSON.stringify({ fulfilled }),
       });
       qc.invalidateQueries({ queryKey: [`app-missing-notes-${applicationId}`] });
-      toast({ title: "Missing documents updated" });
-      setEditing(false);
+      toast({ title: fulfilled ? "Talep kapatıldı" : "Talep tekrar açıldı" });
     } catch (err: any) {
-      toast({ title: "Failed to save", description: err?.message, variant: "destructive" });
+      toast({ title: "Hata", description: err?.message, variant: "destructive" });
     }
-    setSaving(false);
+  }
+
+  async function removeNote(noteId: number) {
+    if (!window.confirm("Bu belge talebini silmek istediğinize emin misiniz?")) return;
+    try {
+      await customFetch(`${BASE_URL}/api/applications/${applicationId}/missing-doc-notes/${noteId}`, {
+        method: "DELETE",
+      });
+      qc.invalidateQueries({ queryKey: [`app-missing-notes-${applicationId}`] });
+    } catch (err: any) {
+      toast({ title: "Silme başarısız", description: err?.message, variant: "destructive" });
+    }
+  }
+
+  if (notes.length === 0) {
+    return (
+      <div className="border rounded-lg p-2.5 bg-amber-50/50 dark:bg-amber-950/20">
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+          <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Eksik Belgeler</span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">Açık eksik belge talebi yok.</p>
+      </div>
+    );
   }
 
   return (
     <div className="border rounded-lg p-2.5 bg-amber-50/50 dark:bg-amber-950/20 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-          <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Required Documents</span>
-        </div>
-        {isAdmin && !editing && (
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2" onClick={startEdit}>
-            <Plus className="w-3 h-3" /> Edit List
-          </Button>
-        )}
+      <div className="flex items-center gap-1.5">
+        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Eksik Belgeler</span>
       </div>
-
-      {editing ? (
-        <div className="space-y-1.5">
-          {items.map((item, idx) => (
-            <div key={idx} className="flex gap-1.5">
-              <Input
-                value={item}
-                onChange={e => updateItem(idx, e.target.value)}
-                placeholder="Document name..."
-                className="h-7 text-xs"
-              />
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeItem(idx)}>
-                <X className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addItem}>
-              <Plus className="w-3 h-3" /> Add
-            </Button>
-            <Button size="sm" className="h-7 text-xs gap-1" onClick={handleSave} disabled={saving}>
-              <Save className="w-3 h-3" /> {saving ? "Saving..." : "Save"}
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
-          </div>
-        </div>
-      ) : notes.length > 0 ? (
-        <ul className="space-y-0.5">
-          {notes.map((note: any) => (
-            <li key={note.id} className="text-xs text-foreground flex items-center gap-1.5 py-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-              {note.fileName}
+      <ul className="space-y-1.5">
+        {notes.map((note: any) => {
+          const fulfilled = !!note.fulfilledAt;
+          return (
+            <li key={note.id} className="rounded-md border bg-background/60 px-2 py-1.5 text-xs">
+              <div className="flex items-start gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${fulfilled ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`font-medium ${fulfilled ? "line-through text-muted-foreground" : ""}`}>
+                      {note.isCustom ? note.fileName : humanize(note.fileName)}
+                    </span>
+                    <Badge variant={note.isCustom ? "secondary" : "outline"} className="text-[9px] h-4 px-1">
+                      {note.isCustom ? "Özel" : "Katalog"}
+                    </Badge>
+                    {fulfilled && (
+                      <Badge variant="outline" className="text-[9px] h-4 px-1 border-emerald-400 text-emerald-700">
+                        Tamamlandı
+                      </Badge>
+                    )}
+                  </div>
+                  {note.note && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{note.note}</p>
+                  )}
+                </div>
+                {isAdmin && (
+                  <div className="flex gap-0.5 shrink-0">
+                    <Button
+                      variant="ghost" size="icon" className="h-6 w-6"
+                      title={fulfilled ? "Tekrar aç" : "Tamamlandı işaretle"}
+                      onClick={() => toggleFulfilled(note.id, !fulfilled)}
+                    >
+                      <Save className={`w-3 h-3 ${fulfilled ? "text-emerald-600" : ""}`} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Sil" onClick={() => removeNote(note.id)}>
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">No missing documents specified yet.</p>
-      )}
+          );
+        })}
+      </ul>
     </div>
   );
 }
