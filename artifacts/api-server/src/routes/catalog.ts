@@ -652,8 +652,20 @@ router.post("/catalog-options/orphans/cleanup", requireAuth, requireRole(...MANA
   }
 
   if (action === "delete_refs") {
+    // Orphan-only guard: this endpoint exists to clean up references to
+    // catalog entries that no longer exist. If the document_type is still
+    // a live catalog option, refuse — otherwise a privileged user with
+    // direct API access could wipe legitimate program/degree requirements
+    // for an in-use document type. UI only exposes orphan keys, but the
+    // API contract must be tight too.
     let removed = 0;
+    let conflict = false;
     await db.transaction(async (tx) => {
+      const [live] = await tx.select({ id: catalogOptionsTable.id })
+        .from(catalogOptionsTable)
+        .where(and(eq(catalogOptionsTable.category, "documents"), eq(catalogOptionsTable.value, key)))
+        .for("update");
+      if (live) { conflict = true; return; }
       const p = await tx.delete(programDocumentRequirementsTable)
         .where(eq(programDocumentRequirementsTable.documentType, key))
         .returning({ id: programDocumentRequirementsTable.id });
@@ -662,6 +674,14 @@ router.post("/catalog-options/orphans/cleanup", requireAuth, requireRole(...MANA
         .returning({ id: degreeDocumentRequirementsTable.id });
       removed = p.length + d.length;
     });
+    if (conflict) {
+      res.status(409).json({
+        error: "not_orphan",
+        message: "Bu belge tipi hâlâ katalogda mevcut; önce katalog seçeneğini silin veya pasife alın.",
+        documentType: key,
+      });
+      return;
+    }
     await logAudit(req.user!.id, "cleanup_orphan_document_refs", "catalog_option", null, { documentType: key, removed }, req.ip);
     res.json({ ok: true, action, documentType: key, removed });
     return;

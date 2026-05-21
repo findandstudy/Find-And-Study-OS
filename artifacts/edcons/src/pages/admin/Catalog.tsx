@@ -2352,14 +2352,19 @@ function DeleteBlockedDialog({ payload, onClose }: {
                     <p className="font-medium mb-1.5">Programlar ({payload.programs.length})</p>
                     <div className="max-h-48 overflow-auto rounded border bg-muted/30 divide-y">
                       {payload.programs.slice(0, 50).map(p => (
-                        <div key={p.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                          <span className="truncate">
+                        <a
+                          key={p.id}
+                          href={`/admin/programs?focus=${p.id}`}
+                          className="flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/60"
+                          title="Programa git"
+                        >
+                          <span className="truncate text-blue-600 hover:underline">
                             <span className="text-muted-foreground">{p.universityName}</span> — {p.name}
                           </span>
                           <Badge variant={p.mandatory ? "default" : "secondary"} className="ml-2 shrink-0 text-[10px]">
                             {p.mandatory ? "Zorunlu" : "Opsiyonel"}
                           </Badge>
-                        </div>
+                        </a>
                       ))}
                       {payload.programs.length > 50 && (
                         <div className="px-3 py-1.5 text-[10px] text-muted-foreground italic">
@@ -2374,12 +2379,17 @@ function DeleteBlockedDialog({ payload, onClose }: {
                     <p className="font-medium mb-1.5">Akademik dereceler ({payload.degrees.length})</p>
                     <div className="rounded border bg-muted/30 divide-y">
                       {payload.degrees.map(d => (
-                        <div key={d.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                          <span>{d.value}</span>
+                        <a
+                          key={d.id}
+                          href={`/admin/catalog?tab=options&category=degree&focus=${d.id}`}
+                          className="flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/60"
+                          title="Dereceye git"
+                        >
+                          <span className="text-blue-600 hover:underline">{d.value}</span>
                           <Badge variant={d.mandatory ? "default" : "secondary"} className="text-[10px]">
                             {d.mandatory ? "Zorunlu" : "Opsiyonel"}
                           </Badge>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
