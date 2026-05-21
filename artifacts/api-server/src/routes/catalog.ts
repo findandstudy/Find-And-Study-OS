@@ -3,7 +3,8 @@ import { db, countriesTable, citiesTable, universitiesTable, programsTable, cata
 import { eq, ilike, sql, and, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
-import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalogKeySet } from "../lib/docCatalog";
+import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
+import * as XLSX from "xlsx/xlsx.js";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
 // (Excel imports). The global body limit is intentionally small (1mb) for
@@ -214,6 +215,80 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
 });
 
 /* ─── PROGRAMS BULK ──────────────────────────────────────────── */
+
+/**
+ * Boş "Programs" Excel şablonu — programs/bulk endpoint'inin tanıdığı
+ * tüm sabit sütunları + canlı belge kataloğundaki tüm aktif belge
+ * anahtarlarını içeren bir XLSX döner. Admin elle sütun adı takip etmek
+ * zorunda kalmasın; şablonu indir → doldur → yükle akışı 0 unknown
+ * column ile geçsin diye. Task #181 (Task #179'un üstüne).
+ *
+ * Sütun sırası: önce sabit alanlar (POST /programs/bulk şemasındaki
+ * NON_DOC_COLUMNS ile birebir aynı sıra), sonra `loadDocCatalogKeySet()`
+ * çıktısı (admin-managed `sort_order` koruyor). Importer aynı kaynaktan
+ * okuduğu için round-trip deterministik.
+ *
+ * Auth: manager+; katalog hassas yapılandırma, dış istemcilere açmıyoruz.
+ */
+const PROGRAM_TEMPLATE_FIXED_COLUMNS = [
+  "universityId", "universityName", "name", "degree", "field", "language",
+  "duration", "tuitionFee", "currency", "scholarship", "intakes",
+  "requirements", "commissionRate", "applicationFee", "advancedFee",
+  "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
+  "feeType", "minGpa", "minLanguageScore", "quota", "isActive",
+] as const;
+
+router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLES), async (_req, res): Promise<void> => {
+  try {
+    const catalog = await loadDocCatalog();
+    const docKeys = Object.keys(catalog);
+    if (docKeys.length === 0) {
+      res.status(503).json({ error: "Belge kataloğu yüklenemedi, lütfen tekrar deneyin." });
+      return;
+    }
+
+    const headerOrder = [...PROGRAM_TEMPLATE_FIXED_COLUMNS, ...docKeys];
+    // json_to_sheet derives headers from the keys of the first object,
+    // in insertion order. Build a single blank example row so the XLSX
+    // surfaces every column even when no data is provided.
+    const blankRow: Record<string, string> = Object.create(null);
+    for (const h of headerOrder) blankRow[h] = "";
+
+    const ws = XLSX.utils.json_to_sheet([blankRow], { header: headerOrder as string[] });
+    ws["!cols"] = headerOrder.map((h) => ({ wch: Math.min(Math.max(h.length + 2, 14), 40) }));
+
+    const notesRows: Record<string, string>[] = [
+      { Column: "universityName", Required: "Yes (or universityId)", Notes: "Exact name as it appears in the Universities tab. Case-insensitive but spelling must match." },
+      { Column: "universityId", Required: "Yes (or universityName)", Notes: "Numeric university id (alternative to universityName)." },
+      { Column: "name", Required: "Yes", Notes: "Program name (e.g. Computer Engineering)." },
+      { Column: "degree / field / language / duration", Required: "No", Notes: "Free text." },
+      { Column: "tuitionFee / scholarship / applicationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol)." },
+      { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
+      { Column: "intakes", Required: "No", Notes: "Comma-separated: 'Fall, Spring, Summer'." },
+      { Column: "commissionRate / minGpa / minLanguageScore / quota", Required: "No", Notes: "Numeric." },
+      { Column: "feeType", Required: "No", Notes: "Free text: 'per year', 'per semester', 'one-time'." },
+      { Column: "isActive", Required: "No", Notes: "Yes / No (defaults to Yes)." },
+      { Column: "— Document columns —", Required: "", Notes: `Şablon ${docKeys.length} aktif belge sütunu içerir (admin kataloğundan canlı üretilmiştir).` },
+      { Column: "Allowed cell values", Required: "", Notes: "'mandatory' = student MUST upload. 'optional' = shown but not required. (blank) = not requested." },
+      { Column: "Removed columns", Required: "", Notes: "Sütunları silerseniz mevcut programlarda DEĞİŞMEZ; sadece dolu hücreler yazılır." },
+    ];
+    const wsNotes = XLSX.utils.json_to_sheet(notesRows);
+    wsNotes["!cols"] = [{ wch: 50 }, { wch: 22 }, { wch: 80 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Programs");
+    XLSX.utils.book_append_sheet(wb, wsNotes, "Instructions");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="programs_template_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(Buffer.from(buf));
+  } catch (err: any) {
+    console.error("[programs/import-template] failed:", err?.message || err);
+    res.status(500).json({ error: err?.message || "Failed to build template" });
+  }
+});
 
 router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   try {

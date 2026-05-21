@@ -2157,9 +2157,44 @@ function OptionsTab() {
             <h3 className="text-sm font-semibold">{catMeta.label}</h3>
             <p className="text-xs text-muted-foreground">{catMeta.description}</p>
           </div>
-          <Button size="sm" onClick={() => { setAddMode(true); setNewValue(""); }} disabled={addMode}>
-            <Plus className="w-4 h-4 mr-1" /> Add
-          </Button>
+          <div className="flex items-center gap-2">
+            {activeCategory === "documents" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const r = await apiFetch("/api/programs/import-template");
+                    if (!r.ok) {
+                      const txt = await r.text().catch(() => "");
+                      throw new Error(txt || `HTTP ${r.status}`);
+                    }
+                    const blob = await r.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `programs_template_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                    toast({ title: "Şablon indirildi", description: "Programs Excel şablonu hazır." });
+                  } catch (err: any) {
+                    toast({
+                      title: "Şablon indirilemedi",
+                      description: err?.message || "Tekrar deneyin.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                <Download className="w-4 h-4 mr-1" /> Program Excel şablonu indir
+              </Button>
+            )}
+            <Button size="sm" onClick={() => { setAddMode(true); setNewValue(""); }} disabled={addMode}>
+              <Plus className="w-4 h-4 mr-1" /> Add
+            </Button>
+          </div>
         </div>
 
         {addMode && (
