@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useProgramDocRequirements, resolveDocMeta } from "@/lib/programDocTypes";
+import { useProgramDocRequirements, useResolveDocMeta } from "@/lib/programDocTypes";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -433,6 +433,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   // requirements configured (so unconfigured programs still show
   // something instead of an empty list).
   const { data: programReqs = [], isFetched: programReqsFetched } = useProgramDocRequirements(program?.id);
+  const resolveDocMeta = useResolveDocMeta();
   const docTypes: DocType[] = useMemo(() => {
     if (programReqsFetched && programReqs.length > 0) {
       return [...programReqs]
@@ -450,7 +451,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         });
     }
     return getDocTypesForDegree(program?.degree);
-  }, [programReqs, programReqsFetched, program?.degree]);
+  }, [programReqs, programReqsFetched, program?.degree, resolveDocMeta]);
   const requiredDocs = docTypes.filter(d => d.required);
   const reusableForProgram: Record<string, ExistingDocInfo> = {};
   for (const dt of docTypes) {

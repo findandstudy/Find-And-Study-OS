@@ -617,8 +617,14 @@ async function seedClaudeIntegration() {
       await backfillLeadConversion();
     }
 
-    // Documents catalog seeder runs on every boot (idempotent per-row).
-    // Outside the bootstrap_done lock so it can backfill existing envs.
+    // Documents catalog: add metadata jsonb column if missing, then seed.
+    // Runs on every boot (idempotent per-row), outside the bootstrap_done
+    // lock so it backfills existing environments too.
+    try {
+      await pool.query(`ALTER TABLE catalog_options ADD COLUMN IF NOT EXISTS metadata jsonb`);
+    } catch (err) {
+      console.error("[migrate] catalog_options.metadata:", err);
+    }
     await seedDocumentTypes(pool);
 
     // One-shot data cleanup (idempotent via system_flags). Runs on every

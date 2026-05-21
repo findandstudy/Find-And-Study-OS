@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { useProgramDocRequirements, resolveDocMeta } from "@/lib/programDocTypes";
+import { useProgramDocRequirements, useResolveDocMeta } from "@/lib/programDocTypes";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1830,6 +1830,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
   // no requirements configured (so unconfigured programs still show
   // something instead of an empty list).
   const { data: programReqs = [], isFetched: programReqsFetched } = useProgramDocRequirements(p?.id);
+  const resolveDocMeta = useResolveDocMeta();
   const currentDocs: LevelDoc[] = useMemo(() => {
     if (programReqsFetched && programReqs.length > 0) {
       return [...programReqs]
@@ -1846,7 +1847,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
         });
     }
     return LEVEL_DOCS[level];
-  }, [programReqs, programReqsFetched, level]);
+  }, [programReqs, programReqsFetched, level, resolveDocMeta]);
   const uploadedCount = Object.keys(docs).length;
   const requiredDocKeys = currentDocs.filter(d => d.required).map(d => d.key);
   const missingRequiredCount = requiredDocKeys.filter(k => !docs[k]).length;

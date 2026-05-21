@@ -18,6 +18,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { apiFetch } from "@/lib/apiFetch";
+import { useDocumentTypeCatalog } from "@/lib/programDocTypes";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
 
@@ -1848,7 +1849,8 @@ function ProgramsTab() {
    OPTIONS TAB
 ══════════════════════════════════════════════════════════ */
 
-type CatalogOption = { id: number; category: string; value: string; sortOrder: number; isActive: boolean };
+type CatalogOptionMetadata = { label?: string; icon?: string; accept?: string } | null;
+type CatalogOption = { id: number; category: string; value: string; sortOrder: number; isActive: boolean; metadata?: CatalogOptionMetadata };
 
 const OPTION_CATEGORIES = [
   { key: "degree", label: "Degree", description: "Academic degree types (Bachelor, Master, etc.)" },
@@ -2028,6 +2030,7 @@ function OptionsTab() {
   const [addMode, setAddMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [docsForOption, setDocsForOption] = useState<CatalogOption | null>(null);
+  const [docMetaItem, setDocMetaItem] = useState<CatalogOption | null>(null);
   const qc = useQueryClient();
 
   const { data: optionsResp, isLoading } = useQuery({
@@ -2143,9 +2146,15 @@ function OptionsTab() {
           {items.length === 0 && !addMode && (
             <p className="text-center text-muted-foreground text-sm py-8">No options yet. Click "Add" to create one.</p>
           )}
-          {items.map((item, idx) => (
+          {items.map((item, idx) => {
+            const isDoc = activeCategory === "documents";
+            const docLabel = isDoc ? (item.metadata?.label || item.value) : item.value;
+            const docIcon = isDoc ? (item.metadata?.icon || "📄") : null;
+            const docAccept = isDoc ? (item.metadata?.accept || ".pdf,.jpg,.jpeg,.png") : null;
+            return (
             <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 group">
               <span className="text-xs text-muted-foreground w-6 text-center">{idx + 1}</span>
+              {isDoc && docIcon && <span className="text-lg leading-none w-6 text-center shrink-0">{docIcon}</span>}
               {editItem?.id === item.id ? (
                 <Input
                   autoFocus
@@ -2158,7 +2167,15 @@ function OptionsTab() {
                   }}
                 />
               ) : (
-                <span className={`flex-1 text-sm ${!item.isActive ? "line-through text-muted-foreground" : ""}`}>{item.value}</span>
+                <span className={`flex-1 text-sm ${!item.isActive ? "line-through text-muted-foreground" : ""}`}>
+                  {docLabel}
+                  {isDoc && docLabel !== item.value && (
+                    <span className="ml-2 text-[10px] text-muted-foreground font-mono">{item.value}</span>
+                  )}
+                </span>
+              )}
+              {isDoc && docAccept && (
+                <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">{docAccept}</Badge>
               )}
               {!item.isActive && <Badge variant="outline" className="text-[10px] bg-muted">Inactive</Badge>}
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2174,6 +2191,11 @@ function OptionsTab() {
                         <FileText className="w-3.5 h-3.5" /> Documents
                       </Button>
                     )}
+                    {isDoc && (
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => setDocMetaItem(item)}>
+                        <Settings2 className="w-3.5 h-3.5" /> Meta
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditItem({ ...item })}><Pencil className="w-3.5 h-3.5" /></Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(item, { isActive: !item.isActive })}>
                       {item.isActive ? <Lock className="w-3.5 h-3.5 text-orange-500" /> : <Check className="w-3.5 h-3.5 text-green-600" />}
@@ -2183,14 +2205,74 @@ function OptionsTab() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
     {docsForOption && (
       <DegreeDocsDialog option={docsForOption} onClose={() => setDocsForOption(null)} />
     )}
+    {docMetaItem && (
+      <DocumentMetaDialog option={docMetaItem} onClose={() => setDocMetaItem(null)} />
+    )}
     </>
+  );
+}
+
+function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const md = option.metadata || {};
+  const [label, setLabel] = useState<string>(typeof md.label === "string" ? md.label : "");
+  const [icon, setIcon] = useState<string>(typeof md.icon === "string" ? md.icon : "📄");
+  const [accept, setAccept] = useState<string>(typeof md.accept === "string" ? md.accept : ".pdf,.jpg,.jpeg,.png");
+  const [saving, setSaving] = useState(false);
+  async function save() {
+    setSaving(true);
+    try {
+      await api(`/api/catalog-options/${option.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata: { label: label.trim() || option.value, icon: icon.trim() || "📄", accept: accept.trim() || ".pdf,.jpg,.jpeg,.png" } }),
+      });
+      qc.invalidateQueries({ queryKey: ["catalog-options"] });
+      qc.invalidateQueries({ queryKey: ["document-type-catalog"] });
+      toast({ title: "Kaydedildi", description: "Belge tipi meta verisi güncellendi." });
+      onClose();
+    } catch (err: any) {
+      toast({ title: "Kayıt başarısız", description: err?.message || "Tekrar deneyin.", variant: "destructive" });
+    }
+    setSaving(false);
+  }
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Belge Meta — {option.value}</DialogTitle>
+          <p className="text-xs text-muted-foreground">Bu belge tipinin görünen adı, ikonu ve kabul edilen dosya uzantıları.</p>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs">Görünen ad (Label)</Label>
+            <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="ör. Passport" className="h-9 text-sm" />
+          </div>
+          <div>
+            <Label className="text-xs">İkon (emoji)</Label>
+            <Input value={icon} onChange={e => setIcon(e.target.value)} maxLength={4} placeholder="📄" className="h-9 text-sm w-20" />
+          </div>
+          <div>
+            <Label className="text-xs">Kabul edilen uzantılar</Label>
+            <Input value={accept} onChange={e => setAccept(e.target.value)} placeholder=".pdf,.jpg,.jpeg,.png" className="h-9 text-sm font-mono" />
+            <p className="text-[10px] text-muted-foreground mt-1">Virgülle ayır, noktayla başlat: .pdf,.jpg,.png</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>İptal</Button>
+          <Button onClick={save} disabled={saving}>{saving ? "Kaydediliyor…" : "Kaydet"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2220,6 +2302,16 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
   const [order, setOrder] = useState<string[]>([]);
   const [docSearch, setDocSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  // Pull the master document catalog (admin-managed). Falls back to the
+  // hardcoded PROGRAM_DOC_TYPE_KEYS / DEGREE_DOC_TYPE_LABELS only if the
+  // catalog API returns nothing.
+  const { data: docCatalog } = useDocumentTypeCatalog();
+  const catalogKeys = useMemo(() => {
+    if (docCatalog && Object.keys(docCatalog).length > 0) return Object.keys(docCatalog);
+    return PROGRAM_DOC_TYPE_KEYS;
+  }, [docCatalog]);
+  const labelFor = (dt: string) =>
+    docCatalog?.[dt]?.label ?? DEGREE_DOC_TYPE_LABELS[dt] ?? dt;
 
   const { data: existing, isLoading } = useQuery<{ documentType: string; mandatory: boolean; sortOrder: number }[]>({
     queryKey: ["catalog-option-doc-reqs", option.id],
@@ -2279,12 +2371,12 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
   const matchesSearch = (dt: string) => {
     if (!docSearch.trim()) return true;
     const q = docSearch.toLowerCase();
-    return dt.toLowerCase().includes(q) || (DEGREE_DOC_TYPE_LABELS[dt] ?? "").toLowerCase().includes(q);
+    return dt.toLowerCase().includes(q) || labelFor(dt).toLowerCase().includes(q);
   };
 
   const selectedKeys = order.filter(dt => (docReqs[dt] ?? "none") !== "none" && matchesSearch(dt));
   const selectedSet = new Set(order.filter(dt => (docReqs[dt] ?? "none") !== "none"));
-  const availableKeys = PROGRAM_DOC_TYPE_KEYS.filter(dt => !selectedSet.has(dt) && matchesSearch(dt));
+  const availableKeys = catalogKeys.filter(dt => !selectedSet.has(dt) && matchesSearch(dt));
 
   const [dragKey, setDragKey] = useState<string | null>(null);
 
@@ -2365,7 +2457,7 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
                     >
                       <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
                       <span className="inline-block w-6 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">{i + 1}.</span>
-                      <span className="flex-1 text-xs break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
+                      <span className="flex-1 text-xs break-words">{labelFor(dt)}</span>
                       <div className="flex flex-col gap-0.5 shrink-0">
                         <button
                           type="button"
@@ -2401,7 +2493,7 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
                   <div className="rounded-lg border bg-background divide-y divide-border">
                     {availableKeys.map(dt => (
                       <div key={dt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/30">
-                        <span className="flex-1 text-xs text-muted-foreground break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
+                        <span className="flex-1 text-xs text-muted-foreground break-words">{labelFor(dt)}</span>
                         <button
                           type="button"
                           onClick={() => setLevel(dt, "optional")}

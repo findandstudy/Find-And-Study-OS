@@ -447,21 +447,24 @@ router.get("/catalog-options", async (_req, res): Promise<void> => {
 });
 
 router.post("/catalog-options", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { category, value, sortOrder = 0 } = req.body;
+  const { category, value, sortOrder = 0, metadata } = req.body;
   if (!category || !value) { res.status(400).json({ error: "category and value are required" }); return; }
   if (!VALID_CATEGORIES.includes(category)) { res.status(400).json({ error: "Invalid category" }); return; }
-  const [opt] = await db.insert(catalogOptionsTable).values({ category, value, sortOrder }).returning();
+  const insertValues: Record<string, unknown> = { category, value, sortOrder };
+  if (metadata !== undefined) insertValues.metadata = metadata;
+  const [opt] = await db.insert(catalogOptionsTable).values(insertValues as never).returning();
   await logAudit(req.user!.id, "create_catalog_option", "catalog_option", opt.id, { category, value }, req.ip);
   res.status(201).json(opt);
 });
 
 router.patch("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
-  const { value, sortOrder, isActive } = req.body;
+  const { value, sortOrder, isActive, metadata } = req.body;
   const updates: Record<string, unknown> = {};
   if (value !== undefined) updates.value = value;
   if (sortOrder !== undefined) updates.sortOrder = sortOrder;
   if (isActive !== undefined) updates.isActive = isActive;
+  if (metadata !== undefined) updates.metadata = metadata;
   const [opt] = await db.update(catalogOptionsTable).set(updates).where(eq(catalogOptionsTable.id, id)).returning();
   if (!opt) { res.status(404).json({ error: "Not found" }); return; }
   res.json(opt);

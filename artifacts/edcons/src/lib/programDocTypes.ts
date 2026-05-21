@@ -119,6 +119,68 @@ export const PROGRAM_DOC_META: Record<string, ProgramDocMeta> = {
 
 export type ProgramDocReq = { documentType: string; mandatory: boolean; sortOrder?: number };
 
+/**
+ * Fetch the admin-managed document-type catalog from the server.
+ * Returns a map of `key → ProgramDocMeta` (label/icon/accept).
+ * Used as the authoritative source for available document types and
+ * their display metadata — `PROGRAM_DOC_META` above is only a fallback
+ * for keys the catalog doesn't know about yet.
+ */
+type CatalogOptionRow = {
+  id: number;
+  category: string;
+  value: string;
+  isActive: boolean;
+  sortOrder: number;
+  metadata?: { label?: unknown; icon?: unknown; accept?: unknown } | null;
+};
+
+export function useDocumentTypeCatalog() {
+  return useQuery<Record<string, ProgramDocMeta>>({
+    queryKey: ["document-type-catalog"],
+    queryFn: async () => {
+      try {
+        const res = await customFetch(`${BASE_URL}/api/catalog-options`) as unknown;
+        const grouped = (res as { grouped?: Record<string, CatalogOptionRow[]> } | null)?.grouped;
+        const rows = grouped?.documents ?? [];
+        const map: Record<string, ProgramDocMeta> = {};
+        for (const r of rows) {
+          if (!r.isActive) continue;
+          const md = r.metadata || {};
+          map[r.value] = {
+            key: r.value,
+            label: typeof md.label === "string" ? md.label : humaniseKey(r.value),
+            icon: typeof md.icon === "string" ? md.icon : "📄",
+            accept: typeof md.accept === "string" ? md.accept : ".pdf,.jpg,.jpeg,.png",
+          };
+        }
+        return map;
+      } catch {
+        return {};
+      }
+    },
+    staleTime: 60_000,
+  });
+}
+
+function humaniseKey(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * React hook that returns a `resolveDocMeta(key)` function backed by the
+ * admin-managed catalog. Falls back to the static `PROGRAM_DOC_META` map
+ * (and finally to a humanised key) for unknown keys.
+ *
+ * Use this in any component that displays document labels/icons/accepts
+ * for end-users (CourseFinder, Programs, DegreeDocsEditor, etc.) so newly
+ * added catalog entries appear without a code change.
+ */
+export function useResolveDocMeta(): (key: string) => ProgramDocMeta {
+  const { data: catalog } = useDocumentTypeCatalog();
+  return (key: string) => catalog?.[key] ?? resolveDocMeta(key);
+}
+
 export function useProgramDocRequirements(programId: number | null | undefined) {
   return useQuery<ProgramDocReq[]>({
     queryKey: ["program-document-requirements", programId],

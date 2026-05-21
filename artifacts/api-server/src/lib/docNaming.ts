@@ -78,9 +78,59 @@ const DOC_LABELS: Record<string, string> = {
   final_acceptance: "Final Acceptance Letter",
 };
 
+/**
+ * In-memory cache of admin-managed document-type labels from the
+ * `catalog_options` table (category='documents'). Refreshed lazily
+ * every 5 minutes; failures fall back to the static DOC_LABELS map.
+ * Lets admins add new document types in the UI and have them appear
+ * in download filenames without a server restart.
+ */
+let dbLabelCache: Record<string, string> | null = null;
+let dbLabelCacheUntil = 0;
+const DB_LABEL_TTL_MS = 5 * 60 * 1000;
+
+async function loadDbLabels(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (dbLabelCache && now < dbLabelCacheUntil) return dbLabelCache;
+  try {
+    const mod = await import("@workspace/db");
+    const { db } = mod as { db: { execute: (q: unknown) => Promise<{ rows: { value: string; metadata: { label?: unknown } | null }[] }> } };
+    const sqlMod = await import("drizzle-orm");
+    const result = await db.execute(sqlMod.sql`SELECT value, metadata FROM catalog_options WHERE category = 'documents' AND is_active = true`);
+    const map: Record<string, string> = {};
+    for (const row of result.rows ?? []) {
+      const label = row.metadata && typeof row.metadata.label === "string" ? row.metadata.label : null;
+      if (label) map[String(row.value).toLowerCase()] = label;
+    }
+    dbLabelCache = map;
+    dbLabelCacheUntil = now + DB_LABEL_TTL_MS;
+    return map;
+  } catch {
+    dbLabelCache = dbLabelCache || {};
+    dbLabelCacheUntil = now + DB_LABEL_TTL_MS;
+    return dbLabelCache;
+  }
+}
+
+// Kick off a background refresh on module load so the first request
+// already has the cache warm (best-effort, errors swallowed above).
+void loadDbLabels();
+
+export function invalidateDocLabelCache(): void {
+  dbLabelCache = null;
+  dbLabelCacheUntil = 0;
+}
+
 export function getDocLabel(docType: string | null | undefined): string {
   if (!docType) return "Document";
   const key = String(docType).toLowerCase().trim();
+  // Prefer admin-managed label, fall back to hardcoded map, then humanise.
+  if (dbLabelCache && dbLabelCache[key]) {
+    void loadDbLabels(); // refresh in background when stale
+    return dbLabelCache[key];
+  }
+  // Trigger background load on cache miss (non-blocking).
+  void loadDbLabels();
   if (DOC_LABELS[key]) return DOC_LABELS[key];
   // Friendly fallback: turn `military_status_document` into
   // `Military Status Document`.
