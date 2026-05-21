@@ -1858,7 +1858,7 @@ const OPTION_CATEGORIES = [
   { key: "intake", label: "Intake Periods", description: "Enrollment periods" },
   { key: "field", label: "Field", description: "Academic fields / study areas" },
   { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
-  { key: "documents", label: "Documents", description: "Manage required documents per degree (program level)" },
+  { key: "documents", label: "Documents", description: "Her derece için istenecek belgeleri seçin" },
 ];
 
 const DOCUMENTS_SECTION_KEY = "documents";
@@ -2105,7 +2105,9 @@ function OptionsTab() {
             className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
           >
             {cat.label}
-            <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
+            {cat.key !== DOCUMENTS_SECTION_KEY && (
+              <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
+            )}
           </button>
         ))}
       </div>
@@ -2318,9 +2320,9 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
       {variant === "inline" && (
         <div className="flex items-center justify-between gap-3 pb-2 border-b">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold truncate">Required Documents — {option.value}</h3>
+            <h3 className="text-sm font-semibold truncate">Belgeler — {option.value}</h3>
             <p className="text-[11px] text-muted-foreground">
-              Set documents to Optional or Mandatory. Drag or use arrows to reorder.
+              Bu derece için istenecek belgeleri seçin. Sürükleyerek veya oklarla sıralayın.
             </p>
           </div>
           <Button size="sm" onClick={handleSave} disabled={saving || isLoading}>
@@ -2335,13 +2337,13 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
         <div className="flex-1 overflow-hidden flex flex-col gap-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">
-                <strong className="text-foreground">{selectedSet.size}</strong> selected · <strong className="text-foreground">{Object.values(docReqs).filter(v => v === "mandatory").length}</strong> mandatory
+                <strong className="text-foreground">{selectedSet.size}</strong> seçili belge
               </span>
             </div>
             <Input
               value={docSearch}
               onChange={e => setDocSearch(e.target.value)}
-              placeholder="Search documents…"
+              placeholder="Belge ara…"
               className="h-8 text-xs"
             />
 
@@ -2350,73 +2352,58 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-                    In Form — Order ({selectedKeys.length})
+                    Seçili Belgeler — Sıra ({selectedKeys.length})
                   </p>
-                  <p className="text-[10px] text-muted-foreground">Drag <GripVertical className="inline h-3 w-3" /> or use arrows</p>
+                  <p className="text-[10px] text-muted-foreground">Sürükle <GripVertical className="inline h-3 w-3" /> veya okları kullan</p>
                 </div>
                 <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 min-h-[60px] divide-y divide-border">
                   {selectedKeys.length === 0 ? (
                     <div className="text-[11px] text-muted-foreground text-center py-4 px-3">
-                      No documents added yet. Mark a document below as <span className="text-blue-600 font-semibold">Optional</span> or <span className="text-red-600 font-semibold">Mandatory</span> to add it here.
+                      Henüz belge eklenmedi. Aşağıdaki listeden <span className="text-primary font-semibold">+ Ekle</span> diyerek seçin.
                     </div>
-                  ) : selectedKeys.map((dt, i) => {
-                    const v = docReqs[dt] ?? "none";
-                    return (
-                      <div
-                        key={dt}
-                        draggable
-                        onDragStart={() => setDragKey(dt)}
-                        onDragOver={(e) => { e.preventDefault(); }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (dragKey && dragKey !== dt) moveTo(dragKey, dt);
-                          setDragKey(null);
-                        }}
-                        onDragEnd={() => setDragKey(null)}
-                        className={cn(
-                          "flex items-center gap-2 px-2 py-1.5 bg-background hover:bg-muted/30 transition-colors",
-                          dragKey === dt && "opacity-40"
-                        )}
-                      >
-                        <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
-                        <span className="inline-block w-6 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">{i + 1}.</span>
-                        <span className="flex-1 text-xs break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
-                        <div className="flex flex-col gap-0.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => move(dt, -1)}
-                            disabled={i === 0}
-                            className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
-                            title="Move up"
-                          ><ArrowUp className="h-3 w-3" /></button>
-                          <button
-                            type="button"
-                            onClick={() => move(dt, 1)}
-                            disabled={i === selectedKeys.length - 1}
-                            className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
-                            title="Move down"
-                          ><ArrowDown className="h-3 w-3" /></button>
-                        </div>
-                        <div className="inline-flex rounded-md border overflow-hidden shrink-0">
-                          {(["none", "optional", "mandatory"] as const).map(opt => (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() => setLevel(dt, opt)}
-                              className={cn(
-                                "px-2 py-0.5 text-[11px] transition-colors",
-                                v === opt
-                                  ? opt === "mandatory" ? "bg-red-600 text-white"
-                                    : opt === "optional" ? "bg-blue-600 text-white"
-                                    : "bg-muted text-foreground"
-                                  : "bg-background hover:bg-muted/50 text-muted-foreground"
-                              )}
-                            >{opt === "none" ? "Remove" : opt === "optional" ? "Optional" : "Mandatory"}</button>
-                          ))}
-                        </div>
+                  ) : selectedKeys.map((dt, i) => (
+                    <div
+                      key={dt}
+                      draggable
+                      onDragStart={() => setDragKey(dt)}
+                      onDragOver={(e) => { e.preventDefault(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (dragKey && dragKey !== dt) moveTo(dragKey, dt);
+                        setDragKey(null);
+                      }}
+                      onDragEnd={() => setDragKey(null)}
+                      className={cn(
+                        "flex items-center gap-2 px-2 py-1.5 bg-background hover:bg-muted/30 transition-colors",
+                        dragKey === dt && "opacity-40"
+                      )}
+                    >
+                      <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
+                      <span className="inline-block w-6 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">{i + 1}.</span>
+                      <span className="flex-1 text-xs break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => move(dt, -1)}
+                          disabled={i === 0}
+                          className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
+                          title="Yukarı taşı"
+                        ><ArrowUp className="h-3 w-3" /></button>
+                        <button
+                          type="button"
+                          onClick={() => move(dt, 1)}
+                          disabled={i === selectedKeys.length - 1}
+                          className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
+                          title="Aşağı taşı"
+                        ><ArrowDown className="h-3 w-3" /></button>
                       </div>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        onClick={() => setLevel(dt, "none")}
+                        className="shrink-0 px-2 py-0.5 text-[11px] rounded border bg-background hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 text-muted-foreground transition-colors"
+                      >Kaldır</button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -2424,24 +2411,17 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
               {availableKeys.length > 0 && (
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Available ({availableKeys.length})
+                    Eklenebilir ({availableKeys.length})
                   </p>
                   <div className="rounded-lg border bg-background divide-y divide-border">
                     {availableKeys.map(dt => (
                       <div key={dt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/30">
                         <span className="flex-1 text-xs text-muted-foreground break-words">{DEGREE_DOC_TYPE_LABELS[dt] ?? dt}</span>
-                        <div className="inline-flex rounded-md border overflow-hidden shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setLevel(dt, "optional")}
-                            className="px-2 py-0.5 text-[11px] bg-background hover:bg-blue-50 hover:text-blue-700 text-muted-foreground transition-colors"
-                          >+ Optional</button>
-                          <button
-                            type="button"
-                            onClick={() => setLevel(dt, "mandatory")}
-                            className="px-2 py-0.5 text-[11px] bg-background hover:bg-red-50 hover:text-red-700 text-muted-foreground transition-colors border-l"
-                          >+ Mandatory</button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLevel(dt, "optional")}
+                          className="shrink-0 px-2 py-0.5 text-[11px] rounded border bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/40 text-muted-foreground transition-colors"
+                        >+ Ekle</button>
                       </div>
                     ))}
                   </div>
@@ -2449,7 +2429,7 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
               )}
 
               {selectedKeys.length === 0 && availableKeys.length === 0 && (
-                <div className="text-center text-muted-foreground py-6 text-xs">No documents match "{docSearch}"</div>
+                <div className="text-center text-muted-foreground py-6 text-xs">"{docSearch}" ile eşleşen belge yok</div>
               )}
             </div>
           </div>
