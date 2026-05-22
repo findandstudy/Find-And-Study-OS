@@ -56,30 +56,28 @@ export async function handleMissingDocFulfillment(
           affectedStages.add(r.stage);
         }
       }
+
+      // Task #187 — ALWAYS mark still-open custom (free-text) requests on
+      // this application as "responded / awaiting staff review" when the
+      // student uploads ANYTHING — even if no catalog item matched. The
+      // student has clearly answered the request; staff still must close
+      // it manually via the fulfilled toggle. Runs before any early-return
+      // so custom-only uploads (no catalog match) get the badge too.
+      await tx.update(applicationStageDocumentsTable)
+        .set({ respondedAt: new Date(), respondedDocumentId: uploadedDocumentId ?? null })
+        .where(and(
+          eq(applicationStageDocumentsTable.applicationId, applicationId),
+          eq(applicationStageDocumentsTable.isMissingDocNote, true),
+          eq(applicationStageDocumentsTable.isCustom, true),
+          isNull(applicationStageDocumentsTable.fulfilledAt),
+          isNull(applicationStageDocumentsTable.respondedAt),
+        ));
+
       if (matchedIds.length === 0) return;
 
       await tx.update(applicationStageDocumentsTable)
         .set({ fulfilledAt: new Date() })
         .where(sql`${applicationStageDocumentsTable.id} = ANY(${matchedIds})`);
-
-      // Task #187 — custom (free-text) requests on the SAME affected source
-      // stages can't auto-match, but the student has clearly responded by
-      // uploading — mark them as "responded / awaiting staff review" so the
-      // student panel stops nagging. Staff still has to close them manually
-      // via the existing fulfilled toggle.
-      const affectedStagesArr = Array.from(affectedStages);
-      if (affectedStagesArr.length > 0) {
-        await tx.update(applicationStageDocumentsTable)
-          .set({ respondedAt: new Date(), respondedDocumentId: uploadedDocumentId ?? null })
-          .where(and(
-            eq(applicationStageDocumentsTable.applicationId, applicationId),
-            eq(applicationStageDocumentsTable.isMissingDocNote, true),
-            eq(applicationStageDocumentsTable.isCustom, true),
-            isNull(applicationStageDocumentsTable.fulfilledAt),
-            isNull(applicationStageDocumentsTable.respondedAt),
-            sql`${applicationStageDocumentsTable.stage} = ANY(${affectedStagesArr})`,
-          ));
-      }
 
       // Each request row is tied to the SOURCE stage where staff
       // originated the missing-doc action. Auto-advance only fires when
@@ -91,12 +89,18 @@ export async function handleMissingDocFulfillment(
         .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
       if (!app) return;
 
-      for (const sourceStageKey of affectedStages) {
-        // Gate: app must be in the source stage RIGHT NOW. If staff moved
-        // the application elsewhere after creating the request, auto-
-        // advance is suppressed — staff must transition manually.
-        if (app.stage !== sourceStageKey) continue;
+      // Resolve the application's current stage sortOrder once — used to
+      // gate auto-advance below (source OR an intermediate waiting stage).
+      const [currentStageRow] = await tx
+        .select({ sortOrder: pipelineStagesTable.sortOrder })
+        .from(pipelineStagesTable)
+        .where(and(
+          eq(pipelineStagesTable.entityType, "application"),
+          eq(pipelineStagesTable.key, app.stage),
+        ));
+      const currentOrder = currentStageRow?.sortOrder ?? null;
 
+      for (const sourceStageKey of affectedStages) {
         const stillOpen = await tx
           .select({ id: applicationStageDocumentsTable.id })
           .from(applicationStageDocumentsTable)
@@ -113,6 +117,7 @@ export async function handleMissingDocFulfillment(
         const [sourceStageRow] = await tx
           .select({
             id: pipelineStagesTable.id,
+            sortOrder: pipelineStagesTable.sortOrder,
             targetId: pipelineStagesTable.missingDocsFulfilledTargetStageId,
           })
           .from(pipelineStagesTable)
@@ -123,13 +128,26 @@ export async function handleMissingDocFulfillment(
         if (!sourceStageRow?.targetId) continue;
 
         const [targetStageRow] = await tx
-          .select({ key: pipelineStagesTable.key })
+          .select({ key: pipelineStagesTable.key, sortOrder: pipelineStagesTable.sortOrder })
           .from(pipelineStagesTable)
           .where(eq(pipelineStagesTable.id, sourceStageRow.targetId));
         if (!targetStageRow) continue;
 
         // Already at target? Nothing to advance.
         if (app.stage === targetStageRow.key) continue;
+
+        // Gate: auto-advance fires when the app is at the SOURCE stage
+        // (no waiting stage in between) OR sitting in some intermediate
+        // stage between source and target (typical "waiting on student"
+        // flow where staff already moved the app forward after creating
+        // the request). Never fires from unrelated parts of the pipeline.
+        const isAtSource = app.stage === sourceStageKey;
+        const isBetween = currentOrder != null
+          && sourceStageRow.sortOrder != null
+          && targetStageRow.sortOrder != null
+          && currentOrder > sourceStageRow.sortOrder
+          && currentOrder < targetStageRow.sortOrder;
+        if (!isAtSource && !isBetween) continue;
 
         await tx.update(applicationsTable)
           .set({ stage: targetStageRow.key, updatedAt: new Date() })

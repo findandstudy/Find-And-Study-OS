@@ -95,12 +95,41 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
         res.status(403).json({ error: "Students can only upload documents for themselves" });
         return;
       }
+      // Task #187 — IDOR guard. The fulfillment hook runs against the
+      // request's applicationId even when stored doc.applicationId is
+      // null for students. A malicious student could guess another
+      // student's app id and trigger missing-doc fulfillment / stage
+      // changes on it. Verify the app belongs to this student.
+      if (applicationId && studentRec) {
+        const [ownApp] = await db.select({ id: applicationsTable.id })
+          .from(applicationsTable)
+          .where(and(eq(applicationsTable.id, Number(applicationId)), eq(applicationsTable.studentId, studentRec.id), isNull(applicationsTable.deletedAt)));
+        if (!ownApp) {
+          res.status(403).json({ error: "You can only upload to your own applications" });
+          return;
+        }
+      }
     } else if (isAgentRole(user.role)) {
       if (studentId) {
         const visibleIds = await getAgentVisibleIds(user.id, user.role);
         const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, studentId));
         if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
           res.status(403).json({ error: "You can only upload documents for your own students" });
+          return;
+        }
+      }
+      // Task #187 — IDOR guard for agents: applicationId must belong to
+      // a student they can see.
+      if (applicationId) {
+        const visibleIds = await getAgentVisibleIds(user.id, user.role);
+        const [appRow] = await db.select({ studentId: applicationsTable.studentId })
+          .from(applicationsTable)
+          .where(and(eq(applicationsTable.id, Number(applicationId)), isNull(applicationsTable.deletedAt)));
+        if (!appRow) { res.status(404).json({ error: "Application not found" }); return; }
+        const [appStudent] = await db.select({ agentId: studentsTable.agentId })
+          .from(studentsTable).where(eq(studentsTable.id, appRow.studentId));
+        if (!appStudent?.agentId || !visibleIds.includes(appStudent.agentId)) {
+          res.status(403).json({ error: "Application is outside your scope" });
           return;
         }
       }

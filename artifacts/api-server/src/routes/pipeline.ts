@@ -60,6 +60,15 @@ const router: IRouter = Router();
       ALTER TABLE application_stage_documents
       ADD COLUMN IF NOT EXISTS fulfilled_at timestamptz
     `);
+    // Task #187 round-3 — custom requests "uploaded, awaiting review" state.
+    await db.execute(sql`
+      ALTER TABLE application_stage_documents
+      ADD COLUMN IF NOT EXISTS responded_at timestamptz
+    `);
+    await db.execute(sql`
+      ALTER TABLE application_stage_documents
+      ADD COLUMN IF NOT EXISTS responded_document_id integer
+    `);
     // Pre-existing missing-doc rows used `fileName` as free-text — treat
     // them as custom (one-shot, gated by pipeline_migrations marker so we
     // don't reclassify newly-created catalog rows on every restart).
