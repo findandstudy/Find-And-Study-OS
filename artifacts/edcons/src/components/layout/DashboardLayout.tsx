@@ -62,6 +62,8 @@ import {
   Star,
   Building,
   IdCard,
+  Sparkles,
+  ListChecks,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -114,6 +116,10 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
           ...((role === 'super_admin' || role === 'admin') ? [{ title: t("dashboard.staffCards"), icon: IdCard, url: '/admin/staff-cards' }] : []),
           ...(role === 'super_admin' ? [{ title: t("dashboard.branches"), icon: Building, url: '/admin/branches' }] : []),
+          ...((role === 'super_admin' || role === 'admin') ? [
+            { title: 'AI Personas', icon: Sparkles, url: '/admin/ai-personas' },
+            { title: 'AI Action Queue', icon: ListChecks, url: '/admin/ai-action-queue' },
+          ] : []),
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
           { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
