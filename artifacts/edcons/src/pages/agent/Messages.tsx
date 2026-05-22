@@ -77,7 +77,7 @@ export default function AgentMessages() {
       });
       const { uploadURL, objectPath } = urlRes as any;
       const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      if (!uploadResp.ok) throw new Error("File upload failed");
+      if (!uploadResp.ok) throw new Error(t("agentMessages.uploadFailed"));
       return { fileName: file.name, fileUrl: `/api/storage${objectPath}`, fileType: file.type, fileSize: file.size };
     } catch (err: any) {
       toast({ title: t("agentMessages.uploadFailed"), description: err.message, variant: "destructive" });
@@ -156,7 +156,7 @@ export default function AgentMessages() {
       const downloadUrl = new URL(fileUrl, window.location.origin);
       downloadUrl.searchParams.set("download", fileName);
       const res = await fetch(downloadUrl.toString(), { credentials: "include" });
-      if (!res.ok) throw new Error("Download failed");
+      if (!res.ok) throw new Error(t("agentMessages.downloadFailed"));
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");

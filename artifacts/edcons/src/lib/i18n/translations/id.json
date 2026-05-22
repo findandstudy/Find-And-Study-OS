@@ -1034,8 +1034,8 @@
     "failedToSend": "Failed to send",
     "fileTooLarge": "File too large",
     "maxFileSize": "Maximum file size is 25MB",
-    "uploadFailed": "Upload failed",
-    "downloadFailed": "Download failed",
+    "uploadFailed": "Unggahan gagal",
+    "downloadFailed": "Unduhan gagal",
     "couldNotDownload": "Could not download the file."
   },
   "agentCommissions": {

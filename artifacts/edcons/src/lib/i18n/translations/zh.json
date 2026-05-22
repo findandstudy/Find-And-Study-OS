@@ -1034,8 +1034,8 @@
     "failedToSend": "Failed to send",
     "fileTooLarge": "File too large",
     "maxFileSize": "Maximum file size is 25MB",
-    "uploadFailed": "Upload failed",
-    "downloadFailed": "Download failed",
+    "uploadFailed": "上传失败",
+    "downloadFailed": "下载失败",
     "couldNotDownload": "Could not download the file."
   },
   "agentCommissions": {
