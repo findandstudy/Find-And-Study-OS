@@ -62,18 +62,21 @@ export async function handleMissingDocFulfillment(
         .where(sql`${applicationStageDocumentsTable.id} = ANY(${matchedIds})`);
 
       // Each request row is tied to the SOURCE stage where staff
-      // originated the missing-doc action. Staff typically moves the
-      // application to a "waiting" stage right after creating requests,
-      // so by the time the student uploads, `app.stage` is no longer
-      // the source. Iterate every affected source stage independently
-      // and advance the app once if its source has all catalog requests
-      // closed AND a target stage configured.
+      // originated the missing-doc action. Auto-advance only fires when
+      // the application is CURRENTLY in that exact source stage — never
+      // from unrelated stages (would cause silent regressions/jumps
+      // across unrelated parts of the pipeline; Task #187 contract).
       const [app] = await tx.select({ stage: applicationsTable.stage })
         .from(applicationsTable)
         .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
       if (!app) return;
 
       for (const sourceStageKey of affectedStages) {
+        // Gate: app must be in the source stage RIGHT NOW. If staff moved
+        // the application elsewhere after creating the request, auto-
+        // advance is suppressed — staff must transition manually.
+        if (app.stage !== sourceStageKey) continue;
+
         const stillOpen = await tx
           .select({ id: applicationStageDocumentsTable.id })
           .from(applicationStageDocumentsTable)

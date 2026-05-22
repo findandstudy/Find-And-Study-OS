@@ -400,14 +400,38 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
 
   // Task #187 — `missingDocsFulfilledTargetStageKey` is sent by the UI
   // (keys survive the delete-and-reinsert cycle, ids do not). Map each
-  // key to the new stage id after insert.
-  const targetKeyByStageIdx: (string | null)[] = stages.map((s: any) => {
-    if (entityType !== "application") return null;
+  // key to the new stage id after insert. Explicitly reject self-
+  // reference and unknown keys with 400 — silent skip would let admins
+  // save a pipeline whose target stage is silently dropped.
+  const targetKeyByStageIdx: (string | null)[] = [];
+  const targetErrors: string[] = [];
+  for (let i = 0; i < stages.length; i++) {
+    if (entityType !== "application") { targetKeyByStageIdx.push(null); continue; }
+    const s: any = stages[i];
     const raw = s.missingDocsFulfilledTargetStageKey;
-    if (typeof raw !== "string" || !raw.trim()) return null;
+    if (raw === null || raw === undefined || raw === "") { targetKeyByStageIdx.push(null); continue; }
+    if (typeof raw !== "string" || !raw.trim()) {
+      targetErrors.push(`"${normalizedKeys[i]}": eksik belge hedef aşaması geçersiz.`);
+      targetKeyByStageIdx.push(null);
+      continue;
+    }
     const k = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    return normalizedKeys.includes(k) ? k : null;
-  });
+    if (k === normalizedKeys[i]) {
+      targetErrors.push(`"${normalizedKeys[i]}": eksik belge hedef aşaması kendisi olamaz.`);
+      targetKeyByStageIdx.push(null);
+      continue;
+    }
+    if (!normalizedKeys.includes(k)) {
+      targetErrors.push(`"${normalizedKeys[i]}": bilinmeyen hedef aşama "${raw}".`);
+      targetKeyByStageIdx.push(null);
+      continue;
+    }
+    targetKeyByStageIdx.push(k);
+  }
+  if (targetErrors.length > 0) {
+    res.status(400).json({ error: targetErrors.join(" ") });
+    return;
+  }
 
   try {
     const inserted = await db.transaction(async (tx) => {

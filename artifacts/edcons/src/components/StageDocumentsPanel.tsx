@@ -539,6 +539,13 @@ function MissingDocsSection({
                   {note.note && (
                     <p className="text-[11px] text-muted-foreground mt-0.5">{note.note}</p>
                   )}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Talep tarihi: {note.createdAt ? new Date(note.createdAt).toLocaleDateString() : "—"}
+                    {note.uploadedByName ? ` · Talep eden: ${note.uploadedByName}` : ""}
+                    {fulfilled && note.fulfilledAt
+                      ? ` · Tamamlandı: ${new Date(note.fulfilledAt).toLocaleDateString()}`
+                      : ""}
+                  </p>
                 </div>
                 {isAdmin && (
                   <div className="flex gap-0.5 shrink-0">
