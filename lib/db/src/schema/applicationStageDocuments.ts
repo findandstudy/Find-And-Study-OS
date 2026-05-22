@@ -27,6 +27,13 @@ export const applicationStageDocumentsTable = pgTable("application_stage_documen
   // requested document. Used to drive the missing-docs-fulfilled auto-stage
   // transition; NULL = still open.
   fulfilledAt: timestamp("fulfilled_at", { withTimezone: true }),
+  // Task #187 — custom (free-text) requests can't be auto-matched, but when
+  // the student uploads ANY document on the same source stage we mark them
+  // as "responded / awaiting staff review" so the panel stops nagging the
+  // student while staff decides whether to close it. NULL = still open and
+  // no upload has happened yet.
+  respondedAt: timestamp("responded_at", { withTimezone: true }),
+  respondedDocumentId: integer("responded_document_id"),
   validUntil: timestamp("valid_until", { withTimezone: true }),
   expiryNotifiedThresholds: text("expiry_notified_thresholds"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

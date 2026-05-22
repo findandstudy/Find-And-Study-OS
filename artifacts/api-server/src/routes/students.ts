@@ -61,7 +61,9 @@ router.get("/students/me/missing-docs", requireAuth, async (req, res): Promise<v
       isCustom: applicationStageDocumentsTable.isCustom,
       note: applicationStageDocumentsTable.note,
       fulfilledAt: applicationStageDocumentsTable.fulfilledAt,
+      respondedAt: applicationStageDocumentsTable.respondedAt,
       createdAt: applicationStageDocumentsTable.createdAt,
+      uploadedByName: applicationStageDocumentsTable.uploadedByName,
       universityName: universitiesTable.name,
       programName: programsTable.name,
     })
@@ -81,7 +83,16 @@ router.get("/students/me/missing-docs", requireAuth, async (req, res): Promise<v
     ))
     .orderBy(desc(applicationStageDocumentsTable.createdAt));
 
-  res.json(rows);
+  // Task #187 contract — explicit names (documentType / customTitle /
+  // requestedAt / requestedBy) alongside raw fields for BC.
+  const shaped = rows.map((r: any) => ({
+    ...r,
+    documentType: r.isCustom ? null : r.fileName,
+    customTitle: r.isCustom ? r.fileName : null,
+    requestedAt: r.createdAt,
+    requestedBy: r.uploadedByName,
+  }));
+  res.json(shaped);
 });
 
 router.get("/students/my-advisor", requireAuth, async (req, res): Promise<void> => {

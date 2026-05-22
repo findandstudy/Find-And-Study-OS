@@ -518,10 +518,11 @@ function MissingDocsSection({
       <ul className="space-y-1.5">
         {notes.map((note: any) => {
           const fulfilled = !!note.fulfilledAt;
+          const responded = !!note.respondedAt;
           return (
             <li key={note.id} className="rounded-md border bg-background/60 px-2 py-1.5 text-xs">
               <div className="flex items-start gap-2">
-                <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${fulfilled ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${fulfilled ? "bg-emerald-500" : responded ? "bg-blue-500" : "bg-amber-500"}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`font-medium ${fulfilled ? "line-through text-muted-foreground" : ""}`}>
@@ -533,6 +534,11 @@ function MissingDocsSection({
                     {fulfilled && (
                       <Badge variant="outline" className="text-[9px] h-4 px-1 border-emerald-400 text-emerald-700">
                         Tamamlandı
+                      </Badge>
+                    )}
+                    {responded && !fulfilled && (
+                      <Badge variant="outline" className="text-[9px] h-4 px-1 border-blue-400 text-blue-700">
+                        Yüklendi, onay bekliyor
                       </Badge>
                     )}
                   </div>

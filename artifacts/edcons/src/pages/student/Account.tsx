@@ -500,7 +500,9 @@ function PendingMissingDocRequests({ onUploadFor }: { onUploadFor: (row: any) =>
         Aşağıdaki belgeler danışmanınız tarafından sizden istenmiştir. Katalog belgelerini yükledikçe talep otomatik kapanır.
       </p>
       <ul className="space-y-2">
-        {rows.map((r) => (
+        {rows.map((r) => {
+          const responded = !!r.respondedAt;
+          return (
           <li key={r.id} className="rounded-xl bg-white/70 border border-amber-200 px-3 py-2 text-sm">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -511,6 +513,11 @@ function PendingMissingDocRequests({ onUploadFor }: { onUploadFor: (row: any) =>
                   <Badge variant={r.isCustom ? "secondary" : "outline"} className="text-[10px] h-4 px-1">
                     {r.isCustom ? "Özel" : "Katalog"}
                   </Badge>
+                  {responded && (
+                    <Badge variant="outline" className="text-[10px] h-4 px-1 border-blue-400 text-blue-700">
+                      Yüklendi, onay bekliyor
+                    </Badge>
+                  )}
                 </div>
                 {r.note && (
                   <p className="text-xs text-muted-foreground mt-1">{r.note}</p>
@@ -524,13 +531,16 @@ function PendingMissingDocRequests({ onUploadFor }: { onUploadFor: (row: any) =>
                 size="sm"
                 className="rounded-lg h-7 px-2 gap-1 text-xs shrink-0"
                 onClick={() => onUploadFor(r)}
+                disabled={responded}
+                title={responded ? "Belge yüklendi, danışman onayı bekleniyor" : undefined}
               >
                 <Upload className="w-3 h-3" />
-                Yükle
+                {responded ? "Bekliyor" : "Yükle"}
               </Button>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
@@ -586,9 +596,14 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
   // Catalog rows seed the doc type so the backend matches via the
   // doc-equivalence groups and auto-fulfills the request; custom rows
   // fall back to "other" with the requested title as the file name.
+  // applicationId is captured from the pending row so the upload is
+  // bound to THAT application — without it the backend skips fulfillment
+  // (no more cross-application matching).
+  const [pendingForApplicationId, setPendingForApplicationId] = useState<number | null>(null);
   function openUploadForRequest(row: any) {
     const first = (user?.firstName ?? "").toLowerCase();
     const last = (user?.lastName ?? "").toLowerCase();
+    setPendingForApplicationId(typeof row?.applicationId === "number" ? row.applicationId : null);
     if (row.isCustom) {
       setUploadType("other");
       setUploadName(`${String(row.fileName).toLowerCase().replace(/\s+/g, "-")}-${first}-${last}`);
@@ -632,12 +647,17 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
           name: docName,
           type: uploadType,
           studentId: studentProfile?.id || null,
+          // Task #187 — bind upload to the specific application the
+          // pending request came from, so fulfillment runs ONLY against
+          // that app. Without this the backend now skips the hook.
+          applicationId: pendingForApplicationId || undefined,
           fileKey,
           mimeType,
           sizeBytes,
           originalFileName: uploadFile.name,
         }),
       });
+      setPendingForApplicationId(null);
       await qc.invalidateQueries({ queryKey: ["student-documents"] });
       // Task #187 — refresh pending missing-doc requests so any
       // auto-fulfilled rows disappear from the panel immediately.

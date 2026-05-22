@@ -254,21 +254,16 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     }).catch(() => {});
   }
 
-  // Task #187 — auto-match against open missing-doc requests on any
-  // active application(s) for the resolved student, and auto-advance the
-  // source stage when all catalog requests are fulfilled.
-  if (resolvedStudentId && type) {
+  // Task #187 — auto-match against open missing-doc requests, scoped to
+  // the SINGLE application this upload is bound to. Cross-application
+  // fulfillment is not allowed: one upload must not silently close
+  // requests (or auto-advance stages) on the student's other apps.
+  // Uploads without an explicit applicationId (e.g. profile-level docs)
+  // skip the hook entirely; the student/staff must select an application.
+  const targetAppId = applicationId ? Number(applicationId) : (doc.applicationId || null);
+  if (targetAppId && type) {
     try {
-      const targetAppIds = applicationId
-        ? [applicationId as number]
-        : (await db
-            .select({ id: applicationsTable.id })
-            .from(applicationsTable)
-            .where(and(eq(applicationsTable.studentId, resolvedStudentId), isNull(applicationsTable.deletedAt))))
-            .map(r => r.id);
-      for (const appId of targetAppIds) {
-        void handleMissingDocFulfillment(appId, type, user.id);
-      }
+      void handleMissingDocFulfillment(targetAppId, type, user.id, doc.id);
     } catch (e) {
       console.error("[DOCUMENTS] missing-doc fulfillment trigger failed:", e);
     }

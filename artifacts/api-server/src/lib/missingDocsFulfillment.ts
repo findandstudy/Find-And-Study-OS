@@ -24,6 +24,7 @@ export async function handleMissingDocFulfillment(
   applicationId: number,
   uploadedDocType: string,
   triggerUserId: number,
+  uploadedDocumentId?: number,
 ): Promise<void> {
   if (!applicationId || !uploadedDocType) return;
   try {
@@ -60,6 +61,25 @@ export async function handleMissingDocFulfillment(
       await tx.update(applicationStageDocumentsTable)
         .set({ fulfilledAt: new Date() })
         .where(sql`${applicationStageDocumentsTable.id} = ANY(${matchedIds})`);
+
+      // Task #187 — custom (free-text) requests on the SAME affected source
+      // stages can't auto-match, but the student has clearly responded by
+      // uploading — mark them as "responded / awaiting staff review" so the
+      // student panel stops nagging. Staff still has to close them manually
+      // via the existing fulfilled toggle.
+      const affectedStagesArr = Array.from(affectedStages);
+      if (affectedStagesArr.length > 0) {
+        await tx.update(applicationStageDocumentsTable)
+          .set({ respondedAt: new Date(), respondedDocumentId: uploadedDocumentId ?? null })
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, applicationId),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+            eq(applicationStageDocumentsTable.isCustom, true),
+            isNull(applicationStageDocumentsTable.fulfilledAt),
+            isNull(applicationStageDocumentsTable.respondedAt),
+            sql`${applicationStageDocumentsTable.stage} = ANY(${affectedStagesArr})`,
+          ));
+      }
 
       // Each request row is tied to the SOURCE stage where staff
       // originated the missing-doc action. Auto-advance only fires when

@@ -344,7 +344,20 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaff
     .limit(limitNum)
     .offset(offset);
 
-  res.json(notes);
+  // Task #187 contract — expose explicit field names alongside the raw
+  // schema row (BC kept so existing clients keep working):
+  //   documentType  = catalog key (null when isCustom)
+  //   customTitle   = free-text title (null when !isCustom)
+  //   requestedAt   = createdAt
+  //   requestedBy   = uploadedByName
+  const shaped = notes.map((n: any) => ({
+    ...n,
+    documentType: n.isCustom ? null : n.fileName,
+    customTitle: n.isCustom ? n.fileName : null,
+    requestedAt: n.createdAt,
+    requestedBy: n.uploadedByName,
+  }));
+  res.json(shaped);
 });
 
 router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next) => {
