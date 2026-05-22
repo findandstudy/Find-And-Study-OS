@@ -82,7 +82,7 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
 router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, mimeType, sizeBytes, notes, originalFileName } = req.body;
+  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, mimeType, sizeBytes, notes, originalFileName, respondingToNoteId } = req.body;
   if (req.body.fileData) {
     res.status(400).json({ error: "fileData uploads are no longer accepted. Upload via /storage/uploads/request-url and pass fileKey." });
     return;
@@ -292,7 +292,7 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   const targetAppId = applicationId ? Number(applicationId) : (doc.applicationId || null);
   if (targetAppId && type) {
     try {
-      void handleMissingDocFulfillment(targetAppId, type, user.id, doc.id);
+      void handleMissingDocFulfillment(targetAppId, type, user.id, doc.id, typeof respondingToNoteId === "number" ? respondingToNoteId : null);
     } catch (e) {
       console.error("[DOCUMENTS] missing-doc fulfillment trigger failed:", e);
     }

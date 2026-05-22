@@ -600,10 +600,14 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
   // bound to THAT application — without it the backend skips fulfillment
   // (no more cross-application matching).
   const [pendingForApplicationId, setPendingForApplicationId] = useState<number | null>(null);
+  const [pendingForNoteId, setPendingForNoteId] = useState<number | null>(null);
   function openUploadForRequest(row: any) {
     const first = (user?.firstName ?? "").toLowerCase();
     const last = (user?.lastName ?? "").toLowerCase();
     setPendingForApplicationId(typeof row?.applicationId === "number" ? row.applicationId : null);
+    // Task #187 — bind upload to the specific request row so only that
+    // custom note (if applicable) is marked "uploaded, awaiting review".
+    setPendingForNoteId(typeof row?.id === "number" ? row.id : null);
     if (row.isCustom) {
       setUploadType("other");
       setUploadName(`${String(row.fileName).toLowerCase().replace(/\s+/g, "-")}-${first}-${last}`);
@@ -651,6 +655,10 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
           // pending request came from, so fulfillment runs ONLY against
           // that app. Without this the backend now skips the hook.
           applicationId: pendingForApplicationId || undefined,
+          // Task #187 — bind upload to a specific missing-doc request so
+          // the backend only marks THAT custom row as responded (not all
+          // open custom rows on the application).
+          respondingToNoteId: pendingForNoteId || undefined,
           fileKey,
           mimeType,
           sizeBytes,
@@ -658,6 +666,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
         }),
       });
       setPendingForApplicationId(null);
+      setPendingForNoteId(null);
       await qc.invalidateQueries({ queryKey: ["student-documents"] });
       // Task #187 — refresh pending missing-doc requests so any
       // auto-fulfilled rows disappear from the panel immediately.

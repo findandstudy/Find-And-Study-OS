@@ -25,6 +25,7 @@ export async function handleMissingDocFulfillment(
   uploadedDocType: string,
   triggerUserId: number,
   uploadedDocumentId?: number,
+  respondingToNoteId?: number | null,
 ): Promise<void> {
   if (!applicationId || !uploadedDocType) return;
   try {
@@ -57,21 +58,42 @@ export async function handleMissingDocFulfillment(
         }
       }
 
-      // Task #187 — ALWAYS mark still-open custom (free-text) requests on
-      // this application as "responded / awaiting staff review" when the
-      // student uploads ANYTHING — even if no catalog item matched. The
-      // student has clearly answered the request; staff still must close
-      // it manually via the fulfilled toggle. Runs before any early-return
-      // so custom-only uploads (no catalog match) get the badge too.
-      await tx.update(applicationStageDocumentsTable)
-        .set({ respondedAt: new Date(), respondedDocumentId: uploadedDocumentId ?? null })
-        .where(and(
-          eq(applicationStageDocumentsTable.applicationId, applicationId),
-          eq(applicationStageDocumentsTable.isMissingDocNote, true),
-          eq(applicationStageDocumentsTable.isCustom, true),
-          isNull(applicationStageDocumentsTable.fulfilledAt),
-          isNull(applicationStageDocumentsTable.respondedAt),
-        ));
+      // Task #187 — mark CUSTOM (free-text) request as "uploaded, awaiting
+      // staff review". Narrow scope so unrelated custom requests aren't
+      // touched:
+      //   - If the caller bound the upload to a specific note via
+      //     `respondingToNoteId`, mark only THAT row (verified to belong
+      //     to this application + still open + custom).
+      //   - Otherwise (legacy / no explicit binding), only mark custom
+      //     rows on the SAME source stages where a catalog match
+      //     actually occurred — so an arbitrary doc upload doesn't blanket
+      //     all open custom requests on the application.
+      // Catalog requests are never set as merely "responded" — they
+      // auto-fulfill below.
+      if (respondingToNoteId) {
+        await tx.update(applicationStageDocumentsTable)
+          .set({ respondedAt: new Date(), respondedDocumentId: uploadedDocumentId ?? null })
+          .where(and(
+            eq(applicationStageDocumentsTable.id, respondingToNoteId),
+            eq(applicationStageDocumentsTable.applicationId, applicationId),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+            eq(applicationStageDocumentsTable.isCustom, true),
+            isNull(applicationStageDocumentsTable.fulfilledAt),
+            isNull(applicationStageDocumentsTable.respondedAt),
+          ));
+      } else if (affectedStages.size > 0) {
+        const affectedStagesArr = Array.from(affectedStages);
+        await tx.update(applicationStageDocumentsTable)
+          .set({ respondedAt: new Date(), respondedDocumentId: uploadedDocumentId ?? null })
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, applicationId),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+            eq(applicationStageDocumentsTable.isCustom, true),
+            isNull(applicationStageDocumentsTable.fulfilledAt),
+            isNull(applicationStageDocumentsTable.respondedAt),
+            sql`${applicationStageDocumentsTable.stage} = ANY(${affectedStagesArr})`,
+          ));
+      }
 
       if (matchedIds.length === 0) return;
 

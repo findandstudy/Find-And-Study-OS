@@ -412,12 +412,34 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   // key to the new stage id after insert. Explicitly reject self-
   // reference and unknown keys with 400 — silent skip would let admins
   // save a pipeline whose target stage is silently dropped.
+  // Task #187 — preserve existing target stage when UI omits the key.
+  // The dialog only writes `missingDocsFulfilledTargetStageKey` into the
+  // payload when the admin explicitly touches that Select. Otherwise the
+  // field is undefined, which used to cause silent data loss because the
+  // delete-and-reinsert below wiped previously configured target stages.
+  // Build an id->key map of CURRENT stages so we can fall back to the id
+  // when the key is absent from the payload.
+  const existingIdToKey = new Map<number, string>();
+  if (entityType === "application") {
+    const existing = await db
+      .select({ id: pipelineStagesTable.id, key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.entityType, "application"));
+    for (const r of existing) existingIdToKey.set(r.id, r.key);
+  }
+
   const targetKeyByStageIdx: (string | null)[] = [];
   const targetErrors: string[] = [];
   for (let i = 0; i < stages.length; i++) {
     if (entityType !== "application") { targetKeyByStageIdx.push(null); continue; }
     const s: any = stages[i];
-    const raw = s.missingDocsFulfilledTargetStageKey;
+    let raw = s.missingDocsFulfilledTargetStageKey;
+    // Key omitted but the payload still carries the id from a prior load?
+    // Resolve to the existing row's key so saves preserve the setting.
+    if ((raw === undefined) && typeof s.missingDocsFulfilledTargetStageId === "number") {
+      const fallback = existingIdToKey.get(s.missingDocsFulfilledTargetStageId);
+      if (fallback) raw = fallback;
+    }
     if (raw === null || raw === undefined || raw === "") { targetKeyByStageIdx.push(null); continue; }
     if (typeof raw !== "string" || !raw.trim()) {
       targetErrors.push(`"${normalizedKeys[i]}": eksik belge hedef aşaması geçersiz.`);
