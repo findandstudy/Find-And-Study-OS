@@ -2115,7 +2115,8 @@
     "badgeUploadedAwaiting": "Загружено, ожидает проверки",
     "uploadActionPending": "Ожидает",
     "uploadActionUpload": "Загрузить",
-    "uploadActionPendingTitle": "Документ загружен, ожидает одобрения консультанта"
+    "uploadActionPendingTitle": "Документ загружен, ожидает одобрения консультанта",
+    "errUploadImageFailed": "Не удалось загрузить изображение"
   },
   "stageDocs": {
     "title": "Документы этапа",

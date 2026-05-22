@@ -8,6 +8,11 @@ EdCons OS is a production-ready SaaS for education consultancy businesses. This 
 
 The user prefers a clean, intuitive UI/UX with a focus on role-based access and clear workflows. They value dynamic content management, such as configurable pipeline stages, and robust authentication with granular permission control. AI integration should be leveraged for efficiency gains, particularly in document processing and data extraction. The system should be scalable and maintainable, built with modern web technologies.
 
+**Communication & i18n rules (zorunlu):**
+- All user-facing communication in chat: Türkçe, no emojis.
+- Every new or modified user-facing string in `artifacts/edcons/src` MUST go through `useI18n()` → `t("namespace.key")`. New keys are added to all 10 locale JSONs (`en`, `tr`, `ar`, `fr`, `ru`, `fa`, `zh`, `hi`, `es`, `id`) using `.local/scripts/i18n-merge.mjs`. Hardcoded literal strings in JSX/toasts/throws are not allowed.
+- Enum values, slugs, technical labels, and canonical type keys (e.g. doc-type keys, stage keys) stay untranslated — only their displayed labels are localized.
+
 ## System Architecture
 
 The project is structured as a pnpm monorepo comprising separate packages for the API server, frontend, and shared libraries.

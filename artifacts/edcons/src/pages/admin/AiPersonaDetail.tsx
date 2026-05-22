@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { Play, Save, ArrowLeft } from "lucide-react";
 
 type ScopeDef = { key: string; label: string; description: string };
@@ -69,6 +70,7 @@ const empty: PersonaForm = {
 const OUTPUT_TARGETS = ["notification", "report", "blog_draft", "internal_msg"];
 
 export default function AiPersonaDetail() {
+  const { t } = useI18n();
   const [, paramsNew] = useRoute("/admin/ai-personas/new");
   const [matchEdit, paramsEdit] = useRoute("/admin/ai-personas/:id");
   const [, setLocation] = useLocation();
@@ -93,14 +95,14 @@ export default function AiPersonaDetail() {
   useEffect(() => {
     (async () => {
       try {
-        const [s, t] = await Promise.all([
+        const [s, tl] = await Promise.all([
           customFetch<{ scopes: ScopeDef[] }>("/api/ai-personas/registry/scopes"),
           customFetch<{ tools: ToolDef[] }>("/api/ai-personas/registry/tools"),
         ]);
         setScopes(s.scopes);
-        setTools(t.tools);
+        setTools(tl.tools);
       } catch (e) {
-        toast({ title: "Registry hatası", description: (e as Error).message, variant: "destructive" });
+        toast({ title: t("aiPersona.toastRegistryError"), description: (e as Error).message, variant: "destructive" });
       }
     })();
   }, []);
@@ -135,7 +137,7 @@ export default function AiPersonaDetail() {
         });
         await loadRuns();
       } catch (e) {
-        toast({ title: "Yükleme hatası", description: (e as Error).message, variant: "destructive" });
+        toast({ title: t("aiPersona.toastLoadError"), description: (e as Error).message, variant: "destructive" });
       } finally {
         setLoading(false);
       }
@@ -164,18 +166,18 @@ export default function AiPersonaDetail() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast({ title: "Kaydedildi" });
+        toast({ title: t("aiPersona.toastSaved") });
       } else {
         const { persona } = await customFetch<{ persona: any }>("/api/ai-personas", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast({ title: "Oluşturuldu" });
+        toast({ title: t("aiPersona.toastCreated") });
         setLocation(`/admin/ai-personas/${persona.id}`);
       }
     } catch (e) {
-      toast({ title: "Kaydetme hatası", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("aiPersona.toastSaveError"), description: (e as Error).message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -183,7 +185,7 @@ export default function AiPersonaDetail() {
 
   const runNow = async () => {
     if (!id) {
-      toast({ title: "Önce kaydet", variant: "destructive" });
+      toast({ title: t("aiPersona.toastSaveFirst"), variant: "destructive" });
       return;
     }
     setRunning(true);
@@ -194,12 +196,12 @@ export default function AiPersonaDetail() {
         body: JSON.stringify({ input: runInput || undefined }),
       });
       toast({
-        title: `Çalıştırıldı: ${res.status}`,
-        description: res.error || `Run #${res.runId}`,
+        title: t("aiPersona.toastRunResult", { status: res.status }),
+        description: res.error || t("aiPersona.toastRunResultDesc", { id: res.runId }),
       });
       await loadRuns();
     } catch (e) {
-      toast({ title: "Çalıştırma hatası", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("aiPersona.toastRunError"), description: (e as Error).message, variant: "destructive" });
     } finally {
       setRunning(false);
     }
@@ -210,10 +212,10 @@ export default function AiPersonaDetail() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/admin/ai-personas")}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Geri
+            <ArrowLeft className="h-4 w-4 mr-1" /> {t("aiPersona.back")}
           </Button>
           <h1 className="text-xl font-semibold">
-            {id ? `Persona #${id}` : "Yeni Persona"}
+            {id ? t("aiPersona.personaNum", { id }) : t("aiPersona.newPersona")}
           </h1>
           {form.personaType && (
             <Badge variant={form.personaType === "operator" ? "destructive" : "secondary"}>
@@ -222,20 +224,20 @@ export default function AiPersonaDetail() {
           )}
         </div>
         <Button onClick={save} disabled={saving || loading}>
-          <Save className="h-4 w-4 mr-2" /> {saving ? "Kaydediliyor…" : "Kaydet"}
+          <Save className="h-4 w-4 mr-2" /> {saving ? t("aiPersona.saving") : t("aiPersona.save")}
         </Button>
       </div>
 
       <Tabs defaultValue="general" className="w-full">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="general">Genel</TabsTrigger>
-          <TabsTrigger value="prompt">Prompt</TabsTrigger>
-          <TabsTrigger value="model">Model</TabsTrigger>
-          <TabsTrigger value="abilities">Yetenekler</TabsTrigger>
-          <TabsTrigger value="trigger">Tetik</TabsTrigger>
-          <TabsTrigger value="output">Çıktı</TabsTrigger>
-          <TabsTrigger value="budget">Bütçe</TabsTrigger>
-          <TabsTrigger value="history" disabled={!id}>Geçmiş</TabsTrigger>
+          <TabsTrigger value="general">{t("aiPersona.tabGeneral")}</TabsTrigger>
+          <TabsTrigger value="prompt">{t("aiPersona.tabPrompt")}</TabsTrigger>
+          <TabsTrigger value="model">{t("aiPersona.tabModel")}</TabsTrigger>
+          <TabsTrigger value="abilities">{t("aiPersona.tabAbilities")}</TabsTrigger>
+          <TabsTrigger value="trigger">{t("aiPersona.tabTrigger")}</TabsTrigger>
+          <TabsTrigger value="output">{t("aiPersona.tabOutput")}</TabsTrigger>
+          <TabsTrigger value="budget">{t("aiPersona.tabBudget")}</TabsTrigger>
+          <TabsTrigger value="history" disabled={!id}>{t("aiPersona.tabHistory")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4 mt-4">
@@ -243,35 +245,35 @@ export default function AiPersonaDetail() {
             <CardContent className="space-y-4 pt-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>İsim</Label>
+                  <Label>{t("aiPersona.fName")}</Label>
                   <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
                 </div>
                 <div>
-                  <Label>Slug</Label>
-                  <Input value={form.slug} onChange={(e) => update("slug", e.target.value)} placeholder="blog-yazari-zeynep" />
+                  <Label>{t("aiPersona.fSlug")}</Label>
+                  <Input value={form.slug} onChange={(e) => update("slug", e.target.value)} placeholder={t("aiPersona.fSlugPlaceholder")} />
                 </div>
                 <div>
-                  <Label>Tip</Label>
+                  <Label>{t("aiPersona.fType")}</Label>
                   <Select value={form.personaType} onValueChange={(v) => update("personaType", v as any)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="advisor">advisor — yan etkisiz</SelectItem>
-                      <SelectItem value="operator">operator — onay kuyruğu</SelectItem>
+                      <SelectItem value="advisor">{t("aiPersona.typeAdvisor")}</SelectItem>
+                      <SelectItem value="operator">{t("aiPersona.typeOperator")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Avatar URL</Label>
+                  <Label>{t("aiPersona.fAvatarUrl")}</Label>
                   <Input value={form.avatarUrl} onChange={(e) => update("avatarUrl", e.target.value)} />
                 </div>
               </div>
               <div>
-                <Label>Açıklama</Label>
+                <Label>{t("aiPersona.fDescription")}</Label>
                 <Textarea value={form.description} onChange={(e) => update("description", e.target.value)} rows={2} />
               </div>
               <div className="flex items-center gap-3">
                 <Switch checked={form.isActive} onCheckedChange={(v) => update("isActive", v)} />
-                <Label className="!m-0">Aktif</Label>
+                <Label className="!m-0">{t("aiPersona.fActive")}</Label>
               </div>
             </CardContent>
           </Card>
@@ -279,21 +281,21 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="prompt" className="space-y-4 mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">System Prompt</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("aiPersona.systemPrompt")}</CardTitle></CardHeader>
             <CardContent>
-              <Textarea rows={6} value={form.systemPrompt} onChange={(e) => update("systemPrompt", e.target.value)} placeholder="Bu persona'nın kim olduğu, üslubu, amacı…" />
+              <Textarea rows={6} value={form.systemPrompt} onChange={(e) => update("systemPrompt", e.target.value)} placeholder={t("aiPersona.systemPromptPlaceholder")} />
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Guidelines</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("aiPersona.guidelines")}</CardTitle></CardHeader>
             <CardContent>
-              <Textarea rows={5} value={form.guidelines} onChange={(e) => update("guidelines", e.target.value)} placeholder="Markdown kurallar, format vs." />
+              <Textarea rows={5} value={form.guidelines} onChange={(e) => update("guidelines", e.target.value)} placeholder={t("aiPersona.guidelinesPlaceholder")} />
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Negative Prompt</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("aiPersona.negativePrompt")}</CardTitle></CardHeader>
             <CardContent>
-              <Textarea rows={4} value={form.negativePrompt} onChange={(e) => update("negativePrompt", e.target.value)} placeholder="Yapma: …" />
+              <Textarea rows={4} value={form.negativePrompt} onChange={(e) => update("negativePrompt", e.target.value)} placeholder={t("aiPersona.negativePromptPlaceholder")} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -302,25 +304,25 @@ export default function AiPersonaDetail() {
           <Card>
             <CardContent className="grid grid-cols-2 gap-4 pt-6">
               <div>
-                <Label>Provider</Label>
+                <Label>{t("aiPersona.provider")}</Label>
                 <Select value={form.provider} onValueChange={(v) => update("provider", v as any)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
-                    <SelectItem value="openai">OpenAI (Faz 2)</SelectItem>
+                    <SelectItem value="anthropic">{t("aiPersona.providerAnthropic")}</SelectItem>
+                    <SelectItem value="openai">{t("aiPersona.providerOpenai")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Model</Label>
+                <Label>{t("aiPersona.model")}</Label>
                 <Input value={form.model} onChange={(e) => update("model", e.target.value)} placeholder="claude-sonnet-4-5" />
               </div>
               <div>
-                <Label>Temperature ({form.temperature})</Label>
+                <Label>{t("aiPersona.temperature", { value: form.temperature })}</Label>
                 <Input type="number" step="0.1" min={0} max={2} value={form.temperature} onChange={(e) => update("temperature", Number(e.target.value))} />
               </div>
               <div>
-                <Label>Max Tokens</Label>
+                <Label>{t("aiPersona.maxTokens")}</Label>
                 <Input type="number" value={form.maxTokens} onChange={(e) => update("maxTokens", Number(e.target.value))} />
               </div>
             </CardContent>
@@ -329,9 +331,9 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="abilities" className="space-y-4 mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Data Scopes (read-only context)</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("aiPersona.scopesTitle")}</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {scopes.length === 0 && <div className="text-sm text-muted-foreground">Registry yükleniyor…</div>}
+              {scopes.length === 0 && <div className="text-sm text-muted-foreground">{t("aiPersona.scopesLoading")}</div>}
               {scopes.map((s) => (
                 <label key={s.key} className="flex items-start gap-3 cursor-pointer border rounded p-2 hover:bg-muted/50">
                   <input
@@ -349,26 +351,26 @@ export default function AiPersonaDetail() {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Tools (aksiyonlar)</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("aiPersona.toolsTitle")}</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {tools.map((t) => {
-                const disabled = form.personaType === "advisor" && t.sideEffect;
+              {tools.map((tl) => {
+                const disabled = form.personaType === "advisor" && tl.sideEffect;
                 return (
-                  <label key={t.key} className={`flex items-start gap-3 cursor-pointer border rounded p-2 ${disabled ? "opacity-50" : "hover:bg-muted/50"}`}>
+                  <label key={tl.key} className={`flex items-start gap-3 cursor-pointer border rounded p-2 ${disabled ? "opacity-50" : "hover:bg-muted/50"}`}>
                     <input
                       type="checkbox"
                       className="mt-1"
                       disabled={disabled}
-                      checked={form.toolsEnabled.includes(t.key)}
-                      onChange={() => update("toolsEnabled", toggleArr(form.toolsEnabled, t.key))}
+                      checked={form.toolsEnabled.includes(tl.key)}
+                      onChange={() => update("toolsEnabled", toggleArr(form.toolsEnabled, tl.key))}
                     />
                     <div className="flex-1">
                       <div className="font-medium text-sm flex items-center gap-2">
-                        {t.label} <span className="text-muted-foreground">({t.key})</span>
-                        {t.sideEffect && <Badge variant="destructive" className="text-[10px]">side-effect</Badge>}
+                        {tl.label} <span className="text-muted-foreground">({tl.key})</span>
+                        {tl.sideEffect && <Badge variant="destructive" className="text-[10px]">{t("aiPersona.sideEffectBadge")}</Badge>}
                       </div>
-                      <div className="text-xs text-muted-foreground">{t.description}</div>
-                      {disabled && <div className="text-xs text-amber-600 mt-1">Advisor persona side-effect tool seçemez.</div>}
+                      <div className="text-xs text-muted-foreground">{tl.description}</div>
+                      {disabled && <div className="text-xs text-amber-600 mt-1">{t("aiPersona.toolAdvisorBlocked")}</div>}
                     </div>
                   </label>
                 );
@@ -381,20 +383,20 @@ export default function AiPersonaDetail() {
           <Card>
             <CardContent className="space-y-4 pt-6">
               <div>
-                <Label>Tetik modu</Label>
+                <Label>{t("aiPersona.triggerMode")}</Label>
                 <Select value={form.triggerMode} onValueChange={(v) => update("triggerMode", v as any)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manual">manual</SelectItem>
-                    <SelectItem value="scheduled">scheduled (Faz 2)</SelectItem>
-                    <SelectItem value="event_driven">event_driven (Faz 2)</SelectItem>
+                    <SelectItem value="manual">{t("aiPersona.triggerManual")}</SelectItem>
+                    <SelectItem value="scheduled">{t("aiPersona.triggerScheduled")}</SelectItem>
+                    <SelectItem value="event_driven">{t("aiPersona.triggerEvent")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {form.triggerMode === "scheduled" && (
                 <div>
-                  <Label>Cron</Label>
-                  <Input value={form.scheduleCron} onChange={(e) => update("scheduleCron", e.target.value)} placeholder="0 9 * * MON" />
+                  <Label>{t("aiPersona.cron")}</Label>
+                  <Input value={form.scheduleCron} onChange={(e) => update("scheduleCron", e.target.value)} placeholder={t("aiPersona.cronPlaceholder")} />
                 </div>
               )}
             </CardContent>
@@ -403,7 +405,7 @@ export default function AiPersonaDetail() {
 
         <TabsContent value="output" className="space-y-4 mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Output Targets</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("aiPersona.outputTargets")}</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {OUTPUT_TARGETS.map((o) => (
                 <label key={o} className="flex items-center gap-2 cursor-pointer">
@@ -416,7 +418,7 @@ export default function AiPersonaDetail() {
                 </label>
               ))}
               <div className="text-xs text-muted-foreground pt-2">
-                Bilgi amaçlı; gerçek dispatch <strong>tools_enabled</strong> üzerinden yapılır.
+                {t("aiPersona.outputDispatchNote")}
               </div>
             </CardContent>
           </Card>
@@ -425,14 +427,14 @@ export default function AiPersonaDetail() {
         <TabsContent value="budget" className="space-y-4 mt-4">
           <Card>
             <CardContent className="pt-6 space-y-2">
-              <Label>Aylık maliyet üst limiti (USD) — boş = limitsiz</Label>
+              <Label>{t("aiPersona.budgetCapLabel")}</Label>
               <Input
                 value={form.monthlyCostCapUsd}
                 onChange={(e) => update("monthlyCostCapUsd", e.target.value)}
-                placeholder="örn. 25.00"
+                placeholder={t("aiPersona.budgetCapPlaceholder")}
               />
               <div className="text-xs text-muted-foreground">
-                Cost cap aşılırsa run <code>blocked_by_cap</code> statüsüyle durdurulur.
+                {t("aiPersona.budgetCapNote")}
               </div>
             </CardContent>
           </Card>
@@ -442,22 +444,22 @@ export default function AiPersonaDetail() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Son çalıştırmalar</CardTitle>
+                <CardTitle className="text-base">{t("aiPersona.lastRuns")}</CardTitle>
                 <div className="flex gap-2">
                   <Input
                     className="w-72"
-                    placeholder="Opsiyonel kullanıcı talebi (USER_DATA bloğuna girer)"
+                    placeholder={t("aiPersona.runInputPlaceholder")}
                     value={runInput}
                     onChange={(e) => setRunInput(e.target.value)}
                   />
-                  <Button onClick={runNow} disabled={running || !form.isActive} title={!form.isActive ? "Önce aktif et" : ""}>
-                    <Play className="h-4 w-4 mr-1" /> {running ? "Çalışıyor…" : "Şimdi çalıştır"}
+                  <Button onClick={runNow} disabled={running || !form.isActive} title={!form.isActive ? t("aiPersona.activateFirst") : ""}>
+                    <Play className="h-4 w-4 mr-1" /> {running ? t("aiPersona.running") : t("aiPersona.runNow")}
                   </Button>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              {runs.length === 0 && <div className="text-sm text-muted-foreground">Henüz çalıştırma yok.</div>}
+              {runs.length === 0 && <div className="text-sm text-muted-foreground">{t("aiPersona.noRuns")}</div>}
               {runs.map((r) => (
                 <div key={r.id} className="border rounded p-3 text-sm space-y-1">
                   <div className="flex items-center gap-2">

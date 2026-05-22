@@ -2085,7 +2085,8 @@
     "badgeUploadedAwaiting": "已上传,等待审核",
     "uploadActionPending": "等待中",
     "uploadActionUpload": "上传",
-    "uploadActionPendingTitle": "文档已上传,等待顾问审核"
+    "uploadActionPendingTitle": "文档已上传,等待顾问审核",
+    "errUploadImageFailed": "图片上传失败"
   },
   "stageDocs": {
     "title": "阶段文档",

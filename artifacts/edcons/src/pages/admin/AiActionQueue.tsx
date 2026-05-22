@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListChecks } from "lucide-react";
+import { useI18n } from "@/hooks/use-i18n";
 
 type ActionItem = {
   id: number;
@@ -19,6 +20,7 @@ type ActionItem = {
 };
 
 export default function AiActionQueue() {
+  const { t } = useI18n();
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,22 +44,21 @@ export default function AiActionQueue() {
     <div className="p-6 space-y-6 max-w-5xl">
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <ListChecks className="h-6 w-6 text-indigo-500" /> AI Action Queue
+          <ListChecks className="h-6 w-6 text-indigo-500" /> {t("aiActionQueue.title")}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Operatör personalarının ürettiği yan etkili aksiyonlar bu kuyruğa düşer. Faz 1'de iskelet
-          görünüyor; Onayla/Reddet akışı Faz 2'de devreye alınacak.
+          {t("aiActionQueue.subtitle")}
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Onay bekleyenler ({pending.length})</CardTitle>
+          <CardTitle className="text-base">{t("aiActionQueue.pendingTitle", { count: pending.length })}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {loading && <div className="text-sm text-muted-foreground">Yükleniyor…</div>}
+          {loading && <div className="text-sm text-muted-foreground">{t("aiActionQueue.loading")}</div>}
           {!loading && pending.length === 0 && (
-            <div className="text-sm text-muted-foreground">Bekleyen aksiyon yok.</div>
+            <div className="text-sm text-muted-foreground">{t("aiActionQueue.noPending")}</div>
           )}
           {pending.map((a) => (
             <div key={a.id} className="border rounded p-3 space-y-1">
@@ -65,15 +66,15 @@ export default function AiActionQueue() {
                 <div className="flex items-center gap-2 text-sm">
                   <Badge variant="outline">{a.actionType}</Badge>
                   <span className="text-muted-foreground">
-                    {a.personaName ?? `persona #${a.personaId}`} · run #{a.runId ?? "—"}
+                    {a.personaName ?? t("aiActionQueue.personaShort", { id: a.personaId })} · {t("aiActionQueue.runShort", { id: a.runId ?? "—" })}
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled title="Faz 2'de aktif">
-                    Reddet
+                  <Button size="sm" variant="outline" disabled title={t("aiActionQueue.phase2Active")}>
+                    {t("aiActionQueue.reject")}
                   </Button>
-                  <Button size="sm" disabled title="Faz 2'de aktif">
-                    Onayla
+                  <Button size="sm" disabled title={t("aiActionQueue.phase2Active")}>
+                    {t("aiActionQueue.approve")}
                   </Button>
                 </div>
               </div>
@@ -92,11 +93,11 @@ export default function AiActionQueue() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Geçmiş ({history.length})</CardTitle>
+          <CardTitle className="text-base">{t("aiActionQueue.historyTitle", { count: history.length })}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {history.length === 0 && (
-            <div className="text-sm text-muted-foreground">Geçmiş kayıt yok.</div>
+            <div className="text-sm text-muted-foreground">{t("aiActionQueue.noHistory")}</div>
           )}
           {history.map((a) => (
             <div

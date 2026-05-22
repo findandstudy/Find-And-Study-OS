@@ -2085,7 +2085,8 @@
     "badgeUploadedAwaiting": "بارگذاری شد، در انتظار بررسی",
     "uploadActionPending": "در انتظار",
     "uploadActionUpload": "بارگذاری",
-    "uploadActionPendingTitle": "سند بارگذاری شد، در انتظار تأیید مشاور"
+    "uploadActionPendingTitle": "سند بارگذاری شد، در انتظار تأیید مشاور",
+    "errUploadImageFailed": "بارگذاری تصویر ناموفق بود"
   },
   "stageDocs": {
     "title": "اسناد مرحله",

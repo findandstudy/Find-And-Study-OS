@@ -2115,7 +2115,8 @@
     "badgeUploadedAwaiting": "تم التحميل، بانتظار المراجعة",
     "uploadActionPending": "بانتظار",
     "uploadActionUpload": "تحميل",
-    "uploadActionPendingTitle": "تم تحميل المستند، بانتظار موافقة المستشار"
+    "uploadActionPendingTitle": "تم تحميل المستند، بانتظار موافقة المستشار",
+    "errUploadImageFailed": "فشل تحميل الصورة"
   },
   "stageDocs": {
     "title": "مستندات المرحلة",

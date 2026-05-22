@@ -2085,7 +2085,8 @@
     "badgeUploadedAwaiting": "Subido, esperando revisión",
     "uploadActionPending": "Pendiente",
     "uploadActionUpload": "Subir",
-    "uploadActionPendingTitle": "Documento subido, esperando aprobación del asesor"
+    "uploadActionPendingTitle": "Documento subido, esperando aprobación del asesor",
+    "errUploadImageFailed": "No se pudo subir la imagen"
   },
   "stageDocs": {
     "title": "Documentos de etapa",

@@ -2115,7 +2115,8 @@
     "badgeUploadedAwaiting": "Téléchargé, en attente de validation",
     "uploadActionPending": "En attente",
     "uploadActionUpload": "Téléverser",
-    "uploadActionPendingTitle": "Document téléchargé, en attente de validation du conseiller"
+    "uploadActionPendingTitle": "Document téléchargé, en attente de validation du conseiller",
+    "errUploadImageFailed": "Échec du chargement de l'image"
   },
   "stageDocs": {
     "title": "Documents d'étape",

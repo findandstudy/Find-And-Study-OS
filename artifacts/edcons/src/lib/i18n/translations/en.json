@@ -2477,7 +2477,8 @@
     "badgeUploadedAwaiting": "Uploaded, awaiting review",
     "uploadActionPending": "Pending",
     "uploadActionUpload": "Upload",
-    "uploadActionPendingTitle": "Document uploaded, awaiting advisor approval"
+    "uploadActionPendingTitle": "Document uploaded, awaiting advisor approval",
+    "errUploadImageFailed": "Failed to upload image"
   },
   "stageDocs": {
     "title": "Stage Documents",

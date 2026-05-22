@@ -2085,7 +2085,8 @@
     "badgeUploadedAwaiting": "अपलोड हुआ, समीक्षा प्रतीक्षित",
     "uploadActionPending": "लंबित",
     "uploadActionUpload": "अपलोड",
-    "uploadActionPendingTitle": "दस्तावेज़ अपलोड हुआ, सलाहकार अनुमोदन प्रतीक्षित"
+    "uploadActionPendingTitle": "दस्तावेज़ अपलोड हुआ, सलाहकार अनुमोदन प्रतीक्षित",
+    "errUploadImageFailed": "छवि अपलोड करने में विफल"
   },
   "stageDocs": {
     "title": "चरण दस्तावेज़",

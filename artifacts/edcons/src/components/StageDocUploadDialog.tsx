@@ -5,9 +5,32 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Upload, FileCheck, Loader2, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+// Safely render a translation template that may contain `<strong>...</strong>`
+// markup. Splits the string into React nodes so interpolated values are never
+// injected as raw HTML (no XSS surface).
+function renderTemplate(template: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const re = /<strong>([\s\S]*?)<\/strong>/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = re.exec(template)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(template.slice(lastIndex, match.index));
+    }
+    parts.push(<strong key={`s${key++}`}>{match[1]}</strong>);
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < template.length) {
+    parts.push(template.slice(lastIndex));
+  }
+  return parts;
+}
 
 function getCsrfToken(): string {
   const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
@@ -21,35 +44,14 @@ interface StageDocUploadDialogProps {
   targetStage: string;
   targetStageLabel: string;
   onUploaded: () => void;
-  /**
-   * Task #167 — stage the document is stored against (the "from" stage in
-   * a stage-action button flow). When omitted, defaults to targetStage,
-   * preserving the original DOCS_REQUIRED behavior used by drag-and-drop.
-   */
   uploadStage?: string;
-  /**
-   * Task #167 — when set, uploaded files are renamed to this document name
-   * (extension preserved). Used by stage-action buttons so the saved file
-   * matches the admin-configured Document Name.
-   */
   documentNameOverride?: string | null;
-  /**
-   * Task #167 — when false, skip the stage PATCH after upload ("Don't
-   * change" target). Defaults to true to preserve drag-and-drop behavior.
-   */
   moveAfterUpload?: boolean;
-  /**
-   * Task #167 — quick-button mode. When true, the dialog acts as a
-   * standalone "upload a specific document and (optionally) move stage"
-   * flow. It bypasses the stage's tracksOfferExpiry / requiresValidUntil
-   * checks (those belong to the stage-entry flow, not to ad-hoc admin
-   * actions configured via Quick Button) and uses neutral wording instead
-   * of the "stage requires a document" message.
-   */
   quickMode?: boolean;
 }
 
 export function StageDocUploadDialog({ open, onClose, applicationId, targetStage, targetStageLabel, onUploaded, uploadStage, documentNameOverride, moveAfterUpload = true, quickMode = false }: StageDocUploadDialogProps) {
+  const { t } = useI18n();
   const docStage = uploadStage || targetStage;
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -58,9 +60,6 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   const { toast } = useToast();
   const { stages: pipelineStages } = usePipelineStages("application");
   const targetStageMeta = pipelineStages.find(s => s.key === docStage);
-  // In quick-button mode the validity-date field is intentionally hidden:
-  // the admin's button is meant to be a discrete action, not the formal
-  // stage-entry that records offer expiry.
   const supportsValidUntil = !quickMode && targetStageMeta?.tracksOfferExpiry === true;
   const requiresValidUntil = !quickMode && targetStageMeta?.requiresValidUntil === true;
 
@@ -77,11 +76,11 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
 
   async function handleUploadAndMove() {
     if (files.length === 0) {
-      toast({ title: "Please select at least one document to upload", variant: "destructive" });
+      toast({ title: t("stageDocUpload.toastSelectAtLeastOne"), variant: "destructive" });
       return;
     }
     if (requiresValidUntil && !validUntil) {
-      toast({ title: "Son geçerlilik tarihi zorunlu", description: "Offer letter için lütfen geçerlilik tarihi seçin.", variant: "destructive" });
+      toast({ title: t("stageDocUpload.toastValidUntilRequired"), description: t("stageDocUpload.toastValidUntilRequiredDesc"), variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -98,10 +97,6 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           reader.readAsDataURL(file);
         });
 
-        // When admin configured a Document Name, send it as
-        // documentNameOverride so backend persists it as the canonical
-        // filename (priority over descriptive student name). Multi-upload
-        // gets a numeric suffix appended to the override.
         const suffix = documentNameOverride && files.length > 1 ? ` (${idx + 1})` : "";
         const overrideForRequest = documentNameOverride
           ? `${documentNameOverride}${suffix}`
@@ -125,8 +120,8 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           }),
         });
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "Upload failed" }));
-          throw new Error(err.error || "Upload failed");
+          const err = await res.json().catch(() => ({ error: t("stageDocUpload.errUploadFailed") }));
+          throw new Error(err.error || t("stageDocUpload.errUploadFailed"));
         }
       }
 
@@ -142,19 +137,19 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
         });
 
         if (!stageRes.ok) {
-          const err = await stageRes.json().catch(() => ({ error: "Stage update failed" }));
-          throw new Error(err.error || "Stage update failed");
+          const err = await stageRes.json().catch(() => ({ error: t("stageDocUpload.errStageUpdateFailed") }));
+          throw new Error(err.error || t("stageDocUpload.errStageUpdateFailed"));
         }
-        toast({ title: `Documents uploaded and moved to ${targetStageLabel}` });
+        toast({ title: t("stageDocUpload.toastUploadedAndMoved", { stage: targetStageLabel }) });
       } else {
-        toast({ title: "Belge yüklendi" });
+        toast({ title: t("stageDocUpload.toastUploaded") });
       }
       setFiles([]);
       setValidUntil("");
       onUploaded();
       onClose();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("stageDocUpload.toastError"), description: err.message, variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -179,33 +174,37 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
               <AlertTriangle className="w-5 h-5 text-amber-500" />
             )}
             {quickMode
-              ? (documentNameOverride ? `${documentNameOverride} Yükle` : "Belge Yükle")
-              : "Document Required"}
+              ? (documentNameOverride ? t("stageDocUpload.quickTitleNamed", { name: documentNameOverride }) : t("stageDocUpload.quickTitle"))
+              : t("stageDocUpload.requiredTitle")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           {quickMode ? (
             <p className="text-sm text-muted-foreground">
-              {documentNameOverride
-                ? <>Bu başvuru için <strong>{documentNameOverride}</strong> belgesini yükleyin.</>
-                : "Bu başvuru için belge yükleyin."}
-              {moveAfterUpload && <> Yükleme tamamlandığında başvuru <strong>{targetStageLabel}</strong> aşamasına geçecek.</>}
+              {renderTemplate(
+                documentNameOverride
+                  ? t("stageDocUpload.quickDescNamed", { name: documentNameOverride })
+                  : t("stageDocUpload.quickDesc")
+              )}
+              {moveAfterUpload && (
+                <> {renderTemplate(t("stageDocUpload.quickDescMove", { stage: targetStageLabel }))}</>
+              )}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              The <strong>{targetStageLabel}</strong> stage requires at least one document to be uploaded before the application can be moved.
+              {renderTemplate(t("stageDocUpload.requiredDesc", { stage: targetStageLabel }))}
             </p>
           )}
 
           <div className="space-y-2">
-            <Label className="text-xs font-semibold">Upload Documents</Label>
+            <Label className="text-xs font-semibold">{t("stageDocUpload.uploadDocuments")}</Label>
             <div
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
             >
               <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">Click to select files</p>
-              <p className="text-xs text-muted-foreground mt-1">PDF, Images, Documents</p>
+              <p className="text-sm text-muted-foreground">{t("stageDocUpload.clickToSelect")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("stageDocUpload.fileTypes")}</p>
             </div>
             <input
               ref={fileInputRef}
@@ -220,7 +219,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           {supportsValidUntil && (
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">
-                Son Geçerlilik Tarihi {requiresValidUntil && <span className="text-destructive">*</span>}
+                {t("stageDocUpload.validUntilLabel")} {requiresValidUntil && <span className="text-destructive">*</span>}
               </Label>
               <Input
                 type="date"
@@ -229,14 +228,14 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
                 disabled={uploading}
               />
               <p className="text-xs text-muted-foreground">
-                Offer letter'ın geçerli olduğu son tarih. Yaklaştığında bildirim gönderilir.
+                {t("stageDocUpload.validUntilHint")}
               </p>
             </div>
           )}
 
           {files.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-xs font-semibold">Selected Files ({files.length})</Label>
+              <Label className="text-xs font-semibold">{t("stageDocUpload.selectedFiles", { count: files.length })}</Label>
               <div className="space-y-1.5 max-h-40 overflow-y-auto">
                 {files.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg text-xs">
@@ -253,9 +252,9 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={uploading}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose} disabled={uploading}>{t("stageDocUpload.cancel")}</Button>
           <Button onClick={handleUploadAndMove} disabled={uploading || files.length === 0}>
-            {uploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...</> : `Upload & Move to ${targetStageLabel}`}
+            {uploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t("stageDocUpload.uploadingBtn")}</> : t("stageDocUpload.uploadAndMove", { stage: targetStageLabel })}
           </Button>
         </DialogFooter>
       </DialogContent>

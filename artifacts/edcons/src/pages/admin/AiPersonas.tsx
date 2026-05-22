@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { Sparkles, Plus, Trash2, Settings as SettingsIcon } from "lucide-react";
 
 type Persona = {
@@ -24,6 +25,7 @@ type Persona = {
 };
 
 export default function AiPersonas() {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export default function AiPersonas() {
       const data = await customFetch<{ personas: Persona[] }>("/api/ai-personas");
       setPersonas(data.personas);
     } catch (e) {
-      toast({ title: "Hata", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("aiPersona.toastError"), description: (e as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -53,20 +55,20 @@ export default function AiPersonas() {
         body: JSON.stringify({ isActive }),
       });
       setPersonas((prev) => prev.map((x) => (x.id === p.id ? { ...x, isActive } : x)));
-      toast({ title: isActive ? "Aktif edildi" : "Pasif edildi" });
+      toast({ title: isActive ? t("aiPersona.toastActivated") : t("aiPersona.toastDeactivated") });
     } catch (e) {
-      toast({ title: "Hata", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("aiPersona.toastError"), description: (e as Error).message, variant: "destructive" });
     }
   };
 
   const remove = async (p: Persona) => {
-    if (!confirm(`"${p.name}" personasını silmek istediğinden emin misin?`)) return;
+    if (!confirm(t("aiPersona.confirmDelete", { name: p.name }))) return;
     try {
       await customFetch(`/api/ai-personas/${p.id}`, { method: "DELETE" });
       setPersonas((prev) => prev.filter((x) => x.id !== p.id));
-      toast({ title: "Silindi" });
+      toast({ title: t("aiPersona.toastDeleted") });
     } catch (e) {
-      toast({ title: "Hata", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("aiPersona.toastError"), description: (e as Error).message, variant: "destructive" });
     }
   };
 
@@ -77,28 +79,28 @@ export default function AiPersonas() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-indigo-500" /> AI Personas
+            <Sparkles className="h-6 w-6 text-indigo-500" /> {t("aiPersona.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Panelden yönetilen AI personaları. Kod sabit persona içermez — buradan ekle, scope/tool seç ve aktif et.
+            {t("aiPersona.subtitle")}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLocation("/admin/ai-action-queue")}>
-            Onay Kuyruğu
+            {t("aiPersona.approvalQueue")}
           </Button>
           <Button onClick={() => setLocation("/admin/ai-personas/new")}>
-            <Plus className="h-4 w-4 mr-2" /> Yeni Persona
+            <Plus className="h-4 w-4 mr-2" /> {t("aiPersona.newPersona")}
           </Button>
         </div>
       </div>
 
-      {loading && <div className="text-sm text-muted-foreground">Yükleniyor…</div>}
+      {loading && <div className="text-sm text-muted-foreground">{t("aiPersona.loading")}</div>}
 
       {empty && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            Henüz persona yok. "Yeni Persona" ile başla.
+            {t("aiPersona.empty")}
           </CardContent>
         </Card>
       )}
@@ -121,15 +123,15 @@ export default function AiPersonas() {
                 {(p.allowedDataScopes || []).map((s) => (
                   <Badge key={s} variant="outline" className="text-xs">scope:{s}</Badge>
                 ))}
-                {(p.toolsEnabled || []).map((t) => (
-                  <Badge key={t} variant="outline" className="text-xs">tool:{t}</Badge>
+                {(p.toolsEnabled || []).map((tl) => (
+                  <Badge key={tl} variant="outline" className="text-xs">tool:{tl}</Badge>
                 ))}
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <div className="flex items-center gap-2 text-sm">
                   <Switch checked={p.isActive} onCheckedChange={(v) => toggleActive(p, v)} />
                   <span className={p.isActive ? "text-emerald-600" : "text-muted-foreground"}>
-                    {p.isActive ? "Aktif" : "Pasif"}
+                    {p.isActive ? t("aiPersona.active") : t("aiPersona.inactive")}
                   </span>
                 </div>
                 <div className="flex gap-1">

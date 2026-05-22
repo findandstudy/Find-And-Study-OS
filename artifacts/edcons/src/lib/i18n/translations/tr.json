@@ -2418,7 +2418,8 @@
     "badgeUploadedAwaiting": "Yüklendi, onay bekliyor",
     "uploadActionPending": "Bekliyor",
     "uploadActionUpload": "Yükle",
-    "uploadActionPendingTitle": "Belge yüklendi, danışman onayı bekleniyor"
+    "uploadActionPendingTitle": "Belge yüklendi, danışman onayı bekleniyor",
+    "errUploadImageFailed": "Resim yüklenemedi"
   },
   "stageDocs": {
     "title": "Aşama Belgeleri",

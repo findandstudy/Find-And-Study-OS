@@ -2085,7 +2085,8 @@
     "badgeUploadedAwaiting": "Diunggah, menunggu peninjauan",
     "uploadActionPending": "Tertunda",
     "uploadActionUpload": "Unggah",
-    "uploadActionPendingTitle": "Dokumen diunggah, menunggu persetujuan penasihat"
+    "uploadActionPendingTitle": "Dokumen diunggah, menunggu persetujuan penasihat",
+    "errUploadImageFailed": "Gagal mengunggah gambar"
   },
   "stageDocs": {
     "title": "Dokumen Tahap",
