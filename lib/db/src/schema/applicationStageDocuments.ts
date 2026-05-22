@@ -34,6 +34,11 @@ export const applicationStageDocumentsTable = pgTable("application_stage_documen
   // no upload has happened yet.
   respondedAt: timestamp("responded_at", { withTimezone: true }),
   respondedDocumentId: integer("responded_document_id"),
+  // Task #187 round-5 — snapshot of the missing-doc action's targetStageKey
+  // (the "waiting" stage staff moved the application to when invoking the
+  // action). The fulfillment hook gates auto-advance on this exact stage so
+  // unrelated transitions can't trigger silent jumps.
+  actionTargetStageKey: text("action_target_stage_key"),
   validUntil: timestamp("valid_until", { withTimezone: true }),
   expiryNotifiedThresholds: text("expiry_notified_thresholds"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

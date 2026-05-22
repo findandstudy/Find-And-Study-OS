@@ -433,11 +433,23 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next)
   }
 
   // Authorize against THAT stage's uploadPermissionLevel (not a hardcoded key).
+  // Also pull `actions` so we can snapshot the missing_docs action's
+  // targetStageKey (the "waiting" stage staff moved the app to) onto
+  // every created row — fulfillment uses it to gate auto-advance.
   const isAdmin = ADMIN_ROLES.includes(user.role as any);
-  const [stageRow] = await db.select({ uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel })
+  const [stageRow] = await db.select({
+    uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel,
+    actions: pipelineStagesTable.actions,
+  })
     .from(pipelineStagesTable)
     .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, stageKey)));
   const permLevel = stageRow?.uploadPermissionLevel || "admin_only";
+  const missingDocsAction = Array.isArray(stageRow?.actions)
+    ? (stageRow!.actions as any[]).find(a => a && a.type === "missing_docs")
+    : null;
+  const actionTargetStageKey: string | null = missingDocsAction && typeof missingDocsAction.targetStageKey === "string" && missingDocsAction.targetStageKey
+    ? missingDocsAction.targetStageKey
+    : null;
   const isStaff = isStaffRole(user.role);
   const isAgent = isAgentRole(user.role);
   let allowed = false;
@@ -468,6 +480,7 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next)
     isMissingDocNote: true,
     isCustom: it.isCustom,
     note: it.note,
+    actionTargetStageKey,
   }));
 
   if (insertValues.length > 0) {

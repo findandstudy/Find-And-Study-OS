@@ -69,6 +69,12 @@ const router: IRouter = Router();
       ALTER TABLE application_stage_documents
       ADD COLUMN IF NOT EXISTS responded_document_id integer
     `);
+    // Task #187 round-5 — snapshot of the missing-doc action's
+    // targetStageKey on each request row, used to gate auto-advance.
+    await db.execute(sql`
+      ALTER TABLE application_stage_documents
+      ADD COLUMN IF NOT EXISTS action_target_stage_key text
+    `);
     // Pre-existing missing-doc rows used `fileName` as free-text — treat
     // them as custom (one-shot, gated by pipeline_migrations marker so we
     // don't reclassify newly-created catalog rows on every restart).

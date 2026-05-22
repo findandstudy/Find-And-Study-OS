@@ -40,6 +40,7 @@ export async function handleMissingDocFulfillment(
           id: applicationStageDocumentsTable.id,
           stage: applicationStageDocumentsTable.stage,
           fileName: applicationStageDocumentsTable.fileName,
+          actionTargetStageKey: applicationStageDocumentsTable.actionTargetStageKey,
         })
         .from(applicationStageDocumentsTable)
         .where(and(
@@ -51,10 +52,16 @@ export async function handleMissingDocFulfillment(
 
       const matchedIds: number[] = [];
       const affectedStages = new Set<string>();
+      // Map source stage -> action targetStageKey (the waiting stage staff
+      // moved the application to). Used for the strict auto-advance gate.
+      const waitingStageBySource = new Map<string, string | null>();
       for (const r of openRequests) {
         if (areEquivalentDocTypes(r.fileName, uploadedDocType)) {
           matchedIds.push(r.id);
           affectedStages.add(r.stage);
+        }
+        if (!waitingStageBySource.has(r.stage)) {
+          waitingStageBySource.set(r.stage, r.actionTargetStageKey || null);
         }
       }
 
@@ -111,17 +118,6 @@ export async function handleMissingDocFulfillment(
         .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
       if (!app) return;
 
-      // Resolve the application's current stage sortOrder once — used to
-      // gate auto-advance below (source OR an intermediate waiting stage).
-      const [currentStageRow] = await tx
-        .select({ sortOrder: pipelineStagesTable.sortOrder })
-        .from(pipelineStagesTable)
-        .where(and(
-          eq(pipelineStagesTable.entityType, "application"),
-          eq(pipelineStagesTable.key, app.stage),
-        ));
-      const currentOrder = currentStageRow?.sortOrder ?? null;
-
       for (const sourceStageKey of affectedStages) {
         const stillOpen = await tx
           .select({ id: applicationStageDocumentsTable.id })
@@ -150,7 +146,7 @@ export async function handleMissingDocFulfillment(
         if (!sourceStageRow?.targetId) continue;
 
         const [targetStageRow] = await tx
-          .select({ key: pipelineStagesTable.key, sortOrder: pipelineStagesTable.sortOrder })
+          .select({ key: pipelineStagesTable.key })
           .from(pipelineStagesTable)
           .where(eq(pipelineStagesTable.id, sourceStageRow.targetId));
         if (!targetStageRow) continue;
@@ -158,18 +154,16 @@ export async function handleMissingDocFulfillment(
         // Already at target? Nothing to advance.
         if (app.stage === targetStageRow.key) continue;
 
-        // Gate: auto-advance fires when the app is at the SOURCE stage
-        // (no waiting stage in between) OR sitting in some intermediate
-        // stage between source and target (typical "waiting on student"
-        // flow where staff already moved the app forward after creating
-        // the request). Never fires from unrelated parts of the pipeline.
+        // Strict gate: auto-advance only fires when the application is
+        // CURRENTLY at the source stage (no waiting stage configured on
+        // the missing-docs action) OR at the exact "waiting" stage the
+        // action moved the app to when the request was created (snapshot
+        // stored on each row as `actionTargetStageKey`). Never advances
+        // from unrelated stages.
+        const waitingStageKey = waitingStageBySource.get(sourceStageKey) ?? null;
         const isAtSource = app.stage === sourceStageKey;
-        const isBetween = currentOrder != null
-          && sourceStageRow.sortOrder != null
-          && targetStageRow.sortOrder != null
-          && currentOrder > sourceStageRow.sortOrder
-          && currentOrder < targetStageRow.sortOrder;
-        if (!isAtSource && !isBetween) continue;
+        const isAtWaiting = !!waitingStageKey && app.stage === waitingStageKey;
+        if (!isAtSource && !isAtWaiting) continue;
 
         await tx.update(applicationsTable)
           .set({ stage: targetStageRow.key, updatedAt: new Date() })
