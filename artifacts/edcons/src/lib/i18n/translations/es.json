@@ -2251,5 +2251,28 @@
     "phase2Active": "Activo en Fase 2",
     "personaShort": "persona #{id}",
     "runShort": "run #{id}"
+  },
+  "scanner": {
+    "scanWithCamera": "Escanear con cámara",
+    "title": "Escáner de documentos",
+    "loading": "Cargando escáner…",
+    "loadingHint": "La primera vez se descarga el motor del escáner (una sola vez, ~8 MB).",
+    "libError": "No se pudo cargar el escáner. Comprueba tu conexión y vuelve a intentarlo.",
+    "cameraError": "No se pudo acceder a la cámara.",
+    "permissionDenied": "Se denegó el permiso de la cámara. Permite el acceso a la cámara en la configuración del navegador y vuelve a intentarlo.",
+    "noCamera": "No se detectó cámara en este dispositivo.",
+    "httpsRequired": "El escáner requiere una conexión segura (HTTPS).",
+    "positionDoc": "Coloca el documento dentro del marco",
+    "capture": "Capturar",
+    "retake": "Repetir",
+    "use": "Usar este escaneo",
+    "addPage": "Añadir página",
+    "finishPdf": "Finalizar ({n} páginas)",
+    "previewLabel": "Vista previa de la página {n}",
+    "processing": "Procesando…",
+    "building": "Generando archivo…",
+    "close": "Cerrar",
+    "pageCount": "{n} páginas",
+    "removePage": "Quitar página"
   }
 }

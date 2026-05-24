@@ -2251,5 +2251,28 @@
     "phase2Active": "第 2 阶段启用",
     "personaShort": "角色 #{id}",
     "runShort": "运行 #{id}"
+  },
+  "scanner": {
+    "scanWithCamera": "用相机扫描",
+    "title": "文档扫描仪",
+    "loading": "正在加载扫描仪…",
+    "loadingHint": "首次使用时下载扫描引擎（一次性，约 8 MB）。",
+    "libError": "无法加载扫描仪。请检查网络后重试。",
+    "cameraError": "无法访问相机。",
+    "permissionDenied": "相机权限被拒绝。请在浏览器设置中允许相机访问后重试。",
+    "noCamera": "未在此设备上检测到相机。",
+    "httpsRequired": "相机扫描需要安全 (HTTPS) 连接。",
+    "positionDoc": "将文档放入框内",
+    "capture": "拍摄",
+    "retake": "重拍",
+    "use": "使用此扫描",
+    "addPage": "添加页面",
+    "finishPdf": "完成（{n} 页）",
+    "previewLabel": "第 {n} 页预览",
+    "processing": "处理中…",
+    "building": "正在生成文件…",
+    "close": "关闭",
+    "pageCount": "{n} 页",
+    "removePage": "删除页面"
   }
 }

@@ -26,6 +26,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { StudentDocChecklist } from "@/components/StudentDocChecklist";
+import { DocumentScanner } from "@/components/DocumentScanner";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -558,6 +559,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: applicationsResp } = useQuery<any>({
@@ -860,6 +862,20 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
                   if (file) handleFileSelect(file);
                   e.target.value = "";
                 }}
+              />
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 px-3 py-2 rounded-lg hover:bg-primary/5 transition-colors border border-primary/20"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                {t("scanner.scanWithCamera")}
+              </button>
+              <DocumentScanner
+                open={scannerOpen}
+                onClose={() => setScannerOpen(false)}
+                baseName={uploadType || "scan"}
+                onCapture={(f) => handleFileSelect(f)}
               />
             </div>
           </div>

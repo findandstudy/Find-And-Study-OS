@@ -2584,5 +2584,28 @@
     "phase2Active": "Faz 2'de aktif",
     "personaShort": "persona #{id}",
     "runShort": "run #{id}"
+  },
+  "scanner": {
+    "scanWithCamera": "Kamerayla Tara",
+    "title": "Belge Tarayıcı",
+    "loading": "Tarayıcı yükleniyor…",
+    "loadingHint": "İlk açılışta tarayıcı motoru indirilir (tek seferlik, ~8 MB).",
+    "libError": "Tarayıcı yüklenemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.",
+    "cameraError": "Kameraya erişilemedi.",
+    "permissionDenied": "Kamera izni reddedildi. Tarayıcı ayarlarından kamera iznini verip tekrar deneyin.",
+    "noCamera": "Bu cihazda kamera bulunamadı.",
+    "httpsRequired": "Kamerayla tarama özelliği güvenli (HTTPS) bağlantı gerektirir.",
+    "positionDoc": "Belgeyi çerçeve içine yerleştirin",
+    "capture": "Çek",
+    "retake": "Tekrar Çek",
+    "use": "Bu Taramayı Kullan",
+    "addPage": "Sayfa Ekle",
+    "finishPdf": "Bitir ({n} sayfa)",
+    "previewLabel": "{n}. sayfa önizleme",
+    "processing": "İşleniyor…",
+    "building": "Dosya hazırlanıyor…",
+    "close": "Kapat",
+    "pageCount": "{n} sayfa",
+    "removePage": "Sayfayı kaldır"
   }
 }

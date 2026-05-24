@@ -1149,7 +1149,25 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-doc-slot{border:2px dashed #d1d5db;border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
 .ew-doc-slot:hover{border-color:${primaryColor};background:${primaryColor}08}
 .ew-doc-slot.uploaded{border-color:#22c55e;border-style:solid;background:#f0fdf4}
-.ew-doc-slot input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.ew-doc-slot input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1}
+.ew-doc-scan-btn{position:absolute;bottom:4px;right:4px;z-index:2;background:#fff;border:1px solid ${primaryColor}40;color:${primaryColor};border-radius:6px;padding:3px 6px;font-size:0.65rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px}
+.ew-doc-scan-btn:hover{background:${primaryColor}10}
+.ew-scan-overlay{position:fixed;inset:0;background:#000;z-index:10000;display:flex;flex-direction:column}
+.ew-scan-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;color:#fff;background:rgba(0,0,0,.6)}
+.ew-scan-header h4{margin:0;font-size:1rem;font-weight:600}
+.ew-scan-header button{background:transparent;border:none;color:#fff;cursor:pointer;font-size:1.4rem;line-height:1;padding:4px 8px}
+.ew-scan-stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+.ew-scan-stage video,.ew-scan-stage canvas{max-width:100%;max-height:100%;display:block}
+.ew-scan-stage canvas.ew-scan-overlay-cv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;object-fit:contain}
+.ew-scan-hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.55);padding:6px 12px;border-radius:999px;font-size:0.8rem}
+.ew-scan-bar{display:flex;gap:8px;padding:12px;background:rgba(0,0,0,.7);justify-content:center;flex-wrap:wrap}
+.ew-scan-bar button{padding:10px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:0.85rem;background:#fff;color:#000}
+.ew-scan-bar button.primary{background:${primaryColor};color:#fff}
+.ew-scan-bar button:disabled{opacity:.5;cursor:not-allowed}
+.ew-scan-pages{display:flex;gap:6px;padding:8px 12px;background:rgba(0,0,0,.7);overflow-x:auto}
+.ew-scan-pages img{height:60px;border-radius:4px;border:1px solid #fff3}
+.ew-scan-loading{color:#fff;text-align:center;padding:24px}
+.ew-scan-loading-hint{color:#aaa;font-size:0.75rem;margin-top:8px}
 .ew-doc-icon{font-size:1.5rem}
 .ew-doc-label{font-size:0.8rem;font-weight:600;color:#374151}
 .ew-doc-hint{font-size:0.65rem;color:#94a3b8}
@@ -1386,6 +1404,216 @@ function degreeToLevel(degree){
   if(d.indexOf('master')>=0||d.indexOf('graduate')>=0||d.indexOf('msc')>=0||d.indexOf('mba')>=0)return 'graduate';
   if(d.indexOf('pathway')>=0||d.indexOf('prep')>=0||d.indexOf('language')>=0||d.indexOf('foundation')>=0)return 'pathway';
   return 'undergraduate';
+}
+
+var __scanLibsPromise=null;
+function loadScanLibs(){
+  if(__scanLibsPromise)return __scanLibsPromise;
+  __scanLibsPromise=new Promise(function(resolve,reject){
+    function addScript(src){
+      return new Promise(function(res,rej){
+        var s=document.createElement('script');
+        s.src=src;s.async=true;
+        s.onload=function(){res();};
+        s.onerror=function(){rej(new Error('load fail: '+src));};
+        document.head.appendChild(s);
+      });
+    }
+    function waitForCv(){
+      return new Promise(function(res,rej){
+        var start=Date.now();
+        (function poll(){
+          if(window.cv&&window.cv.Mat)return res();
+          if(Date.now()-start>30000)return rej(new Error('cv timeout'));
+          setTimeout(poll,150);
+        })();
+      });
+    }
+    var cvP=window.cv&&window.cv.Mat?Promise.resolve():addScript('https://docs.opencv.org/4.10.0/opencv.js').then(waitForCv);
+    var jsP=window.jscanify?Promise.resolve():addScript('https://cdn.jsdelivr.net/npm/jscanify@1.3.0/src/jscanify.min.js');
+    var pdfP=window.jspdf?Promise.resolve():addScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js');
+    Promise.all([cvP,jsP,pdfP]).then(function(){resolve();}).catch(function(err){__scanLibsPromise=null;reject(err);});
+  });
+  return __scanLibsPromise;
+}
+
+function enhanceContrast(canvas){
+  try{
+    var ctx=canvas.getContext('2d');
+    var img=ctx.getImageData(0,0,canvas.width,canvas.height);
+    var d=img.data;
+    var min=255,max=0;
+    for(var i=0;i<d.length;i+=4){
+      var l=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0;
+      if(l<min)min=l;if(l>max)max=l;
+    }
+    var range=Math.max(1,max-min);
+    var scale=255/range;
+    for(var j=0;j<d.length;j+=4){
+      d[j]=Math.min(255,Math.max(0,(d[j]-min)*scale));
+      d[j+1]=Math.min(255,Math.max(0,(d[j+1]-min)*scale));
+      d[j+2]=Math.min(255,Math.max(0,(d[j+2]-min)*scale));
+    }
+    ctx.putImageData(img,0,0);
+  }catch(e){}
+}
+
+function canvasToBlob(canvas,type,quality){
+  return new Promise(function(res){
+    if(canvas.toBlob)canvas.toBlob(function(b){res(b);},type||'image/jpeg',quality||0.92);
+    else{
+      var d=canvas.toDataURL(type||'image/jpeg',quality||0.92);
+      var bin=atob(d.split(',')[1]);var arr=new Uint8Array(bin.length);
+      for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      res(new Blob([arr],{type:type||'image/jpeg'}));
+    }
+  });
+}
+
+function openScanner(baseName,onCapture){
+  var ov=document.createElement('div');
+  ov.className='ew-scan-overlay';
+  ov.innerHTML='<div class="ew-scan-header"><h4>Document Scanner</h4><button type="button" class="ew-scan-close">\\u00d7</button></div>'+
+    '<div class="ew-scan-stage"><div class="ew-scan-loading">Loading scanner\\u2026<div class="ew-scan-loading-hint">First load downloads the scanner engine (~8 MB).</div></div></div>'+
+    '<div class="ew-scan-pages" style="display:none"></div>'+
+    '<div class="ew-scan-bar" style="display:none"></div>';
+  document.body.appendChild(ov);
+  var stage=ov.querySelector('.ew-scan-stage');
+  var bar=ov.querySelector('.ew-scan-bar');
+  var pagesEl=ov.querySelector('.ew-scan-pages');
+  var stream=null;var rafId=null;var pages=[];var video=null;var overlayCv=null;var scanner=null;
+  function stop(){
+    if(rafId)cancelAnimationFrame(rafId);rafId=null;
+    if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
+  }
+  function destroy(){stop();if(ov.parentNode)ov.parentNode.removeChild(ov);}
+  ov.querySelector('.ew-scan-close').addEventListener('click',destroy);
+  function showErr(msg){stage.innerHTML='<div class="ew-scan-loading" style="color:#fca5a5">'+esc(msg)+'</div>';}
+  function startLive(){
+    stage.innerHTML='';
+    video=document.createElement('video');
+    video.setAttribute('playsinline','');video.muted=true;video.autoplay=true;
+    overlayCv=document.createElement('canvas');
+    overlayCv.className='ew-scan-overlay-cv';
+    var hint=document.createElement('div');hint.className='ew-scan-hint';hint.textContent='Position the document inside the frame';
+    stage.appendChild(video);stage.appendChild(overlayCv);stage.appendChild(hint);
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showErr('Camera not supported in this browser.');return;}
+    if(location.protocol!=='https:'&&location.hostname!=='localhost'){showErr('Camera scanner requires HTTPS.');return;}
+    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})
+      .then(function(s){
+        stream=s;video.srcObject=s;
+        video.onloadedmetadata=function(){
+          video.play();
+          try{scanner=new window.jscanify();}catch(e){}
+          function loop(){
+            if(!video||video.readyState<2){rafId=requestAnimationFrame(loop);return;}
+            overlayCv.width=video.videoWidth;overlayCv.height=video.videoHeight;
+            try{
+              var hl=scanner.highlightPaper(video);
+              var octx=overlayCv.getContext('2d');
+              octx.clearRect(0,0,overlayCv.width,overlayCv.height);
+              octx.drawImage(hl,0,0,overlayCv.width,overlayCv.height);
+            }catch(e){}
+            rafId=requestAnimationFrame(loop);
+          }
+          loop();
+          renderBar();
+        };
+      })
+      .catch(function(err){
+        var m='Could not access the camera.';
+        if(err&&(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'))m='Camera permission denied. Allow camera access and retry.';
+        else if(err&&(err.name==='NotFoundError'||err.name==='OverconstrainedError'))m='No camera detected on this device.';
+        showErr(m);
+      });
+  }
+  function renderBar(){
+    bar.style.display='flex';
+    bar.innerHTML='';
+    var cap=document.createElement('button');cap.className='primary';cap.textContent='Capture';
+    cap.addEventListener('click',capture);
+    bar.appendChild(cap);
+    if(pages.length>0){
+      var done=document.createElement('button');done.className='primary';done.textContent='Finish ('+pages.length+' page'+(pages.length>1?'s':'')+')';
+      done.addEventListener('click',finishMulti);
+      bar.appendChild(done);
+    }
+  }
+  function renderPages(){
+    if(pages.length===0){pagesEl.style.display='none';pagesEl.innerHTML='';return;}
+    pagesEl.style.display='flex';pagesEl.innerHTML='';
+    pages.forEach(function(p){
+      var img=document.createElement('img');img.src=p.dataUrl;pagesEl.appendChild(img);
+    });
+  }
+  function capture(){
+    if(!video||!scanner)return;
+    try{
+      var tmp=document.createElement('canvas');
+      tmp.width=video.videoWidth;tmp.height=video.videoHeight;
+      tmp.getContext('2d').drawImage(video,0,0);
+      var extracted=scanner.extractPaper(tmp,Math.min(1240,tmp.width),Math.min(1754,tmp.height));
+      enhanceContrast(extracted);
+      showReview(extracted);
+    }catch(e){alert('Capture failed: '+e.message);}
+  }
+  function showReview(canvas){
+    stop();
+    stage.innerHTML='';
+    var img=document.createElement('img');
+    img.src=canvas.toDataURL('image/jpeg',0.92);
+    img.style.maxWidth='100%';img.style.maxHeight='100%';
+    stage.appendChild(img);
+    bar.innerHTML='';
+    var retake=document.createElement('button');retake.textContent='Retake';retake.addEventListener('click',function(){startLive();});
+    var add=document.createElement('button');add.textContent='Add page';add.addEventListener('click',function(){
+      canvasToBlob(canvas,'image/jpeg',0.92).then(function(b){
+        pages.push({blob:b,dataUrl:img.src,width:canvas.width,height:canvas.height});
+        renderPages();startLive();
+      });
+    });
+    var useBtn=document.createElement('button');useBtn.className='primary';useBtn.textContent=pages.length>0?'Finish ('+(pages.length+1)+' pages)':'Use this scan';
+    useBtn.addEventListener('click',function(){
+      canvasToBlob(canvas,'image/jpeg',0.92).then(function(b){
+        if(pages.length===0){
+          var f=new File([b],(baseName||'scan')+'.jpg',{type:'image/jpeg'});
+          destroy();onCapture(f);
+        }else{
+          pages.push({blob:b,dataUrl:img.src,width:canvas.width,height:canvas.height});
+          finishMulti();
+        }
+      });
+    });
+    bar.appendChild(retake);bar.appendChild(add);bar.appendChild(useBtn);
+  }
+  function finishMulti(){
+    try{
+      var jsPDF=window.jspdf.jsPDF;
+      var pdf=new jsPDF({unit:'pt',format:'a4'});
+      var pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
+      pages.forEach(function(p,i){
+        if(i>0)pdf.addPage();
+        var r=Math.min(pw/p.width,ph/p.height);
+        var w=p.width*r,h=p.height*r;
+        pdf.addImage(p.dataUrl,'JPEG',(pw-w)/2,(ph-h)/2,w,h);
+      });
+      var blob=pdf.output('blob');
+      var f=new File([blob],(baseName||'scan')+'.pdf',{type:'application/pdf'});
+      destroy();onCapture(f);
+    }catch(e){alert('PDF build failed: '+e.message);}
+  }
+  loadScanLibs().then(startLive).catch(function(){showErr('Could not load the scanner. Check connection and retry.');});
+}
+
+function handleScanForKey(key){
+  openScanner(key,function(file){
+    var vErr=validateFileUpload(file);
+    if(vErr){alert(vErr);return;}
+    fileToBase64(file).then(function(result){
+      uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
+      if(formOpen)showModal();else render(false);
+    });
+  });
 }
 
 function fileToBase64(file){
@@ -1768,6 +1996,7 @@ function renderFormContent(prog){
         h+='<div class="ew-doc-hint">Click to upload</div>';
         if(d.required)h+='<div class="ew-doc-required">Required</div>';
       }
+      h+='<button type="button" class="ew-doc-scan-btn" data-doc-scan="'+esc(d.key)+'" title="Scan with camera">\\ud83d\\udcf7 Scan</button>';
       h+='</div>';
     }
     h+='</div>';
@@ -2148,6 +2377,12 @@ function bindModalEvents(modal,overlay){
         if(formOpen)showModal();
         else render(false);
       });
+    });
+  });
+  $$('[data-doc-scan]',modal).forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      handleScanForKey(btn.getAttribute('data-doc-scan'));
     });
   });
   var analyzeBtn=$('#ew-analyze-btn',modal);
@@ -2621,6 +2856,13 @@ function bindEvents(){
         uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
         render(false);
       });
+    });
+  });
+  $$('[data-doc-scan]').forEach(function(btn){
+    if(formOpen)return;
+    btn.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();
+      handleScanForKey(btn.getAttribute('data-doc-scan'));
     });
   });
 }

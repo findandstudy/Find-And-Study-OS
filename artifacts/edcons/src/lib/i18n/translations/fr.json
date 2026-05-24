@@ -2281,5 +2281,28 @@
     "phase2Active": "Actif en Phase 2",
     "personaShort": "persona #{id}",
     "runShort": "run #{id}"
+  },
+  "scanner": {
+    "scanWithCamera": "Scanner avec la caméra",
+    "title": "Scanner de documents",
+    "loading": "Chargement du scanner…",
+    "loadingHint": "Le moteur du scanner est téléchargé lors de la première utilisation (une seule fois, ~8 Mo).",
+    "libError": "Impossible de charger le scanner. Vérifiez votre connexion et réessayez.",
+    "cameraError": "Impossible d'accéder à la caméra.",
+    "permissionDenied": "L'accès à la caméra a été refusé. Autorisez la caméra dans les paramètres du navigateur, puis réessayez.",
+    "noCamera": "Aucune caméra détectée sur cet appareil.",
+    "httpsRequired": "Le scanner nécessite une connexion sécurisée (HTTPS).",
+    "positionDoc": "Placez le document dans le cadre",
+    "capture": "Capturer",
+    "retake": "Reprendre",
+    "use": "Utiliser ce scan",
+    "addPage": "Ajouter une page",
+    "finishPdf": "Terminer ({n} pages)",
+    "previewLabel": "Aperçu de la page {n}",
+    "processing": "Traitement…",
+    "building": "Création du fichier…",
+    "close": "Fermer",
+    "pageCount": "{n} pages",
+    "removePage": "Supprimer la page"
   }
 }

@@ -2643,5 +2643,28 @@
     "phase2Active": "Active in Phase 2",
     "personaShort": "persona #{id}",
     "runShort": "run #{id}"
+  },
+  "scanner": {
+    "scanWithCamera": "Scan with Camera",
+    "title": "Document Scanner",
+    "loading": "Loading scanner…",
+    "loadingHint": "First load downloads the scanner engine (one-time, ~8 MB).",
+    "libError": "Could not load the scanner. Please check your connection and try again.",
+    "cameraError": "Could not access the camera.",
+    "permissionDenied": "Camera permission was denied. Please allow camera access in your browser settings and try again.",
+    "noCamera": "No camera was detected on this device.",
+    "httpsRequired": "The camera scanner requires a secure (HTTPS) connection.",
+    "positionDoc": "Position the document inside the frame",
+    "capture": "Capture",
+    "retake": "Retake",
+    "use": "Use this scan",
+    "addPage": "Add page",
+    "finishPdf": "Finish ({n} pages)",
+    "previewLabel": "Page {n} preview",
+    "processing": "Processing…",
+    "building": "Building file…",
+    "close": "Close",
+    "pageCount": "{n} pages",
+    "removePage": "Remove page"
   }
 }

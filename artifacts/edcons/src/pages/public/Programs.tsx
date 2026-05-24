@@ -22,8 +22,9 @@ import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
-  AlertTriangle, FileText,
+  AlertTriangle, FileText, Camera,
 } from "lucide-react";
+import { DocumentScanner } from "@/components/DocumentScanner";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
@@ -218,6 +219,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const { toast } = useToast();
 
   async function handleFile(file: File) {
@@ -266,6 +268,20 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
       }
       <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setScannerOpen(true); }}
+        className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+      >
+        <Camera className="w-3 h-3" />
+        {t("scanner.scanWithCamera")}
+      </button>
+      <DocumentScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        baseName={docType.key}
+        onCapture={(f) => handleFile(f)}
+      />
     </div>
   );
 }

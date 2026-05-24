@@ -2251,5 +2251,28 @@
     "phase2Active": "Aktif di Fase 2",
     "personaShort": "persona #{id}",
     "runShort": "run #{id}"
+  },
+  "scanner": {
+    "scanWithCamera": "Pindai dengan Kamera",
+    "title": "Pemindai Dokumen",
+    "loading": "Memuat pemindai…",
+    "loadingHint": "Mesin pemindai diunduh saat pertama kali digunakan (sekali saja, ~8 MB).",
+    "libError": "Pemindai gagal dimuat. Periksa koneksi Anda dan coba lagi.",
+    "cameraError": "Tidak dapat mengakses kamera.",
+    "permissionDenied": "Izin kamera ditolak. Izinkan akses kamera di pengaturan browser lalu coba lagi.",
+    "noCamera": "Tidak ada kamera terdeteksi pada perangkat ini.",
+    "httpsRequired": "Pemindai kamera memerlukan koneksi aman (HTTPS).",
+    "positionDoc": "Letakkan dokumen di dalam bingkai",
+    "capture": "Ambil",
+    "retake": "Ulangi",
+    "use": "Gunakan hasil ini",
+    "addPage": "Tambah halaman",
+    "finishPdf": "Selesai ({n} halaman)",
+    "previewLabel": "Pratinjau halaman {n}",
+    "processing": "Memproses…",
+    "building": "Membuat berkas…",
+    "close": "Tutup",
+    "pageCount": "{n} halaman",
+    "removePage": "Hapus halaman"
   }
 }

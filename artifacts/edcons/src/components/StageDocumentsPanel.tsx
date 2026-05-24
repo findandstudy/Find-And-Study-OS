@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, FileText, Trash2, Download, Plus, X,
-  AlertTriangle, ChevronDown, ChevronRight, Save, Calendar, Pencil,
+  AlertTriangle, ChevronDown, ChevronRight, Save, Calendar, Pencil, Camera,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import { DocumentScanner } from "@/components/DocumentScanner";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -163,6 +164,7 @@ function StageSection({
   const [pendingValidUntil, setPendingValidUntil] = useState<string>("");
   const [editingDocId, setEditingDocId] = useState<number | null>(null);
   const [editValidUntil, setEditValidUntil] = useState<string>("");
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const requiresValidUntil = requiresValidUntilFlag;
   const supportsValidUntil = tracksOfferExpiry;
@@ -431,6 +433,41 @@ function StageSection({
                 onChange={handleFileSelect}
                 accept={ACCEPT_ATTRIBUTE}
               />
+              <DocumentScanner
+                open={scannerOpen}
+                onClose={() => setScannerOpen(false)}
+                baseName={stage || "scan"}
+                onCapture={async (file) => {
+                  if (requiresValidUntil && !pendingValidUntil) {
+                    toast({ title: t("stageDocs.toastValidUntilRequired"), description: t("stageDocs.toastValidUntilRequiredDesc"), variant: "destructive" });
+                    return;
+                  }
+                  const validation = validateFile(file);
+                  if (!validation.valid) {
+                    toast({ title: t("stageDocs.toastFileError"), description: validation.message, variant: "destructive" });
+                    return;
+                  }
+                  setUploading(true);
+                  try {
+                    const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
+                    await uploadMutation.mutateAsync(safeFile);
+                  } catch (err: any) {
+                    toast({ title: t("stageDocs.toastFileError"), description: err?.message || String(err), variant: "destructive" });
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs w-full"
+                onClick={() => setScannerOpen(true)}
+                disabled={uploading}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                {t("scanner.scanWithCamera")}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

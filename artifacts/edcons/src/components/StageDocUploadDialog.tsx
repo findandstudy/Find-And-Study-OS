@@ -3,10 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Upload, FileCheck, Loader2, AlertTriangle, X } from "lucide-react";
+import { Upload, FileCheck, Loader2, AlertTriangle, X, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
+import { DocumentScanner } from "@/components/DocumentScanner";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -56,6 +57,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [validUntil, setValidUntil] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { stages: pipelineStages } = usePipelineStages("application");
@@ -213,6 +215,20 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
               onChange={handleFileSelect}
               className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 px-2.5 py-1.5 rounded-md hover:bg-primary/5 transition-colors border border-primary/20"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {t("scanner.scanWithCamera")}
+            </button>
+            <DocumentScanner
+              open={scannerOpen}
+              onClose={() => setScannerOpen(false)}
+              baseName={documentNameOverride || docStage || "scan"}
+              onCapture={(f) => setFiles(prev => [...prev, f])}
             />
           </div>
 
