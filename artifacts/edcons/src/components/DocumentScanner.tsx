@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Camera, X, RotateCcw, Plus, Check, Loader2, AlertTriangle, FileText } from "lucide-react";
+import { Camera, X, RotateCcw, Plus, Check, Loader2, AlertTriangle, FileText, Sun, Hand, Crop } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 
@@ -44,14 +44,12 @@ async function ensureScannerLibs(): Promise<any> {
   cachedStatus = "loading";
   cachedPromise = (async () => {
     await loadScript(OPENCV_URL);
-    // Wait for cv runtime to actually be ready
     await new Promise<void>((resolve, reject) => {
       const w = window as any;
       const start = Date.now();
       function check() {
         if (w.cv && (typeof w.cv.Mat === "function" || (w.cv.then && typeof w.cv.then === "function"))) {
           if (typeof w.cv.Mat === "function") return resolve();
-          // cv is a promise during init
           w.cv.then(() => resolve()).catch(reject);
           return;
         }
@@ -83,6 +81,15 @@ interface CapturedPage {
   blob: Blob;
 }
 
+type ScanMode = "color" | "bw";
+type Corner = { x: number; y: number };
+type Corners = { tl: Corner; tr: Corner; br: Corner; bl: Corner };
+
+interface AdjustState {
+  snap: HTMLCanvasElement;
+  corners: Corners;
+}
+
 interface DocumentScannerProps {
   open: boolean;
   onClose: () => void;
@@ -100,13 +107,19 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const scannerRef = useRef<any>(null);
+  const lastFrameRef = useRef<ImageData | null>(null);
+  const lightSampleRef = useRef<number>(0);
 
   const [libStatus, setLibStatus] = useState<LibStatus>(cachedStatus);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [pages, setPages] = useState<CapturedPage[]>([]);
+  const [adjust, setAdjust] = useState<AdjustState | null>(null);
   const [previewPage, setPreviewPage] = useState<CapturedPage | null>(null);
   const [processing, setProcessing] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [mode, setMode] = useState<ScanMode>("color");
+  const [lowLight, setLowLight] = useState(false);
+  const [shaky, setShaky] = useState(false);
 
   // Lazy-load OpenCV + jscanify on first open.
   useEffect(() => {
@@ -124,7 +137,7 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
 
   // Start camera once libs are ready (or when reopened).
   useEffect(() => {
-    if (!open || libStatus !== "ready" || previewPage) return;
+    if (!open || libStatus !== "ready" || previewPage || adjust) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       if (location.protocol !== "https:" && location.hostname !== "localhost") {
         setCameraError(t("scanner.httpsRequired"));
@@ -147,6 +160,8 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
         v.srcObject = stream;
         v.setAttribute("playsinline", "true");
         await v.play().catch(() => {});
+        lastFrameRef.current = null;
+        lightSampleRef.current = 0;
         startOverlayLoop();
       } catch (err: any) {
         const name = err?.name || "";
@@ -166,7 +181,7 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, libStatus, previewPage]);
+  }, [open, libStatus, previewPage, adjust]);
 
   function stopCamera() {
     if (rafRef.current != null) {
@@ -182,6 +197,11 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
   }
 
   function startOverlayLoop() {
+    const sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = 64;
+    sampleCanvas.height = 36;
+    const sctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
     const draw = () => {
       const v = videoRef.current;
       const c = overlayRef.current;
@@ -198,22 +218,43 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
         const ctx = c.getContext("2d");
         if (!ctx) { rafRef.current = requestAnimationFrame(draw); return; }
         ctx.clearRect(0, 0, vw, vh);
-        // Use jscanify highlightPaper to draw a green outline on top of a video frame copy
         try {
           const highlighted: HTMLCanvasElement = scanner.highlightPaper(v, {
             color: "#22c55e",
             thickness: Math.max(4, Math.round(vw / 240)),
           });
-          // highlightPaper returns the whole frame; we only need the contour overlay,
-          // so composite using "difference" trick: just draw the highlighted result,
-          // but to keep video visible we draw at low alpha then re-draw bright lines.
-          // Simpler: scan & manually re-stroke the contour ourselves.
-          // Fallback: just blit highlighted at low opacity for the outline cue.
           ctx.globalAlpha = 0.6;
           ctx.drawImage(highlighted, 0, 0, vw, vh);
           ctx.globalAlpha = 1;
-        } catch {
-          // No paper detected — leave overlay empty.
+        } catch {/* no paper */}
+
+        // Sample brightness + motion every ~8 frames (~7Hz)
+        lightSampleRef.current = (lightSampleRef.current + 1) % 8;
+        if (lightSampleRef.current === 0 && sctx) {
+          try {
+            sctx.drawImage(v, 0, 0, sampleCanvas.width, sampleCanvas.height);
+            const id = sctx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
+            const d = id.data;
+            let lum = 0;
+            for (let i = 0; i < d.length; i += 4) {
+              lum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+            }
+            lum = lum / (d.length / 4);
+            const dim = lum < 65;
+            setLowLight(prev => prev === dim ? prev : dim);
+
+            const prev = lastFrameRef.current;
+            if (prev && prev.data.length === d.length && lum >= 25) {
+              let diff = 0;
+              for (let i = 0; i < d.length; i += 4) {
+                diff += Math.abs(d[i] - prev.data[i]);
+              }
+              const meanDiff = diff / (d.length / 4);
+              const sh = meanDiff > 22;
+              setShaky(cur => cur === sh ? cur : sh);
+            }
+            lastFrameRef.current = id;
+          } catch {/* sampling failed */}
         }
       } catch {/* ignore one-frame errors */}
       rafRef.current = requestAnimationFrame(draw);
@@ -227,7 +268,6 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
     if (!v || !scanner || v.readyState < 2) return;
     setProcessing(true);
     try {
-      // Draw current frame to a snapshot canvas
       const snap = document.createElement("canvas");
       snap.width = v.videoWidth;
       snap.height = v.videoHeight;
@@ -235,42 +275,71 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
       if (!sctx) throw new Error("ctx");
       sctx.drawImage(v, 0, 0, snap.width, snap.height);
 
-      // Determine target output size, capping the long edge for sane PDF size
-      const MAX = 1600;
-      const longest = Math.max(snap.width, snap.height);
-      const scale = longest > MAX ? MAX / longest : 1;
-      const outW = Math.round(snap.width * scale);
-      const outH = Math.round(snap.height * scale);
+      const corners = detectCorners(scanner, snap);
+      stopCamera();
+      setAdjust({ snap, corners });
+    } catch {/* swallow */}
+    setProcessing(false);
+  }, []);
 
-      let extracted: HTMLCanvasElement;
+  // Apply manual corners + warp + enhancement.
+  const applyAdjust = useCallback(async () => {
+    if (!adjust) return;
+    setProcessing(true);
+    try {
+      const { snap, corners } = adjust;
+      // Output size: estimate from corners, capped.
+      const wTop = dist(corners.tl, corners.tr);
+      const wBot = dist(corners.bl, corners.br);
+      const hLeft = dist(corners.tl, corners.bl);
+      const hRight = dist(corners.tr, corners.br);
+      let outW = Math.max(wTop, wBot);
+      let outH = Math.max(hLeft, hRight);
+      const MAX = 1600;
+      const longest = Math.max(outW, outH);
+      if (longest > MAX) {
+        const s = MAX / longest;
+        outW *= s; outH *= s;
+      }
+      outW = Math.max(200, Math.round(outW));
+      outH = Math.max(200, Math.round(outH));
+
+      let warped: HTMLCanvasElement;
       try {
-        extracted = scanner.extractPaper(snap, outW, outH);
+        warped = warpPerspective(snap, corners, outW, outH);
       } catch {
-        // Could not detect — fall back to the raw frame at capped size.
-        extracted = document.createElement("canvas");
-        extracted.width = outW;
-        extracted.height = outH;
-        extracted.getContext("2d")!.drawImage(snap, 0, 0, outW, outH);
+        warped = document.createElement("canvas");
+        warped.width = outW;
+        warped.height = outH;
+        warped.getContext("2d")!.drawImage(snap, 0, 0, outW, outH);
       }
 
-      // Apply mild contrast / grayscale-ish enhancement for legibility
-      const enhanced = enhanceContrast(extracted);
+      let enhanced: HTMLCanvasElement;
+      if (mode === "bw") {
+        enhanced = toBlackWhite(warped);
+      } else {
+        autoWhiteBalance(warped);
+        enhanced = enhanceContrast(warped);
+      }
 
       const blob: Blob = await new Promise((resolve, reject) => {
         enhanced.toBlob(b => b ? resolve(b) : reject(new Error("blob")), "image/jpeg", 0.92);
       });
       const dataUrl = enhanced.toDataURL("image/jpeg", 0.92);
       setPreviewPage({ dataUrl, blob });
-      stopCamera();
+      setAdjust(null);
     } catch {/* swallow */}
     setProcessing(false);
-  }, []);
+  }, [adjust, mode]);
+
+  function cancelAdjust() {
+    setAdjust(null);
+  }
 
   function acceptPreview() {
     if (!previewPage) return;
     setPages(prev => [...prev, previewPage]);
     setPreviewPage(null);
-    // camera will auto-restart via effect (previewPage cleared)
   }
 
   function retake() {
@@ -308,9 +377,9 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
         const file = new File([blob], `${baseName}-${ts}.pdf`, { type: "application/pdf" });
         onCapture(file);
       }
-      // Reset state & close
       setPages([]);
       setPreviewPage(null);
+      setAdjust(null);
       onClose();
     } catch {/* swallow */}
     setBuilding(false);
@@ -320,7 +389,10 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
     stopCamera();
     setPages([]);
     setPreviewPage(null);
+    setAdjust(null);
     setCameraError(null);
+    setLowLight(false);
+    setShaky(false);
     onClose();
   }
 
@@ -346,9 +418,46 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
               </span>
             )}
           </div>
-          <button onClick={handleClose} className="p-1.5 rounded-full hover:bg-white/10" aria-label={t("scanner.close")}>
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Mode toggle */}
+            <div className="hidden sm:flex items-center bg-white/10 rounded-full p-0.5">
+              <button
+                onClick={() => setMode("color")}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${mode === "color" ? "bg-white text-black" : "text-white/80 hover:text-white"}`}
+                aria-pressed={mode === "color"}
+              >
+                {t("scanner.modeColor")}
+              </button>
+              <button
+                onClick={() => setMode("bw")}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${mode === "bw" ? "bg-white text-black" : "text-white/80 hover:text-white"}`}
+                aria-pressed={mode === "bw"}
+              >
+                {t("scanner.modeBw")}
+              </button>
+            </div>
+            <button onClick={handleClose} className="p-1.5 rounded-full hover:bg-white/10" aria-label={t("scanner.close")}>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile mode toggle */}
+        <div className="sm:hidden flex items-center justify-center bg-black/80 pb-2 shrink-0">
+          <div className="flex items-center bg-white/10 rounded-full p-0.5">
+            <button
+              onClick={() => setMode("color")}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${mode === "color" ? "bg-white text-black" : "text-white/80"}`}
+            >
+              {t("scanner.modeColor")}
+            </button>
+            <button
+              onClick={() => setMode("bw")}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${mode === "bw" ? "bg-white text-black" : "text-white/80"}`}
+            >
+              {t("scanner.modeBw")}
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -367,7 +476,7 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
               <Button variant="secondary" size="sm" onClick={handleClose}>{t("scanner.close")}</Button>
             </div>
           )}
-          {libStatus === "ready" && cameraError && !previewPage && (
+          {libStatus === "ready" && cameraError && !previewPage && !adjust && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 p-6 text-center">
               <AlertTriangle className="w-10 h-10 text-amber-400" />
               <p className="text-sm font-semibold max-w-sm">{cameraError}</p>
@@ -376,14 +485,40 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
           )}
 
           {/* Live capture view */}
-          {libStatus === "ready" && !cameraError && !previewPage && (
+          {libStatus === "ready" && !cameraError && !previewPage && !adjust && (
             <div className="relative w-full h-full">
               <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain" muted playsInline />
               <canvas ref={overlayRef} className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
               <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full">
                 {t("scanner.positionDoc")}
               </div>
+              {(lowLight || shaky) && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none">
+                  {lowLight && (
+                    <div className="flex items-center gap-1.5 bg-amber-500/90 text-black text-xs font-medium px-3 py-1.5 rounded-full shadow-lg">
+                      <Sun className="w-3.5 h-3.5" />
+                      {t("scanner.lowLight")}
+                    </div>
+                  )}
+                  {shaky && (
+                    <div className="flex items-center gap-1.5 bg-rose-500/90 text-white text-xs font-medium px-3 py-1.5 rounded-full shadow-lg">
+                      <Hand className="w-3.5 h-3.5" />
+                      {t("scanner.shaky")}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Manual corner adjustment view */}
+          {adjust && (
+            <CornerEditor
+              snap={adjust.snap}
+              corners={adjust.corners}
+              onChange={(c) => setAdjust(prev => prev ? { ...prev, corners: c } : prev)}
+              hint={t("scanner.dragCorners")}
+            />
           )}
 
           {/* Preview view */}
@@ -425,7 +560,7 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
 
         {/* Controls */}
         <div className="bg-black/90 p-3 shrink-0 flex flex-wrap items-center justify-center gap-2">
-          {libStatus === "ready" && !cameraError && !previewPage && (
+          {libStatus === "ready" && !cameraError && !previewPage && !adjust && (
             <Button
               onClick={handleCapture}
               disabled={processing}
@@ -434,6 +569,16 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
               <Camera className="w-5 h-5" />
               {t("scanner.capture")}
             </Button>
+          )}
+          {adjust && !processing && (
+            <>
+              <Button variant="secondary" onClick={cancelAdjust} className="gap-2">
+                <RotateCcw className="w-4 h-4" /> {t("scanner.retake")}
+              </Button>
+              <Button onClick={applyAdjust} className="gap-2">
+                <Crop className="w-4 h-4" /> {t("scanner.applyCrop")}
+              </Button>
+            </>
           )}
           {previewPage && !building && (
             <>
@@ -463,13 +608,256 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
   );
 }
 
+/* ----------------- Corner editor ----------------- */
+
+function CornerEditor({ snap, corners, onChange, hint }: {
+  snap: HTMLCanvasElement;
+  corners: Corners;
+  onChange: (c: Corners) => void;
+  hint: string;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [dataUrl] = useState(() => snap.toDataURL("image/jpeg", 0.85));
+  const dragRef = useRef<keyof Corners | null>(null);
+
+  // Compute the on-screen rect of the displayed image (object-contain).
+  function recompute() {
+    const wrap = wrapRef.current;
+    const img = imgRef.current;
+    if (!wrap || !img) return;
+    const cw = wrap.clientWidth;
+    const ch = wrap.clientHeight;
+    const ratio = Math.min(cw / snap.width, ch / snap.height);
+    const w = snap.width * ratio;
+    const h = snap.height * ratio;
+    const x = (cw - w) / 2;
+    const y = (ch - h) / 2;
+    setImgRect({ x, y, w, h });
+  }
+  useEffect(() => {
+    recompute();
+    const ro = new ResizeObserver(() => recompute());
+    if (wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap]);
+
+  function toScreen(c: Corner): Corner {
+    if (!imgRect) return { x: 0, y: 0 };
+    return {
+      x: imgRect.x + (c.x / snap.width) * imgRect.w,
+      y: imgRect.y + (c.y / snap.height) * imgRect.h,
+    };
+  }
+  function toImage(sx: number, sy: number): Corner {
+    if (!imgRect) return { x: 0, y: 0 };
+    let x = ((sx - imgRect.x) / imgRect.w) * snap.width;
+    let y = ((sy - imgRect.y) / imgRect.h) * snap.height;
+    x = Math.max(0, Math.min(snap.width, x));
+    y = Math.max(0, Math.min(snap.height, y));
+    return { x, y };
+  }
+
+  function onPointerDown(key: keyof Corners) {
+    return (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragRef.current = key;
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    };
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!dragRef.current) return;
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const r = wrap.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    const c = toImage(sx, sy);
+    onChange({ ...corners, [dragRef.current]: c });
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    if (dragRef.current) {
+      try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch {}
+    }
+    dragRef.current = null;
+  }
+
+  const order: (keyof Corners)[] = ["tl", "tr", "br", "bl"];
+  const screenCorners = order.map(k => toScreen(corners[k]));
+
+  return (
+    <div
+      ref={wrapRef}
+      className="relative w-full h-full select-none touch-none"
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      <img
+        ref={imgRef}
+        src={dataUrl}
+        alt=""
+        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+        onLoad={recompute}
+      />
+      {imgRect && (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: "visible" }}>
+          <polygon
+            points={screenCorners.map(p => `${p.x},${p.y}`).join(" ")}
+            fill="rgba(34,197,94,0.18)"
+            stroke="#22c55e"
+            strokeWidth={2}
+          />
+        </svg>
+      )}
+      {imgRect && order.map((k, i) => {
+        const p = screenCorners[i];
+        return (
+          <div
+            key={k}
+            role="slider"
+            aria-label={`corner-${k}`}
+            onPointerDown={onPointerDown(k)}
+            className="absolute w-9 h-9 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/95 border-2 border-emerald-500 shadow-lg cursor-grab active:cursor-grabbing touch-none"
+            style={{ left: p.x, top: p.y }}
+          >
+            <div className="absolute inset-1.5 rounded-full bg-emerald-500" />
+          </div>
+        );
+      })}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full">
+        {hint}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------- Image processing helpers ----------------- */
+
+function dist(a: Corner, b: Corner): number {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function detectCorners(scanner: any, snap: HTMLCanvasElement): Corners {
+  const cv = (window as any).cv;
+  // Sensible default: inset 4% rectangle.
+  const ix = snap.width * 0.04;
+  const iy = snap.height * 0.04;
+  const fallback: Corners = {
+    tl: { x: ix, y: iy },
+    tr: { x: snap.width - ix, y: iy },
+    br: { x: snap.width - ix, y: snap.height - iy },
+    bl: { x: ix, y: snap.height - iy },
+  };
+  if (!cv || !scanner) return fallback;
+  let src: any = null;
+  try {
+    src = cv.imread(snap);
+    const contour = scanner.findPaperContour(src);
+    if (!contour) return fallback;
+    const cp = scanner.getCornerPoints(contour, src);
+    const ok = cp && cp.topLeftCorner && cp.topRightCorner && cp.bottomLeftCorner && cp.bottomRightCorner;
+    if (!ok) return fallback;
+    return {
+      tl: { x: cp.topLeftCorner.x, y: cp.topLeftCorner.y },
+      tr: { x: cp.topRightCorner.x, y: cp.topRightCorner.y },
+      br: { x: cp.bottomRightCorner.x, y: cp.bottomRightCorner.y },
+      bl: { x: cp.bottomLeftCorner.x, y: cp.bottomLeftCorner.y },
+    };
+  } catch {
+    return fallback;
+  } finally {
+    if (src) try { src.delete(); } catch {}
+  }
+}
+
+function warpPerspective(snap: HTMLCanvasElement, c: Corners, outW: number, outH: number): HTMLCanvasElement {
+  const cv = (window as any).cv;
+  const src = cv.imread(snap);
+  const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    c.tl.x, c.tl.y,
+    c.tr.x, c.tr.y,
+    c.br.x, c.br.y,
+    c.bl.x, c.bl.y,
+  ]);
+  const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0, 0,
+    outW, 0,
+    outW, outH,
+    0, outH,
+  ]);
+  const M = cv.getPerspectiveTransform(srcTri, dstTri);
+  const dst = new cv.Mat();
+  cv.warpPerspective(src, dst, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
+  const out = document.createElement("canvas");
+  out.width = outW;
+  out.height = outH;
+  cv.imshow(out, dst);
+  src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); dst.delete();
+  return out;
+}
+
+function toBlackWhite(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const cv = (window as any).cv;
+  if (!cv) return canvas;
+  const src = cv.imread(canvas);
+  const gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  // Light denoise before thresholding
+  const blurred = new cv.Mat();
+  cv.GaussianBlur(gray, blurred, new cv.Size(3, 3), 0);
+  const dst = new cv.Mat();
+  // Block size must be odd; tune from image width for stability across resolutions.
+  const block = Math.max(15, (Math.floor(canvas.width / 60) | 1));
+  cv.adaptiveThreshold(blurred, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, block, 12);
+  const out = document.createElement("canvas");
+  out.width = canvas.width;
+  out.height = canvas.height;
+  cv.imshow(out, dst);
+  src.delete(); gray.delete(); blurred.delete(); dst.delete();
+  return out;
+}
+
+function autoWhiteBalance(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+  try {
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = img.data;
+    let r = 0, g = 0, b = 0, n = 0;
+    // Sample every 4th pixel (16 bytes) for speed.
+    for (let i = 0; i < d.length; i += 16) {
+      r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+    }
+    if (n === 0) return canvas;
+    const ar = r / n, ag = g / n, ab = b / n;
+    const avg = (ar + ag + ab) / 3;
+    if (ar < 1 || ag < 1 || ab < 1) return canvas;
+    let kr = avg / ar, kg = avg / ag, kb = avg / ab;
+    // Damp to avoid over-correction on already-balanced images.
+    kr = 1 + (kr - 1) * 0.85;
+    kg = 1 + (kg - 1) * 0.85;
+    kb = 1 + (kb - 1) * 0.85;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]     = clamp(d[i]     * kr);
+      d[i + 1] = clamp(d[i + 1] * kg);
+      d[i + 2] = clamp(d[i + 2] * kb);
+    }
+    ctx.putImageData(img, 0, 0);
+  } catch {/* CORS/perf */}
+  return canvas;
+}
+
 function enhanceContrast(src: HTMLCanvasElement): HTMLCanvasElement {
   const ctx = src.getContext("2d");
   if (!ctx) return src;
   try {
     const img = ctx.getImageData(0, 0, src.width, src.height);
     const d = img.data;
-    // Simple contrast/brightness curve to whiten paper
     const contrast = 1.15;
     const brightness = 8;
     for (let i = 0; i < d.length; i += 4) {
@@ -478,7 +866,7 @@ function enhanceContrast(src: HTMLCanvasElement): HTMLCanvasElement {
       d[i + 2] = clamp((d[i + 2] - 128) * contrast + 128 + brightness);
     }
     ctx.putImageData(img, 0, 0);
-  } catch {/* CORS/perf — ignore */}
+  } catch {/* CORS/perf */}
   return src;
 }
 

@@ -2303,6 +2303,12 @@
     "building": "Création du fichier…",
     "close": "Fermer",
     "pageCount": "{n} pages",
-    "removePage": "Supprimer la page"
+    "removePage": "Supprimer la page",
+    "modeColor": "Couleur",
+    "modeBw": "N&B",
+    "dragCorners": "Faites glisser les coins pour ajuster le document",
+    "applyCrop": "Appliquer",
+    "lowLight": "Lumière faible — essayez un endroit plus éclairé",
+    "shaky": "Tenez stable"
   }
 }

@@ -2665,6 +2665,12 @@
     "building": "Building file…",
     "close": "Close",
     "pageCount": "{n} pages",
-    "removePage": "Remove page"
+    "removePage": "Remove page",
+    "modeColor": "Color",
+    "modeBw": "B&W",
+    "dragCorners": "Drag the corners to fit the document",
+    "applyCrop": "Apply",
+    "lowLight": "Low light — try a brighter spot",
+    "shaky": "Hold steady"
   }
 }
