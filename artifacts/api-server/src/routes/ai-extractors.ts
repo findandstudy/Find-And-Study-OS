@@ -95,9 +95,18 @@ router.get(
   },
 );
 
-async function clearOtherDefaults(scope: string | null): Promise<void> {
-  // Only one isDefault per scope is enforced softly: clearing all when setting default true.
-  await db.update(aiExtractorsTable).set({ isDefault: false }).where(eq(aiExtractorsTable.isDefault, true));
+async function clearOtherDefaultsForScopes(scopes: string[], exceptId: number | null): Promise<void> {
+  // Enforce one default per scope: clear the default flag on any active
+  // extractor whose scope set overlaps the new defaults scope set.
+  if (!scopes || scopes.length === 0) return;
+  const rows = await db.select().from(aiExtractorsTable).where(eq(aiExtractorsTable.isDefault, true));
+  for (const r of rows) {
+    if (exceptId != null && r.id === exceptId) continue;
+    const overlap = Array.isArray(r.scopes) && (r.scopes as string[]).some((s) => scopes.includes(s));
+    if (overlap) {
+      await db.update(aiExtractorsTable).set({ isDefault: false }).where(eq(aiExtractorsTable.id, r.id));
+    }
+  }
 }
 
 // Create
@@ -114,7 +123,7 @@ router.post(
     }
     const data = parsed.data;
     try {
-      if (data.isDefault) await clearOtherDefaults(null);
+      if (data.isDefault) await clearOtherDefaultsForScopes(data.scopes, null);
       const [row] = await db
         .insert(aiExtractorsTable)
         .values({
@@ -167,7 +176,11 @@ router.put(
       return;
     }
     const data = parsed.data;
-    if (data.isDefault === true) await clearOtherDefaults(null);
+    if (data.isDefault === true) {
+      // Need to know which scopes this extractor occupies (incoming or stored).
+      const existing = data.scopes ?? (await getExtractorById(id))?.scopes ?? [];
+      await clearOtherDefaultsForScopes(existing as string[], id);
+    }
     const updates: Record<string, unknown> = { ...data };
     if (data.temperature != null) updates.temperature = String(data.temperature);
     const [row] = await db
@@ -227,6 +240,12 @@ router.post(
     };
     if (!Array.isArray(documents) || documents.length === 0) {
       res.status(400).json({ error: "No documents provided" });
+      return;
+    }
+    if (ext.provider !== "anthropic") {
+      res.status(400).json({
+        error: `Provider "${ext.provider}" is not yet wired into the runtime. Switch the provider to "anthropic" or contact engineering to enable additional providers.`,
+      });
       return;
     }
     let anthropic;

@@ -901,7 +901,18 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
     }
 
     const requestedLang = ((req as any).body?.lang || req.headers["accept-language"] || "en").toString().slice(0, 2);
-    const extractor = await getActiveExtractor("public_apply");
+    // The public extract endpoint is shared between the public apply form and
+    // the embed widget. Clients pass a `scope` so admins can wire a separate
+    // extractor per audience (e.g. shorter prompt for embed).
+    const requestedScope = ((req as any).body?.scope || "public_apply").toString();
+    const scope: "public_apply" | "embed" = requestedScope === "embed" ? "embed" : "public_apply";
+    const extractor = await getActiveExtractor(scope);
+    if (extractor.provider !== "anthropic") {
+      res.status(503).json({
+        error: "Configured AI provider is not yet supported on the runtime. Please contact support.",
+      });
+      return;
+    }
     const useLegacy = isFallbackExtractor(extractor);
     const promptText = useLegacy ? EXTRACT_PROMPT : buildExtractionPrompt(extractor, { lang: requestedLang });
     const contentBlocks: any[] = [
@@ -1009,7 +1020,7 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
     res.json({ extracted, warnings });
     await recordExtractorRun({
       extractorId: extractor.id,
-      scope: "public_apply",
+      scope,
       documentCount: documents.length,
       documentTypes: [extracted.documentType].filter(Boolean) as string[],
       model,

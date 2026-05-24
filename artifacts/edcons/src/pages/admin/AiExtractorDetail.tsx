@@ -275,11 +275,14 @@ export default function AiExtractorDetail() {
                 <Select value={data.provider} onValueChange={(v) => update("provider", v as any)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="gemini">Google Gemini</SelectItem>
+                    <SelectItem value="anthropic">{t("aiExtractor.providerAnthropic")}</SelectItem>
+                    <SelectItem value="openai">{t("aiExtractor.providerOpenai")}</SelectItem>
+                    <SelectItem value="gemini">{t("aiExtractor.providerGemini")}</SelectItem>
                   </SelectContent>
                 </Select>
+                {data.provider !== "anthropic" && (
+                  <p className="text-xs text-amber-600 mt-1">{t("aiExtractor.providerNotWired")}</p>
+                )}
               </div>
               <div>
                 <Label>{t("aiExtractor.model")}</Label>
@@ -338,9 +341,9 @@ export default function AiExtractorDetail() {
                       <Select value={f.normalize || "none"} onValueChange={(v) => setField(i, { normalize: v as any })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">none</SelectItem>
-                          <SelectItem value="gpa100">gpa100</SelectItem>
-                          <SelectItem value="dateYmd">dateYmd</SelectItem>
+                          <SelectItem value="none">{t("aiExtractor.normalizeNone")}</SelectItem>
+                          <SelectItem value="gpa100">{t("aiExtractor.normalizeGpa100")}</SelectItem>
+                          <SelectItem value="dateYmd">{t("aiExtractor.normalizeDateYmd")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -2747,6 +2747,13 @@
     "testExtracted": "Extracted JSON",
     "testPrompt": "Show prompt sent to the model",
     "testLatency": "Latency: {ms} ms",
-    "testTokens": "Tokens: {in} in / {out} out"
+    "testTokens": "Tokens: {in} in / {out} out",
+    "providerAnthropic": "Anthropic (Claude)",
+    "providerOpenai": "OpenAI (GPT)",
+    "providerGemini": "Google Gemini",
+    "providerNotWired": "This provider is not yet wired into the runtime. Saving will work, but extractions will fail until engineering enables it. Use Anthropic for now.",
+    "normalizeNone": "No normalization",
+    "normalizeGpa100": "GPA → 0-100 scale",
+    "normalizeDateYmd": "Date → YYYY-MM-DD"
   }
 }

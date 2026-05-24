@@ -121,7 +121,12 @@ Rules:
 router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   const runStart = Date.now();
   const requestedLang = ((req as any).body?.lang || req.headers["accept-language"] || "en").toString().slice(0, 2);
-  const extractor = await getActiveExtractor("staff");
+  // The authenticated /ai/extract-document endpoint is shared between staff
+  // and agent panels. Clients may pass a `scope` field so admins can wire a
+  // separate extractor (prompt, fields, model) per audience.
+  const requestedScope = ((req as any).body?.scope || "staff").toString();
+  const scope: "staff" | "agent" = requestedScope === "agent" ? "agent" : "staff";
+  const extractor = await getActiveExtractor(scope);
   try {
     const { documents } = req.body as {
       documents: Array<{
@@ -147,6 +152,12 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       return;
     }
 
+    if (extractor.provider !== "anthropic") {
+      res.status(400).json({
+        error: `Provider "${extractor.provider}" is not yet wired into the runtime. Set the active extractor's provider to "anthropic" in the admin panel.`,
+      });
+      return;
+    }
     // Backward compatibility: when no DB extractor is configured for this scope,
     // keep the exact legacy prompt + token defaults so existing callers see no
     // behavioural change. As soon as an admin defines an extractor, the dynamic

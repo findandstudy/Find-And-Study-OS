@@ -2678,7 +2678,7 @@ function handleAnalyze(){
   fetch(apiBase+'/public/ai/extract-document',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({documents:docPayload})
+    body:JSON.stringify({documents:docPayload,scope:'embed'})
   }).then(function(r){
     if(r.ok)return r.json();
     throw new Error('AI analysis failed');

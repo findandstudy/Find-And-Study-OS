@@ -2682,6 +2682,13 @@
     "testExtracted": "Çıkarılan JSON",
     "testPrompt": "Modele gönderilen prompt'u göster",
     "testLatency": "Gecikme: {ms} ms",
-    "testTokens": "Token: {in} giriş / {out} çıkış"
+    "testTokens": "Token: {in} giriş / {out} çıkış",
+    "providerAnthropic": "Anthropic (Claude)",
+    "providerOpenai": "OpenAI (GPT)",
+    "providerGemini": "Google Gemini",
+    "providerNotWired": "Bu sağlayıcı henüz çalıştırma katmanına bağlı değil. Kaydetme çalışır ama belge çıkarımı başarısız olur. Şimdilik Anthropic'i kullanın.",
+    "normalizeNone": "Normalleştirme yok",
+    "normalizeGpa100": "Not → 0-100 ölçeği",
+    "normalizeDateYmd": "Tarih → YYYY-AA-GG"
   }
 }

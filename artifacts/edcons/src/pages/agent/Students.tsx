@@ -532,7 +532,7 @@ function AddStudentModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ documents: docPayload }),
+        body: JSON.stringify({ documents: docPayload, scope: "agent" }),
       });
 
       if (!res.ok) {
