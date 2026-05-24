@@ -84,6 +84,8 @@ const AdminCampaigns = lazyRetry(() => import("@/pages/admin/Campaigns"));
 const AdminAiPersonas = lazyRetry(() => import("@/pages/admin/AiPersonas"));
 const AdminAiPersonaDetail = lazyRetry(() => import("@/pages/admin/AiPersonaDetail"));
 const AdminAiActionQueue = lazyRetry(() => import("@/pages/admin/AiActionQueue"));
+const AdminAiExtractors = lazyRetry(() => import("@/pages/admin/AiExtractors"));
+const AdminAiExtractorDetail = lazyRetry(() => import("@/pages/admin/AiExtractorDetail"));
 const AdminPopups = lazyRetry(() => import("@/pages/admin/Popups"));
 const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
@@ -295,6 +297,15 @@ function StaffAdminShell() {
           </Route>
           <Route path="/admin/ai-action-queue">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAiActionQueue /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/ai-extractors/new">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAiExtractorDetail /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/ai-extractors/:id">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAiExtractorDetail /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/ai-extractors">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminAiExtractors /></ProtectedRoute>
           </Route>
           <Route path="/admin/popups">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminPopups /></ProtectedRoute>

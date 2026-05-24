@@ -27,6 +27,7 @@ import applicationStageDocumentsRouter from "./applicationStageDocuments";
 import embedRouter from "./embed";
 import publicApplyRouter from "./public-apply";
 import aiPersonasRouter from "./ai-personas";
+import aiExtractorsRouter from "./ai-extractors";
 import destinationsRouter from "./destinations";
 import quickLinksRouter from "./quickLinks";
 import exportRouter from "./export";
@@ -160,5 +161,6 @@ router.use(agentOnboardingRouter);
 router.use(leadAssignmentRulesRouter);
 router.use(staffCardsRouter);
 router.use(aiPersonasRouter);
+router.use(aiExtractorsRouter);
 
 export default router;

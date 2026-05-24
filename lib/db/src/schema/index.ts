@@ -39,3 +39,4 @@ export * from "./leadAssignmentRules";
 export * from "./agencyAssignedStaff";
 export * from "./staffCards";
 export * from "./aiPersonas";
+export * from "./aiExtractors";

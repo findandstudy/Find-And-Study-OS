@@ -64,6 +64,7 @@ import {
   IdCard,
   Sparkles,
   ListChecks,
+  FileSearch,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -119,6 +120,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           ...((role === 'super_admin' || role === 'admin') ? [
             { title: 'AI Personas', icon: Sparkles, url: '/admin/ai-personas' },
             { title: 'AI Action Queue', icon: ListChecks, url: '/admin/ai-action-queue' },
+            { title: t('aiExtractor.sidebar'), icon: FileSearch, url: '/admin/ai-extractors' },
           ] : []),
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },

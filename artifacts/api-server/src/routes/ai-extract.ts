@@ -2,6 +2,12 @@ import { Router, type IRouter, type Request, type Response, type NextFunction, j
 import { requireAuth } from "../lib/auth";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+import {
+  buildExtractionPrompt,
+  getActiveExtractor,
+  isFallbackExtractor,
+  recordExtractorRun,
+} from "../lib/aiExtractorService";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -26,6 +32,19 @@ function normalizeExtractedGpa(extracted: Record<string, any>): void {
     extracted.gpaRaw = raw;
     extracted.gpa = (Math.round(pct * 10) / 10).toString();
     extracted.gpaScale = 100;
+  }
+}
+
+function applyExtractorNormalize(extractor: { fields: any[] }, extracted: Record<string, any>): void {
+  for (const f of (extractor.fields as any[]) || []) {
+    if (f.normalize === "gpa100" && extracted[f.key] != null && extracted[f.key] !== "") {
+      const pct = normalizeGpaTo100(String(extracted[f.key]));
+      if (!isNaN(pct)) {
+        extracted[`${f.key}Raw`] = extracted[f.key];
+        extracted[f.key] = (Math.round(pct * 10) / 10).toString();
+        extracted[`${f.key}Scale`] = 100;
+      }
+    }
   }
 }
 
@@ -100,6 +119,9 @@ Rules:
 - Set null for fields you cannot find or are not sure about`;
 
 router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
+  const runStart = Date.now();
+  const requestedLang = ((req as any).body?.lang || req.headers["accept-language"] || "en").toString().slice(0, 2);
+  const extractor = await getActiveExtractor("staff");
   try {
     const { documents } = req.body as {
       documents: Array<{
@@ -125,8 +147,14 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       return;
     }
 
+    // Backward compatibility: when no DB extractor is configured for this scope,
+    // keep the exact legacy prompt + token defaults so existing callers see no
+    // behavioural change. As soon as an admin defines an extractor, the dynamic
+    // prompt + per-extractor model/tokens take over.
+    const useLegacy = isFallbackExtractor(extractor);
+    const promptText = useLegacy ? EXTRACT_PROMPT : buildExtractionPrompt(extractor, { lang: requestedLang });
     const contentBlocks: any[] = [
-      { type: "text", text: EXTRACT_PROMPT },
+      { type: "text", text: promptText },
     ];
 
     for (const doc of documents) {
@@ -158,10 +186,13 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       }
     }
 
-    const model = claudeConfig.model || DEFAULT_VISION_MODEL;
+    const model = useLegacy
+      ? (claudeConfig.model || DEFAULT_VISION_MODEL)
+      : (extractor.model || claudeConfig.model || DEFAULT_VISION_MODEL);
+    const maxTokens = useLegacy ? 8192 : (extractor.maxTokens || 8192);
     const message = await anthropic.messages.create({
       model,
-      max_tokens: 8192,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content: contentBlocks }],
     });
 
@@ -182,7 +213,11 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       return;
     }
 
-    normalizeExtractedGpa(extracted);
+    if (useLegacy) {
+      normalizeExtractedGpa(extracted);
+    } else {
+      applyExtractorNormalize(extractor, extracted);
+    }
 
     const warnings: string[] = [];
 
@@ -199,10 +234,32 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       }
     }
 
-    res.json({ extracted, warnings });
+    res.json({ extracted, warnings, extractorId: extractor.id || null });
+    await recordExtractorRun({
+      extractorId: extractor.id,
+      scope: "staff",
+      documentCount: documents.length,
+      documentTypes: [extracted.documentType].filter(Boolean) as string[],
+      model,
+      promptTokens: (message as any).usage?.input_tokens ?? null,
+      completionTokens: (message as any).usage?.output_tokens ?? null,
+      latencyMs: Date.now() - runStart,
+      status: "success",
+      triggeredBy: (req as any).user?.id ?? null,
+    });
   } catch (err: any) {
     console.error("AI extraction error:", err);
     res.status(500).json({ error: "AI extraction failed" });
+    await recordExtractorRun({
+      extractorId: extractor.id,
+      scope: "staff",
+      documentCount: 0,
+      model: extractor.model,
+      latencyMs: Date.now() - runStart,
+      status: "error",
+      errorMessage: String(err?.message || err),
+      triggeredBy: (req as any).user?.id ?? null,
+    });
   }
 });
 

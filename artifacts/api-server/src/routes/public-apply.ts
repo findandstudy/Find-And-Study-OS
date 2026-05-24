@@ -12,6 +12,7 @@ import { isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuf
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+import { getActiveExtractor, buildExtractionPrompt, isFallbackExtractor, recordExtractorRun } from "../lib/aiExtractorService";
 import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
@@ -899,8 +900,12 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
       return;
     }
 
+    const requestedLang = ((req as any).body?.lang || req.headers["accept-language"] || "en").toString().slice(0, 2);
+    const extractor = await getActiveExtractor("public_apply");
+    const useLegacy = isFallbackExtractor(extractor);
+    const promptText = useLegacy ? EXTRACT_PROMPT : buildExtractionPrompt(extractor, { lang: requestedLang });
     const contentBlocks: any[] = [
-      { type: "text", text: EXTRACT_PROMPT },
+      { type: "text", text: promptText },
     ];
 
     for (const doc of documents) {
@@ -932,10 +937,14 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
       }
     }
 
-    const model = claudeConfig.model || "claude-sonnet-4-6";
+    const model = useLegacy
+      ? (claudeConfig.model || "claude-sonnet-4-6")
+      : (extractor.model || claudeConfig.model || "claude-sonnet-4-6");
+    const maxTokens = useLegacy ? 4096 : (extractor.maxTokens || 4096);
+    const runStart = Date.now();
     const message = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content: contentBlocks }],
     });
 
@@ -956,16 +965,29 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
       return;
     }
 
-    // Normalize AI-extracted GPA to a 0-100 percent so the public form,
-    // widget, and panel all show the same percentage no matter which
-    // grading scale (4.0 / 5.0 / 10 / 20 / 100) the diploma uses.
-    if (extracted.gpa != null && extracted.gpa !== "") {
-      const raw = String(extracted.gpa);
-      const pct = normalizeGpaTo100(raw);
-      if (!isNaN(pct)) {
-        extracted.gpaRaw = raw;
-        extracted.gpa = (Math.round(pct * 10) / 10).toString();
-        extracted.gpaScale = 100;
+    // Legacy fallback: hardcoded GPA normalization. With a DB extractor, apply
+    // per-field normalize flags so admins can add more numeric-normalized fields.
+    if (useLegacy) {
+      if (extracted.gpa != null && extracted.gpa !== "") {
+        const raw = String(extracted.gpa);
+        const pct = normalizeGpaTo100(raw);
+        if (!isNaN(pct)) {
+          extracted.gpaRaw = raw;
+          extracted.gpa = (Math.round(pct * 10) / 10).toString();
+          extracted.gpaScale = 100;
+        }
+      }
+    } else {
+      for (const f of (extractor.fields as any[]) || []) {
+        if (f.normalize === "gpa100" && extracted[f.key] != null && extracted[f.key] !== "") {
+          const raw = String(extracted[f.key]);
+          const pct = normalizeGpaTo100(raw);
+          if (!isNaN(pct)) {
+            extracted[`${f.key}Raw`] = raw;
+            extracted[f.key] = (Math.round(pct * 10) / 10).toString();
+            extracted[`${f.key}Scale`] = 100;
+          }
+        }
       }
     }
 
@@ -985,6 +1007,17 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
     }
 
     res.json({ extracted, warnings });
+    await recordExtractorRun({
+      extractorId: extractor.id,
+      scope: "public_apply",
+      documentCount: documents.length,
+      documentTypes: [extracted.documentType].filter(Boolean) as string[],
+      model,
+      promptTokens: (message as any).usage?.input_tokens ?? null,
+      completionTokens: (message as any).usage?.output_tokens ?? null,
+      latencyMs: Date.now() - runStart,
+      status: "success",
+    });
   } catch (err: any) {
     console.error("Public AI extraction error:", err);
     res.status(500).json({ error: "AI extraction failed. Please try again." });
