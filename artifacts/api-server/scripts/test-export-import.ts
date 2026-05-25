@@ -428,3 +428,15 @@ test("xlsx: server-level round-trip — export embed bytes can be re-imported lo
     assert.deepEqual(vals.allowedDomains, original[i].allowedDomains);
   }
 });
+
+test("xlsx: parser rejects workbook with mismatched version", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  const buf = await buildWorkbookBuffer({
+    sheets: [{ name: "Widgets", columns: cols, rows: [] }],
+    meta: { kind: EMBED_KIND, version: "999", exportedAt: "x" },
+  });
+  await assert.rejects(
+    () => parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols }),
+    /Unsupported workbook version/,
+  );
+});

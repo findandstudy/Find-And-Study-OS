@@ -189,8 +189,11 @@ export async function buildWorkbookBuffer(spec: WorkbookSpec): Promise<Buffer> {
 
 export interface ParseOptions {
   expectedKind: string;
+  expectedVersion?: string;
   maxBytes?: number;
 }
+
+export const CURRENT_WORKBOOK_VERSION = "1";
 
 export interface ParsedSheet {
   name: string;
@@ -281,6 +284,12 @@ export async function parseWorkbookBuffer(
   if (meta.kind !== opts.expectedKind) {
     throw new ImportValidationError(
       `Wrong workbook kind: expected "${opts.expectedKind}", got "${meta.kind}".`,
+    );
+  }
+  const expectedVersion = opts.expectedVersion ?? CURRENT_WORKBOOK_VERSION;
+  if (meta.version && meta.version !== expectedVersion) {
+    throw new ImportValidationError(
+      `Unsupported workbook version "${meta.version}". This server only accepts version "${expectedVersion}". Re-export from a matching server.`,
     );
   }
 
