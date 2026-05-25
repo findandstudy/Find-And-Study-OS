@@ -17,6 +17,8 @@ import {
   ChevronUp, ChevronDown, Eye, EyeOff, Inbox, ExternalLink, Copy,
   Settings2, MailOpen,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ExportImportToolbar } from "@/components/admin/ExportImportToolbar";
 
 interface WebsiteForm {
   id: number;
@@ -110,6 +112,11 @@ export default function WebsiteForms() {
   const [fieldDialog, setFieldDialog] = useState(false);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [activeTab, setActiveTab] = useState("fields");
+  const [selectedFormIds, setSelectedFormIds] = useState<number[]>([]);
+
+  function toggleFormSelect(id: number) {
+    setSelectedFormIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  }
 
   const { data: pipelineStages } = useQuery<{ key: string; label: string }[]>({
     queryKey: ["pipeline-stages", "lead"],
@@ -304,9 +311,18 @@ export default function WebsiteForms() {
             <h1 className="text-2xl font-bold flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" /> Forms</h1>
             <p className="text-sm text-muted-foreground mt-1">Build and manage website forms with CRM integration.</p>
           </div>
-          <Button onClick={() => openFormDialog()} className="gap-2">
-            <Plus className="w-4 h-4" /> New Form
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExportImportToolbar
+              exportPath="/api/website/forms/export"
+              importPath="/api/website/forms/import"
+              downloadName="website-forms"
+              selectedIds={selectedFormIds}
+              onImported={() => { qc.invalidateQueries({ queryKey: ["/api/website/forms"] }); setSelectedFormIds([]); }}
+            />
+            <Button onClick={() => openFormDialog()} className="gap-2">
+              <Plus className="w-4 h-4" /> New Form
+            </Button>
+          </div>
         </div>
 
         {!selectedForm ? (
@@ -325,6 +341,15 @@ export default function WebsiteForms() {
                 {forms.map(form => (
                   <Card key={form.id} className="p-5 hover:shadow-md transition-shadow cursor-pointer" onClick={() => { setSelectedForm(form); setActiveTab("fields"); }}>
                     <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          checked={selectedFormIds.includes(form.id)}
+                          onCheckedChange={() => toggleFormSelect(form.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select ${form.name}`}
+                          data-testid={`checkbox-form-${form.id}`}
+                          className="mt-1"
+                        />
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-semibold">{form.name}</p>
@@ -332,6 +357,7 @@ export default function WebsiteForms() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">/{form.slug}</p>
                         {form.description && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{form.description}</p>}
+                      </div>
                       </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); openFormDialog(form); }}><Pencil className="w-4 h-4" /></Button>

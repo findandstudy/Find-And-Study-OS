@@ -129,6 +129,10 @@ const LARGE_BODY_PATHS = [
   "/api/public/embed",
   "/api/ai/extract-document",
   "/api/ai/extract-bulk-csv",
+  // Task #202: lossless export/import for embed widgets and website forms.
+  // Route handlers install their own 2 MB parser; bypass the 1 MB global cap.
+  "/api/embed/widgets/import",
+  "/api/website/forms/import",
 ];
 // Stage-document uploads send the file as base64 inside a JSON body. A 1MB
 // file balloons to ~1.4MB after base64 + JSON envelope, so the global 1MB

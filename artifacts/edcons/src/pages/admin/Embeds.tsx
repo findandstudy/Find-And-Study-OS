@@ -24,6 +24,8 @@ import {
   Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText
 } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ExportImportToolbar } from "@/components/admin/ExportImportToolbar";
 
 const BASE_URL = import.meta.env.BASE_URL || "/";
 const API_BASE = `${BASE_URL}api`.replace(/\/+/g, "/");
@@ -79,6 +81,11 @@ export default function Embeds() {
   const [codeDialog, setCodeDialog] = useState<Widget | null>(null);
   const [viewWidget, setViewWidget] = useState<Widget | null>(null);
   const [subTab, setSubTab] = useState<string>("submissions");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  function toggleSelect(id: number) {
+    setSelectedIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  }
 
   const { data: widgetsRes, isLoading } = useQuery({
     queryKey: ["embed-widgets", page],
@@ -103,9 +110,18 @@ export default function Embeds() {
             <h1 className="text-2xl font-bold">{t("adminEmbeds.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{t("adminEmbeds.subtitle")}</p>
           </div>
-          <Button onClick={() => { setEditWidget(null); setDialogOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> New Widget
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExportImportToolbar
+              exportPath="/api/embed/widgets/export"
+              importPath="/api/embed/widgets/import"
+              downloadName="embed-widgets"
+              selectedIds={selectedIds}
+              onImported={() => { qc.invalidateQueries({ queryKey: ["embed-widgets"] }); setSelectedIds([]); }}
+            />
+            <Button onClick={() => { setEditWidget(null); setDialogOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> New Widget
+            </Button>
+          </div>
         </div>
 
         {viewWidget ? (
@@ -138,6 +154,14 @@ export default function Embeds() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-8">
+                          <Checkbox
+                            checked={widgets.length > 0 && widgets.every((w: Widget) => selectedIds.includes(w.id))}
+                            onCheckedChange={(c) => setSelectedIds(c ? widgets.map((w: Widget) => w.id) : [])}
+                            aria-label="Select all"
+                            data-testid="checkbox-select-all"
+                          />
+                        </TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Slug</TableHead>
                         <TableHead>Mode</TableHead>
@@ -150,6 +174,14 @@ export default function Embeds() {
                     <TableBody>
                       {widgets.map((w: Widget) => (
                         <TableRow key={w.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.includes(w.id)}
+                              onCheckedChange={() => toggleSelect(w.id)}
+                              aria-label={`Select ${w.name}`}
+                              data-testid={`checkbox-widget-${w.id}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{w.name}</TableCell>
                           <TableCell>
                             <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{w.slug}</code>

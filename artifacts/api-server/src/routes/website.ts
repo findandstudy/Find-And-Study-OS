@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, json, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import type { PgTableWithColumns, TableConfig } from "drizzle-orm/pg-core";
@@ -32,6 +32,17 @@ import { sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
+import {
+  buildEnvelope,
+  parseEnvelope,
+  pickFields,
+  emptySummary,
+  tallyResult,
+  nextAvailableSlug,
+  isValidConflictStrategy,
+  ImportValidationError,
+  type ConflictStrategy,
+} from "../lib/exportImport";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -159,6 +170,180 @@ router.get("/website/pages/:pageId/versions", ...adminOnly, async (req: Request,
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
   }
+});
+
+// --- Export / Import (Task #202) ---------------------------------------
+// Lossless JSON round-trip for Web-to-Lead forms together with their fields.
+// Form + its fields are imported in a single transaction so a failure on
+// any field rolls the form back too. Slugs are the cross-installation
+// identity; ids, timestamps, and submission counts are stripped.
+
+const FORM_EXPORT_KIND = "website_forms";
+const FORM_EXPORT_FIELDS = [
+  "name", "slug", "description", "submitAction", "submitEmail",
+  "submitWebhookUrl", "successMessage", "errorMessage", "crmSource",
+  "crmPipelineStage", "pageSourceTag", "isActive",
+] as const;
+const FORM_FIELD_EXPORT_FIELDS = [
+  "fieldType", "label", "name", "placeholder", "isRequired",
+  "validationRules", "options", "sortOrder",
+] as const;
+
+function normalizeFormSlug(slug: string): string {
+  return String(slug).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+}
+
+router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Response) => {
+  try {
+    const { ids } = (req.body || {}) as { ids?: unknown };
+    let forms;
+    if (Array.isArray(ids) && ids.length > 0) {
+      const numericIds = ids.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0);
+      if (numericIds.length === 0) return res.status(400).json({ error: "ids must be a non-empty array of positive integers" });
+      forms = await db.select().from(websiteFormsTable).where(inArray(websiteFormsTable.id, numericIds)).orderBy(asc(websiteFormsTable.name));
+    } else {
+      forms = await db.select().from(websiteFormsTable).orderBy(asc(websiteFormsTable.name));
+    }
+
+    const allFields = forms.length > 0
+      ? await db.select().from(websiteFormFieldsTable)
+          .where(inArray(websiteFormFieldsTable.formId, forms.map((f) => f.id)))
+          .orderBy(asc(websiteFormFieldsTable.formId), asc(websiteFormFieldsTable.sortOrder))
+      : [];
+
+    const fieldsByForm = new Map<number, typeof allFields>();
+    for (const f of allFields) {
+      const list = fieldsByForm.get(f.formId) || [];
+      list.push(f);
+      fieldsByForm.set(f.formId, list);
+    }
+
+    const items = forms.map((form) => {
+      const cleanedForm = pickFields(form as Record<string, unknown>, FORM_EXPORT_FIELDS);
+      const fields = (fieldsByForm.get(form.id) || []).map((fld) =>
+        pickFields(fld as Record<string, unknown>, FORM_FIELD_EXPORT_FIELDS)
+      );
+      return { ...cleanedForm, fields };
+    });
+
+    const envelope = buildEnvelope(FORM_EXPORT_KIND, items);
+    res.setHeader("Content-Disposition", `attachment; filename="website-forms-${new Date().toISOString().slice(0,10)}.json"`);
+    res.json(envelope);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+const VALID_FIELD_TYPES = new Set(["text", "email", "phone", "textarea", "select", "checkbox", "number", "date", "url"]);
+const VALID_SUBMIT_ACTIONS = new Set(["email", "webhook", "crm"]);
+
+router.post("/website/forms/import", ...adminOnly, json({ limit: "2mb" }), async (req: Request, res: Response) => {
+  const body = (req.body || {}) as { envelope?: unknown; conflict?: unknown };
+  const conflict: ConflictStrategy = isValidConflictStrategy(body.conflict) ? body.conflict : "skip";
+
+  let rawItems: Array<Record<string, unknown>>;
+  try {
+    rawItems = parseEnvelope<Record<string, unknown>>(body.envelope, { expectedKind: FORM_EXPORT_KIND });
+  } catch (err) {
+    const e = err as ImportValidationError;
+    return res.status(e.status || 400).json({ error: e.message });
+  }
+
+  const summary = emptySummary(rawItems.length);
+
+  for (let i = 0; i < rawItems.length; i++) {
+    const item = rawItems[i];
+    try {
+      if (!item || typeof item !== "object") throw new Error("Item must be an object");
+      const cleanedForm = pickFields(item, FORM_EXPORT_FIELDS) as Record<string, unknown>;
+      if (!cleanedForm.name || typeof cleanedForm.name !== "string") throw new Error("name is required");
+      if (!cleanedForm.slug || typeof cleanedForm.slug !== "string") throw new Error("slug is required");
+      const slug = normalizeFormSlug(cleanedForm.slug as string);
+      if (!slug) throw new Error("slug is invalid");
+      const submitAction = VALID_SUBMIT_ACTIONS.has(cleanedForm.submitAction as string) ? cleanedForm.submitAction as string : "email";
+
+      const formValues = {
+        name: cleanedForm.name as string,
+        slug,
+        description: (cleanedForm.description as string | null) ?? null,
+        submitAction,
+        submitEmail: (cleanedForm.submitEmail as string | null) ?? null,
+        submitWebhookUrl: (cleanedForm.submitWebhookUrl as string | null) ?? null,
+        successMessage: (cleanedForm.successMessage as string | null) ?? null,
+        errorMessage: (cleanedForm.errorMessage as string | null) ?? null,
+        crmSource: (cleanedForm.crmSource as string | null) ?? null,
+        crmPipelineStage: (cleanedForm.crmPipelineStage as string | null) ?? null,
+        pageSourceTag: (cleanedForm.pageSourceTag as string | null) ?? null,
+        isActive: typeof cleanedForm.isActive === "boolean" ? cleanedForm.isActive : true,
+      };
+
+      const rawFields = Array.isArray((item as Record<string, unknown>).fields)
+        ? ((item as Record<string, unknown>).fields as Array<Record<string, unknown>>)
+        : [];
+
+      const fieldRows = rawFields.map((f, idx) => {
+        const cleanedField = pickFields(f, FORM_FIELD_EXPORT_FIELDS) as Record<string, unknown>;
+        if (!cleanedField.label || typeof cleanedField.label !== "string") throw new Error(`field[${idx}].label is required`);
+        if (!cleanedField.name || typeof cleanedField.name !== "string") throw new Error(`field[${idx}].name is required`);
+        const fieldType = VALID_FIELD_TYPES.has(cleanedField.fieldType as string) ? cleanedField.fieldType as string : "text";
+        return {
+          fieldType,
+          label: cleanedField.label as string,
+          name: cleanedField.name as string,
+          placeholder: (cleanedField.placeholder as string | null) ?? null,
+          isRequired: typeof cleanedField.isRequired === "boolean" ? cleanedField.isRequired : false,
+          validationRules: (cleanedField.validationRules as Record<string, unknown>) ?? {},
+          options: (cleanedField.options as unknown[]) ?? [],
+          sortOrder: typeof cleanedField.sortOrder === "number" ? cleanedField.sortOrder : idx,
+        };
+      });
+
+      const [existing] = await db.select().from(websiteFormsTable).where(eq(websiteFormsTable.slug, slug));
+
+      if (existing && conflict === "skip") {
+        tallyResult(summary, { index: i, slug, status: "skipped" });
+        continue;
+      }
+
+      let finalSlug = slug;
+      let status: "created" | "updated" | "renamed" = "created";
+
+      if (existing && conflict === "overwrite") {
+        await db.transaction(async (tx) => {
+          await tx.update(websiteFormsTable).set(formValues).where(eq(websiteFormsTable.id, existing.id));
+          await tx.delete(websiteFormFieldsTable).where(eq(websiteFormFieldsTable.formId, existing.id));
+          if (fieldRows.length > 0) {
+            await tx.insert(websiteFormFieldsTable).values(fieldRows.map((f) => ({ ...f, formId: existing.id })));
+          }
+        });
+        status = "updated";
+      } else {
+        if (existing && conflict === "rename") {
+          finalSlug = await nextAvailableSlug(slug, async (cand) => {
+            const [hit] = await db.select({ id: websiteFormsTable.id }).from(websiteFormsTable).where(eq(websiteFormsTable.slug, cand));
+            return !!hit;
+          });
+          status = "renamed";
+        }
+        await db.transaction(async (tx) => {
+          const [created] = await tx.insert(websiteFormsTable).values({ ...formValues, slug: finalSlug }).returning();
+          if (fieldRows.length > 0) {
+            await tx.insert(websiteFormFieldsTable).values(fieldRows.map((f) => ({ ...f, formId: created.id })));
+          }
+        });
+      }
+
+      tallyResult(summary, status === "renamed"
+        ? { index: i, slug, status, finalSlug }
+        : { index: i, slug: finalSlug, status });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      tallyResult(summary, { index: i, slug: typeof item?.slug === "string" ? (item.slug as string) : null, status: "error", error: msg });
+    }
+  }
+
+  res.json(summary);
 });
 
 router.get("/website/forms/:formId/fields", ...adminOnly, async (req: Request, res: Response) => {

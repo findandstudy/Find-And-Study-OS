@@ -13,6 +13,17 @@ import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceG
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertEmbedLead } from "../lib/embedLeadDedup";
+import {
+  buildEnvelope,
+  parseEnvelope,
+  pickFields,
+  emptySummary,
+  tallyResult,
+  nextAvailableSlug,
+  isValidConflictStrategy,
+  ImportValidationError,
+  type ConflictStrategy,
+} from "../lib/exportImport";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
 function tlu(v: any, max: number): string | null {
@@ -179,6 +190,118 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), asy
       throw err;
     }
   }
+});
+
+// --- Export / Import (Task #202) ---------------------------------------
+// Lossless JSON round-trip for embed widget configurations. Admin/staff only.
+// Volatile fields (id, createdAt, updatedAt) and runtime relationships
+// (submissions) are stripped on export; slugs are preserved as the
+// human-readable cross-installation identifier.
+
+const EMBED_EXPORT_KIND = "embed_widgets";
+const EMBED_EXPORT_FIELDS = [
+  "name", "slug", "mode", "presetFilters", "lockedFilters",
+  "hiddenFilters", "visibleFilters", "theme", "allowedDomains", "isActive",
+] as const;
+
+function normalizeEmbedSlug(slug: string): string {
+  return String(slug).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+}
+
+// Admin-only: export/import are configuration-mutating operations and must
+// not be exposed to consultant/editor/accountant staff. Matches the
+// `adminOnly` gate used in src/routes/website.ts.
+const EMBED_ADMIN_ROLES = ["super_admin", "admin"] as const;
+
+router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROLES), json({ limit: "64kb" }), async (req, res): Promise<void> => {
+  const { ids } = (req.body || {}) as { ids?: unknown };
+  let rows;
+  if (Array.isArray(ids) && ids.length > 0) {
+    const numericIds = ids.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0);
+    if (numericIds.length === 0) { res.status(400).json({ error: "ids must be a non-empty array of positive integers" }); return; }
+    rows = await db.select().from(embedWidgetsTable).where(inArray(embedWidgetsTable.id, numericIds)).orderBy(embedWidgetsTable.name);
+  } else {
+    rows = await db.select().from(embedWidgetsTable).orderBy(embedWidgetsTable.name);
+  }
+  const items = rows.map((r) => pickFields(r as Record<string, unknown>, EMBED_EXPORT_FIELDS));
+  const envelope = buildEnvelope(EMBED_EXPORT_KIND, items);
+  await logAudit(req.user!.id, "export_embed_widgets", "embed_widget", null, { count: items.length }, req.ip);
+  res.setHeader("Content-Disposition", `attachment; filename="embed-widgets-${new Date().toISOString().slice(0,10)}.json"`);
+  res.json(envelope);
+});
+
+router.post("/embed/widgets/import", requireAuth, requireRole(...EMBED_ADMIN_ROLES), json({ limit: "2mb" }), async (req, res): Promise<void> => {
+  const body = (req.body || {}) as { envelope?: unknown; conflict?: unknown };
+  const conflict: ConflictStrategy = isValidConflictStrategy(body.conflict) ? body.conflict : "skip";
+
+  let rawItems: Array<Record<string, unknown>>;
+  try {
+    rawItems = parseEnvelope<Record<string, unknown>>(body.envelope, { expectedKind: EMBED_EXPORT_KIND });
+  } catch (err) {
+    const e = err as ImportValidationError;
+    res.status(e.status || 400).json({ error: e.message });
+    return;
+  }
+
+  const summary = emptySummary(rawItems.length);
+
+  for (let i = 0; i < rawItems.length; i++) {
+    const item = rawItems[i];
+    try {
+      if (!item || typeof item !== "object") throw new Error("Item must be an object");
+      const cleaned = pickFields(item, EMBED_EXPORT_FIELDS) as Record<string, unknown>;
+      if (!cleaned.name || typeof cleaned.name !== "string") throw new Error("name is required");
+      if (!cleaned.slug || typeof cleaned.slug !== "string") throw new Error("slug is required");
+      const slug = normalizeEmbedSlug(cleaned.slug as string);
+      if (!slug) throw new Error("slug is invalid");
+      const mode = VALID_MODES.includes(cleaned.mode as string) ? cleaned.mode as string : "combined";
+
+      const insertValues = {
+        name: cleaned.name as string,
+        slug,
+        mode,
+        presetFilters: (cleaned.presetFilters as Record<string, unknown>) ?? {},
+        lockedFilters: (cleaned.lockedFilters as unknown[]) ?? [],
+        hiddenFilters: (cleaned.hiddenFilters as unknown[]) ?? [],
+        visibleFilters: (cleaned.visibleFilters as unknown[]) ?? [],
+        theme: (cleaned.theme as Record<string, unknown>) ?? {},
+        allowedDomains: (cleaned.allowedDomains as unknown[]) ?? [],
+        isActive: typeof cleaned.isActive === "boolean" ? cleaned.isActive : true,
+      };
+
+      const [existing] = await db.select().from(embedWidgetsTable).where(eq(embedWidgetsTable.slug, slug));
+      if (existing) {
+        if (conflict === "skip") {
+          tallyResult(summary, { index: i, slug, status: "skipped" });
+          continue;
+        }
+        if (conflict === "overwrite") {
+          const [updated] = await db.update(embedWidgetsTable).set(insertValues).where(eq(embedWidgetsTable.id, existing.id)).returning();
+          tallyResult(summary, { index: i, slug: updated.slug, status: "updated" });
+          continue;
+        }
+        // rename
+        const newSlug = await nextAvailableSlug(slug, async (cand) => {
+          const [hit] = await db.select({ id: embedWidgetsTable.id }).from(embedWidgetsTable).where(eq(embedWidgetsTable.slug, cand));
+          return !!hit;
+        });
+        const [created] = await db.insert(embedWidgetsTable).values({ ...insertValues, slug: newSlug }).returning();
+        tallyResult(summary, { index: i, slug, status: "renamed", finalSlug: created.slug });
+        continue;
+      }
+      const [created] = await db.insert(embedWidgetsTable).values(insertValues).returning();
+      tallyResult(summary, { index: i, slug: created.slug, status: "created" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      tallyResult(summary, { index: i, slug: typeof item?.slug === "string" ? (item.slug as string) : null, status: "error", error: msg });
+    }
+  }
+
+  await logAudit(req.user!.id, "import_embed_widgets", "embed_widget", null, {
+    total: summary.total, created: summary.created, updated: summary.updated,
+    renamed: summary.renamed, skipped: summary.skipped, errors: summary.errors, conflict,
+  }, req.ip);
+  res.json(summary);
 });
 
 router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
