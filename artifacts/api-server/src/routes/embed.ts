@@ -126,9 +126,12 @@ router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (re
   res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+// Non-numeric ids fall through to sibling string paths like
+// `/embed/widgets/template` and `/embed/widgets/export` instead of
+// failing with a misleading "Invalid ID" 400.
+router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+  if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const [widget] = await db.select().from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
   res.json(widget);
@@ -167,9 +170,9 @@ router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (r
   }
 });
 
-router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+  if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive } = req.body;
   const updates: any = {};
   if (name !== undefined) updates.name = name;
@@ -322,17 +325,17 @@ router.post(
   },
 );
 
-router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+  if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   await db.delete(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
   await logAudit(req.user!.id, "delete_embed_widget", "embed_widget", id, {}, req.ip);
   res.sendStatus(204);
 });
 
-router.get("/embed/widgets/:id/submissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/embed/widgets/:id/submissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+  if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const widgetId = parseInt(req.params.id, 10);
-  if (isNaN(widgetId)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const { page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
