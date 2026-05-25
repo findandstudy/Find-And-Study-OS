@@ -369,9 +369,10 @@ export interface EmbedFilterCatalog {
   universityTypes: readonly string[];
   levels: readonly string[];
   languages: readonly string[];
-  // Up to N sample universities so admins can paste the right numeric id
-  // into presetFilters.universityId.
-  sampleUniversities: ReadonlyArray<{ id: number; name: string; country: string | null }>;
+  // Every active university — admins can paste the right numeric id
+  // into presetFilters.universityId. Not capped: the dedicated
+  // "Universities" sheet is the source of truth for IDs.
+  universities: ReadonlyArray<{ id: number; name: string; country: string | null; city: string | null; type: string | null }>;
 }
 
 export function embedWidgetColumns(
@@ -405,64 +406,125 @@ export function embedWidgetColumns(
   ];
 }
 
-// --- Embed filter reference (read-only docs sheet) -----------------------
+// --- Embed filter reference (read-only docs sheets) ----------------------
+// One sheet per filter dimension so admins can see EVERY valid value in
+// full, not just a sample. Sheets are read-only documentation — the
+// parser ignores them on import.
 
-const FILTER_REFERENCE_COLUMNS: readonly ColumnSpec[] = [
+const SUMMARY_COLUMNS: readonly ColumnSpec[] = [
   { key: "filterKey", header: "Filter key", kind: "string", width: 20 },
-  { key: "valueType", header: "Value type", kind: "string", width: 16 },
-  { key: "sampleValues", header: "Sample valid values (from your live data)", kind: "string", width: 80 },
-  { key: "exampleUsage", header: "Example preset JSON", kind: "string", width: 40 },
+  { key: "valueType", header: "Value type", kind: "string", width: 14 },
+  { key: "count", header: "Total options", kind: "number", width: 14 },
+  { key: "lookupSheet", header: "See sheet", kind: "string", width: 26 },
+  { key: "exampleUsage", header: "Example preset JSON", kind: "string", width: 44 },
+  { key: "description", header: "Description", kind: "string", width: 60 },
 ];
 
-function joinSample(values: readonly string[], cap = 12): string {
-  if (values.length === 0) return "(no values yet — none configured in your data)";
-  const head = values.slice(0, cap).join(", ");
-  return values.length > cap ? `${head}, … (${values.length - cap} more)` : head;
+const SIMPLE_VALUE_COLUMNS: readonly ColumnSpec[] = [
+  { key: "value", header: "Value (paste this into JSON cells)", kind: "string", width: 50 },
+];
+
+const UNIVERSITY_REF_COLUMNS: readonly ColumnSpec[] = [
+  { key: "id", header: "ID (universityId)", kind: "number", width: 18 },
+  { key: "name", header: "University name", kind: "string", width: 50 },
+  { key: "country", header: "Country", kind: "string", width: 22 },
+  { key: "city", header: "City", kind: "string", width: 22 },
+  { key: "type", header: "Type", kind: "string", width: 18 },
+];
+
+const EMPTY_PLACEHOLDER = "(no values yet — add some in the admin UI)";
+
+function listRows(values: readonly string[]): Array<Record<string, unknown>> {
+  if (values.length === 0) return [{ value: EMPTY_PLACEHOLDER }];
+  return values.map((v) => ({ value: v }));
 }
 
-export function buildEmbedFilterReferenceSheet(catalog: EmbedFilterCatalog): SheetSpec<Record<string, unknown>> {
-  const sampleUniIds = catalog.sampleUniversities.slice(0, 8)
-    .map((u) => `${u.id} (${u.name}${u.country ? ` — ${u.country}` : ""})`)
-    .join(", ");
-  const rows: Array<Record<string, unknown>> = [
-    {
-      filterKey: "country",
-      valueType: "string",
-      sampleValues: joinSample(catalog.countries),
-      exampleUsage: '{"country":"Turkey"}',
-    },
-    {
-      filterKey: "city",
-      valueType: "string",
-      sampleValues: joinSample(catalog.cities),
-      exampleUsage: '{"city":"Istanbul"}',
-    },
-    {
-      filterKey: "universityType",
-      valueType: "string",
-      sampleValues: joinSample(catalog.universityTypes),
-      exampleUsage: '{"universityType":"Private"}',
-    },
-    {
-      filterKey: "universityId",
-      valueType: "number",
-      sampleValues: sampleUniIds || "(no active universities)",
-      exampleUsage: '{"universityId":1}',
-    },
-    {
-      filterKey: "level",
-      valueType: "string",
-      sampleValues: joinSample(catalog.levels),
-      exampleUsage: '{"level":"Master"}',
-    },
-    {
-      filterKey: "language",
-      valueType: "string",
-      sampleValues: joinSample(catalog.languages),
-      exampleUsage: '{"language":"English"}',
-    },
+/**
+ * Build the full set of reference sheets for the template/export:
+ *   1. "Filter reference"  — summary index with counts + example JSON
+ *   2. "Countries"         — every distinct active country
+ *   3. "Cities"            — every distinct active city
+ *   4. "University types"  — every distinct universityType
+ *   5. "Levels"            — every distinct program degree
+ *   6. "Languages"         — every distinct program language
+ *   7. "Universities"      — every active university (id, name, country, city, type)
+ *
+ * Every list reflects the live DB on the moment of download, so adding a
+ * new university / language / level shows up on the next template.
+ */
+export function buildEmbedFilterReferenceSheets(
+  catalog: EmbedFilterCatalog,
+): Array<SheetSpec<Record<string, unknown>>> {
+  const summary: SheetSpec<Record<string, unknown>> = {
+    name: "Filter reference",
+    columns: SUMMARY_COLUMNS,
+    rows: [
+      {
+        filterKey: "country", valueType: "string",
+        count: catalog.countries.length, lookupSheet: "Countries",
+        exampleUsage: '{"country":"Turkey"}',
+        description: "Country name as stored on the university record.",
+      },
+      {
+        filterKey: "city", valueType: "string",
+        count: catalog.cities.length, lookupSheet: "Cities",
+        exampleUsage: '{"city":"Istanbul"}',
+        description: "City name as stored on the university record.",
+      },
+      {
+        filterKey: "universityType", valueType: "string",
+        count: catalog.universityTypes.length, lookupSheet: "University types",
+        exampleUsage: '{"universityType":"Private"}',
+        description: "Distinct universityType values across active universities.",
+      },
+      {
+        filterKey: "universityId", valueType: "number",
+        count: catalog.universities.length, lookupSheet: "Universities",
+        exampleUsage: '{"universityId":1}',
+        description: "Pick the numeric ID from the Universities sheet.",
+      },
+      {
+        filterKey: "level", valueType: "string",
+        count: catalog.levels.length, lookupSheet: "Levels",
+        exampleUsage: '{"level":"Master"}',
+        description: "Distinct program degree values (Bachelor, Master, PhD, …).",
+      },
+      {
+        filterKey: "language", valueType: "string",
+        count: catalog.languages.length, lookupSheet: "Languages",
+        exampleUsage: '{"language":"English"}',
+        description: "Distinct program language values.",
+      },
+    ],
+  };
+
+  const universityRows: Array<Record<string, unknown>> = catalog.universities.length
+    ? catalog.universities.map((u) => ({
+        id: u.id, name: u.name,
+        country: u.country ?? "", city: u.city ?? "", type: u.type ?? "",
+      }))
+    : [{ id: null, name: EMPTY_PLACEHOLDER, country: "", city: "", type: "" }];
+
+  return [
+    summary,
+    { name: "Countries", columns: SIMPLE_VALUE_COLUMNS, rows: listRows(catalog.countries) },
+    { name: "Cities", columns: SIMPLE_VALUE_COLUMNS, rows: listRows(catalog.cities) },
+    { name: "University types", columns: SIMPLE_VALUE_COLUMNS, rows: listRows(catalog.universityTypes) },
+    { name: "Levels", columns: SIMPLE_VALUE_COLUMNS, rows: listRows(catalog.levels) },
+    { name: "Languages", columns: SIMPLE_VALUE_COLUMNS, rows: listRows(catalog.languages) },
+    { name: "Universities", columns: UNIVERSITY_REF_COLUMNS, rows: universityRows },
   ];
-  return { name: "Filter reference", columns: FILTER_REFERENCE_COLUMNS, rows };
+}
+
+/**
+ * @deprecated Use `buildEmbedFilterReferenceSheets` to ship the full
+ * multi-sheet reference. Kept as a back-compat shim so callers that
+ * only want the summary index still work.
+ */
+export function buildEmbedFilterReferenceSheet(
+  catalog: EmbedFilterCatalog,
+): SheetSpec<Record<string, unknown>> {
+  return buildEmbedFilterReferenceSheets(catalog)[0];
 }
 
 // --- Web-to-Lead forms schema --------------------------------------------

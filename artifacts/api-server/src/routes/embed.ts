@@ -26,7 +26,7 @@ import {
   parseWorkbookBuffer,
   XLSX_CONTENT_TYPE,
   embedWidgetColumns,
-  buildEmbedFilterReferenceSheet,
+  buildEmbedFilterReferenceSheets,
   toEmbedInsertValues,
   EMBED_KIND,
   EMBED_FILTER_KEYS as EMBED_FILTER_KEYS_FROM_LIB,
@@ -255,11 +255,16 @@ async function loadEmbedFilterCatalog(): Promise<EmbedFilterCatalog> {
       .from(programsTable)
       .where(and(eq(programsTable.isActive, true), isNotNull(programsTable.language)))
       .orderBy(programsTable.language),
-    db.select({ id: universitiesTable.id, name: universitiesTable.name, country: universitiesTable.country })
+    db.select({
+        id: universitiesTable.id,
+        name: universitiesTable.name,
+        country: universitiesTable.country,
+        city: universitiesTable.city,
+        type: universitiesTable.universityType,
+      })
       .from(universitiesTable)
       .where(eq(universitiesTable.isActive, true))
-      .orderBy(universitiesTable.name)
-      .limit(50),
+      .orderBy(universitiesTable.name),
   ]);
   const clean = (rows: Array<{ v: string | null }>): string[] =>
     Array.from(new Set(rows.map((r) => (r.v ?? "").trim()).filter(Boolean))).sort();
@@ -269,7 +274,7 @@ async function loadEmbedFilterCatalog(): Promise<EmbedFilterCatalog> {
     universityTypes: clean(typesRows),
     levels: clean(levelsRows),
     languages: clean(languagesRows),
-    sampleUniversities: sampleUnis,
+    universities: sampleUnis,
   };
 }
 
@@ -288,7 +293,7 @@ router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROL
   const buf = await buildWorkbookBuffer({
     sheets: [
       { name: "Widgets", columns, rows: embedExportRows(rows as Array<Record<string, unknown>>) },
-      buildEmbedFilterReferenceSheet(catalog),
+      ...buildEmbedFilterReferenceSheets(catalog),
     ],
     meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
   });
@@ -322,7 +327,7 @@ router.get("/embed/widgets/template", requireAuth, requireRole(...EMBED_ADMIN_RO
   const buf = await buildWorkbookBuffer({
     sheets: [
       { name: "Widgets", columns, rows: [exampleRow as Record<string, unknown>] },
-      buildEmbedFilterReferenceSheet(catalog),
+      ...buildEmbedFilterReferenceSheets(catalog),
     ],
     meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
   });
