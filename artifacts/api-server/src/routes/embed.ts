@@ -306,27 +306,99 @@ router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROL
 router.get("/embed/widgets/template", requireAuth, requireRole(...EMBED_ADMIN_ROLES), async (req, res): Promise<void> => {
   const catalog = await loadEmbedFilterCatalog();
   const columns = embedWidgetColumns(VALID_MODES, catalog);
-  const sampleSlugSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  // One example row so admins immediately see the expected JSON shape.
-  // The row is plainly marked "EXAMPLE …" — admins delete it before import.
-  const examplePreset: Record<string, unknown> = {};
-  if (catalog.countries[0]) examplePreset.country = catalog.countries[0];
-  if (catalog.levels[0]) examplePreset.level = catalog.levels[0];
-  const exampleRow = {
-    name: "EXAMPLE — delete or edit me",
-    slug: `example-widget-${sampleSlugSuffix}`,
-    mode: VALID_MODES[0] ?? "combined",
-    isActive: true,
-    theme: { primary: "#0ea5e9", radius: "8px" },
-    presetFilters: examplePreset,
-    lockedFilters: [],
-    hiddenFilters: [],
-    visibleFilters: [...EMBED_FILTER_KEYS_FROM_LIB],
-    allowedDomains: ["example.com"],
+  // Several diverse example rows pre-filled from the LIVE catalog so admins
+  // immediately see the shape of each filter combination. Every row is
+  // plainly marked "EXAMPLE …" — admins delete or edit them before import.
+  const slugSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const pick = <T,>(arr: readonly T[], i: number): T | undefined => arr[i] ?? arr[0];
+
+  type ExampleSpec = {
+    suffix: string;
+    label: string;
+    mode: string;
+    theme: Record<string, unknown>;
+    presetFilters: Record<string, unknown>;
+    lockedFilters: string[];
+    hiddenFilters: string[];
+    visibleFilters: string[];
+    allowedDomains: string[];
   };
+
+  const specs: ExampleSpec[] = [
+    {
+      suffix: "combined",
+      label: "Combined widget — all modes, country preset",
+      mode: "combined",
+      theme: { primary: "#0ea5e9", radius: "8px" },
+      presetFilters: {
+        ...(pick(catalog.countries, 0) ? { country: pick(catalog.countries, 0) } : {}),
+      },
+      lockedFilters: pick(catalog.countries, 0) ? ["country"] : [],
+      hiddenFilters: [],
+      visibleFilters: ["country", "city", "universityType", "level", "language"],
+      allowedDomains: ["example.com"],
+    },
+    {
+      suffix: "course-finder",
+      label: "Course finder — level + language preset",
+      mode: "course_finder",
+      theme: { primary: "#10b981", radius: "12px" },
+      presetFilters: {
+        ...(pick(catalog.levels, 0) ? { level: pick(catalog.levels, 0) } : {}),
+        ...(pick(catalog.languages, 0) ? { language: pick(catalog.languages, 0) } : {}),
+      },
+      lockedFilters: [],
+      hiddenFilters: ["universityType"],
+      visibleFilters: ["country", "city", "level", "language"],
+      allowedDomains: ["example.com", "partner.example.com"],
+    },
+    {
+      suffix: "application-only",
+      label: "Application only — pinned to one university",
+      mode: "application_only",
+      theme: { primary: "#f59e0b", radius: "6px" },
+      presetFilters: {
+        ...(catalog.universities[0] ? { universityId: catalog.universities[0].id } : {}),
+      },
+      lockedFilters: catalog.universities[0] ? ["universityId"] : [],
+      hiddenFilters: ["country", "city", "universityType", "level", "language"],
+      visibleFilters: [],
+      allowedDomains: [catalog.universities[0]?.name ? "your-university.com" : "example.com"],
+    },
+    {
+      suffix: "lead-form",
+      label: "Lead form — city + university type preset",
+      mode: "lead_form",
+      theme: { primary: "#8b5cf6", radius: "10px" },
+      presetFilters: {
+        ...(pick(catalog.cities, 0) ? { city: pick(catalog.cities, 0) } : {}),
+        ...(pick(catalog.universityTypes, 0) ? { universityType: pick(catalog.universityTypes, 0) } : {}),
+      },
+      lockedFilters: [],
+      hiddenFilters: [],
+      visibleFilters: ["country", "city", "universityType", "level"],
+      allowedDomains: ["example.com"],
+    },
+  ];
+
+  const exampleRows = specs
+    .filter((s) => VALID_MODES.includes(s.mode))
+    .map((s) => ({
+      name: `EXAMPLE — ${s.label} (delete or edit me)`,
+      slug: `example-${s.suffix}-${slugSuffix}`,
+      mode: s.mode,
+      isActive: false,
+      theme: s.theme,
+      presetFilters: s.presetFilters,
+      lockedFilters: s.lockedFilters,
+      hiddenFilters: s.hiddenFilters,
+      visibleFilters: s.visibleFilters,
+      allowedDomains: s.allowedDomains,
+    }));
+
   const buf = await buildWorkbookBuffer({
     sheets: [
-      { name: "Widgets", columns, rows: [exampleRow as Record<string, unknown>] },
+      { name: "Widgets", columns, rows: exampleRows as Array<Record<string, unknown>> },
       ...buildEmbedFilterReferenceSheets(catalog),
     ],
     meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
