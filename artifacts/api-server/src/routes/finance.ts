@@ -6,6 +6,7 @@ import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getAgentRecord } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { getCurrentSeason } from "../lib/season";
+import { loadCurrencyCatalog } from "../lib/currencyCatalog";
 
 const router: IRouter = Router();
 
@@ -19,10 +20,14 @@ function toNum(v: any): number {
   return parseFloat(String(v ?? 0)) || 0;
 }
 
-const SUPPORTED_CURRENCIES = ["USD", "EUR", "GBP", "TRY", "AED"] as const;
+// Currency normalization preserves any valid ISO-shaped code so that
+// admin-added currencies (e.g. CHF, SAR) flow into per-currency
+// aggregation buckets WITHOUT being collapsed into USD. This is critical:
+// the system never mixes totals across currencies, so an unrecognised
+// code must stay in its own bucket rather than poison the USD bucket.
 function normCurrency(c: any): string {
-  const s = String(c ?? "USD").toUpperCase();
-  return (SUPPORTED_CURRENCIES as readonly string[]).includes(s) ? s : "USD";
+  const s = String(c ?? "USD").toUpperCase().trim();
+  return /^[A-Z]{2,5}$/.test(s) ? s : "USD";
 }
 
 type CommBucket = {
@@ -169,18 +174,23 @@ function calcCommissionAmounts(body: any) {
 
 router.get("/currencies-in-use", requireAuth, async (_req, res): Promise<void> => {
   try {
-    const [progRows, commRows, feeRows] = await Promise.all([
+    const [progRows, commRows, feeRows, catalog] = await Promise.all([
       db.selectDistinct({ currency: programsTable.currency }).from(programsTable),
       db.selectDistinct({ currency: commissionsTable.currency }).from(commissionsTable),
       db.selectDistinct({ currency: serviceFeesTable.currency }).from(serviceFeesTable),
+      loadCurrencyCatalog(),
     ]);
     const set = new Set<string>();
     for (const r of [...progRows, ...commRows, ...feeRows]) {
-      const c = normCurrency((r as any).currency);
-      set.add(c);
+      const raw = String((r as any).currency ?? "").toUpperCase().trim();
+      if (/^[A-Z]{2,5}$/.test(raw)) set.add(raw);
     }
-    const inUse = (SUPPORTED_CURRENCIES as readonly string[]).filter(c => set.has(c));
-    res.json({ currencies: inUse });
+    // Strict intersection: only codes that BOTH appear in real data AND
+    // are configured in catalog_options. If an admin deactivates/deletes
+    // a currency, it disappears from selectors even if legacy rows still
+    // exist (those rows are reported via the delete usage-check instead).
+    const ordered = catalog.ordered.filter(c => set.has(c));
+    res.json({ currencies: ordered });
   } catch {
     res.json({ currencies: [] });
   }
@@ -940,7 +950,7 @@ router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), requi
     isSubAgent ? eq(commissionsTable.subAgentId, agent.id) : eq(commissionsTable.agentId, agent.id),
     sql`${commissionsTable.status} != 'excluded'`,
   ];
-  if (currency && (SUPPORTED_CURRENCIES as readonly string[]).includes(currency.toUpperCase())) {
+  if (currency && /^[A-Za-z]{2,5}$/.test(currency)) {
     conds.push(eq(commissionsTable.currency, currency.toUpperCase()));
   }
   const whereClause = and(...conds);
@@ -968,7 +978,7 @@ router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), requ
   const offset = (pageNum - 1) * limitNum;
 
   const conds = [eq(serviceFeesTable.agentId, agent.id), sql`${serviceFeesTable.financeStatus} != 'excluded'`];
-  if (currency && (SUPPORTED_CURRENCIES as readonly string[]).includes(currency.toUpperCase())) {
+  if (currency && /^[A-Za-z]{2,5}$/.test(currency)) {
     conds.push(eq(serviceFeesTable.currency, currency.toUpperCase()));
   }
   const whereClause = and(...conds);

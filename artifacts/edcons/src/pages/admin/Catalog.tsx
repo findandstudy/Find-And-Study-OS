@@ -1669,7 +1669,7 @@ function ProgramsTab() {
                 <Select value={form?.currency ?? "USD"} onValueChange={v => setForm(f => ({ ...f, currency: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "GBP", "TRY", "AED", "CAD", "AUD"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {(activeOpts("currency").length > 0 ? activeOpts("currency") : ["USD", "EUR", "GBP", "TRY", "AED"]).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -1890,6 +1890,7 @@ const OPTION_CATEGORIES = [
   { key: "field", label: "Field", description: "Academic fields / study areas" },
   { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
   { key: "documents", label: "Documents", description: "Tüm belge türlerinin ana listesi — buraya eklediğiniz belgeler, başvuru ve derece sayfalarında seçenek olarak görünür" },
+  { key: "currency", label: "Currencies", description: "Program ücretleri, komisyonlar ve hizmet bedellerinde kullanılan para birimleri. Yeni eklenenler dropdown'larda hemen görünür; kullanımdaki bir kod silinemez." },
 ];
 
 

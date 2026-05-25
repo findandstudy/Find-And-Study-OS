@@ -8,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { getCurrentSeason } from "./lib/season";
 import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
+import { seedCurrencies } from "./scripts/seedCurrencies";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -626,6 +627,7 @@ async function seedClaudeIntegration() {
       console.error("[migrate] catalog_options.metadata:", err);
     }
     await seedDocumentTypes(pool);
+    await seedCurrencies(pool);
 
     // One-shot data cleanup (idempotent via system_flags). Runs on every
     // boot but exits early once the version flag is set. This ensures

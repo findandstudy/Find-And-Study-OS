@@ -4,6 +4,7 @@ import { eq, ilike, sql, and, asc, inArray, notInArray, isNotNull } from "drizzl
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
+import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
 import * as XLSX from "xlsx/xlsx.js";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
@@ -538,7 +539,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
 
 /* ─── CATALOG OPTIONS ──────────────────────────────────────── */
 
-const VALID_CATEGORIES = ["degree", "language", "duration", "fee_type", "intake", "field", "university_type", "documents"];
+const VALID_CATEGORIES = ["degree", "language", "duration", "fee_type", "intake", "field", "university_type", "documents", "currency"];
 
 router.get("/catalog-options", async (_req, res): Promise<void> => {
   const data = await db.select().from(catalogOptionsTable).orderBy(asc(catalogOptionsTable.category), asc(catalogOptionsTable.sortOrder));
@@ -559,6 +560,7 @@ router.post("/catalog-options", requireAuth, requireRole(...MANAGER_ROLES), asyn
   const [opt] = await db.insert(catalogOptionsTable).values(insertValues as never).returning();
   await logAudit(req.user!.id, "create_catalog_option", "catalog_option", opt.id, { category, value }, req.ip);
   if (category === "documents") invalidateDocCatalogCache();
+  if (category === "currency") invalidateCurrencyCatalog();
   res.status(201).json(opt);
 });
 
@@ -573,6 +575,7 @@ router.patch("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES),
   const [opt] = await db.update(catalogOptionsTable).set(updates).where(eq(catalogOptionsTable.id, id)).returning();
   if (!opt) { res.status(404).json({ error: "Not found" }); return; }
   if (opt.category === "documents") invalidateDocCatalogCache();
+  if (opt.category === "currency") invalidateCurrencyCatalog();
   res.json(opt);
 });
 
@@ -838,9 +841,16 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
   //    serialise admin-initiated mutations on the same option and accept
   //    the small remaining race against staff inserts of new program
   //    requirements (the orphan scanner is the safety net for that case).
+  type CurrencyUsage = {
+    programs: number;
+    commissions: number;
+    serviceFees: number;
+    total: number;
+  };
   type BlockedReason =
     | { kind: "documents"; usage: DocumentUsage }
-    | { kind: "degree"; usage: DegreeUsage };
+    | { kind: "degree"; usage: DegreeUsage }
+    | { kind: "currency"; usage: CurrencyUsage };
 
   let opt: typeof catalogOptionsTable.$inferSelect | undefined;
   let blocked: BlockedReason | null = null;
@@ -860,6 +870,20 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
     } else if (row.category === "degree") {
       const usage = await getDegreeUsage(row.id, tx as DbOrTx);
       if (usage.totals.documents > 0) { blocked = { kind: "degree", usage }; return; }
+    } else if (row.category === "currency") {
+      const code = String(row.value).toUpperCase();
+      const { commissionsTable, serviceFeesTable } = await import("@workspace/db");
+      const [pRow] = await tx.select({ c: sql<number>`count(*)` }).from(programsTable)
+        .where(sql`upper(${programsTable.currency}) = ${code}`);
+      const [cRow] = await tx.select({ c: sql<number>`count(*)` }).from(commissionsTable)
+        .where(sql`upper(${commissionsTable.currency}) = ${code}`);
+      const [sRow] = await tx.select({ c: sql<number>`count(*)` }).from(serviceFeesTable)
+        .where(sql`upper(${serviceFeesTable.currency}) = ${code}`);
+      const programs = Number(pRow?.c ?? 0);
+      const commissions = Number(cRow?.c ?? 0);
+      const serviceFees = Number(sRow?.c ?? 0);
+      const total = programs + commissions + serviceFees;
+      if (total > 0) { blocked = { kind: "currency", usage: { programs, commissions, serviceFees, total } }; return; }
     }
 
     await tx.delete(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
@@ -870,7 +894,7 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
   if (blocked) {
     await logAudit(req.user!.id, "delete_catalog_option_blocked", "catalog_option", id, {
       category: opt.category, value: opt.value,
-      totals: blocked.kind === "documents" ? blocked.usage.totals : blocked.usage.totals,
+      totals: blocked.kind === "currency" ? blocked.usage : blocked.usage.totals,
     }, req.ip);
     if (blocked.kind === "documents") {
       res.status(409).json({
@@ -880,7 +904,7 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
         value: opt.value,
         ...blocked.usage,
       });
-    } else {
+    } else if (blocked.kind === "degree") {
       res.status(409).json({
         error: "in_use",
         message: "Bu dereceye bağlı belge gereksinimleri var. Önce bunları temizleyin, sonra silmeyi tekrar deneyin.",
@@ -888,12 +912,26 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
         value: opt.value,
         ...blocked.usage,
       });
+    } else {
+      const u = blocked.usage;
+      const parts: string[] = [];
+      if (u.programs > 0) parts.push(`${u.programs} program`);
+      if (u.commissions > 0) parts.push(`${u.commissions} komisyon`);
+      if (u.serviceFees > 0) parts.push(`${u.serviceFees} hizmet bedeli`);
+      res.status(409).json({
+        error: "in_use",
+        message: `Bu para birimi (${opt.value}) ${parts.join(", ")} kaydında kullanılıyor. Önce bu kayıtların para birimini değiştirin, sonra silmeyi tekrar deneyin.`,
+        category: opt.category,
+        value: opt.value,
+        usage: u,
+      });
     }
     return;
   }
 
   await logAudit(req.user!.id, "delete_catalog_option", "catalog_option", id, { category: opt.category, value: opt.value }, req.ip);
   if (opt.category === "documents") invalidateDocCatalogCache();
+  if (opt.category === "currency") invalidateCurrencyCatalog();
   res.sendStatus(204);
 });
 
