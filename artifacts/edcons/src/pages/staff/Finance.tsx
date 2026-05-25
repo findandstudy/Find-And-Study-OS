@@ -30,6 +30,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { CurrencySelector } from "@/components/CurrencySelector";
 import { useCurrencyPreference } from "@/hooks/use-currency-preference";
 import { formatMoney, SUPPORTED_CURRENCIES, listNonZeroCurrencies, type CurrencyCode } from "@/lib/currency";
+import { useCatalogCurrencies } from "@/hooks/use-catalog-currencies";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -163,6 +164,7 @@ function CommissionModal({
   const qc = useQueryClient();
   const [form, setForm] = useState<CommissionForm>(initial || EMPTY_COMM);
   const [saving, setSaving] = useState(false);
+  const currencyOpts = useCatalogCurrencies();
 
   const { data: agentsResp } = useQuery({
     queryKey: ["agents-list"],
@@ -285,7 +287,7 @@ function CommissionModal({
             <Select value={form.currency} onValueChange={set("currency")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {["USD","EUR","GBP","TRY","AED"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {currencyOpts.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -467,6 +469,7 @@ function ServiceFeeModal({
   const qc = useQueryClient();
   const [form, setForm] = useState<ServiceFeeForm>(initial || EMPTY_FEE);
   const [saving, setSaving] = useState(false);
+  const currencyOpts = useCatalogCurrencies();
 
   const set = (k: keyof ServiceFeeForm) => (e: any) =>
     setForm(f => ({ ...f, [k]: e?.target ? e.target.value : e }));
@@ -535,7 +538,7 @@ function ServiceFeeModal({
             <Select value={form.currency} onValueChange={set("currency")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {["USD","EUR","GBP","TRY","AED"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {currencyOpts.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

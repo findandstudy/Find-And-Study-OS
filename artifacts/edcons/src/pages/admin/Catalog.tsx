@@ -2067,7 +2067,13 @@ type DeleteBlockedDegreePayload = {
   documents: { documentType: string; mandatory: boolean; sortOrder: number }[];
   totals: { documents: number };
 };
-type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload;
+type DeleteBlockedCurrencyPayload = {
+  message?: string;
+  category: "currency";
+  value: string;
+  usage: { programs: number; commissions: number; serviceFees: number; total: number };
+};
+type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload | DeleteBlockedCurrencyPayload;
 
 function OptionsTab() {
   const { toast } = useToast();
@@ -2141,7 +2147,7 @@ function OptionsTab() {
       const r = await apiFetch(`/api/catalog-options/${item.id}`, { method: "DELETE" });
       if (r.status === 409) {
         const body = await r.json().catch(() => null) as DeleteBlockedPayload | null;
-        if (body && (body.category === "documents" || body.category === "degree")) {
+        if (body && (body.category === "documents" || body.category === "degree" || body.category === "currency")) {
           setDeleteBlocked(body);
           setConfirmDelete(null);
           return;
@@ -2460,6 +2466,31 @@ function DeleteBlockedDialog({ payload, onClose }: {
                   </div>
                 )}
               </>
+            )}
+            {payload.category === "currency" && (
+              <div>
+                <p className="font-medium mb-1.5">Kullanım yerleri ({payload.usage.total})</p>
+                <div className="rounded border bg-muted/30 divide-y">
+                  {payload.usage.programs > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 text-xs">
+                      <span>Programlar</span>
+                      <Badge variant="secondary" className="text-[10px]">{payload.usage.programs}</Badge>
+                    </div>
+                  )}
+                  {payload.usage.commissions > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 text-xs">
+                      <span>Komisyonlar</span>
+                      <Badge variant="secondary" className="text-[10px]">{payload.usage.commissions}</Badge>
+                    </div>
+                  )}
+                  {payload.usage.serviceFees > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 text-xs">
+                      <span>Hizmet bedelleri</span>
+                      <Badge variant="secondary" className="text-[10px]">{payload.usage.serviceFees}</Badge>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
             {payload.category === "degree" && (
               <div>
