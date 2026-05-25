@@ -151,10 +151,13 @@ import {
   buildWorkbookBuffer,
   parseWorkbookBuffer,
   embedWidgetColumns,
+  buildEmbedFilterReferenceSheet,
+  EMBED_FILTER_KEYS,
   formColumns,
   formFieldColumns,
   EMBED_KIND,
   FORMS_KIND,
+  type EmbedFilterCatalog,
 } from "../src/lib/exportImportExcel";
 
 const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form"];
@@ -426,6 +429,61 @@ test("xlsx: server-level round-trip — export embed bytes can be re-imported lo
     assert.deepEqual(vals.presetFilters, original[i].presetFilters);
     assert.deepEqual(vals.lockedFilters, original[i].lockedFilters);
     assert.deepEqual(vals.allowedDomains, original[i].allowedDomains);
+  }
+});
+
+test("xlsx: filter reference sheet reflects live catalog dynamically", async () => {
+  const catalog: EmbedFilterCatalog = {
+    countries: ["Turkey", "United Kingdom"],
+    cities: ["Istanbul", "London"],
+    universityTypes: ["Private", "State"],
+    levels: ["Bachelor", "Master"],
+    languages: ["English", "Turkish"],
+    sampleUniversities: [
+      { id: 1, name: "Beykoz Univ.", country: "Turkey" },
+      { id: 2, name: "Okan Univ.", country: "Turkey" },
+    ],
+  };
+  // Template must show ALL canonical filter keys so admins can see what
+  // is valid, even if some have zero values in the live data yet.
+  const cols = embedWidgetColumns(["combined"], catalog);
+  const refSheet = buildEmbedFilterReferenceSheet(catalog);
+  const buf = await buildWorkbookBuffer({
+    sheets: [
+      { name: "Widgets", columns: cols, rows: [] },
+      refSheet,
+    ],
+    meta: { kind: EMBED_KIND, version: "1", exportedAt: "x" },
+  });
+  // The Widgets sheet's presetFilters header note must reference the live keys.
+  const presetCol = cols.find((c) => c.key === "presetFilters")!;
+  for (const k of EMBED_FILTER_KEYS) {
+    assert.ok(presetCol.note?.includes(k), `presetFilters note should mention key "${k}"`);
+  }
+  // The Filter reference sheet must include one row per canonical key and
+  // surface at least one sample value the admin can paste in.
+  assert.equal(refSheet.rows.length, EMBED_FILTER_KEYS.length);
+  for (const k of EMBED_FILTER_KEYS) {
+    assert.ok(refSheet.rows.some((r) => r.filterKey === k), `missing row for "${k}"`);
+  }
+  const countryRow = refSheet.rows.find((r) => r.filterKey === "country")!;
+  assert.ok(String(countryRow.sampleValues).includes("Turkey"));
+  // Parsing must succeed and treat the extra sheet as benign (Widgets only).
+  const parsed = await parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols });
+  assert.equal(parsed.sheets.get("Widgets")!.rows.length, 0);
+});
+
+test("xlsx: empty catalog still produces a valid reference sheet (no DB data yet)", async () => {
+  const empty: EmbedFilterCatalog = {
+    countries: [], cities: [], universityTypes: [], levels: [], languages: [],
+    sampleUniversities: [],
+  };
+  const refSheet = buildEmbedFilterReferenceSheet(empty);
+  assert.equal(refSheet.rows.length, EMBED_FILTER_KEYS.length);
+  // Every cell still renders a helpful placeholder, not undefined.
+  for (const row of refSheet.rows) {
+    assert.equal(typeof row.sampleValues, "string");
+    assert.ok((row.sampleValues as string).length > 0);
   }
 });
 

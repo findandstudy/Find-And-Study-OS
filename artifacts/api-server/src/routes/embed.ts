@@ -26,8 +26,11 @@ import {
   parseWorkbookBuffer,
   XLSX_CONTENT_TYPE,
   embedWidgetColumns,
+  buildEmbedFilterReferenceSheet,
   toEmbedInsertValues,
   EMBED_KIND,
+  EMBED_FILTER_KEYS as EMBED_FILTER_KEYS_FROM_LIB,
+  type EmbedFilterCatalog,
 } from "../lib/exportImportExcel";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
@@ -226,6 +229,50 @@ function embedExportRows(rows: Array<Record<string, unknown>>): Array<Record<str
   }));
 }
 
+// Snapshot of valid filter values pulled from the live DB. Every value
+// reflects current state (universities, programs) so adding a new
+// country/level/language anywhere in the system shows up on the next
+// downloaded template without any code change.
+async function loadEmbedFilterCatalog(): Promise<EmbedFilterCatalog> {
+  const [countriesRows, citiesRows, typesRows, levelsRows, languagesRows, sampleUnis] = await Promise.all([
+    db.selectDistinct({ v: universitiesTable.country })
+      .from(universitiesTable)
+      .where(and(eq(universitiesTable.isActive, true), isNotNull(universitiesTable.country)))
+      .orderBy(universitiesTable.country),
+    db.selectDistinct({ v: universitiesTable.city })
+      .from(universitiesTable)
+      .where(and(eq(universitiesTable.isActive, true), isNotNull(universitiesTable.city)))
+      .orderBy(universitiesTable.city),
+    db.selectDistinct({ v: universitiesTable.universityType })
+      .from(universitiesTable)
+      .where(and(eq(universitiesTable.isActive, true), isNotNull(universitiesTable.universityType)))
+      .orderBy(universitiesTable.universityType),
+    db.selectDistinct({ v: programsTable.degree })
+      .from(programsTable)
+      .where(and(eq(programsTable.isActive, true), isNotNull(programsTable.degree)))
+      .orderBy(programsTable.degree),
+    db.selectDistinct({ v: programsTable.language })
+      .from(programsTable)
+      .where(and(eq(programsTable.isActive, true), isNotNull(programsTable.language)))
+      .orderBy(programsTable.language),
+    db.select({ id: universitiesTable.id, name: universitiesTable.name, country: universitiesTable.country })
+      .from(universitiesTable)
+      .where(eq(universitiesTable.isActive, true))
+      .orderBy(universitiesTable.name)
+      .limit(50),
+  ]);
+  const clean = (rows: Array<{ v: string | null }>): string[] =>
+    Array.from(new Set(rows.map((r) => (r.v ?? "").trim()).filter(Boolean))).sort();
+  return {
+    countries: clean(countriesRows),
+    cities: clean(citiesRows),
+    universityTypes: clean(typesRows),
+    levels: clean(levelsRows),
+    languages: clean(languagesRows),
+    sampleUniversities: sampleUnis,
+  };
+}
+
 router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROLES), json({ limit: "64kb" }), async (req, res): Promise<void> => {
   const { ids } = (req.body || {}) as { ids?: unknown };
   let rows;
@@ -236,9 +283,13 @@ router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROL
   } else {
     rows = await db.select().from(embedWidgetsTable).orderBy(embedWidgetsTable.name);
   }
-  const columns = embedWidgetColumns(VALID_MODES);
+  const catalog = await loadEmbedFilterCatalog();
+  const columns = embedWidgetColumns(VALID_MODES, catalog);
   const buf = await buildWorkbookBuffer({
-    sheets: [{ name: "Widgets", columns, rows: embedExportRows(rows as Array<Record<string, unknown>>) }],
+    sheets: [
+      { name: "Widgets", columns, rows: embedExportRows(rows as Array<Record<string, unknown>>) },
+      buildEmbedFilterReferenceSheet(catalog),
+    ],
     meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
   });
   await logAudit(req.user!.id, "export_embed_widgets", "embed_widget", null, { count: rows.length }, req.ip);
@@ -248,9 +299,31 @@ router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROL
 });
 
 router.get("/embed/widgets/template", requireAuth, requireRole(...EMBED_ADMIN_ROLES), async (req, res): Promise<void> => {
-  const columns = embedWidgetColumns(VALID_MODES);
+  const catalog = await loadEmbedFilterCatalog();
+  const columns = embedWidgetColumns(VALID_MODES, catalog);
+  const sampleSlugSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  // One example row so admins immediately see the expected JSON shape.
+  // The row is plainly marked "EXAMPLE …" — admins delete it before import.
+  const examplePreset: Record<string, unknown> = {};
+  if (catalog.countries[0]) examplePreset.country = catalog.countries[0];
+  if (catalog.levels[0]) examplePreset.level = catalog.levels[0];
+  const exampleRow = {
+    name: "EXAMPLE — delete or edit me",
+    slug: `example-widget-${sampleSlugSuffix}`,
+    mode: VALID_MODES[0] ?? "combined",
+    isActive: true,
+    theme: { primary: "#0ea5e9", radius: "8px" },
+    presetFilters: examplePreset,
+    lockedFilters: [],
+    hiddenFilters: [],
+    visibleFilters: [...EMBED_FILTER_KEYS_FROM_LIB],
+    allowedDomains: ["example.com"],
+  };
   const buf = await buildWorkbookBuffer({
-    sheets: [{ name: "Widgets", columns, rows: [] }],
+    sheets: [
+      { name: "Widgets", columns, rows: [exampleRow as Record<string, unknown>] },
+      buildEmbedFilterReferenceSheet(catalog),
+    ],
     meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
   });
   res.setHeader("Content-Type", XLSX_CONTENT_TYPE);

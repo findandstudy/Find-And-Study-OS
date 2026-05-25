@@ -349,9 +349,41 @@ export async function parseWorkbookBuffer(
 
 export const EMBED_KIND = "embed_widgets";
 
+// Canonical list of filter keys the embed widget supports. Mirrors the
+// FILTER_KEYS list in artifacts/edcons/src/pages/admin/Embeds.tsx — keep
+// the two in sync so admins see the same allowed keys in the UI and the
+// downloaded Excel template.
+export const EMBED_FILTER_KEYS = [
+  "country", "city", "universityType", "universityId", "level", "language",
+] as const;
+
+export type EmbedFilterKey = (typeof EMBED_FILTER_KEYS)[number];
+
+// Catalog of currently-valid values for each filter key, sampled from the
+// live DB so admins don't have to guess what to type into the JSON cells.
+// `null` for `universityId` because IDs are numeric — the sample
+// universities list is rendered as a separate reference instead.
+export interface EmbedFilterCatalog {
+  countries: readonly string[];
+  cities: readonly string[];
+  universityTypes: readonly string[];
+  levels: readonly string[];
+  languages: readonly string[];
+  // Up to N sample universities so admins can paste the right numeric id
+  // into presetFilters.universityId.
+  sampleUniversities: ReadonlyArray<{ id: number; name: string; country: string | null }>;
+}
+
 export function embedWidgetColumns(
   validModes: readonly string[],
+  catalog?: EmbedFilterCatalog,
 ): readonly ColumnSpec[] {
+  const keysList = EMBED_FILTER_KEYS.join(", ");
+  const presetNote = catalog
+    ? `Object of default filter values applied on load. Valid keys: ${keysList}. ` +
+      `See the "Filter reference" sheet for sample values from your live data.`
+    : `Object of default filter values applied on load. Valid keys: ${keysList}.`;
+  const arrayNote = `Array of filter keys. Allowed: ${keysList}.`;
   return [
     { key: "name", header: "Name", kind: "string", required: true, width: 28 },
     { key: "slug", header: "Slug", kind: "string", required: true, width: 28,
@@ -360,15 +392,77 @@ export function embedWidgetColumns(
     { key: "isActive", header: "Active", kind: "boolean", required: true, width: 10 },
     { key: "theme", header: "Theme (JSON)", kind: "json", width: 40,
       note: 'Object, e.g. {"primary":"#0ea5e9","radius":"8px"}' },
-    { key: "presetFilters", header: "Preset filters (JSON)", kind: "json", width: 32,
-      note: "Object of default filter values applied on load." },
+    { key: "presetFilters", header: "Preset filters (JSON)", kind: "json", width: 36,
+      note: presetNote },
     { key: "lockedFilters", header: "Locked filters (JSON)", kind: "json", width: 28,
-      note: 'Array of filter keys, e.g. ["country","level"]' },
-    { key: "hiddenFilters", header: "Hidden filters (JSON)", kind: "json", width: 28 },
-    { key: "visibleFilters", header: "Visible filters (JSON)", kind: "json", width: 28 },
+      note: arrayNote + ' Example: ["country","level"]' },
+    { key: "hiddenFilters", header: "Hidden filters (JSON)", kind: "json", width: 28,
+      note: arrayNote },
+    { key: "visibleFilters", header: "Visible filters (JSON)", kind: "json", width: 28,
+      note: arrayNote },
     { key: "allowedDomains", header: "Allowed domains (JSON)", kind: "json", width: 36,
       note: 'Array of hostnames permitted to embed, e.g. ["example.com"]' },
   ];
+}
+
+// --- Embed filter reference (read-only docs sheet) -----------------------
+
+const FILTER_REFERENCE_COLUMNS: readonly ColumnSpec[] = [
+  { key: "filterKey", header: "Filter key", kind: "string", width: 20 },
+  { key: "valueType", header: "Value type", kind: "string", width: 16 },
+  { key: "sampleValues", header: "Sample valid values (from your live data)", kind: "string", width: 80 },
+  { key: "exampleUsage", header: "Example preset JSON", kind: "string", width: 40 },
+];
+
+function joinSample(values: readonly string[], cap = 12): string {
+  if (values.length === 0) return "(no values yet — none configured in your data)";
+  const head = values.slice(0, cap).join(", ");
+  return values.length > cap ? `${head}, … (${values.length - cap} more)` : head;
+}
+
+export function buildEmbedFilterReferenceSheet(catalog: EmbedFilterCatalog): SheetSpec<Record<string, unknown>> {
+  const sampleUniIds = catalog.sampleUniversities.slice(0, 8)
+    .map((u) => `${u.id} (${u.name}${u.country ? ` — ${u.country}` : ""})`)
+    .join(", ");
+  const rows: Array<Record<string, unknown>> = [
+    {
+      filterKey: "country",
+      valueType: "string",
+      sampleValues: joinSample(catalog.countries),
+      exampleUsage: '{"country":"Turkey"}',
+    },
+    {
+      filterKey: "city",
+      valueType: "string",
+      sampleValues: joinSample(catalog.cities),
+      exampleUsage: '{"city":"Istanbul"}',
+    },
+    {
+      filterKey: "universityType",
+      valueType: "string",
+      sampleValues: joinSample(catalog.universityTypes),
+      exampleUsage: '{"universityType":"Private"}',
+    },
+    {
+      filterKey: "universityId",
+      valueType: "number",
+      sampleValues: sampleUniIds || "(no active universities)",
+      exampleUsage: '{"universityId":1}',
+    },
+    {
+      filterKey: "level",
+      valueType: "string",
+      sampleValues: joinSample(catalog.levels),
+      exampleUsage: '{"level":"Master"}',
+    },
+    {
+      filterKey: "language",
+      valueType: "string",
+      sampleValues: joinSample(catalog.languages),
+      exampleUsage: '{"language":"English"}',
+    },
+  ];
+  return { name: "Filter reference", columns: FILTER_REFERENCE_COLUMNS, rows };
 }
 
 // --- Web-to-Lead forms schema --------------------------------------------
