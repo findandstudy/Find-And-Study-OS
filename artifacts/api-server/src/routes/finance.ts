@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable } from "@workspace/db";
+import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable, programsTable } from "@workspace/db";
 import { eq, sql, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -164,6 +164,27 @@ function calcCommissionAmounts(body: any) {
     : aAmount > 0 && saRate > 0 ? (aAmount * saRate) / 100 : 0;
   return { uAmount, aAmount, saAmount };
 }
+
+/* ─── CURRENCIES IN USE ──────────────────────────────────────── */
+
+router.get("/currencies-in-use", requireAuth, async (_req, res): Promise<void> => {
+  try {
+    const [progRows, commRows, feeRows] = await Promise.all([
+      db.selectDistinct({ currency: programsTable.currency }).from(programsTable),
+      db.selectDistinct({ currency: commissionsTable.currency }).from(commissionsTable),
+      db.selectDistinct({ currency: serviceFeesTable.currency }).from(serviceFeesTable),
+    ]);
+    const set = new Set<string>();
+    for (const r of [...progRows, ...commRows, ...feeRows]) {
+      const c = normCurrency((r as any).currency);
+      set.add(c);
+    }
+    const inUse = (SUPPORTED_CURRENCIES as readonly string[]).filter(c => set.has(c));
+    res.json({ currencies: inUse });
+  } catch {
+    res.json({ currencies: [] });
+  }
+});
 
 /* ─── COMMISSIONS ────────────────────────────────────────────── */
 
