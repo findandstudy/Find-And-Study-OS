@@ -380,3 +380,51 @@ test("xlsx: multiple long-enum columns get distinct defined names", async () => 
   const names = wb.definedNames.model.map((n: { name: string }) => n.name).sort();
   assert.deepEqual(names, ["_opts_alpha_rng", "_opts_beta_rng"]);
 });
+
+test("xlsx: toEmbedInsertValues rejects invalid mode instead of silently coercing", async () => {
+  const { toEmbedInsertValues } = await import("../src/lib/exportImportExcel");
+  assert.throws(
+    () => toEmbedInsertValues({ name: "n", slug: "s", mode: "totally_made_up", isActive: true }, VALID_MODES),
+    /Invalid mode/,
+  );
+  // Empty / missing mode also rejected
+  assert.throws(
+    () => toEmbedInsertValues({ name: "n", slug: "s", mode: "", isActive: true }, VALID_MODES),
+    /Invalid mode/,
+  );
+});
+
+test("xlsx: server-level round-trip — export embed bytes can be re-imported losslessly", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  const original = [
+    { name: "Alpha", slug: "alpha", mode: "combined", isActive: true,
+      theme: { primary: "#0ea5e9" }, presetFilters: { country: "TR" },
+      lockedFilters: ["country"], hiddenFilters: [], visibleFilters: ["level"],
+      allowedDomains: ["alpha.example.com"] },
+    { name: "Beta", slug: "beta", mode: "lead_form", isActive: false,
+      theme: {}, presetFilters: {}, lockedFilters: [], hiddenFilters: [],
+      visibleFilters: [], allowedDomains: [] },
+  ];
+  // Pretend this was an /export response.
+  const exportBuf = await buildWorkbookBuffer({
+    sheets: [{ name: "Widgets", columns: cols, rows: original }],
+    meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
+  });
+  // Re-parse as if it had been uploaded to /import.
+  const parsed = await parseWorkbookBuffer(exportBuf, { expectedKind: EMBED_KIND }, { Widgets: cols });
+  const rows = parsed.sheets.get("Widgets")!.rows;
+  assert.equal(rows.length, original.length);
+  const { toEmbedInsertValues } = await import("../src/lib/exportImportExcel");
+  for (let i = 0; i < rows.length; i++) {
+    const vals = toEmbedInsertValues(rows[i], VALID_MODES);
+    // Every editable field survives the round-trip.
+    assert.equal(vals.name, original[i].name);
+    assert.equal(vals.slug, original[i].slug);
+    assert.equal(vals.mode, original[i].mode);
+    assert.equal(vals.isActive, original[i].isActive);
+    assert.deepEqual(vals.theme, original[i].theme);
+    assert.deepEqual(vals.presetFilters, original[i].presetFilters);
+    assert.deepEqual(vals.lockedFilters, original[i].lockedFilters);
+    assert.deepEqual(vals.allowedDomains, original[i].allowedDomains);
+  }
+});

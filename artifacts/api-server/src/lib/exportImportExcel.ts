@@ -424,7 +424,14 @@ export function toEmbedInsertValues(
   row: Record<string, unknown>,
   validModes: readonly string[],
 ): Record<string, unknown> {
-  const mode = validModes.includes(row.mode as string) ? row.mode as string : "combined";
+  // Reject invalid modes loudly rather than silently coercing — admins
+  // would otherwise discover the wrong mode only after publishing.
+  if (typeof row.mode !== "string" || !validModes.includes(row.mode)) {
+    throw new ImportValidationError(
+      `Invalid mode "${String(row.mode ?? "")}". Allowed: ${validModes.join(", ")}.`,
+    );
+  }
+  const mode = row.mode;
   return {
     name: row.name,
     slug: row.slug,

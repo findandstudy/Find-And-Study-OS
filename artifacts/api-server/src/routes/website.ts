@@ -340,8 +340,10 @@ router.post(
         if (!item.slug || typeof item.slug !== "string") throw new Error("Slug is required");
         const slug = normalizeFormSlug(item.slug);
         if (!slug) throw new Error("Slug is invalid");
-        const submitAction = validSubmitActions.has(item.submitAction as string)
-          ? (item.submitAction as string) : "email";
+        if (typeof item.submitAction !== "string" || !validSubmitActions.has(item.submitAction)) {
+          throw new Error(`Invalid submitAction "${String(item.submitAction ?? "")}". Allowed: ${Array.from(validSubmitActions).join(", ")}.`);
+        }
+        const submitAction = item.submitAction;
 
         const formValues = {
           name: item.name,
@@ -364,7 +366,10 @@ router.post(
         const fieldRows = matchingFields.map((f, idx) => {
           if (!f.label || typeof f.label !== "string") throw new Error(`Field row ${idx + 1}: Label is required`);
           if (!f.name || typeof f.name !== "string") throw new Error(`Field row ${idx + 1}: Name is required`);
-          const fieldType = validFieldTypes.has(f.fieldType as string) ? (f.fieldType as string) : "text";
+          if (typeof f.fieldType !== "string" || !validFieldTypes.has(f.fieldType)) {
+            throw new Error(`Field row ${idx + 1}: Invalid fieldType "${String(f.fieldType ?? "")}". Allowed: ${Array.from(validFieldTypes).join(", ")}.`);
+          }
+          const fieldType = f.fieldType;
           return {
             fieldType,
             label: f.label,
