@@ -117,15 +117,31 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
     revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd} AND ${idCol} IN (${sql.join(agentIds.map(id => sql`${id}`), sql`, `)})`;
   }
 
-  const revenueExpr = isAgent
-    ? (isSubAgentUser
-        ? sql<number>`coalesce(sum(CAST(sub_agent_commission_amount AS numeric)), 0)`
-        : sql<number>`coalesce(sum(CAST(agent_commission_amount AS numeric) - coalesce(CAST(sub_agent_commission_amount AS numeric), 0)), 0)`)
-    : sql<number>`coalesce(sum(CAST(university_commission_amount AS numeric) - coalesce(CAST(agent_commission_amount AS numeric), 0)), 0)`;
-  const [{ monthlyRevenue }] = await db
-    .select({ monthlyRevenue: revenueExpr })
+  const revenueRows = await db
+    .select({
+      currency: sql<string>`coalesce(currency, 'USD')`,
+      universityCommissionAmount: commissionsTable.universityCommissionAmount,
+      agentCommissionAmount: commissionsTable.agentCommissionAmount,
+      subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,
+    })
     .from(commissionsTable)
     .where(revenueFilter);
+
+  const SUPPORTED = ["USD", "EUR", "GBP", "TRY", "AED"] as const;
+  const monthlyRevenueByCurrency: Record<string, number> = {};
+  const toN = (v: any) => parseFloat(String(v ?? 0)) || 0;
+  for (const r of revenueRows) {
+    const raw = String(r.currency || "USD").toUpperCase();
+    const cur = (SUPPORTED as readonly string[]).includes(raw) ? raw : "USD";
+    const uAmt = toN(r.universityCommissionAmount);
+    const aAmt = toN(r.agentCommissionAmount);
+    const saAmt = toN(r.subAgentCommissionAmount);
+    const val = isAgent
+      ? (isSubAgentUser ? saAmt : (aAmt - saAmt))
+      : (uAmt - aAmt);
+    monthlyRevenueByCurrency[cur] = (monthlyRevenueByCurrency[cur] || 0) + val;
+  }
+  const monthlyRevenue = Object.values(monthlyRevenueByCurrency).reduce((s, v) => s + v, 0);
 
   res.json({
     totalLeads: Number(leads),
@@ -133,7 +149,8 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
     totalApplications: Number(applications),
     activeApplications: activeApps,
     enrolledStudents: enrolledStudents,
-    monthlyRevenue: Number(monthlyRevenue),
+    monthlyRevenue,
+    monthlyRevenueByCurrency,
   });
 });
 

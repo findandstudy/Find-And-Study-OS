@@ -7,20 +7,20 @@ import { DollarSign, CheckCircle, Banknote, Receipt } from "lucide-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDate } from "@/lib/i18n";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { useCurrencyPreference } from "@/hooks/use-currency-preference";
+import { formatMoney, SUPPORTED_CURRENCIES, type CurrencyCode } from "@/lib/currency";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-
-function formatUSD(v: number) {
-  return `USD ${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 export default function AgentCommissions() {
   const { t, lang } = useI18n();
   const { user } = useAuth(true);
+  const { currency, setCurrency } = useCurrencyPreference("agent-commissions", "all");
   const pgComm = useTablePagination(25);
   const pgFee = useTablePagination(25);
 
-  const { data: summary } = useQuery<{ commissions: { potential: number; confirmed: number; paid: number; pending: number }; serviceFees: { potential: number; confirmed: number; paid: number; pending: number } }>({
+  const { data: summary } = useQuery<any>({
     queryKey: ["agent-finance-summary", user?.id],
     enabled: !!user,
     queryFn: async () => {
@@ -30,21 +30,22 @@ export default function AgentCommissions() {
     },
   });
 
+  const commQs = currency === "all" ? "" : `&currency=${currency}`;
   const { data: commData, isLoading: commLoading } = useQuery({
-    queryKey: ["agent-commissions", user?.id],
+    queryKey: ["agent-commissions", user?.id, currency],
     enabled: !!user,
     queryFn: async () => {
-      const r = await fetch(`${BASE_URL}/api/agent/commissions?limit=200`, { credentials: "include" });
+      const r = await fetch(`${BASE_URL}/api/agent/commissions?limit=200${commQs}`, { credentials: "include" });
       if (!r.ok) throw new Error("Failed");
       return r.json();
     },
   });
 
   const { data: feeData, isLoading: feeLoading } = useQuery({
-    queryKey: ["agent-service-fees", user?.id],
+    queryKey: ["agent-service-fees", user?.id, currency],
     enabled: !!user,
     queryFn: async () => {
-      const r = await fetch(`${BASE_URL}/api/agent/service-fees?limit=200`, { credentials: "include" });
+      const r = await fetch(`${BASE_URL}/api/agent/service-fees?limit=200${commQs}`, { credentials: "include" });
       if (!r.ok) throw new Error("Failed");
       return r.json();
     },
@@ -56,48 +57,76 @@ export default function AgentCommissions() {
   const { paged: pagedComm, total: totalComm } = pgComm.paginate(commissions);
   const { paged: pagedFees, total: totalFees } = pgFee.paginate(serviceFees);
 
-  const cs = summary?.commissions || { potential: 0, confirmed: 0, paid: 0, pending: 0 };
-  const fs = summary?.serviceFees || { potential: 0, confirmed: 0, paid: 0, pending: 0 };
+  const commByCur: Record<string, any> = summary?.commissions?.byCurrency || {};
+  const feeByCur: Record<string, any> = summary?.serviceFees?.byCurrency || {};
+  const activeCurrencies: CurrencyCode[] = currency === "all"
+    ? (() => {
+        const set = new Set<string>();
+        Object.keys(commByCur).forEach(c => set.add(c));
+        Object.keys(feeByCur).forEach(c => set.add(c));
+        const arr = [...set].filter(c => (SUPPORTED_CURRENCIES as readonly string[]).includes(c)) as CurrencyCode[];
+        return arr.length > 0 ? arr : ["USD"];
+      })()
+    : [currency as CurrencyCode];
+
+  function renderCardValues(buckets: Record<string, any>, field: string) {
+    return (
+      <div className="space-y-0.5">
+        {activeCurrencies.map(c => {
+          const b = buckets[c] || {};
+          const v = Number(b[field] || 0);
+          return (
+            <p key={c} className="text-base lg:text-lg font-display font-bold text-foreground leading-tight">
+              {formatMoney(v, c, { maximumFractionDigits: 2, minimumFractionDigits: 0 })}
+            </p>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-primary" /> {t("agentCommissions.title")}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("agentCommissions.subtitle")}</p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-2">
+              <DollarSign className="w-6 h-6 text-primary" /> {t("agentCommissions.title")}
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">{t("agentCommissions.subtitle")}</p>
+          </div>
+          <CurrencySelector value={currency} onChange={setCurrency} />
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: t("agentCommissions.potentialCommission"), value: formatUSD(cs.potential), icon: DollarSign, color: "text-green-500 bg-green-500/10" },
-            { label: t("agentCommissions.confirmedCommission"), value: formatUSD(cs.confirmed), icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
-            { label: t("agentCommissions.commissionPaid"), value: formatUSD(cs.paid), icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
-            { label: t("agentCommissions.pendingCommission"), value: formatUSD(cs.pending), icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
+            { label: t("agentCommissions.potentialCommission"), field: "potential", icon: DollarSign, color: "text-green-500 bg-green-500/10" },
+            { label: t("agentCommissions.confirmedCommission"), field: "confirmed", icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
+            { label: t("agentCommissions.commissionPaid"), field: "paid", icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
+            { label: t("agentCommissions.pendingCommission"), field: "pending", icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
           ].map((s, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
               <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-3`}>
                 <s.icon className="w-5 h-5" />
               </div>
               <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{s.label}</p>
-              <p className="text-xl font-display font-bold text-foreground mt-1">{s.value}</p>
+              <div className="mt-1">{renderCardValues(commByCur, s.field)}</div>
             </Card>
           ))}
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: t("agentCommissions.potentialServiceFee"), value: formatUSD(fs.potential), icon: DollarSign, color: "text-green-500 bg-green-500/10" },
-            { label: t("agentCommissions.confirmedServiceFee"), value: formatUSD(fs.confirmed), icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
-            { label: t("agentCommissions.paidServiceFee"), value: formatUSD(fs.paid), icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
-            { label: t("agentCommissions.pendingServiceFee"), value: formatUSD(fs.pending), icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
+            { label: t("agentCommissions.potentialServiceFee"), field: "potential", icon: DollarSign, color: "text-green-500 bg-green-500/10" },
+            { label: t("agentCommissions.confirmedServiceFee"), field: "confirmed", icon: DollarSign, color: "text-amber-500 bg-amber-500/10" },
+            { label: t("agentCommissions.paidServiceFee"), field: "paid", icon: DollarSign, color: "text-blue-500 bg-blue-500/10" },
+            { label: t("agentCommissions.pendingServiceFee"), field: "pending", icon: DollarSign, color: "text-purple-500 bg-purple-500/10" },
           ].map((s, i) => (
             <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
               <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-3`}>
                 <s.icon className="w-5 h-5" />
               </div>
               <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{s.label}</p>
-              <p className="text-xl font-display font-bold text-foreground mt-1">{s.value}</p>
+              <div className="mt-1">{renderCardValues(feeByCur, s.field)}</div>
             </Card>
           ))}
         </div>
@@ -149,9 +178,9 @@ export default function AgentCommissions() {
                       <tr key={c.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-5 py-4 text-sm font-medium">{c.studentName || "—"}</td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">{c.universityName || "—"}</td>
-                        {!isSubAgent && <td className="px-5 py-4 text-sm font-medium">{c.programFee ? `${c.currency || "USD"} ${Number(c.programFee).toLocaleString()}` : "—"}</td>}
-                        <td className="px-5 py-4 text-sm font-bold text-primary">{commAmt ? `${c.currency || "USD"} ${Number(commAmt).toLocaleString()}` : "—"}</td>
-                        <td className="px-5 py-4 text-sm font-medium text-green-600">{commPaid && Number(commPaid) > 0 ? `${c.currency || "USD"} ${Number(commPaid).toLocaleString()}` : "—"}</td>
+                        {!isSubAgent && <td className="px-5 py-4 text-sm font-medium">{c.programFee ? formatMoney(c.programFee, c.currency, { maximumFractionDigits: 2 }) : "—"}</td>}
+                        <td className="px-5 py-4 text-sm font-bold text-primary">{commAmt ? formatMoney(commAmt, c.currency, { maximumFractionDigits: 2 }) : "—"}</td>
+                        <td className="px-5 py-4 text-sm font-medium text-green-600">{commPaid && Number(commPaid) > 0 ? formatMoney(commPaid, c.currency, { maximumFractionDigits: 2 }) : "—"}</td>
                         <td className="px-5 py-4">
                           <Badge className={
                             c.status === "potential" ? "bg-gray-100 text-gray-600 border-gray-200" :
@@ -220,11 +249,11 @@ export default function AgentCommissions() {
                       <tr key={f.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-5 py-4 text-sm font-medium">{f.studentName || "—"}</td>
                         <td className="px-5 py-4 text-sm text-muted-foreground">{f.universityName || "—"}</td>
-                        <td className="px-5 py-4 text-sm font-bold text-primary">{f.currency || "USD"} {Number(f.totalAmount || 0).toLocaleString()}</td>
+                        <td className="px-5 py-4 text-sm font-bold text-primary">{formatMoney(f.totalAmount, f.currency, { maximumFractionDigits: 2 })}</td>
                         <td className="px-5 py-4 text-sm">
                           {f.firstInstallmentAmount ? (
                             <span className={f.firstInstallmentPaidAt ? "text-green-600 font-medium" : "text-muted-foreground"}>
-                              {f.currency || "USD"} {Number(f.firstInstallmentAmount).toLocaleString()}
+                              {formatMoney(f.firstInstallmentAmount, f.currency, { maximumFractionDigits: 2 })}
                               {f.firstInstallmentPaidAt && <CheckCircle className="w-3 h-3 inline ml-1" />}
                             </span>
                           ) : "—"}
@@ -232,7 +261,7 @@ export default function AgentCommissions() {
                         <td className="px-5 py-4 text-sm">
                           {f.secondInstallmentAmount ? (
                             <span className={f.secondInstallmentPaidAt ? "text-green-600 font-medium" : "text-muted-foreground"}>
-                              {f.currency || "USD"} {Number(f.secondInstallmentAmount).toLocaleString()}
+                              {formatMoney(f.secondInstallmentAmount, f.currency, { maximumFractionDigits: 2 })}
                               {f.secondInstallmentPaidAt && <CheckCircle className="w-3 h-3 inline ml-1" />}
                             </span>
                           ) : "—"}

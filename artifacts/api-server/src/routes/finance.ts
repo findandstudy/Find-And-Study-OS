@@ -19,6 +19,135 @@ function toNum(v: any): number {
   return parseFloat(String(v ?? 0)) || 0;
 }
 
+const SUPPORTED_CURRENCIES = ["USD", "EUR", "GBP", "TRY", "AED"] as const;
+function normCurrency(c: any): string {
+  const s = String(c ?? "USD").toUpperCase();
+  return (SUPPORTED_CURRENCIES as readonly string[]).includes(s) ? s : "USD";
+}
+
+type CommBucket = {
+  potentialUniversityCommission: number;
+  potentialAgentCommission: number;
+  confirmedUniversityCommission: number;
+  confirmedAgentCommission: number;
+  totalUniversityCommission: number;
+  totalUniversityCollected: number;
+  totalAgentCommission: number;
+  totalAgentPaid: number;
+  totalSubAgentCommission: number;
+  totalSubAgentPaid: number;
+  totalNetAgency: number;
+  totalOffsetAmount: number;
+  paidToAgents: number;
+  paidToSubAgents: number;
+  collectedFromUniversities: number;
+  pendingToCollect: number;
+  pendingToPay: number;
+  pendingToPaySubAgents: number;
+};
+function emptyCommBucket(): CommBucket {
+  return {
+    potentialUniversityCommission: 0, potentialAgentCommission: 0,
+    confirmedUniversityCommission: 0, confirmedAgentCommission: 0,
+    totalUniversityCommission: 0, totalUniversityCollected: 0,
+    totalAgentCommission: 0, totalAgentPaid: 0,
+    totalSubAgentCommission: 0, totalSubAgentPaid: 0,
+    totalNetAgency: 0, totalOffsetAmount: 0,
+    paidToAgents: 0, paidToSubAgents: 0,
+    collectedFromUniversities: 0,
+    pendingToCollect: 0, pendingToPay: 0, pendingToPaySubAgents: 0,
+  };
+}
+function buildCommissionsByCurrency(rows: any[]): Record<string, CommBucket> {
+  const buckets: Record<string, CommBucket> = {};
+  for (const c of rows) {
+    const cur = normCurrency(c.currency);
+    const b = buckets[cur] ?? (buckets[cur] = emptyCommBucket());
+    const uAmt = toNum(c.universityCommissionAmount);
+    const uColl = toNum(c.universityCollected);
+    const aAmt = toNum(c.agentCommissionAmount);
+    const aPaid = toNum(c.agentPaid);
+    const saAmt = toNum(c.subAgentCommissionAmount);
+    const saPaid = toNum(c.subAgentPaid);
+    b.totalUniversityCommission += uAmt;
+    b.totalUniversityCollected += uColl;
+    b.totalAgentCommission += aAmt;
+    b.totalAgentPaid += aPaid;
+    b.totalSubAgentCommission += saAmt;
+    b.totalSubAgentPaid += saPaid;
+    b.totalNetAgency += uAmt - aAmt;
+    b.totalOffsetAmount += toNum(c.offsetAmount);
+    b.paidToAgents += aPaid;
+    b.paidToSubAgents += saPaid;
+    b.collectedFromUniversities += uColl;
+    if (c.status === "potential") {
+      b.potentialUniversityCommission += uAmt;
+      b.potentialAgentCommission += aAmt;
+    } else {
+      b.confirmedUniversityCommission += uAmt;
+      b.confirmedAgentCommission += aAmt;
+      b.pendingToCollect += (uAmt - uColl);
+      b.pendingToPay += (aAmt - aPaid);
+      b.pendingToPaySubAgents += (saAmt - saPaid);
+    }
+  }
+  return buckets;
+}
+
+type FeeBucket = {
+  totalServiceFees: number;
+  totalCollected: number;
+  potentialTotal: number;
+  confirmedTotal: number;
+};
+function emptyFeeBucket(): FeeBucket {
+  return { totalServiceFees: 0, totalCollected: 0, potentialTotal: 0, confirmedTotal: 0 };
+}
+function buildFeesByCurrency(rows: any[]): Record<string, FeeBucket> {
+  const buckets: Record<string, FeeBucket> = {};
+  for (const f of rows) {
+    const cur = normCurrency(f.currency);
+    const b = buckets[cur] ?? (buckets[cur] = emptyFeeBucket());
+    const total = toNum(f.totalAmount);
+    const collected = toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0);
+    b.totalServiceFees += total;
+    b.totalCollected += collected;
+    if (f.financeStatus === "potential") b.potentialTotal += total;
+    else if (f.financeStatus === "confirmed") b.confirmedTotal += total;
+  }
+  return buckets;
+}
+
+type AgentCommBucket = { potential: number; confirmed: number; paid: number; pending: number };
+function buildAgentCommByCurrency(rows: any[], isSubAgent: boolean): Record<string, AgentCommBucket> {
+  const buckets: Record<string, AgentCommBucket> = {};
+  for (const c of rows) {
+    const cur = normCurrency(c.currency);
+    const b = buckets[cur] ?? (buckets[cur] = { potential: 0, confirmed: 0, paid: 0, pending: 0 });
+    const amt = toNum(isSubAgent ? c.subAgentCommissionAmount : c.agentCommissionAmount);
+    const paid = toNum(isSubAgent ? c.subAgentPaid : c.agentPaid);
+    if (c.status === "potential") b.potential += amt;
+    else if (["confirmed", "collected_partial", "collected_full", "settled"].includes(c.status)) b.confirmed += amt;
+    b.paid += paid;
+    if (c.status !== "potential") b.pending += (amt - paid);
+  }
+  return buckets;
+}
+function buildAgentFeeByCurrency(rows: any[]): Record<string, AgentCommBucket> {
+  const buckets: Record<string, AgentCommBucket> = {};
+  for (const f of rows) {
+    const cur = normCurrency(f.currency);
+    const b = buckets[cur] ?? (buckets[cur] = { potential: 0, confirmed: 0, paid: 0, pending: 0 });
+    const total = toNum(f.totalAmount);
+    const collected = toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0);
+    if (f.financeStatus === "potential") b.potential += total;
+    else if (f.financeStatus === "confirmed") b.confirmed += total;
+    b.paid += collected;
+    if (f.status !== "paid") b.pending += (total - collected);
+  }
+  return buckets;
+}
+
 function calcCommissionAmounts(body: any) {
   const programFee = toNum(body.programFee);
   const uRate = toNum(body.universityCommissionRate);
@@ -86,6 +215,7 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
     totalSubAgentPaid: activeOnly.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
     totalNetAgency: activeOnly.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)), 0),
     totalOffsetAmount: activeOnly.reduce((s, c) => s + toNum(c.offsetAmount), 0),
+    byCurrency: buildCommissionsByCurrency(activeOnly),
   };
 
   res.json({
@@ -261,6 +391,7 @@ router.get("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (r
     confirmedCount: activeOnly.filter(f => f.financeStatus === "confirmed").length,
     potentialTotal: activeOnly.filter(f => f.financeStatus === "potential").reduce((s, f) => s + toNum(f.totalAmount), 0),
     confirmedTotal: activeOnly.filter(f => f.financeStatus === "confirmed").reduce((s, f) => s + toNum(f.totalAmount), 0),
+    byCurrency: buildFeesByCurrency(activeOnly),
   };
 
   res.json({ data, summary, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
@@ -649,6 +780,7 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
       pendingToCollect: confirmedComms.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
       pendingToPay: confirmedComms.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
       pendingToPaySubAgents: confirmedComms.reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
+      byCurrency: buildCommissionsByCurrency(commissions),
     },
     serviceFees: {
       total: fees.reduce((s, f) => s + toNum(f.totalAmount), 0),
@@ -662,6 +794,7 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
       confirmedCount: fees.filter(f => f.financeStatus === "confirmed").length,
       potentialTotal: fees.filter(f => f.financeStatus === "potential").reduce((s, f) => s + toNum(f.totalAmount), 0),
       confirmedTotal: fees.filter(f => f.financeStatus === "confirmed").reduce((s, f) => s + toNum(f.totalAmount), 0),
+      byCurrency: buildFeesByCurrency(fees),
     },
     offset: {
       totalConfirmedCommission,
@@ -733,7 +866,10 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), r
       pending: commissions.filter(c => !["potential"].includes(c.status)).reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
     };
 
-    res.json({ commissions: commSummary, serviceFees: { potential: 0, confirmed: 0, paid: 0, pending: 0 } });
+    res.json({
+      commissions: { ...commSummary, byCurrency: buildAgentCommByCurrency(commissions, true) },
+      serviceFees: { potential: 0, confirmed: 0, paid: 0, pending: 0, byCurrency: {} },
+    });
     return;
   }
 
@@ -761,7 +897,10 @@ router.get("/agent/finance-summary", requireAuth, requireRole(...AGENT_ROLES), r
     }, 0),
   };
 
-  res.json({ commissions: commSummary, serviceFees: feeSummary });
+  res.json({
+    commissions: { ...commSummary, byCurrency: buildAgentCommByCurrency(commissions, false) },
+    serviceFees: { ...feeSummary, byCurrency: buildAgentFeeByCurrency(fees) },
+  });
 });
 
 router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
@@ -771,19 +910,29 @@ router.get("/agent/commissions", requireAuth, requireRole(...AGENT_ROLES), requi
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   const isSubAgent = userRole === "sub_agent" || !!agent.parentAgentId;
 
-  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { page = "1", limit = "50", currency } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const whereClause = isSubAgent
-    ? and(eq(commissionsTable.subAgentId, agent.id), sql`${commissionsTable.status} != 'excluded'`)
-    : and(eq(commissionsTable.agentId, agent.id), sql`${commissionsTable.status} != 'excluded'`);
+  const conds = [
+    isSubAgent ? eq(commissionsTable.subAgentId, agent.id) : eq(commissionsTable.agentId, agent.id),
+    sql`${commissionsTable.status} != 'excluded'`,
+  ];
+  if (currency && (SUPPORTED_CURRENCIES as readonly string[]).includes(currency.toUpperCase())) {
+    conds.push(eq(commissionsTable.currency, currency.toUpperCase()));
+  }
+  const whereClause = and(...conds);
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(commissionsTable).where(whereClause);
   const data = await db.select().from(commissionsTable).where(whereClause)
     .orderBy(desc(commissionsTable.createdAt)).limit(limitNum).offset(offset);
+  const allRows = await db.select().from(commissionsTable).where(and(
+    isSubAgent ? eq(commissionsTable.subAgentId, agent.id) : eq(commissionsTable.agentId, agent.id),
+    sql`${commissionsTable.status} != 'excluded'`,
+  ));
+  const byCurrency = buildAgentCommByCurrency(allRows, isSubAgent);
 
-  res.json({ data, isSubAgent, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  res.json({ data, isSubAgent, byCurrency, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), requireAgentStaffPermission("commissions"), async (req, res): Promise<void> => {
@@ -792,17 +941,25 @@ router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), requ
   const agent = await getAgentRecord(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  const { page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { page = "1", limit = "50", currency } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const whereClause = and(eq(serviceFeesTable.agentId, agent.id), sql`${serviceFeesTable.financeStatus} != 'excluded'`);
+  const conds = [eq(serviceFeesTable.agentId, agent.id), sql`${serviceFeesTable.financeStatus} != 'excluded'`];
+  if (currency && (SUPPORTED_CURRENCIES as readonly string[]).includes(currency.toUpperCase())) {
+    conds.push(eq(serviceFeesTable.currency, currency.toUpperCase()));
+  }
+  const whereClause = and(...conds);
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(serviceFeesTable).where(whereClause);
   const data = await db.select().from(serviceFeesTable).where(whereClause)
     .orderBy(desc(serviceFeesTable.createdAt)).limit(limitNum).offset(offset);
+  const allRows = await db.select().from(serviceFeesTable).where(and(
+    eq(serviceFeesTable.agentId, agent.id), sql`${serviceFeesTable.financeStatus} != 'excluded'`,
+  ));
+  const byCurrency = buildAgentFeeByCurrency(allRows);
 
-  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  res.json({ data, byCurrency, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 export default router;

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, AlertTriangle, Shield, Link as LinkIcon } from "lucide-react";
+import { formatMoney } from "@/lib/currency";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -138,13 +139,25 @@ export default function StaffDashboard() {
             { label: t("staffDash.totalLeads"), value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
             { label: t("staffDash.activeApplications"), value: stats?.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
             { label: t("staffDash.studentsEnrolled"), value: (stats as any)?.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
-            { label: t("staffDash.revenueMonth"), value: `$${((stats as any)?.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-          ].map((stat, i) => (
+            { label: t("staffDash.revenueMonth"), value: (stats as any)?.monthlyRevenueByCurrency || { USD: (stats as any)?.monthlyRevenue || 0 }, icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10", isMoney: true },
+          ].map((stat: any, i) => (
             <Card key={i} className="p-6 border-none shadow-lg shadow-black/5 hover:-translate-y-1 transition-transform duration-300">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-1">{stat.label}</p>
-                  <h3 className="text-3xl font-display font-bold text-foreground">{isLoading ? "..." : stat.value}</h3>
+                  {stat.isMoney ? (
+                    <div className="space-y-0.5">
+                      {(() => {
+                        const entries = Object.entries(stat.value as Record<string, number>).filter(([, v]) => v !== 0);
+                        if (entries.length === 0) entries.push(["USD", 0]);
+                        return entries.map(([cur, v]) => (
+                          <h3 key={cur} className="text-2xl font-display font-bold text-foreground leading-tight">{isLoading ? "..." : formatMoney(v as number, cur)}</h3>
+                        ));
+                      })()}
+                    </div>
+                  ) : (
+                    <h3 className="text-3xl font-display font-bold text-foreground">{isLoading ? "..." : stat.value}</h3>
+                  )}
                 </div>
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.bg}`}>
                   <stat.icon className={`w-6 h-6 ${stat.color}`} />

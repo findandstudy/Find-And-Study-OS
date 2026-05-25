@@ -6,6 +6,7 @@ import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, FileText, GraduationCap, DollarSign, TrendingUp, AlertTriangle, Activity, Shield, CalendarClock, ExternalLink, Bell, UserPlus, FileCheck, CreditCard, MessageCircle, Megaphone, AlertCircle, ArrowUpRight } from "lucide-react";
+import { formatMoney } from "@/lib/currency";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
@@ -122,7 +123,7 @@ export default function AdminDashboard() {
     { label: t("adminDash.totalLeads"), value: s.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
     { label: t("adminDash.activeApplications"), value: s.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10" },
     { label: t("adminDash.studentsEnrolled"), value: s.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10" },
-    { label: t("adminDash.revenueMonth"), value: `$${(s.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10" },
+    { label: t("adminDash.revenueMonth"), value: s.monthlyRevenueByCurrency || { USD: s.monthlyRevenue || 0 }, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10", isMoney: true },
   ];
 
   return (
@@ -140,7 +141,7 @@ export default function AdminDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statCards.map((s, i) => (
+          {statCards.map((s: any, i) => (
             <Card key={i} className="p-6 border-none shadow-lg shadow-black/5 hover:-translate-y-1 transition-transform duration-300 group">
               <div className="flex items-start justify-between mb-4">
                 <div className={`w-12 h-12 rounded-xl ${s.bg} flex items-center justify-center group-hover:scale-110 transition-transform`}>
@@ -148,9 +149,23 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <p className="text-sm font-medium text-muted-foreground">{s.label}</p>
-              <p className="text-3xl font-display font-bold text-foreground mt-1">
-                {isLoading ? "..." : s.value}
-              </p>
+              {s.isMoney ? (
+                <div className="mt-1 space-y-0.5">
+                  {(() => {
+                    const entries = Object.entries(s.value as Record<string, number>).filter(([, v]) => v !== 0);
+                    if (entries.length === 0) entries.push(["USD", 0]);
+                    return entries.map(([cur, v]) => (
+                      <p key={cur} className="text-2xl font-display font-bold text-foreground leading-tight">
+                        {isLoading ? "..." : formatMoney(v as number, cur)}
+                      </p>
+                    ));
+                  })()}
+                </div>
+              ) : (
+                <p className="text-3xl font-display font-bold text-foreground mt-1">
+                  {isLoading ? "..." : s.value}
+                </p>
+              )}
             </Card>
           ))}
         </div>

@@ -27,12 +27,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { useI18n } from "@/hooks/use-i18n";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { useCurrencyPreference } from "@/hooks/use-currency-preference";
+import { formatMoney, SUPPORTED_CURRENCIES, listNonZeroCurrencies, type CurrencyCode } from "@/lib/currency";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
-const fmt = (v: any, currency = "USD") =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 0 }).format(toNum(v));
+const fmt = (v: any, currency: string | null | undefined = "USD") =>
+  formatMoney(v, currency);
 const pct = (num: number, den: number) =>
   den > 0 ? Math.round((num / den) * 100) : 0;
 
@@ -842,6 +845,7 @@ export default function FinancePage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { season } = useSeason();
+  const { currency, setCurrency } = useCurrencyPreference("finance-staff", "all");
   const [tab, setTab] = useState("commissions");
   const [commSearch, setCommSearch] = useState("");
   const [commStatus, setCommStatus] = useState("all");
@@ -880,11 +884,44 @@ export default function FinancePage() {
     queryFn: () => customFetch<any>(`${BASE}/api/finance/university-breakdown?season=${season}`),
   });
 
-  const commissions: any[] = (commResp as any)?.data || [];
+  const allCommissions: any[] = (commResp as any)?.data || [];
   const commSummary: any = (commResp as any)?.summary || {};
-  const fees: any[] = (feeResp as any)?.data || [];
+  const allFees: any[] = (feeResp as any)?.data || [];
   const feeSummary: any = (feeResp as any)?.summary || {};
   const summary: any = summaryData || {};
+
+  const commissions: any[] = currency === "all"
+    ? allCommissions
+    : allCommissions.filter((c: any) => (c.currency || "USD").toUpperCase() === currency);
+  const fees: any[] = currency === "all"
+    ? allFees
+    : allFees.filter((f: any) => (f.currency || "USD").toUpperCase() === currency);
+
+  const commByCur: Record<string, any> = commSummary?.byCurrency || {};
+  const feeByCur: Record<string, any> = feeSummary?.byCurrency || {};
+  const activeCurrencies: CurrencyCode[] = currency === "all"
+    ? (() => {
+        const set = new Set<string>();
+        Object.keys(commByCur).forEach(c => set.add(c));
+        Object.keys(feeByCur).forEach(c => set.add(c));
+        const arr = [...set].filter(c => (SUPPORTED_CURRENCIES as readonly string[]).includes(c)) as CurrencyCode[];
+        return arr.length > 0 ? arr : ["USD"];
+      })()
+    : [currency as CurrencyCode];
+
+  function commRowsFor(field: string, computeFn?: (b: any) => number): { label: string; value: string }[] {
+    return activeCurrencies.map(c => {
+      const b = commByCur[c] || {};
+      const v = computeFn ? computeFn(b) : toNum(b[field]);
+      return { label: c, value: fmt(v, c) };
+    });
+  }
+  function feeRowsFor(field: string): { label: string; value: string }[] {
+    return activeCurrencies.map(c => {
+      const b = feeByCur[c] || {};
+      return { label: c, value: fmt(toNum(b[field]), c) };
+    });
+  }
   const uniBreakdown: any[] = uniBreakdownData?.breakdown || [];
   const uniTotals: any = uniBreakdownData?.totals || {};
 
@@ -1031,6 +1068,7 @@ export default function FinancePage() {
             <p className="text-slate-500 text-sm mt-0.5">{t("staffFinance.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
+            <CurrencySelector value={currency} onChange={setCurrency} />
             <div className="text-sm text-muted-foreground font-medium bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg">
               Season: <span className="font-bold text-primary">{season}</span>
             </div>
@@ -1043,53 +1081,38 @@ export default function FinancePage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <FinanceStatCard
             icon={Clock}
-            label="Potential Commission"
+            label={t("financePage.statusPotential") + " · " + t("financePage.univCommission")}
             borderColor="border-t-amber-400"
             color="text-amber-600"
-            rows={[
-              { label: "Agency", value: fmt(cs?.potentialAgentCommission || 0) },
-              { label: "Our Commission", value: fmt((toNum(cs?.potentialUniversityCommission) - toNum(cs?.potentialAgentCommission)) || 0) },
-            ]}
+            rows={commRowsFor("potentialUniversityCommission")}
           />
           <FinanceStatCard
             icon={CheckCircle}
-            label="Confirmed Commission"
+            label={t("financePage.statusConfirmed") + " · " + t("financePage.univCommission")}
             borderColor="border-t-blue-500"
             color="text-blue-600"
-            rows={[
-              { label: "Agency", value: fmt(cs?.confirmedAgentCommission || 0) },
-              { label: "Our Commission", value: fmt((toNum(cs?.confirmedUniversityCommission) - toNum(cs?.confirmedAgentCommission)) || 0) },
-            ]}
+            rows={commRowsFor("confirmedUniversityCommission")}
           />
           <FinanceStatCard
             icon={CreditCard}
-            label="Commission Paid"
+            label={t("financePage.agentPayouts")}
             borderColor="border-t-emerald-500"
             color="text-emerald-600"
-            rows={[
-              { label: "Paid (To agents)", value: fmt(cs?.paidToAgents || 0) },
-              { label: "Collected (From unis)", value: fmt(cs?.collectedFromUniversities || 0) },
-            ]}
+            rows={commRowsFor("paidToAgents")}
           />
           <FinanceStatCard
             icon={AlertCircle}
-            label="Pending Commission"
+            label={t("financePage.remaining")}
             borderColor="border-t-rose-400"
             color="text-rose-600"
-            rows={[
-              { label: "Pending (To pay)", value: fmt(cs?.pendingToPay || 0) },
-              { label: "Pending (To get)", value: fmt(cs?.pendingToCollect || 0) },
-            ]}
+            rows={commRowsFor("pendingToCollect")}
           />
           <FinanceStatCard
             icon={DollarSign}
-            label="Service Fees"
+            label={t("financePage.totalAmount")}
             borderColor="border-t-indigo-500"
             color="text-indigo-600"
-            rows={[
-              { label: "Confirmed", value: fmt(feeSummary.totalServiceFees || 0) },
-              { label: "Collected", value: fmt(feeSummary.totalCollected || 0) },
-            ]}
+            rows={feeRowsFor("totalServiceFees")}
           />
         </div>
 
