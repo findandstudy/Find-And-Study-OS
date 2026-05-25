@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { customFetch } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { Download, Upload, Loader2 } from "lucide-react";
+import { Download, Upload, Loader2, FileSpreadsheet } from "lucide-react";
 
 type ImportItemResult = {
   index: number;
@@ -26,18 +26,33 @@ type ImportSummary = {
 };
 
 export interface ExportImportToolbarProps {
-  exportPath: string;     // e.g. "/api/embed/widgets/export"
-  importPath: string;     // e.g. "/api/embed/widgets/import"
-  downloadName: string;   // base filename, ".json" appended
+  exportPath: string;     // POST endpoint, e.g. "/api/embed/widgets/export"
+  importPath: string;     // POST endpoint, accepts raw .xlsx body
+  templatePath: string;   // GET endpoint, returns a pre-filled .xlsx template
+  downloadName: string;   // base filename, ".xlsx" appended
   selectedIds?: number[];
   onImported?: () => void;
 }
 
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+const XLSX_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export function ExportImportToolbar({
   exportPath,
   importPath,
+  templatePath,
   downloadName,
   selectedIds = [],
   onImported,
@@ -46,31 +61,25 @@ export function ExportImportToolbar({
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [importDialog, setImportDialog] = useState(false);
   const [conflict, setConflict] = useState<"skip" | "overwrite" | "rename">("skip");
-  const [parsedEnvelope, setParsedEnvelope] = useState<unknown>(null);
-  const [parsedCount, setParsedCount] = useState(0);
-  const [parsedError, setParsedError] = useState<string | null>(null);
+  const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [filename, setFilename] = useState<string>("");
   const [importing, setImporting] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
 
   async function handleExport() {
     setExporting(true);
     try {
-      const env = await customFetch<unknown>(exportPath, {
+      const blob = await customFetch<Blob>(exportPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: selectedIds.length > 0 ? selectedIds : undefined }),
+        responseType: "blob",
       });
-      const blob = new Blob([JSON.stringify(env, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${downloadName}-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${downloadName}-${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast({ title: t("exportImport.exportSuccess") });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -80,48 +89,64 @@ export function ExportImportToolbar({
     }
   }
 
+  async function handleDownloadTemplate() {
+    setDownloadingTemplate(true);
+    try {
+      const blob = await customFetch<Blob>(templatePath, {
+        method: "GET",
+        responseType: "blob",
+      });
+      downloadBlob(blob, `${downloadName}-template.xlsx`);
+      toast({ title: t("exportImport.templateReady") });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({ title: t("exportImport.templateFailed"), description: msg, variant: "destructive" });
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  }
+
   function resetImport() {
-    setParsedEnvelope(null);
-    setParsedCount(0);
-    setParsedError(null);
+    setFileBuffer(null);
+    setFileError(null);
+    setFilename("");
     setSummary(null);
     if (fileRef.current) fileRef.current.value = "";
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    setParsedEnvelope(null);
-    setParsedError(null);
-    setParsedCount(0);
+    setFileBuffer(null);
+    setFileError(null);
+    setFilename("");
     setSummary(null);
     if (!file) return;
     if (file.size > MAX_IMPORT_BYTES) {
-      setParsedError(t("exportImport.errorTooLarge"));
+      setFileError(t("exportImport.errorTooLarge"));
+      return;
+    }
+    if (!/\.xlsx$/i.test(file.name)) {
+      setFileError(t("exportImport.errorNotXlsx"));
       return;
     }
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as { kind?: unknown; version?: unknown; items?: unknown };
-      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.items)) {
-        setParsedError(t("exportImport.errorInvalidFile"));
-        return;
-      }
-      setParsedEnvelope(parsed);
-      setParsedCount(parsed.items.length);
+      const ab = await file.arrayBuffer();
+      setFileBuffer(ab);
+      setFilename(file.name);
     } catch {
-      setParsedError(t("exportImport.errorInvalidJson"));
+      setFileError(t("exportImport.errorReadFile"));
     }
   }
 
   async function handleImport() {
-    if (!parsedEnvelope) return;
+    if (!fileBuffer) return;
     setImporting(true);
     setSummary(null);
     try {
-      const result = await customFetch<ImportSummary>(importPath, {
+      const result = await customFetch<ImportSummary>(`${importPath}?conflict=${conflict}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ envelope: parsedEnvelope, conflict }),
+        headers: { "Content-Type": XLSX_CONTENT_TYPE },
+        body: fileBuffer,
       });
       setSummary(result);
       onImported?.();
@@ -145,7 +170,17 @@ export function ExportImportToolbar({
 
   return (
     <>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownloadTemplate}
+          disabled={downloadingTemplate}
+          data-testid="button-download-template"
+        >
+          {downloadingTemplate ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-2" />}
+          {t("exportImport.downloadTemplate")}
+        </Button>
         <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} data-testid="button-export">
           {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
           {selectedIds.length > 0
@@ -170,7 +205,7 @@ export function ExportImportToolbar({
               <input
                 ref={fileRef}
                 type="file"
-                accept="application/json,.json"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={handleFile}
                 className="block w-full mt-1 text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-muted file:text-sm file:cursor-pointer"
                 data-testid="input-import-file"
@@ -178,15 +213,15 @@ export function ExportImportToolbar({
               <p className="text-[10px] text-muted-foreground mt-1">{t("exportImport.fileHint")}</p>
             </div>
 
-            {parsedError && (
+            {fileError && (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-                {parsedError}
+                {fileError}
               </div>
             )}
 
-            {parsedEnvelope && !parsedError && (
+            {fileBuffer && !fileError && (
               <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
-                <div><strong>{parsedCount}</strong> {t("exportImport.itemsDetected")}</div>
+                <div><strong>{filename}</strong> — {(fileBuffer.byteLength / 1024).toFixed(1)} KB</div>
               </div>
             )}
 
@@ -236,7 +271,7 @@ export function ExportImportToolbar({
             <Button variant="outline" onClick={() => { setImportDialog(false); resetImport(); }}>
               {t("exportImport.close")}
             </Button>
-            <Button onClick={handleImport} disabled={!parsedEnvelope || !!parsedError || importing} data-testid="button-import-confirm">
+            <Button onClick={handleImport} disabled={!fileBuffer || !!fileError || importing} data-testid="button-import-confirm">
               {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
               {t("exportImport.runImport")}
             </Button>

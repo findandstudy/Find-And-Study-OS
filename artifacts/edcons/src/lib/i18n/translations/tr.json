@@ -2692,12 +2692,13 @@
     "normalizeDateYmd": "Tarih → YYYY-AA-GG"
   },
   "exportImport": {
-    "exportAll": "Tümünü dışa aktar",
-    "exportSelected": "Seçilenleri dışa aktar ({count})",
-    "import": "İçe aktar",
-    "importTitle": "JSON'dan içe aktar",
-    "selectFile": "Bir JSON dosyası seçin",
-    "fileHint": "En fazla 2 MB. Yalnızca bu uygulamadan dışa aktarılan JSON dosyaları kabul edilir.",
+    "exportAll": "Tümünü dışa aktar (Excel)",
+    "exportSelected": "Seçilenleri dışa aktar ({count}) (Excel)",
+    "import": "İçe aktar (Excel)",
+    "downloadTemplate": "Şablonu indir",
+    "importTitle": "Excel'den içe aktar",
+    "selectFile": "Bir .xlsx dosyası seçin",
+    "fileHint": "En fazla 2 MB. Açılır listelerin ve sütun başlıklarının eşleşmesi için indirilen şablonu kullanın.",
     "itemsDetected": "öğe dosyada bulundu.",
     "conflictStrategy": "Aynı slug zaten varsa",
     "conflict_skip": "Atla",
@@ -2710,6 +2711,8 @@
     "close": "Kapat",
     "exportSuccess": "Dışa aktarma hazır",
     "exportFailed": "Dışa aktarma başarısız",
+    "templateReady": "Şablon indirildi",
+    "templateFailed": "Şablon indirilemedi",
     "importSuccess": "İçe aktarma tamamlandı",
     "importFailed": "İçe aktarma başarısız",
     "importSummary": "{created} oluşturuldu, {updated} güncellendi, {renamed} yeniden adlandırıldı, {skipped} atlandı, {errors} hata",
@@ -2720,7 +2723,7 @@
     "summarySkipped": "Atlanan: {n}",
     "summaryErrors": "Hata: {n}",
     "errorTooLarge": "Dosya 2 MB sınırını aşıyor.",
-    "errorInvalidFile": "Dosya geçerli bir dışa aktarma gibi görünmüyor.",
-    "errorInvalidJson": "Dosya geçerli JSON değil."
+    "errorNotXlsx": "Lütfen bir .xlsx dosyası seçin.",
+    "errorReadFile": "Dosya okunamadı."
   }
 }

@@ -145,3 +145,238 @@ test("round-trip: buildEnvelope -> JSON string -> parseEnvelope is lossless", ()
   const items = parseEnvelope<typeof original[number]>(transported, { expectedKind: "embed_widgets" });
   assert.deepEqual(items, original);
 });
+
+// --- Excel round-trip tests (Task #202 v2) -------------------------------
+import {
+  buildWorkbookBuffer,
+  parseWorkbookBuffer,
+  embedWidgetColumns,
+  formColumns,
+  formFieldColumns,
+  EMBED_KIND,
+  FORMS_KIND,
+} from "../src/lib/exportImportExcel";
+
+const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form"];
+
+test("xlsx: embed widget round-trip preserves every editable field", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  const original = {
+    name: "Main widget",
+    slug: "main-widget",
+    mode: "lead_form",
+    isActive: true,
+    theme: { primary: "#0ea5e9", radius: "8px" },
+    presetFilters: { country: "TR" },
+    lockedFilters: ["country"],
+    hiddenFilters: ["fee"],
+    visibleFilters: ["level", "subject"],
+    allowedDomains: ["example.com", "edu.tr"],
+  };
+  const buf = await buildWorkbookBuffer({
+    sheets: [{ name: "Widgets", columns: cols, rows: [original] }],
+    meta: { kind: EMBED_KIND, version: "1", exportedAt: "2026-05-25" },
+  });
+  const parsed = await parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols });
+  const row = parsed.sheets.get("Widgets")!.rows[0];
+  assert.equal(row.name, original.name);
+  assert.equal(row.slug, original.slug);
+  assert.equal(row.mode, original.mode);
+  assert.equal(row.isActive, true);
+  assert.deepEqual(row.theme, original.theme);
+  assert.deepEqual(row.presetFilters, original.presetFilters);
+  assert.deepEqual(row.lockedFilters, original.lockedFilters);
+  assert.deepEqual(row.hiddenFilters, original.hiddenFilters);
+  assert.deepEqual(row.visibleFilters, original.visibleFilters);
+  assert.deepEqual(row.allowedDomains, original.allowedDomains);
+});
+
+test("xlsx: parseWorkbookBuffer rejects wrong kind", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  const buf = await buildWorkbookBuffer({
+    sheets: [{ name: "Widgets", columns: cols, rows: [] }],
+    meta: { kind: "something_else", version: "1", exportedAt: "x" },
+  });
+  await assert.rejects(
+    () => parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols }),
+    /Wrong workbook kind/,
+  );
+});
+
+test("xlsx: parseWorkbookBuffer rejects oversized payload", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  // 1 byte buffer with the maxBytes guard set to 0 to force a 413.
+  await assert.rejects(
+    () => parseWorkbookBuffer(Buffer.from([0]), { expectedKind: EMBED_KIND, maxBytes: 0 }, { Widgets: cols }),
+    /exceeds 2 MB limit/,
+  );
+});
+
+test("xlsx: form workbook splits Forms + Fields and round-trips both", async () => {
+  const fCols = formColumns(["new", "qualified", "won"], ["website", "embed"]);
+  const fldCols = formFieldColumns();
+  const form = {
+    name: "Lead form",
+    slug: "lead-form",
+    description: "Main lead form",
+    submitAction: "crm",
+    submitEmail: null,
+    submitWebhookUrl: null,
+    successMessage: "Thanks!",
+    errorMessage: "Please try again",
+    crmSource: "website",
+    crmPipelineStage: "new",
+    pageSourceTag: "homepage",
+    isActive: true,
+  };
+  const field = {
+    form_slug: "lead-form",
+    fieldType: "select",
+    label: "Country",
+    name: "country",
+    placeholder: "Pick a country",
+    isRequired: true,
+    sortOrder: 1,
+    validationRules: { minLength: 2 },
+    options: [{ label: "Türkiye", value: "TR" }, { label: "USA", value: "US" }],
+  };
+  const buf = await buildWorkbookBuffer({
+    sheets: [
+      { name: "Forms", columns: fCols, rows: [form] },
+      { name: "Fields", columns: fldCols, rows: [field] },
+    ],
+    meta: { kind: FORMS_KIND, version: "1", exportedAt: "x" },
+  });
+  const parsed = await parseWorkbookBuffer(buf, { expectedKind: FORMS_KIND }, {
+    Forms: fCols, Fields: fldCols,
+  });
+  const f = parsed.sheets.get("Forms")!.rows[0];
+  const fld = parsed.sheets.get("Fields")!.rows[0];
+  assert.equal(f.submitAction, "crm");
+  assert.equal(f.crmPipelineStage, "new");
+  assert.equal(f.isActive, true);
+  assert.equal(fld.form_slug, "lead-form");
+  assert.equal(fld.fieldType, "select");
+  assert.equal(fld.isRequired, true);
+  assert.equal(fld.sortOrder, 1);
+  assert.deepEqual(fld.validationRules, { minLength: 2 });
+  assert.deepEqual(fld.options, [{ label: "Türkiye", value: "TR" }, { label: "USA", value: "US" }]);
+});
+
+test("xlsx: parser rejects prototype-polluting JSON cell", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  // Build a workbook with a JSON cell that contains __proto__ pollution.
+  // We use the low-level ExcelJS to inject the bad cell.
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Widgets");
+  ws.columns = cols.map((c) => ({ header: c.header, key: c.key }));
+  ws.addRow({
+    name: "x",
+    slug: "x",
+    mode: "combined",
+    isActive: "TRUE",
+    theme: '{"__proto__":{"polluted":true}}',
+  });
+  const meta = wb.addWorksheet("_meta", { state: "hidden" });
+  meta.getCell("A1").value = "kind";
+  meta.getCell("B1").value = EMBED_KIND;
+  const buf = Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+  await assert.rejects(
+    () => parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols }),
+    /Disallowed property|__proto__/,
+  );
+});
+
+test("xlsx: parser requires _meta.kind to be present", async () => {
+  const cols = embedWidgetColumns(VALID_MODES);
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Widgets");
+  ws.columns = cols.map((c) => ({ header: c.header, key: c.key }));
+  // No _meta sheet at all
+  const buf = Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+  await assert.rejects(
+    () => parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols }),
+    /missing its provenance marker/,
+  );
+});
+
+test("xlsx: long enum option lists fall back to a hidden helper sheet", async () => {
+  // Build a fake column with 60 options each 10 chars long -> well past 255.
+  const longOpts = Array.from({ length: 60 }, (_, i) => `option_${String(i).padStart(3, "0")}`);
+  const cols = [
+    { key: "name", header: "Name", kind: "string" as const, required: true },
+    { key: "slug", header: "Slug", kind: "string" as const, required: true },
+    { key: "mode", header: "Mode", kind: "enum" as const, options: longOpts, required: true },
+    { key: "isActive", header: "Active", kind: "boolean" as const, required: true },
+  ];
+  const buf = await buildWorkbookBuffer({
+    sheets: [{ name: "Widgets", columns: cols, rows: [
+      { name: "n", slug: "s", mode: "option_005", isActive: true },
+    ] }],
+    meta: { kind: EMBED_KIND, version: "1", exportedAt: "x" },
+  });
+  // Workbook must still round-trip cleanly.
+  const parsed = await parseWorkbookBuffer(buf, { expectedKind: EMBED_KIND }, { Widgets: cols });
+  assert.equal(parsed.sheets.get("Widgets")!.rows[0].mode, "option_005");
+  // Confirm the hidden helper sheet exists.
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  assert.ok(wb.getWorksheet("_opts_mode"), "expected hidden helper sheet for long enum");
+});
+
+test("xlsx: blank isActive cell defaults to active on embed import", async () => {
+  const { toEmbedInsertValues } = await import("../src/lib/exportImportExcel");
+  const blank = toEmbedInsertValues({ name: "n", slug: "s", mode: "combined", isActive: null }, VALID_MODES);
+  assert.equal(blank.isActive, true);
+  const explicitOff = toEmbedInsertValues({ name: "n", slug: "s", mode: "combined", isActive: false }, VALID_MODES);
+  assert.equal(explicitOff.isActive, false);
+});
+
+test("xlsx: long enum fallback registers a workbook defined name and uses it", async () => {
+  const longOpts = Array.from({ length: 60 }, (_, i) => `option_${String(i).padStart(3, "0")}`);
+  const cols = [
+    { key: "name", header: "Name", kind: "string" as const, required: true },
+    { key: "slug", header: "Slug", kind: "string" as const, required: true },
+    { key: "mode", header: "Mode", kind: "enum" as const, options: longOpts, required: true },
+    { key: "isActive", header: "Active", kind: "boolean" as const, required: true },
+  ];
+  const buf = await buildWorkbookBuffer({
+    sheets: [{ name: "Widgets", columns: cols, rows: [
+      { name: "n", slug: "s", mode: "option_010", isActive: true },
+    ] }],
+    meta: { kind: EMBED_KIND, version: "1", exportedAt: "x" },
+  });
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  // Defined name registered.
+  const names = wb.definedNames.model;
+  const hit = names.find((n: { name: string }) => n.name === "_opts_mode_rng");
+  assert.ok(hit, `expected defined name _opts_mode_rng, got ${JSON.stringify(names.map((n: { name: string }) => n.name))}`);
+  // Validation formula uses the defined name, not a raw sheet reference.
+  const ws = wb.getWorksheet("Widgets")!;
+  const dv = ws.getCell("C2").dataValidation!;
+  assert.deepEqual(dv.formulae, ["_opts_mode_rng"]);
+});
+
+test("xlsx: multiple long-enum columns get distinct defined names", async () => {
+  const longA = Array.from({ length: 60 }, (_, i) => `a_${String(i).padStart(3, "0")}`);
+  const longB = Array.from({ length: 70 }, (_, i) => `b_${String(i).padStart(3, "0")}`);
+  const cols = [
+    { key: "name", header: "Name", kind: "string" as const, required: true },
+    { key: "alpha", header: "Alpha", kind: "enum" as const, options: longA, required: true },
+    { key: "beta", header: "Beta", kind: "enum" as const, options: longB, required: true },
+  ];
+  const buf = await buildWorkbookBuffer({
+    sheets: [{ name: "Sheet1", columns: cols, rows: [] }],
+    meta: { kind: EMBED_KIND, version: "1", exportedAt: "x" },
+  });
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  const names = wb.definedNames.model.map((n: { name: string }) => n.name).sort();
+  assert.deepEqual(names, ["_opts_alpha_rng", "_opts_beta_rng"]);
+});

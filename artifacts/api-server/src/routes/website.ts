@@ -1,4 +1,4 @@
-import { Router, json, type Request, type Response } from "express";
+import express, { Router, json, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import type { PgTableWithColumns, TableConfig } from "drizzle-orm/pg-core";
@@ -33,9 +33,6 @@ import { requireAuth, requireRole } from "../lib/auth";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import {
-  buildEnvelope,
-  parseEnvelope,
-  pickFields,
   emptySummary,
   tallyResult,
   nextAvailableSlug,
@@ -43,6 +40,16 @@ import {
   ImportValidationError,
   type ConflictStrategy,
 } from "../lib/exportImport";
+import {
+  buildWorkbookBuffer,
+  parseWorkbookBuffer,
+  XLSX_CONTENT_TYPE,
+  formColumns,
+  formFieldColumns,
+  VALID_FIELD_TYPES as XLSX_VALID_FIELD_TYPES,
+  VALID_SUBMIT_ACTIONS as XLSX_VALID_SUBMIT_ACTIONS,
+  FORMS_KIND,
+} from "../lib/exportImportExcel";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -173,24 +180,61 @@ router.get("/website/pages/:pageId/versions", ...adminOnly, async (req: Request,
 });
 
 // --- Export / Import (Task #202) ---------------------------------------
-// Lossless JSON round-trip for Web-to-Lead forms together with their fields.
-// Form + its fields are imported in a single transaction so a failure on
-// any field rolls the form back too. Slugs are the cross-installation
-// identity; ids, timestamps, and submission counts are stripped.
-
-const FORM_EXPORT_KIND = "website_forms";
-const FORM_EXPORT_FIELDS = [
-  "name", "slug", "description", "submitAction", "submitEmail",
-  "submitWebhookUrl", "successMessage", "errorMessage", "crmSource",
-  "crmPipelineStage", "pageSourceTag", "isActive",
-] as const;
-const FORM_FIELD_EXPORT_FIELDS = [
-  "fieldType", "label", "name", "placeholder", "isRequired",
-  "validationRules", "options", "sortOrder",
-] as const;
+// Lossless Excel (.xlsx) round-trip for Web-to-Lead forms together with
+// their fields. The workbook has two sheets — `Forms` and `Fields` —
+// linked by `Form slug`. Each form is created with its fields inside a
+// single database transaction so a failure on any field rolls back the
+// form too. Slugs are the cross-installation identity; ids, timestamps,
+// and submission counts are stripped. A separate `/template` endpoint
+// hands back an empty workbook with dropdowns pulled live from current
+// pipeline stages and existing lead sources.
 
 function normalizeFormSlug(slug: string): string {
   return String(slug).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+}
+
+async function loadFormDropdownOptions(): Promise<{
+  pipelineStages: string[];
+  crmSources: string[];
+}> {
+  const stages = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(eq(pipelineStagesTable.entityType, "lead"))
+    .orderBy(asc(pipelineStagesTable.sortOrder));
+  const stageKeys = Array.from(new Set(stages.map((s) => s.key).filter(Boolean) as string[]));
+
+  const sources = await db.select({ src: websiteFormsTable.crmSource })
+    .from(websiteFormsTable);
+  const sourceSet = new Set<string>();
+  for (const r of sources) if (r.src) sourceSet.add(r.src);
+  // Always include a sensible default list so the dropdown is never empty.
+  ["website", "embed", "manual", "import", "referral"].forEach((s) => sourceSet.add(s));
+  return { pipelineStages: stageKeys, crmSources: Array.from(sourceSet).sort() };
+}
+
+function formsExportRows(forms: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return forms.map((f) => ({
+    name: f.name, slug: f.slug, description: f.description,
+    submitAction: f.submitAction, submitEmail: f.submitEmail,
+    submitWebhookUrl: f.submitWebhookUrl, successMessage: f.successMessage,
+    errorMessage: f.errorMessage, crmSource: f.crmSource,
+    crmPipelineStage: f.crmPipelineStage, pageSourceTag: f.pageSourceTag,
+    isActive: f.isActive,
+  }));
+}
+
+function fieldsExportRows(
+  forms: Array<{ id: number; slug: string }>,
+  fields: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  const slugByFormId = new Map(forms.map((f) => [f.id, f.slug] as const));
+  return fields.map((fld) => ({
+    form_slug: slugByFormId.get(fld.formId as number) ?? "",
+    fieldType: fld.fieldType, label: fld.label, name: fld.name,
+    placeholder: fld.placeholder, isRequired: fld.isRequired,
+    sortOrder: fld.sortOrder, validationRules: fld.validationRules,
+    options: fld.options,
+  }));
 }
 
 router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Response) => {
@@ -211,140 +255,175 @@ router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Res
           .orderBy(asc(websiteFormFieldsTable.formId), asc(websiteFormFieldsTable.sortOrder))
       : [];
 
-    const fieldsByForm = new Map<number, typeof allFields>();
-    for (const f of allFields) {
-      const list = fieldsByForm.get(f.formId) || [];
-      list.push(f);
-      fieldsByForm.set(f.formId, list);
-    }
-
-    const items = forms.map((form) => {
-      const cleanedForm = pickFields(form as Record<string, unknown>, FORM_EXPORT_FIELDS);
-      const fields = (fieldsByForm.get(form.id) || []).map((fld) =>
-        pickFields(fld as Record<string, unknown>, FORM_FIELD_EXPORT_FIELDS)
-      );
-      return { ...cleanedForm, fields };
+    const opts = await loadFormDropdownOptions();
+    const buf = await buildWorkbookBuffer({
+      sheets: [
+        { name: "Forms", columns: formColumns(opts.pipelineStages, opts.crmSources),
+          rows: formsExportRows(forms as Array<Record<string, unknown>>) },
+        { name: "Fields", columns: formFieldColumns(),
+          rows: fieldsExportRows(forms as Array<{ id: number; slug: string }>, allFields as Array<Record<string, unknown>>) },
+      ],
+      meta: { kind: FORMS_KIND, version: "1", exportedAt: new Date().toISOString() },
     });
-
-    const envelope = buildEnvelope(FORM_EXPORT_KIND, items);
-    res.setHeader("Content-Disposition", `attachment; filename="website-forms-${new Date().toISOString().slice(0,10)}.json"`);
-    res.json(envelope);
+    res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
+    res.setHeader("Content-Disposition", `attachment; filename="website-forms-${new Date().toISOString().slice(0,10)}.xlsx"`);
+    res.send(buf);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
   }
 });
 
-const VALID_FIELD_TYPES = new Set(["text", "email", "phone", "textarea", "select", "checkbox", "number", "date", "url"]);
-const VALID_SUBMIT_ACTIONS = new Set(["email", "webhook", "crm"]);
-
-router.post("/website/forms/import", ...adminOnly, json({ limit: "2mb" }), async (req: Request, res: Response) => {
-  const body = (req.body || {}) as { envelope?: unknown; conflict?: unknown };
-  const conflict: ConflictStrategy = isValidConflictStrategy(body.conflict) ? body.conflict : "skip";
-
-  let rawItems: Array<Record<string, unknown>>;
+router.get("/website/forms/template", ...adminOnly, async (_req: Request, res: Response) => {
   try {
-    rawItems = parseEnvelope<Record<string, unknown>>(body.envelope, { expectedKind: FORM_EXPORT_KIND });
-  } catch (err) {
-    const e = err as ImportValidationError;
-    return res.status(e.status || 400).json({ error: e.message });
+    const opts = await loadFormDropdownOptions();
+    const buf = await buildWorkbookBuffer({
+      sheets: [
+        { name: "Forms", columns: formColumns(opts.pipelineStages, opts.crmSources), rows: [] },
+        { name: "Fields", columns: formFieldColumns(), rows: [] },
+      ],
+      meta: { kind: FORMS_KIND, version: "1", exportedAt: new Date().toISOString() },
+    });
+    res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
+    res.setHeader("Content-Disposition", `attachment; filename="website-forms-template.xlsx"`);
+    res.send(buf);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
   }
-
-  const summary = emptySummary(rawItems.length);
-
-  for (let i = 0; i < rawItems.length; i++) {
-    const item = rawItems[i];
-    try {
-      if (!item || typeof item !== "object") throw new Error("Item must be an object");
-      const cleanedForm = pickFields(item, FORM_EXPORT_FIELDS) as Record<string, unknown>;
-      if (!cleanedForm.name || typeof cleanedForm.name !== "string") throw new Error("name is required");
-      if (!cleanedForm.slug || typeof cleanedForm.slug !== "string") throw new Error("slug is required");
-      const slug = normalizeFormSlug(cleanedForm.slug as string);
-      if (!slug) throw new Error("slug is invalid");
-      const submitAction = VALID_SUBMIT_ACTIONS.has(cleanedForm.submitAction as string) ? cleanedForm.submitAction as string : "email";
-
-      const formValues = {
-        name: cleanedForm.name as string,
-        slug,
-        description: (cleanedForm.description as string | null) ?? null,
-        submitAction,
-        submitEmail: (cleanedForm.submitEmail as string | null) ?? null,
-        submitWebhookUrl: (cleanedForm.submitWebhookUrl as string | null) ?? null,
-        successMessage: (cleanedForm.successMessage as string | null) ?? null,
-        errorMessage: (cleanedForm.errorMessage as string | null) ?? null,
-        crmSource: (cleanedForm.crmSource as string | null) ?? null,
-        crmPipelineStage: (cleanedForm.crmPipelineStage as string | null) ?? null,
-        pageSourceTag: (cleanedForm.pageSourceTag as string | null) ?? null,
-        isActive: typeof cleanedForm.isActive === "boolean" ? cleanedForm.isActive : true,
-      };
-
-      const rawFields = Array.isArray((item as Record<string, unknown>).fields)
-        ? ((item as Record<string, unknown>).fields as Array<Record<string, unknown>>)
-        : [];
-
-      const fieldRows = rawFields.map((f, idx) => {
-        const cleanedField = pickFields(f, FORM_FIELD_EXPORT_FIELDS) as Record<string, unknown>;
-        if (!cleanedField.label || typeof cleanedField.label !== "string") throw new Error(`field[${idx}].label is required`);
-        if (!cleanedField.name || typeof cleanedField.name !== "string") throw new Error(`field[${idx}].name is required`);
-        const fieldType = VALID_FIELD_TYPES.has(cleanedField.fieldType as string) ? cleanedField.fieldType as string : "text";
-        return {
-          fieldType,
-          label: cleanedField.label as string,
-          name: cleanedField.name as string,
-          placeholder: (cleanedField.placeholder as string | null) ?? null,
-          isRequired: typeof cleanedField.isRequired === "boolean" ? cleanedField.isRequired : false,
-          validationRules: (cleanedField.validationRules as Record<string, unknown>) ?? {},
-          options: (cleanedField.options as unknown[]) ?? [],
-          sortOrder: typeof cleanedField.sortOrder === "number" ? cleanedField.sortOrder : idx,
-        };
-      });
-
-      const [existing] = await db.select().from(websiteFormsTable).where(eq(websiteFormsTable.slug, slug));
-
-      if (existing && conflict === "skip") {
-        tallyResult(summary, { index: i, slug, status: "skipped" });
-        continue;
-      }
-
-      let finalSlug = slug;
-      let status: "created" | "updated" | "renamed" = "created";
-
-      if (existing && conflict === "overwrite") {
-        await db.transaction(async (tx) => {
-          await tx.update(websiteFormsTable).set(formValues).where(eq(websiteFormsTable.id, existing.id));
-          await tx.delete(websiteFormFieldsTable).where(eq(websiteFormFieldsTable.formId, existing.id));
-          if (fieldRows.length > 0) {
-            await tx.insert(websiteFormFieldsTable).values(fieldRows.map((f) => ({ ...f, formId: existing.id })));
-          }
-        });
-        status = "updated";
-      } else {
-        if (existing && conflict === "rename") {
-          finalSlug = await nextAvailableSlug(slug, async (cand) => {
-            const [hit] = await db.select({ id: websiteFormsTable.id }).from(websiteFormsTable).where(eq(websiteFormsTable.slug, cand));
-            return !!hit;
-          });
-          status = "renamed";
-        }
-        await db.transaction(async (tx) => {
-          const [created] = await tx.insert(websiteFormsTable).values({ ...formValues, slug: finalSlug }).returning();
-          if (fieldRows.length > 0) {
-            await tx.insert(websiteFormFieldsTable).values(fieldRows.map((f) => ({ ...f, formId: created.id })));
-          }
-        });
-      }
-
-      tallyResult(summary, status === "renamed"
-        ? { index: i, slug, status, finalSlug }
-        : { index: i, slug: finalSlug, status });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      tallyResult(summary, { index: i, slug: typeof item?.slug === "string" ? (item.slug as string) : null, status: "error", error: msg });
-    }
-  }
-
-  res.json(summary);
 });
+
+router.post(
+  "/website/forms/import",
+  ...adminOnly,
+  express.raw({ type: XLSX_CONTENT_TYPE, limit: "2mb" }),
+  async (req: Request, res: Response) => {
+    const conflict: ConflictStrategy = isValidConflictStrategy(req.query.conflict) ? req.query.conflict : "skip";
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: "Upload an .xlsx file with Content-Type " + XLSX_CONTENT_TYPE });
+    }
+
+    const opts = await loadFormDropdownOptions();
+    let parsed;
+    try {
+      parsed = await parseWorkbookBuffer(req.body, { expectedKind: FORMS_KIND }, {
+        Forms: formColumns(opts.pipelineStages, opts.crmSources),
+        Fields: formFieldColumns(),
+      });
+    } catch (err) {
+      const e = err as ImportValidationError;
+      return res.status(e.status || 400).json({ error: e.message });
+    }
+
+    const rawForms = parsed.sheets.get("Forms")?.rows ?? [];
+    const rawFields = parsed.sheets.get("Fields")?.rows ?? [];
+
+    // Group fields by normalised form slug so the order in the Fields
+    // sheet doesn't have to match the Forms sheet.
+    const fieldsBySlug = new Map<string, Array<Record<string, unknown>>>();
+    for (const f of rawFields) {
+      const slug = normalizeFormSlug(String(f.form_slug ?? ""));
+      if (!slug) continue;
+      const list = fieldsBySlug.get(slug) ?? [];
+      list.push(f);
+      fieldsBySlug.set(slug, list);
+    }
+
+    const summary = emptySummary(rawForms.length);
+    const validSubmitActions = new Set<string>(XLSX_VALID_SUBMIT_ACTIONS);
+    const validFieldTypes = new Set<string>(XLSX_VALID_FIELD_TYPES);
+
+    for (let i = 0; i < rawForms.length; i++) {
+      const item = rawForms[i];
+      try {
+        if (!item.name || typeof item.name !== "string") throw new Error("Name is required");
+        if (!item.slug || typeof item.slug !== "string") throw new Error("Slug is required");
+        const slug = normalizeFormSlug(item.slug);
+        if (!slug) throw new Error("Slug is invalid");
+        const submitAction = validSubmitActions.has(item.submitAction as string)
+          ? (item.submitAction as string) : "email";
+
+        const formValues = {
+          name: item.name,
+          slug,
+          description: (item.description as string | null) ?? null,
+          submitAction,
+          submitEmail: (item.submitEmail as string | null) ?? null,
+          submitWebhookUrl: (item.submitWebhookUrl as string | null) ?? null,
+          successMessage: (item.successMessage as string | null) ?? null,
+          errorMessage: (item.errorMessage as string | null) ?? null,
+          crmSource: (item.crmSource as string | null) ?? null,
+          crmPipelineStage: (item.crmPipelineStage as string | null) ?? null,
+          pageSourceTag: (item.pageSourceTag as string | null) ?? null,
+          // Blank cells default to active so the template stays low-friction;
+          // an explicit FALSE in the cell still deactivates the form.
+          isActive: item.isActive === false ? false : true,
+        };
+
+        const matchingFields = fieldsBySlug.get(slug) ?? [];
+        const fieldRows = matchingFields.map((f, idx) => {
+          if (!f.label || typeof f.label !== "string") throw new Error(`Field row ${idx + 1}: Label is required`);
+          if (!f.name || typeof f.name !== "string") throw new Error(`Field row ${idx + 1}: Name is required`);
+          const fieldType = validFieldTypes.has(f.fieldType as string) ? (f.fieldType as string) : "text";
+          return {
+            fieldType,
+            label: f.label,
+            name: f.name,
+            placeholder: (f.placeholder as string | null) ?? null,
+            isRequired: f.isRequired === true,
+            validationRules: (f.validationRules as Record<string, unknown>) ?? {},
+            options: (f.options as unknown[]) ?? [],
+            sortOrder: typeof f.sortOrder === "number" ? f.sortOrder : idx,
+          };
+        });
+
+        const [existing] = await db.select().from(websiteFormsTable).where(eq(websiteFormsTable.slug, slug));
+
+        if (existing && conflict === "skip") {
+          tallyResult(summary, { index: i, slug, status: "skipped" });
+          continue;
+        }
+
+        let finalSlug = slug;
+        let status: "created" | "updated" | "renamed" = "created";
+
+        if (existing && conflict === "overwrite") {
+          await db.transaction(async (tx) => {
+            await tx.update(websiteFormsTable).set(formValues).where(eq(websiteFormsTable.id, existing.id));
+            await tx.delete(websiteFormFieldsTable).where(eq(websiteFormFieldsTable.formId, existing.id));
+            if (fieldRows.length > 0) {
+              await tx.insert(websiteFormFieldsTable).values(fieldRows.map((f) => ({ ...f, formId: existing.id })));
+            }
+          });
+          status = "updated";
+        } else {
+          if (existing && conflict === "rename") {
+            finalSlug = await nextAvailableSlug(slug, async (cand) => {
+              const [hit] = await db.select({ id: websiteFormsTable.id }).from(websiteFormsTable).where(eq(websiteFormsTable.slug, cand));
+              return !!hit;
+            });
+            status = "renamed";
+          }
+          await db.transaction(async (tx) => {
+            const [created] = await tx.insert(websiteFormsTable).values({ ...formValues, slug: finalSlug }).returning();
+            if (fieldRows.length > 0) {
+              await tx.insert(websiteFormFieldsTable).values(fieldRows.map((f) => ({ ...f, formId: created.id })));
+            }
+          });
+        }
+
+        tallyResult(summary, status === "renamed"
+          ? { index: i, slug, status, finalSlug }
+          : { index: i, slug: finalSlug, status });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tallyResult(summary, { index: i, slug: typeof item.slug === "string" ? item.slug : null, status: "error", error: msg });
+      }
+    }
+
+    res.json(summary);
+  },
+);
 
 router.get("/website/forms/:formId/fields", ...adminOnly, async (req: Request, res: Response) => {
   try {

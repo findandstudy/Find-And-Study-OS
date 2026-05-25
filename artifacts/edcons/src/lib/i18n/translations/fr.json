@@ -2395,12 +2395,13 @@
     "normalizeDateYmd": "Date → YYYY-MM-DD"
   },
   "exportImport": {
-    "exportAll": "Export all",
-    "exportSelected": "Export selected ({count})",
-    "import": "Import",
-    "importTitle": "Import from JSON",
-    "selectFile": "Select a JSON file",
-    "fileHint": "Maximum file size 2 MB. Only JSON exports from this app are accepted.",
+    "exportAll": "Export all (Excel)",
+    "exportSelected": "Export selected ({count}) (Excel)",
+    "import": "Import (Excel)",
+    "downloadTemplate": "Download template",
+    "importTitle": "Import from Excel",
+    "selectFile": "Select an .xlsx file",
+    "fileHint": "Maximum file size 2 MB. Use the downloaded template so dropdowns and column headers match.",
     "itemsDetected": "items detected in the file.",
     "conflictStrategy": "When a slug already exists",
     "conflict_skip": "Skip",
@@ -2413,6 +2414,8 @@
     "close": "Close",
     "exportSuccess": "Export ready",
     "exportFailed": "Export failed",
+    "templateReady": "Template downloaded",
+    "templateFailed": "Could not download template",
     "importSuccess": "Import finished",
     "importFailed": "Import failed",
     "importSummary": "{created} created, {updated} updated, {renamed} renamed, {skipped} skipped, {errors} errors",
@@ -2423,7 +2426,7 @@
     "summarySkipped": "Skipped: {n}",
     "summaryErrors": "Errors: {n}",
     "errorTooLarge": "File is larger than the 2 MB limit.",
-    "errorInvalidFile": "File does not look like a valid export.",
-    "errorInvalidJson": "File is not valid JSON."
+    "errorNotXlsx": "Please pick an .xlsx file.",
+    "errorReadFile": "Could not read the file."
   }
 }

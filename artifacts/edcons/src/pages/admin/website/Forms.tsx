@@ -315,6 +315,7 @@ export default function WebsiteForms() {
             <ExportImportToolbar
               exportPath="/api/website/forms/export"
               importPath="/api/website/forms/import"
+              templatePath="/api/website/forms/template"
               downloadName="website-forms"
               selectedIds={selectedFormIds}
               onImported={() => { qc.invalidateQueries({ queryKey: ["/api/website/forms"] }); setSelectedFormIds([]); }}

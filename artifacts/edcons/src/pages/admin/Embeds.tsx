@@ -114,6 +114,7 @@ export default function Embeds() {
             <ExportImportToolbar
               exportPath="/api/embed/widgets/export"
               importPath="/api/embed/widgets/import"
+              templatePath="/api/embed/widgets/template"
               downloadName="embed-widgets"
               selectedIds={selectedIds}
               onImported={() => { qc.invalidateQueries({ queryKey: ["embed-widgets"] }); setSelectedIds([]); }}
