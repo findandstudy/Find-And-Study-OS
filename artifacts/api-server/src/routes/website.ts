@@ -46,9 +46,11 @@ import {
   XLSX_CONTENT_TYPE,
   formColumns,
   formFieldColumns,
+  buildFormsReferenceSheets,
   VALID_FIELD_TYPES as XLSX_VALID_FIELD_TYPES,
   VALID_SUBMIT_ACTIONS as XLSX_VALID_SUBMIT_ACTIONS,
   FORMS_KIND,
+  type FormsCatalog,
 } from "../lib/exportImportExcel";
 
 const router = Router();
@@ -193,23 +195,24 @@ function normalizeFormSlug(slug: string): string {
   return String(slug).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
-async function loadFormDropdownOptions(): Promise<{
-  pipelineStages: string[];
-  crmSources: string[];
-}> {
-  const stages = await db.select({ key: pipelineStagesTable.key })
-    .from(pipelineStagesTable)
-    .where(eq(pipelineStagesTable.entityType, "lead"))
-    .orderBy(asc(pipelineStagesTable.sortOrder));
+async function loadFormDropdownOptions(): Promise<FormsCatalog> {
+  const [stages, sources, pages] = await Promise.all([
+    db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.entityType, "lead"))
+      .orderBy(asc(pipelineStagesTable.sortOrder)),
+    db.select({ src: websiteFormsTable.crmSource }).from(websiteFormsTable),
+    db.select({ slug: websitePagesTable.slug })
+      .from(websitePagesTable)
+      .orderBy(asc(websitePagesTable.sortOrder), asc(websitePagesTable.slug)),
+  ]);
   const stageKeys = Array.from(new Set(stages.map((s) => s.key).filter(Boolean) as string[]));
-
-  const sources = await db.select({ src: websiteFormsTable.crmSource })
-    .from(websiteFormsTable);
   const sourceSet = new Set<string>();
   for (const r of sources) if (r.src) sourceSet.add(r.src);
   // Always include a sensible default list so the dropdown is never empty.
   ["website", "embed", "manual", "import", "referral"].forEach((s) => sourceSet.add(s));
-  return { pipelineStages: stageKeys, crmSources: Array.from(sourceSet).sort() };
+  const pageTags = Array.from(new Set(pages.map((p) => p.slug).filter(Boolean) as string[])).sort();
+  return { pipelineStages: stageKeys, crmSources: Array.from(sourceSet).sort(), pageTags };
 }
 
 function formsExportRows(forms: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
@@ -262,6 +265,7 @@ router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Res
           rows: formsExportRows(forms as Array<Record<string, unknown>>) },
         { name: "Fields", columns: formFieldColumns(),
           rows: fieldsExportRows(forms as Array<{ id: number; slug: string }>, allFields as Array<Record<string, unknown>>) },
+        ...buildFormsReferenceSheets(opts),
       ],
       meta: { kind: FORMS_KIND, version: "1", exportedAt: new Date().toISOString() },
     });
@@ -277,10 +281,108 @@ router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Res
 router.get("/website/forms/template", ...adminOnly, async (_req: Request, res: Response) => {
   try {
     const opts = await loadFormDropdownOptions();
+    const pick = <T,>(arr: readonly T[], i: number): T | undefined => arr[i] ?? arr[0];
+    const slugSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const stage = pick(opts.pipelineStages, 0);
+    const altStage = pick(opts.pipelineStages, 1);
+    const sourceWebsite = opts.crmSources.includes("website") ? "website" : pick(opts.crmSources, 0);
+    const sourceEmbed = opts.crmSources.includes("embed") ? "embed" : pick(opts.crmSources, 0);
+    const pageTag = pick(opts.pageTags, 0);
+
+    // Three diverse example forms covering all three submit actions.
+    // Every row is plainly marked EXAMPLE and shipped with isActive=false
+    // so an accidental re-import never publishes a live form.
+    const exampleForms = [
+      {
+        name: "EXAMPLE — Contact form (delete or edit me)",
+        slug: `example-contact-${slugSuffix}`,
+        description: "Simple contact form delivered to a shared inbox.",
+        submitAction: "email",
+        submitEmail: "leads@example.com",
+        submitWebhookUrl: "",
+        successMessage: "Thank you — we will be in touch shortly.",
+        errorMessage: "Sorry, something went wrong. Please try again.",
+        crmSource: sourceWebsite ?? "",
+        crmPipelineStage: stage ?? "",
+        pageSourceTag: pageTag ?? "contact",
+        isActive: false,
+      },
+      {
+        name: "EXAMPLE — Webhook lead capture (delete or edit me)",
+        slug: `example-webhook-${slugSuffix}`,
+        description: "Posts every submission to an external webhook.",
+        submitAction: "webhook",
+        submitEmail: "",
+        submitWebhookUrl: "https://example.com/api/leads",
+        successMessage: "Got it!",
+        errorMessage: "Please try again.",
+        crmSource: sourceEmbed ?? "",
+        crmPipelineStage: stage ?? "",
+        pageSourceTag: pageTag ?? "",
+        isActive: false,
+      },
+      {
+        name: "EXAMPLE — CRM lead form (delete or edit me)",
+        slug: `example-crm-${slugSuffix}`,
+        description: "Creates a lead in the CRM at the chosen pipeline stage.",
+        submitAction: "crm",
+        submitEmail: "",
+        submitWebhookUrl: "",
+        successMessage: "Thanks — your application has been received.",
+        errorMessage: "Submission failed. Please retry.",
+        crmSource: sourceWebsite ?? "",
+        crmPipelineStage: altStage ?? stage ?? "",
+        pageSourceTag: pageTag ?? "",
+        isActive: false,
+      },
+    ];
+
+    // Matching field rows, linked to the example forms by `form_slug`.
+    // Demonstrates required vs optional fields, validation rules, and
+    // select options JSON shape.
+    const ef = (i: number) => exampleForms[i].slug;
+    const exampleFields = [
+      // Contact form: name, email, message
+      { form_slug: ef(0), fieldType: "text", label: "Full name", name: "full_name",
+        placeholder: "Your name", isRequired: true, sortOrder: 1,
+        validationRules: { minLength: 2, maxLength: 80 }, options: [] },
+      { form_slug: ef(0), fieldType: "email", label: "Email", name: "email",
+        placeholder: "you@example.com", isRequired: true, sortOrder: 2,
+        validationRules: {}, options: [] },
+      { form_slug: ef(0), fieldType: "textarea", label: "Message", name: "message",
+        placeholder: "How can we help?", isRequired: false, sortOrder: 3,
+        validationRules: { maxLength: 1000 }, options: [] },
+      // Webhook form: phone + interest select
+      { form_slug: ef(1), fieldType: "phone", label: "Phone", name: "phone",
+        placeholder: "+90 …", isRequired: true, sortOrder: 1,
+        validationRules: {}, options: [] },
+      { form_slug: ef(1), fieldType: "select", label: "Interested in", name: "interest",
+        placeholder: "", isRequired: true, sortOrder: 2,
+        validationRules: {},
+        options: [
+          { label: "Undergraduate", value: "undergraduate" },
+          { label: "Postgraduate", value: "postgraduate" },
+          { label: "Language course", value: "language" },
+        ] },
+      // CRM form: name + email + consent checkbox
+      { form_slug: ef(2), fieldType: "text", label: "Full name", name: "full_name",
+        placeholder: "", isRequired: true, sortOrder: 1,
+        validationRules: { minLength: 2 }, options: [] },
+      { form_slug: ef(2), fieldType: "email", label: "Email", name: "email",
+        placeholder: "", isRequired: true, sortOrder: 2,
+        validationRules: {}, options: [] },
+      { form_slug: ef(2), fieldType: "checkbox", label: "I agree to be contacted", name: "consent",
+        placeholder: "", isRequired: true, sortOrder: 3,
+        validationRules: {}, options: [] },
+    ];
+
     const buf = await buildWorkbookBuffer({
       sheets: [
-        { name: "Forms", columns: formColumns(opts.pipelineStages, opts.crmSources), rows: [] },
-        { name: "Fields", columns: formFieldColumns(), rows: [] },
+        { name: "Forms", columns: formColumns(opts.pipelineStages, opts.crmSources),
+          rows: exampleForms as Array<Record<string, unknown>> },
+        { name: "Fields", columns: formFieldColumns(),
+          rows: exampleFields as Array<Record<string, unknown>> },
+        ...buildFormsReferenceSheets(opts),
       ],
       meta: { kind: FORMS_KIND, version: "1", exportedAt: new Date().toISOString() },
     });

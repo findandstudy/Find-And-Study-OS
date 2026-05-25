@@ -564,6 +564,65 @@ export function formColumns(
   ];
 }
 
+// Catalog of currently-valid values surfaced as a multi-sheet
+// reference inside the forms template/export, mirroring the embed
+// catalog approach. Lists are read-only documentation — the parser
+// ignores them on re-import.
+export interface FormsCatalog {
+  pipelineStages: readonly string[];
+  crmSources: readonly string[];
+  pageTags: readonly string[];
+}
+
+export function buildFormsReferenceSheets(
+  catalog: FormsCatalog,
+): Array<SheetSpec<Record<string, unknown>>> {
+  const summary: SheetSpec<Record<string, unknown>> = {
+    name: "Form reference",
+    columns: [
+      { key: "column", header: "Forms sheet column", kind: "string", width: 26 },
+      { key: "valueType", header: "Value type", kind: "string", width: 14 },
+      { key: "count", header: "Total options", kind: "number", width: 14 },
+      { key: "lookupSheet", header: "See sheet", kind: "string", width: 22 },
+      { key: "description", header: "Description", kind: "string", width: 60 },
+    ],
+    rows: [
+      { column: "submitAction", valueType: "enum",
+        count: VALID_SUBMIT_ACTIONS.length, lookupSheet: "Submit actions",
+        description: "How a submission is delivered. One of: email, webhook, crm." },
+      { column: "crmSource", valueType: "string",
+        count: catalog.crmSources.length, lookupSheet: "CRM sources",
+        description: "Free-form text. Pick from existing values or type a new one." },
+      { column: "crmPipelineStage", valueType: "string",
+        count: catalog.pipelineStages.length, lookupSheet: "Pipeline stages",
+        description: "Must match a configured lead pipeline stage key." },
+      { column: "pageSourceTag", valueType: "string",
+        count: catalog.pageTags.length, lookupSheet: "Page tags",
+        description: "Slug of the website page the form lives on (optional but recommended for analytics)." },
+      { column: "Fields.fieldType", valueType: "enum",
+        count: VALID_FIELD_TYPES.length, lookupSheet: "Field types",
+        description: "Allowed field types on the Fields sheet." },
+    ],
+  };
+
+  const simple = (name: string, values: readonly string[]): SheetSpec<Record<string, unknown>> => ({
+    name,
+    columns: [{ key: "value", header: "Value (paste this into the matching cell)", kind: "string", width: 50 }],
+    rows: values.length
+      ? values.map((v) => ({ value: v }))
+      : [{ value: "(no values yet — add some in the admin UI)" }],
+  });
+
+  return [
+    summary,
+    simple("Submit actions", VALID_SUBMIT_ACTIONS),
+    simple("CRM sources", catalog.crmSources),
+    simple("Pipeline stages", catalog.pipelineStages),
+    simple("Page tags", catalog.pageTags),
+    simple("Field types", VALID_FIELD_TYPES),
+  ];
+}
+
 export function formFieldColumns(): readonly ColumnSpec[] {
   return [
     { key: "form_slug", header: "Form slug", kind: "string", required: true, width: 28,
