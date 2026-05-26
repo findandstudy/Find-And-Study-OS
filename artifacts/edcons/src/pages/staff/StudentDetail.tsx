@@ -1938,12 +1938,12 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
     <>
     <>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <p className="text-sm text-muted-foreground">{documents.length} documents</p>
+        <p className="text-sm text-muted-foreground">{t("common.documentsCount", { n: documents.length })}</p>
         <div className="flex items-center gap-2 flex-wrap">
           {documents.length > 0 && (
             <Button size="sm" variant="outline" onClick={handleZipDownload} disabled={downloadingZip}>
               {downloadingZip ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-              Download ZIP
+              {t("common.downloadZip")}
             </Button>
           )}
           {pdfDocs.length >= 2 && (
@@ -2114,7 +2114,7 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
     <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
       <div className="flex items-center gap-2">
         <FileText className="w-4 h-4 text-muted-foreground" />
-        <h2 className="font-semibold text-foreground">Başvuru Belgeleri</h2>
+        <h2 className="font-semibold text-foreground">{t("common.applicationDocuments")}</h2>
         {docs.length > 0 && (
           <Badge variant="secondary" className="text-xs px-1.5 py-0">{docs.length}</Badge>
         )}
@@ -2124,7 +2124,7 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
         </div>
       ) : docs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Bu öğrencinin başvurularına henüz belge yüklenmemiş.</p>
+        <p className="text-sm text-muted-foreground">{t("common.noStudentDocsUploaded")}</p>
       ) : (
         <div className="space-y-4">
           {grouped.map((g) => (
@@ -2134,7 +2134,7 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
                   <p className="text-sm font-medium truncate">
                     {g.universityName ?? "—"} <span className="text-muted-foreground">·</span> {g.programName ?? "—"}
                   </p>
-                  <p className="text-xs text-muted-foreground">Başvuru #{g.applicationId}</p>
+                  <p className="text-xs text-muted-foreground">{t("common.applicationNumber", { id: g.applicationId })}</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -2142,7 +2142,7 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
                   className="rounded-full"
                   onClick={() => setLocation(`${basePath}/applications/${g.applicationId}`)}
                 >
-                  Başvuruyu Aç
+                  {t("common.openApplication")}
                 </Button>
               </div>
               <div className="divide-y">

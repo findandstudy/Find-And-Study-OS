@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Circle, AlertTriangle, GraduationCap } from "lucide-react";
+import { useI18n } from "@/hooks/use-i18n";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -48,6 +49,7 @@ interface StudentDocChecklistProps {
 }
 
 export function StudentDocChecklist({ documents, compact = false, programId, programRequirements }: StudentDocChecklistProps) {
+  const { t } = useI18n();
   type ProgramDocReq = { documentType: string; mandatory: boolean; sortOrder?: number };
 
   const { data: fetchedProgramReqs, isFetched: programReqsFetched } = useQuery<ProgramDocReq[]>({
@@ -134,7 +136,7 @@ export function StudentDocChecklist({ documents, compact = false, programId, pro
   if (!requiredDocs.length) {
     return (
       <div className="p-3 rounded-xl bg-muted/50 border text-xs text-muted-foreground">
-        Bu program için belge gereksinimi tanımlanmamış.
+        {t("common.programNoDocReq")}
       </div>
     );
   }

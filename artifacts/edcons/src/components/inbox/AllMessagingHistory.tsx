@@ -3,6 +3,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, MessageCircle, Send, Mail, Smartphone, MessageSquare, FormInput } from "lucide-react";
+import { useI18n } from "@/hooks/use-i18n";
 
 const CHANNEL_ICON: Record<string, any> = {
   whatsapp: MessageCircle,
@@ -28,6 +29,7 @@ interface AllMessagingHistoryProps {
 }
 
 export function AllMessagingHistory({ type, id }: AllMessagingHistoryProps) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
@@ -64,7 +66,7 @@ export function AllMessagingHistory({ type, id }: AllMessagingHistoryProps) {
   if (conversations.length === 0) {
     return (
       <Card className="p-6 text-center text-sm text-muted-foreground">
-        No external messaging history yet.
+        {t("common.noMessagingHistory")}
       </Card>
     );
   }

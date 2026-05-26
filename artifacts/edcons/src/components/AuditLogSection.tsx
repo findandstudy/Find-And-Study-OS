@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { formatDate } from "@workspace/i18n";
 import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   ChevronDown,
   ChevronUp,
@@ -412,7 +413,7 @@ export function AuditLogSection({ resource, resourceId }: Props) {
       >
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-muted-foreground" />
-          <h2 className="font-semibold text-foreground">Activity Log</h2>
+          <h2 className="font-semibold text-foreground">{t("common.activityLog")}</h2>
           {logs.length > 0 && (
             <span className="text-xs text-muted-foreground">({logs.length})</span>
           )}

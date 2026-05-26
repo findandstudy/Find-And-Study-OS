@@ -596,7 +596,19 @@
     "source": "Source",
     "stage": "Stage",
     "uploading": "Subiendo...",
-    "current": "Actual"
+    "current": "Actual",
+    "activityLog": "Activity Log",
+    "allMessaging": "All Messaging",
+    "noMessagingHistory": "No external messaging history yet.",
+    "downloadZip": "Download ZIP",
+    "openApplication": "Open Application",
+    "applicationDocuments": "Application Documents",
+    "applicationNumber": "Application #{id}",
+    "programNoDocReq": "No document requirements are defined for this program.",
+    "noStudentDocsUploaded": "No documents have been uploaded to this student's applications yet.",
+    "documentsCount": "{n} documents",
+    "leadNoDocsYet": "No documents yet",
+    "leadNoDocsDesc": "When the lead submits documents via the application form, they will appear here."
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",

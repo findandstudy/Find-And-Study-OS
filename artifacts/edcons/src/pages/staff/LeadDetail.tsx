@@ -935,7 +935,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         )}
         <div className="space-y-3">
           <h2 className="font-semibold text-foreground flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" /> All Messaging
+            <MessageSquare className="w-4 h-4" /> {t("common.allMessaging")}
           </h2>
           <AllMessagingHistory type="lead" id={Number(id)} />
         </div>
@@ -1295,8 +1295,8 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
     return (
       <div className="bg-card rounded-2xl border shadow-sm p-12 text-center text-muted-foreground">
         <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="font-medium">Henüz belge yok</p>
-        <p className="text-xs mt-1">Lead başvuru formundan belge gönderdiğinde burada görünecek.</p>
+        <p className="font-medium">{t("common.leadNoDocsYet")}</p>
+        <p className="text-xs mt-1">{t("common.leadNoDocsDesc")}</p>
       </div>
     );
   }

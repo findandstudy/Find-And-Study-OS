@@ -156,6 +156,7 @@ function CategorySection({
   isAgent: boolean;
   hideUpload?: boolean;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(docs.length > 0);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -249,10 +250,10 @@ function CategorySection({
             <Badge variant="secondary" className="text-xs px-1.5 py-0">{docs.length}</Badge>
           )}
           {isAdminOnly && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 text-rose-600 border-rose-300">Admin Upload</Badge>
+            <Badge variant="outline" className="text-xs px-1.5 py-0 text-rose-600 border-rose-300">{t("stageDocs.adminUpload")}</Badge>
           )}
           {isStaffOnly && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">Staff Upload</Badge>
+            <Badge variant="outline" className="text-xs px-1.5 py-0 text-amber-600 border-amber-300">{t("stageDocs.staffUpload")}</Badge>
           )}
         </div>
       </button>
