@@ -240,14 +240,14 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-          toast({ title: "Status updated" });
+          toast({ title: t("leadDetailPage.statusUpdated") });
         },
       }
     );
   }
 
   function handleConvert() {
-    if (!confirm("Convert this lead to a student? This cannot be undone.")) return;
+    if (!confirm(t("leadDetailPage.convertConfirm"))) return;
     convertLead.mutate(
       { id },
       {
@@ -255,14 +255,16 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           const studentData = result?.student || result;
           const studentName = `${studentData?.firstName || ""} ${studentData?.lastName || ""}`.trim();
           toast({
-            title: "Lead converted to student",
-            description: result?.merged ? `Merged with existing student: ${studentName}` : `New student created: ${studentName}`,
+            title: t("leadDetailPage.leadConverted"),
+            description: result?.merged
+              ? t("leadDetailPage.mergedWithExisting", { name: studentName })
+              : t("leadDetailPage.newStudentCreated", { name: studentName }),
           });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           setLocation(`${basePath}/leads`);
         },
         onError: () => {
-          toast({ title: "Conversion failed", variant: "destructive" });
+          toast({ title: t("leadDetailPage.conversionFailed"), variant: "destructive" });
         },
       }
     );
@@ -381,7 +383,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 {lead?.firstName} {lead?.lastName}
               </h1>
             )}
-            <p className="text-sm text-muted-foreground mt-0.5">Lead Detail</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{t("leadDetailPage.leadDetail")}</p>
           </div>
           {!isLoading && lead && (
             <div className="flex items-center gap-2">
@@ -401,13 +403,13 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-md"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Convert to Student
+                  {t("leadDetailPage.convertToStudent")}
                 </Button>
               ) : lead.convertedStudentId ? (
                 <Link href={`${basePath}/students/${lead.convertedStudentId}`}>
                   <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md">
                     <GraduationCap className="w-4 h-4 mr-2" />
-                    View Student
+                    {t("leadDetailPage.viewStudent")}
                   </Button>
                 </Link>
               ) : null}
@@ -422,7 +424,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${mainTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
             data-testid="lead-tab-overview"
           >
-            Genel
+            {t("leadDetailPage.general")}
           </button>
           <button
             type="button"
@@ -431,7 +433,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             data-testid="lead-tab-documents"
           >
             <FileText className="w-3.5 h-3.5" />
-            Belgeler {leadDocs.length > 0 && <span className="text-xs">({leadDocs.length})</span>}
+            {t("leadDetailPage.documents")} {leadDocs.length > 0 && <span className="text-xs">({leadDocs.length})</span>}
           </button>
         </div>
 
@@ -448,7 +450,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-semibold text-foreground">Contact Information</h2>
+                  <h2 className="font-semibold text-foreground">{t("leadDetailPage.contactInformation")}</h2>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowEditDialog(true)}>
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
@@ -489,22 +491,22 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={lead?.email} />
-                  <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={lead?.phone} />
-                  <InfoRow icon={<BookOpen className="w-4 h-4" />} label="Interested Program" value={lead?.interestedProgram} />
-                  <InfoRow icon={<User className="w-4 h-4" />} label="Source" value={lead?.source} />
-                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Estimated Budget" value={estimatedBudgetDisplay} />
+                  <InfoRow icon={<Mail className="w-4 h-4" />} label={t("leadDetailPage.email")} value={lead?.email} />
+                  <InfoRow icon={<Phone className="w-4 h-4" />} label={t("leadDetailPage.phone")} value={lead?.phone} />
+                  <InfoRow icon={<BookOpen className="w-4 h-4" />} label={t("leadDetailPage.interestedProgramLabel")} value={lead?.interestedProgram} />
+                  <InfoRow icon={<User className="w-4 h-4" />} label={t("leadDetailPage.sourceLabel")} value={lead?.source} />
+                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label={t("leadDetailPage.estimatedBudget")} value={estimatedBudgetDisplay} />
                 </div>
               )}
 
               <div className="pt-2 border-t">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Origin</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">{t("leadDetailPage.origin")}</p>
                 <OriginSection originType={lead?.originType || "direct"} originDisplayName={lead?.originDisplayName} />
               </div>
 
               {(lead?.sourcePageUrl || lead?.utmSource || lead?.utmMedium || lead?.utmCampaign || lead?.utmTerm || lead?.utmContent) && (
                 <div className="pt-2 border-t">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Kaynak Bilgisi</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">{t("leadDetailPage.sourceInfo")}</p>
                   <div className="space-y-2 text-sm">
                     {lead?.sourcePageUrl && (() => {
                       const safeHref = /^https?:\/\//i.test(lead.sourcePageUrl) ? lead.sourcePageUrl : null;
@@ -536,7 +538,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
               {lead?.notes && (
                 <div className="pt-2 border-t">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Initial Notes</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">{t("leadDetailPage.initialNotes")}</p>
                   <p className="text-sm text-foreground">{lead.notes}</p>
                 </div>
               )}
@@ -547,7 +549,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CalendarClock className="w-4 h-4 text-muted-foreground" />
-                  <h2 className="font-semibold text-foreground">Follow-ups</h2>
+                  <h2 className="font-semibold text-foreground">{t("leadDetailPage.followUps")}</h2>
                   <span className="text-xs text-muted-foreground">({(followUps as any[]).length})</span>
                 </div>
                 <Button
@@ -775,10 +777,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                         queryClient.setQueryData([`/api/leads/${id}`], updated);
                         queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
                         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-                        toast({ title: "Status updated" });
+                        toast({ title: t("leadDetailPage.statusUpdated") });
                       },
                       onError: (err: any) => {
-                        toast({ title: "Failed to update status", description: err?.message, variant: "destructive" });
+                        toast({ title: t("studentDetailPage.failedToUpdateStatus"), description: err?.message, variant: "destructive" });
                       },
                     });
                   }}

@@ -1914,10 +1914,10 @@ export default function ApplicationsPage() {
                             value: filters.assignedTo,
                             onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
                             options: [
-                              { value: "unassigned", label: "Unassigned" },
+                              { value: "unassigned", label: t("applicationsPage.unassigned") },
                               ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
                             ],
-                            label: "Assigned to",
+                            label: t("applicationsPage.assignedTo"),
                           }}
                         />
                       );

@@ -54,17 +54,29 @@ function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string }
   return { phoneCode: "+90", phone: fullPhone };
 }
 
-const roleBadge: Record<string, { color: string; label: string }> = {
-  super_admin: { color: "bg-rose-500/10 text-rose-600 border-rose-200", label: "Super Admin" },
-  admin: { color: "bg-red-500/10 text-red-600 border-red-200", label: "Admin" },
-  manager: { color: "bg-orange-500/10 text-orange-600 border-orange-200", label: "Manager" },
-  staff: { color: "bg-blue-500/10 text-blue-600 border-blue-200", label: "Staff" },
-  consultant: { color: "bg-indigo-500/10 text-indigo-600 border-indigo-200", label: "Consultant" },
-  accountant: { color: "bg-purple-500/10 text-purple-600 border-purple-200", label: "Accountant" },
-  editor: { color: "bg-cyan-500/10 text-cyan-600 border-cyan-200", label: "Editor" },
-  student: { color: "bg-green-500/10 text-green-600 border-green-200", label: "Student" },
-  agent: { color: "bg-amber-500/10 text-amber-600 border-amber-200", label: "Agent" },
-  sub_agent: { color: "bg-yellow-500/10 text-yellow-600 border-yellow-200", label: "Sub Agent" },
+const roleBadgeColors: Record<string, string> = {
+  super_admin: "bg-rose-500/10 text-rose-600 border-rose-200",
+  admin: "bg-red-500/10 text-red-600 border-red-200",
+  manager: "bg-orange-500/10 text-orange-600 border-orange-200",
+  staff: "bg-blue-500/10 text-blue-600 border-blue-200",
+  consultant: "bg-indigo-500/10 text-indigo-600 border-indigo-200",
+  accountant: "bg-purple-500/10 text-purple-600 border-purple-200",
+  editor: "bg-cyan-500/10 text-cyan-600 border-cyan-200",
+  student: "bg-green-500/10 text-green-600 border-green-200",
+  agent: "bg-amber-500/10 text-amber-600 border-amber-200",
+  sub_agent: "bg-yellow-500/10 text-yellow-600 border-yellow-200",
+};
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  super_admin: "usersPage.roleSuperAdmin",
+  admin: "usersPage.roleAdmin",
+  manager: "usersPage.roleManager",
+  staff: "usersPage.roleStaff",
+  consultant: "usersPage.roleConsultant",
+  accountant: "usersPage.roleAccountant",
+  editor: "usersPage.roleEditor",
+  student: "usersPage.roleStudent",
+  agent: "usersPage.roleAgent",
+  sub_agent: "usersPage.roleSubAgent",
 };
 
 const roleColors: Record<string, string> = {
@@ -303,7 +315,7 @@ function UsersTab() {
 
   const availableRoles = (roles.length > 0
     ? roles.map(r => ({ value: r.name, label: r.displayName }))
-    : Object.entries(roleBadge).map(([k, v]) => ({ value: k, label: v.label }))
+    : Object.keys(ROLE_LABEL_KEYS).map(k => ({ value: k, label: t(ROLE_LABEL_KEYS[k]) }))
   ).filter(r => r.value !== "student");
 
   return (
@@ -383,7 +395,10 @@ function UsersTab() {
               ) : pagedUsers.length === 0 ? (
                 <tr><td colSpan={5} className="px-6 py-16 text-center text-muted-foreground">No users found</td></tr>
               ) : pagedUsers.map(user => {
-                const badge = roleBadge[user.role] || { color: "bg-secondary text-foreground border-border", label: user.role };
+                const badge = {
+                  color: roleBadgeColors[user.role] || "bg-secondary text-foreground border-border",
+                  label: ROLE_LABEL_KEYS[user.role] ? t(ROLE_LABEL_KEYS[user.role]) : user.role,
+                };
                 const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
                 return (
                   <tr key={user.id} className="hover:bg-secondary/30 transition-colors">

@@ -581,7 +581,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 {student?.firstName} {student?.lastName}
               </h1>
             )}
-            <p className="text-sm text-muted-foreground mt-0.5">Student Profile</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{t("studentDetailPage.studentProfile")}</p>
           </div>
           {!isLoading && student && (
             <div className="flex items-center gap-2">
@@ -616,13 +616,13 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       qc.invalidateQueries({ queryKey: ["getStudent"] });
                       qc.invalidateQueries({ queryKey: [`/api/students/${student.id}`] });
                       qc.invalidateQueries({ queryKey: ["/api/students"] });
-                      toast({ title: next === "active" ? "Marked as Active" : "Marked as Inactive" });
+                      toast({ title: next === "active" ? t("studentDetailPage.markedAsActive") : t("studentDetailPage.markedAsInactive") });
                     }).catch((err: any) => {
-                      toast({ title: "Failed to update status", description: err?.message, variant: "destructive" });
+                      toast({ title: t("studentDetailPage.failedToUpdateStatus"), description: err?.message, variant: "destructive" });
                     });
                   }}
                 >
-                  {student.status === "inactive" ? "Mark Active" : "Mark Inactive"}
+                  {student.status === "inactive" ? t("studentDetailPage.markActive") : t("studentDetailPage.markInactive")}
                 </Button>
               )}
             </div>
@@ -633,17 +633,17 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           <TabsList className="rounded-xl bg-secondary/60">
             <TabsTrigger value="profile">{t("studentDetailPage.profile")}</TabsTrigger>
             <TabsTrigger value="documents">
-              Documents {documents.length > 0 && `(${documents.length})`}
+              {t("studentDetailPage.documents")} {documents.length > 0 && `(${documents.length})`}
             </TabsTrigger>
             <TabsTrigger value="notes">
-              Notes ({generalNotes.length + internalNotes.length})
+              {t("studentDetailPage.notes")} ({generalNotes.length + internalNotes.length})
             </TabsTrigger>
             <TabsTrigger value="applications">
-              Applications {applications.length > 0 && `(${applications.length})`}
+              {t("studentDetailPage.applications")} {applications.length > 0 && `(${applications.length})`}
             </TabsTrigger>
             {isStaffUser && (
               <TabsTrigger value="followups">
-                Follow-ups {(followUps as any[]).length > 0 && `(${(followUps as any[]).length})`}
+                {t("studentDetailPage.followUps")} {(followUps as any[]).length > 0 && `(${(followUps as any[]).length})`}
               </TabsTrigger>
             )}
             <TabsTrigger value="messaging">{t("studentDetailPage.allMessaging")}</TabsTrigger>
@@ -653,26 +653,26 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <div className="flex justify-end mb-2">
               <Button variant="outline" size="sm" className="rounded-full" onClick={() => setShowEditDialog(true)}>
                 <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Edit Profile
+                {t("studentDetailPage.editProfile")}
               </Button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
-                <h2 className="font-semibold text-foreground">Personal Information</h2>
+                <h2 className="font-semibold text-foreground">{t("studentDetailPage.personalInformation")}</h2>
                 {isLoading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
                   </div>
                 ) : (
                   <div className="space-y-3 text-sm">
-                    <InfoRow icon={<Calendar className="w-4 h-4" />} label="Date of Birth" value={student?.dateOfBirth} />
-                    <InfoRow icon={<User className="w-4 h-4" />} label="Gender" value={student?.gender === "female" ? "Female" : student?.gender === "male" ? "Male" : null} />
-                    <InfoRow icon={<Globe className="w-4 h-4" />} label="Nationality" value={student?.nationality} />
-                    <InfoRow icon={<Mail className="w-4 h-4" />} label="Email" value={student?.email} />
-                    <InfoRow icon={<Phone className="w-4 h-4" />} label="Phone" value={student?.phone} />
-                    <InfoRow icon={<User className="w-4 h-4" />} label="Mother's Name" value={student?.motherName} />
-                    <InfoRow icon={<User className="w-4 h-4" />} label="Father's Name" value={student?.fatherName} />
-                    <InfoRow icon={<Home className="w-4 h-4" />} label="Address" value={student?.address} />
+                    <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("studentDetailPage.dateOfBirth")} value={student?.dateOfBirth} />
+                    <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.gender")} value={student?.gender === "female" ? t("studentDetailPage.female") : student?.gender === "male" ? t("studentDetailPage.male") : null} />
+                    <InfoRow icon={<Globe className="w-4 h-4" />} label={t("studentDetailPage.nationality")} value={student?.nationality} />
+                    <InfoRow icon={<Mail className="w-4 h-4" />} label={t("studentDetailPage.email")} value={student?.email} />
+                    <InfoRow icon={<Phone className="w-4 h-4" />} label={t("studentDetailPage.phone")} value={student?.phone} />
+                    <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.mothersName")} value={student?.motherName} />
+                    <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.fathersName")} value={student?.fatherName} />
+                    <InfoRow icon={<Home className="w-4 h-4" />} label={t("studentDetailPage.address")} value={student?.address} />
                   </div>
                 )}
               </div>
@@ -1846,6 +1846,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
   qc: any;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [mergingPdf, setMergingPdf] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<number[]>([]);
@@ -1948,12 +1949,12 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
           {pdfDocs.length >= 2 && (
             <Button size="sm" variant="outline" onClick={handleMergePdf} disabled={mergingPdf || selectedForMerge.length < 2}>
               {mergingPdf ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
-              Merge PDFs ({selectedForMerge.length})
+              {t("studentDetailPage.mergePdfs")} ({selectedForMerge.length})
             </Button>
           )}
           <Button size="sm" onClick={openUpload}>
             <Upload className="w-4 h-4 mr-2" />
-            Upload Docs
+            {t("studentDetailPage.uploadDocs")}
           </Button>
         </div>
       </div>
@@ -1965,8 +1966,8 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
             onClick={openUpload}
           >
             <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No documents yet</p>
-            <p className="text-xs mt-1">Click to upload documents</p>
+            <p className="font-medium">{t("studentDetailPage.noDocsYet")}</p>
+            <p className="text-xs mt-1">{t("studentDetailPage.clickToUpload")}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -1977,11 +1978,11 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                     <span className="text-xs text-muted-foreground">PDF</span>
                   </th>
                 )}
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Name</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Type</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Status</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">Uploaded</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">File</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableName")}</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableType")}</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableStatus")}</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableUploaded")}</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableFile")}</th>
                 <th className="text-left px-4 py-3 font-semibold text-foreground"></th>
               </tr>
             </thead>
@@ -2021,7 +2022,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                           data-testid={`btn-preview-${doc.id}`}
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          Preview
+                          {t("studentDetailPage.preview")}
                         </button>
                       )}
                       {(doc.fileKey || doc.fileData) && (
@@ -2030,12 +2031,12 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                           className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          Download
+                          {t("studentDetailPage.download")}
                         </button>
                       )}
                       {doc.fileUrl && !doc.fileKey && !doc.fileData && (
                         <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
-                          View
+                          {t("studentDetailPage.view")}
                         </a>
                       )}
                     </div>
@@ -2043,14 +2044,14 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
                   <td className="px-4 py-3">
                     <button
                       onClick={async () => {
-                        if (!confirm("Are you sure you want to delete this document?")) return;
+                        if (!confirm(t("studentDetailPage.deleteConfirm"))) return;
                         const resp = await apiFetch(`${BASE_URL}/api/documents/${doc.id}`, { method: "DELETE" });
                         if (resp.ok) {
                           await qc.invalidateQueries({ predicate: (q: any) => q.queryKey.some((k: any) => typeof k === "string" && (k.includes("document") || k.includes("student"))) });
                         }
                       }}
                       className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
-                      title="Delete document"
+                      title={t("studentDetailPage.deleteTooltip")}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

@@ -648,7 +648,7 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
-        <p className="text-muted-foreground text-sm mt-4">RTL (right-to-left) is automatically applied for Arabic.</p>
+        <p className="text-muted-foreground text-sm mt-4">{t("settingsPage.rtlNote")}</p>
       </Card>
     );
   }
@@ -1199,7 +1199,7 @@ export default function SettingsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">{t("settingsPage.settings")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your profile, organization settings, and system configuration.</p>
+          <p className="text-muted-foreground text-sm mt-1">{t("settingsPage.subtitle")}</p>
         </div>
 
         <div className="lg:hidden mb-4">
@@ -1218,7 +1218,7 @@ export default function SettingsPage() {
         <div className="flex gap-6 min-h-[600px]">
           <nav className="w-56 shrink-0 hidden lg:block">
             <div className="sticky top-20 space-y-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 py-2">Personal</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 py-2">{t("settingsPage.personalGroup")}</p>
               {visibleNav.filter(n => n.group === "personal").map(n => (
                 <button key={n.id} onClick={() => setActiveTab(n.id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left
@@ -1230,7 +1230,7 @@ export default function SettingsPage() {
               {isManager && (
                 <>
                   <div className="h-px bg-border/50 my-3" />
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 py-2">Organization</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 py-2">{t("settingsPage.organizationGroup")}</p>
                   {visibleNav.filter(n => n.group === "organization").map(n => (
                     <button key={n.id} onClick={() => setActiveTab(n.id)}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left

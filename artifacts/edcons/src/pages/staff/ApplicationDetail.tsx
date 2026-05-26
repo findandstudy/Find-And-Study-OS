@@ -172,7 +172,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 {app?.studentFirstName} {app?.studentLastName}
               </h1>
             )}
-            <p className="text-sm text-muted-foreground mt-0.5">Application #{id}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{t("applicationDetailPage.applicationHash", { id })}</p>
           </div>
           <div className="flex items-center gap-2">
             {!isLoading && (
@@ -181,7 +181,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
               </Badge>
             )}
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="gap-1.5">
-              <Pencil className="w-3.5 h-3.5" /> Edit
+              <Pencil className="w-3.5 h-3.5" /> {t("applicationDetailPage.edit")}
             </Button>
           </div>
         </div>
@@ -190,7 +190,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           <div className="md:col-span-2 space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-foreground">Application Details</h2>
+                <h2 className="font-semibold text-foreground">{t("applicationDetailPage.applicationDetails")}</h2>
                 <Select
                   value={app?.stage}
                   onValueChange={handleStageChange}
@@ -220,33 +220,33 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <InfoRow icon={<User className="w-4 h-4" />} label="Student" value={app?.studentFirstName && app?.studentLastName ? `${app.studentFirstName} ${app.studentLastName}` : undefined} />
-                  <InfoRow icon={<Globe className="w-4 h-4" />} label="Country" value={app?.country} />
-                  <InfoRow icon={<GraduationCap className="w-4 h-4" />} label="University" value={app?.universityName} />
-                  <InfoRow icon={<BookOpen className="w-4 h-4" />} label="Program" value={app?.programName} />
-                  <InfoRow icon={<BookOpen className="w-4 h-4" />} label="Level" value={levelLabel} />
-                  <InfoRow icon={<Globe className="w-4 h-4" />} label="Language" value={app?.instructionLanguage} />
-                  <InfoRow icon={<Calendar className="w-4 h-4" />} label="Intake" value={app?.intake} />
-                  <InfoRow icon={<Calendar className="w-4 h-4" />} label="Deadline" value={app?.deadline} />
-                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Tuition Fee" value={formatCurrency(app?.tuitionFee)} />
-                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label="Scholarship" value={formatCurrency(app?.scholarship)} />
+                  <InfoRow icon={<User className="w-4 h-4" />} label={t("applicationDetailPage.student")} value={app?.studentFirstName && app?.studentLastName ? `${app.studentFirstName} ${app.studentLastName}` : undefined} />
+                  <InfoRow icon={<Globe className="w-4 h-4" />} label={t("applicationDetailPage.country")} value={app?.country} />
+                  <InfoRow icon={<GraduationCap className="w-4 h-4" />} label={t("applicationDetailPage.university")} value={app?.universityName} />
+                  <InfoRow icon={<BookOpen className="w-4 h-4" />} label={t("applicationDetailPage.program")} value={app?.programName} />
+                  <InfoRow icon={<BookOpen className="w-4 h-4" />} label={t("applicationDetailPage.level")} value={levelLabel} />
+                  <InfoRow icon={<Globe className="w-4 h-4" />} label={t("applicationDetailPage.language")} value={app?.instructionLanguage} />
+                  <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("applicationDetailPage.intake")} value={app?.intake} />
+                  <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("applicationDetailPage.deadline")} value={app?.deadline} />
+                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label={t("applicationDetailPage.tuitionFee")} value={formatCurrency(app?.tuitionFee)} />
+                  <InfoRow icon={<DollarSign className="w-4 h-4" />} label={t("applicationDetailPage.scholarship")} value={formatCurrency(app?.scholarship)} />
                   {app?.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
-                    <InfoRow icon={<TrendingUp className="w-4 h-4" />} label="Commission" value={formatCurrency(app.commissionAmount)} />
+                    <InfoRow icon={<TrendingUp className="w-4 h-4" />} label={t("applicationDetailPage.commission")} value={formatCurrency(app.commissionAmount)} />
                   )}
                   {app?.commissionStatus && (
-                    <InfoRow icon={<TrendingUp className="w-4 h-4" />} label="Commission Status" value={app.commissionStatus.replace(/_/g, " ")} />
+                    <InfoRow icon={<TrendingUp className="w-4 h-4" />} label={t("applicationDetailPage.commissionStatus")} value={app.commissionStatus.replace(/_/g, " ")} />
                   )}
                 </div>
               )}
 
               <div className="pt-3 border-t">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Origin</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">{t("applicationDetailPage.originLabel")}</p>
                 <OriginSection originType={(app as any)?.originType || "direct"} originDisplayName={(app as any)?.originDisplayName} originStudentId={(app as any)?.originStudentId} />
               </div>
 
               {app?.notes && (
                 <div className="pt-3 border-t">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Notes</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">{t("applicationDetailPage.notes")}</p>
                   <p className="text-sm text-foreground whitespace-pre-wrap">{app.notes}</p>
                 </div>
               )}
@@ -283,7 +283,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-muted-foreground" />
-                <h2 className="font-semibold text-foreground">Notes</h2>
+                <h2 className="font-semibold text-foreground">{t("applicationDetailPage.notes")}</h2>
               </div>
 
               <div className="flex gap-1 border-b">
@@ -291,27 +291,27 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   onClick={() => setNoteTab("general")}
                   className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "general" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                 >
-                  General ({generalNotes.length})
+                  {t("applicationDetailPage.general")} ({generalNotes.length})
                 </button>
                 {isStaffUser && (
                   <button
                     onClick={() => setNoteTab("internal")}
                     className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${noteTab === "internal" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                   >
-                    🔒 Private ({internalNotes.length})
+                    🔒 {t("applicationDetailPage.private")} ({internalNotes.length})
                   </button>
                 )}
               </div>
 
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {activeNotes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No notes yet.</p>
+                  <p className="text-sm text-muted-foreground">{t("applicationDetailPage.noNotesYet")}</p>
                 ) : (
                   activeNotes.map((note: any) => (
                     <div key={note.id} className={`rounded-xl p-3 ${noteTab === "internal" ? "bg-orange-50 border border-orange-200" : "bg-secondary/50"}`}>
                       <p className="text-sm text-foreground">{note.content}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
+                        {note.authorName || t("applicationDetailPage.team")} · {new Date(note.createdAt).toLocaleDateString()}
                       </p>
                     </div>
                   ))
@@ -321,7 +321,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
               {(noteTab === "general" || isStaffUser) && (
                 <div className="flex gap-2 pt-2 border-t">
                   <Textarea
-                    placeholder={noteTab === "internal" ? "Add an internal note (only visible to staff)..." : "Add a note..."}
+                    placeholder={noteTab === "internal" ? t("applicationDetailPage.addInternalNotePh") : t("applicationDetailPage.addNotePh")}
                     value={noteText}
                     onChange={(e) => setNoteText(e.target.value)}
                     className={`resize-none min-h-[72px] ${noteTab === "internal" ? "border-orange-300 focus-visible:ring-orange-400" : ""}`}
@@ -331,7 +331,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                     disabled={!noteText.trim()}
                     className={`self-end ${noteTab === "internal" ? "bg-orange-500 hover:bg-orange-600" : ""}`}
                   >
-                    Add
+                    {t("applicationDetailPage.add")}
                   </Button>
                 </div>
               )}
@@ -340,7 +340,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 
           <div className="space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
-              <h2 className="font-semibold text-foreground">Stage Progress</h2>
+              <h2 className="font-semibold text-foreground">{t("applicationDetailPage.stageProgress")}</h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-28 rounded-full" />
               ) : (
@@ -366,15 +366,15 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 </div>
               )}
               <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
-                <p>Created: {app ? new Date(app.createdAt).toLocaleDateString() : "—"}</p>
-                {app?.updatedAt && <p>Updated: {new Date(app.updatedAt).toLocaleDateString()}</p>}
-                {app?.season && <p>Season: {app.season}</p>}
+                <p>{t("applicationDetailPage.created")}: {app ? new Date(app.createdAt).toLocaleDateString() : "—"}</p>
+                {app?.updatedAt && <p>{t("applicationDetailPage.updated")}: {new Date(app.updatedAt).toLocaleDateString()}</p>}
+                {app?.season && <p>{t("applicationDetailPage.season")}: {app.season}</p>}
               </div>
             </div>
 
             {app?.studentEmail && (
               <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
-                <h2 className="font-semibold text-foreground text-sm">Student Contact</h2>
+                <h2 className="font-semibold text-foreground text-sm">{t("applicationDetailPage.studentContact")}</h2>
                 <div className="text-sm space-y-1.5">
                   <p className="text-foreground">{app.studentFirstName} {app.studentLastName}</p>
                   <p className="text-muted-foreground text-xs">{app.studentEmail}</p>
@@ -396,7 +396,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <Globe className="w-4 h-4" />
-                Origin
+                {t("applicationDetailPage.originLabel")}
               </h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
@@ -422,7 +422,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                       <SelectContent>
                         <SelectItem value="direct">{t("applicationDetailPage.direct")}</SelectItem>
                         <SelectItem value="agent">{t("applicationDetailPage.agentLabel")}</SelectItem>
-                        <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+                        <SelectItem value="sub_agent">{t("applicationDetailPage.subAgent")}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -438,7 +438,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                 onClick={() => setLocation(`${basePath}/students/${app.studentId}`)}
               >
                 <User className="w-4 h-4 mr-2" />
-                View Student Profile
+                {t("applicationDetailPage.viewStudentProfile")}
               </Button>
             )}
           </div>
@@ -476,12 +476,12 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <GraduationCap className="w-5 h-5" />
-              Eksik Zorunlu Belgeler
+              {t("applicationDetailPage.missingMandatoryDocs")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Bu başvuruyu <strong>Documents Collected</strong> aşamasına taşımak için aşağıdaki zorunlu belgeler öğrenci profiline yüklenmelidir:
+              {t("applicationDetailPage.missingDocsDescription")}
             </p>
             <ul className="space-y-1.5">
               {(studentDocsMissing || []).map((docType) => {

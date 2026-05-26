@@ -1459,11 +1459,11 @@ export default function LeadsPage() {
                         value: filters.assignment,
                         onChange: v => setFilters(f => ({ ...f, assignment: v })),
                         options: [
-                          { value: "mine", label: "Me" },
-                          { value: "unassigned", label: "Unassigned" },
+                          { value: "mine", label: t("leadsPage.me") },
+                          { value: "unassigned", label: t("leadsPage.unassigned") },
                           ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
                         ],
-                        label: "Assigned to",
+                        label: t("leadsPage.assignedTo"),
                       }}
                     />
                     <ColumnHeader

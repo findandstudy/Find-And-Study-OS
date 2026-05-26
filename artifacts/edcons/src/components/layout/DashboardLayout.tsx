@@ -118,8 +118,8 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           ...((role === 'super_admin' || role === 'admin') ? [{ title: t("dashboard.staffCards"), icon: IdCard, url: '/admin/staff-cards' }] : []),
           ...(role === 'super_admin' ? [{ title: t("dashboard.branches"), icon: Building, url: '/admin/branches' }] : []),
           ...((role === 'super_admin' || role === 'admin') ? [
-            { title: 'AI Personas', icon: Sparkles, url: '/admin/ai-personas' },
-            { title: 'AI Action Queue', icon: ListChecks, url: '/admin/ai-action-queue' },
+            { title: t('dashboard.aiPersonas'), icon: Sparkles, url: '/admin/ai-personas' },
+            { title: t('dashboard.aiActionQueue'), icon: ListChecks, url: '/admin/ai-action-queue' },
             { title: t('aiExtractor.sidebar'), icon: FileSearch, url: '/admin/ai-extractors' },
           ] : []),
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
