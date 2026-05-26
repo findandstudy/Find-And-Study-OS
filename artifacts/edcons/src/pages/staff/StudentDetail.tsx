@@ -2078,6 +2078,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
 }
 
 function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: number; basePath: string }) {
+  const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { data: docs = [], isLoading } = useQuery<any[]>({
     queryKey: [`/api/students/${studentId}/application-documents`],

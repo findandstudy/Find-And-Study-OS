@@ -1291,6 +1291,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
   firstName: string;
   lastName: string;
 }) {
+  const { t } = useI18n();
   if (!docs || docs.length === 0) {
     return (
       <div className="bg-card rounded-2xl border shadow-sm p-12 text-center text-muted-foreground">
