@@ -389,6 +389,7 @@ function relativeTime(iso: string): string {
 }
 
 export function AuditLogSection({ resource, resourceId }: Props) {
+  const { t } = useI18n();
   const { user } = useAuth(true);
   const [open, setOpen] = useState(false);
   const isAdminLike = user && ["super_admin", "admin"].includes(user.role);
