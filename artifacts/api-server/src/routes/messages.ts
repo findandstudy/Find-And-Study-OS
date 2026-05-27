@@ -13,7 +13,7 @@ import {
   agentsTable,
   documentsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 
@@ -311,7 +311,7 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
     .from(messagesTable)
     .leftJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
     .where(and(...conditions))
-    .orderBy(desc(messagesTable.id))
+    .orderBy(desc(messagesTable.createdAt))
     .limit(parseInt(limit, 10));
 
   await db
@@ -903,7 +903,7 @@ router.get("/student/conversations/:id/messages", requireAuth, async (req, res):
     .from(messagesTable)
     .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
     .where(eq(messagesTable.conversationId, conversationId))
-    .orderBy(desc(messagesTable.createdAt));
+    .orderBy(asc(messagesTable.createdAt));
 
   await db.update(messagesTable)
     .set({ status: "read" })
@@ -1100,7 +1100,7 @@ router.get("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPe
     .from(messagesTable)
     .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
     .where(eq(messagesTable.conversationId, conversationId))
-    .orderBy(desc(messagesTable.createdAt));
+    .orderBy(asc(messagesTable.createdAt));
 
   await db.update(messagesTable)
     .set({ status: "read" })

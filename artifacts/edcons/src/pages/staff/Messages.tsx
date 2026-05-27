@@ -858,6 +858,8 @@ function MessageThread({
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wasAtBottomRef = useRef(true);
+  const justOpenedRef = useRef(true);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -868,6 +870,8 @@ function MessageThread({
 
   useEffect(() => {
     setLoading(true);
+    justOpenedRef.current = true;
+    wasAtBottomRef.current = true;
     Promise.all([
       fetchMessages(),
       customFetch(`/api/conversations/${conversationId}/participants`).then((r: any) => setParticipants(r?.data || r || [])),
@@ -877,9 +881,19 @@ function MessageThread({
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [conversationId, fetchMessages]);
 
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    wasAtBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 100;
+  }, []);
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (justOpenedRef.current || wasAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      wasAtBottomRef.current = true;
+      justOpenedRef.current = false;
     }
   }, [messages]);
 
@@ -995,7 +1009,7 @@ function MessageThread({
         </Badge>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
