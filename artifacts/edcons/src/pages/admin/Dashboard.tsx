@@ -96,13 +96,13 @@ export default function AdminDashboard() {
 
   const { data: latestStudentsRaw } = useQuery<unknown>({
     queryKey: ["/api/students", "dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/students?limit=5&page=1`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
+    queryFn: () => fetch(`${BASE}/api/students?limit=20&page=1`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
   });
   const latestStudents: any[] = toArray(latestStudentsRaw);
 
   const { data: latestAuditRaw } = useQuery<unknown>({
     queryKey: ["/api/audit", "dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
+    queryFn: () => fetch(`${BASE}/api/audit?limit=20&page=1`, { credentials: "include" }).then(r => r.json()).catch(() => ({ data: [] })),
   });
   const latestUpdates: any[] = toArray(latestAuditRaw);
 
