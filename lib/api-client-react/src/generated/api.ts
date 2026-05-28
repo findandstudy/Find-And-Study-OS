@@ -17,6 +17,10 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddInboxConversationNoteBody,
+  AddInboxConversationNoteResponse,
+  AddInboxConversationTaskBody,
+  AddInboxConversationTaskResponse,
   Agent,
   AgentsListResponse,
   Announcement,
@@ -39,6 +43,7 @@ import type {
   CreateServiceFeeBody,
   CreateStudentBody,
   CreateUniversityBody,
+  CreateUniversityContract201,
   CreateUserBody,
   Document,
   DocumentExtraction,
@@ -46,7 +51,9 @@ import type {
   GetBlogPostParams,
   GetFinanceSummary200,
   GetFinanceSummaryParams,
+  GetUniversityContract200,
   HealthStatus,
+  InboxConversationDetailResponse,
   Invoice,
   InvoicesListResponse,
   Lead,
@@ -66,6 +73,8 @@ import type {
   ListServiceFeesParams,
   ListStudentsParams,
   ListUniversitiesParams,
+  ListUniversityContracts200,
+  ListUniversityContractsParams,
   ListUsersParams,
   Note,
   OverviewStats,
@@ -77,8 +86,10 @@ import type {
   Student,
   StudentsListResponse,
   SuccessResponse,
+  SummarizeInboxConversationResponse,
   UniversitiesListResponse,
   University,
+  UniversityContractWriteBody,
   UpdateAgentBody,
   UpdateAnnouncementBody,
   UpdateApplicationBody,
@@ -92,6 +103,7 @@ import type {
   UpdateSettingsBody,
   UpdateStudentBody,
   UpdateUniversityBody,
+  UpdateUniversityContract200,
   UpdateUserBody,
   UserProfile,
   UsersListResponse,
@@ -6775,3 +6787,915 @@ export function useGetOverviewStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List university contracts (admin)
+ */
+export const getListUniversityContractsUrl = (
+  params?: ListUniversityContractsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/university-contracts?${stringifiedParams}`
+    : `/api/university-contracts`;
+};
+
+export const listUniversityContracts = async (
+  params?: ListUniversityContractsParams,
+  options?: RequestInit,
+): Promise<ListUniversityContracts200> => {
+  return customFetch<ListUniversityContracts200>(
+    getListUniversityContractsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListUniversityContractsQueryKey = (
+  params?: ListUniversityContractsParams,
+) => {
+  return [`/api/university-contracts`, ...(params ? [params] : [])] as const;
+};
+
+export const getListUniversityContractsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUniversityContracts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListUniversityContractsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUniversityContracts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListUniversityContractsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listUniversityContracts>>
+  > = ({ signal }) =>
+    listUniversityContracts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUniversityContracts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListUniversityContractsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listUniversityContracts>>
+>;
+export type ListUniversityContractsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List university contracts (admin)
+ */
+
+export function useListUniversityContracts<
+  TData = Awaited<ReturnType<typeof listUniversityContracts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListUniversityContractsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUniversityContracts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUniversityContractsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create university contract
+ */
+export const getCreateUniversityContractUrl = () => {
+  return `/api/university-contracts`;
+};
+
+export const createUniversityContract = async (
+  universityContractWriteBody: UniversityContractWriteBody,
+  options?: RequestInit,
+): Promise<CreateUniversityContract201> => {
+  return customFetch<CreateUniversityContract201>(
+    getCreateUniversityContractUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(universityContractWriteBody),
+    },
+  );
+};
+
+export const getCreateUniversityContractMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUniversityContract>>,
+    TError,
+    { data: BodyType<UniversityContractWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createUniversityContract>>,
+  TError,
+  { data: BodyType<UniversityContractWriteBody> },
+  TContext
+> => {
+  const mutationKey = ["createUniversityContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createUniversityContract>>,
+    { data: BodyType<UniversityContractWriteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createUniversityContract(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateUniversityContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createUniversityContract>>
+>;
+export type CreateUniversityContractMutationBody =
+  BodyType<UniversityContractWriteBody>;
+export type CreateUniversityContractMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create university contract
+ */
+export const useCreateUniversityContract = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUniversityContract>>,
+    TError,
+    { data: BodyType<UniversityContractWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createUniversityContract>>,
+  TError,
+  { data: BodyType<UniversityContractWriteBody> },
+  TContext
+> => {
+  return useMutation(getCreateUniversityContractMutationOptions(options));
+};
+
+/**
+ * @summary Get university contract by ID
+ */
+export const getGetUniversityContractUrl = (id: number) => {
+  return `/api/university-contracts/${id}`;
+};
+
+export const getUniversityContract = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GetUniversityContract200> => {
+  return customFetch<GetUniversityContract200>(
+    getGetUniversityContractUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetUniversityContractQueryKey = (id: number) => {
+  return [`/api/university-contracts/${id}`] as const;
+};
+
+export const getGetUniversityContractQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUniversityContract>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUniversityContract>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetUniversityContractQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getUniversityContract>>
+  > = ({ signal }) => getUniversityContract(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUniversityContract>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUniversityContractQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getUniversityContract>>
+>;
+export type GetUniversityContractQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get university contract by ID
+ */
+
+export function useGetUniversityContract<
+  TData = Awaited<ReturnType<typeof getUniversityContract>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUniversityContract>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUniversityContractQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update university contract
+ */
+export const getUpdateUniversityContractUrl = (id: number) => {
+  return `/api/university-contracts/${id}`;
+};
+
+export const updateUniversityContract = async (
+  id: number,
+  universityContractWriteBody: UniversityContractWriteBody,
+  options?: RequestInit,
+): Promise<UpdateUniversityContract200> => {
+  return customFetch<UpdateUniversityContract200>(
+    getUpdateUniversityContractUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(universityContractWriteBody),
+    },
+  );
+};
+
+export const getUpdateUniversityContractMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUniversityContract>>,
+    TError,
+    { id: number; data: BodyType<UniversityContractWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateUniversityContract>>,
+  TError,
+  { id: number; data: BodyType<UniversityContractWriteBody> },
+  TContext
+> => {
+  const mutationKey = ["updateUniversityContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateUniversityContract>>,
+    { id: number; data: BodyType<UniversityContractWriteBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateUniversityContract(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateUniversityContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateUniversityContract>>
+>;
+export type UpdateUniversityContractMutationBody =
+  BodyType<UniversityContractWriteBody>;
+export type UpdateUniversityContractMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update university contract
+ */
+export const useUpdateUniversityContract = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUniversityContract>>,
+    TError,
+    { id: number; data: BodyType<UniversityContractWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateUniversityContract>>,
+  TError,
+  { id: number; data: BodyType<UniversityContractWriteBody> },
+  TContext
+> => {
+  return useMutation(getUpdateUniversityContractMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete university contract (move to trash)
+ */
+export const getDeleteUniversityContractUrl = (id: number) => {
+  return `/api/university-contracts/${id}`;
+};
+
+export const deleteUniversityContract = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteUniversityContractUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteUniversityContractMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUniversityContract>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteUniversityContract>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteUniversityContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteUniversityContract>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteUniversityContract(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteUniversityContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteUniversityContract>>
+>;
+
+export type DeleteUniversityContractMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Soft-delete university contract (move to trash)
+ */
+export const useDeleteUniversityContract = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUniversityContract>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteUniversityContract>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteUniversityContractMutationOptions(options));
+};
+
+/**
+ * @summary Download stored contract file
+ */
+export const getDownloadUniversityContractFileUrl = (id: number) => {
+  return `/api/university-contracts/${id}/file`;
+};
+
+export const downloadUniversityContractFile = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadUniversityContractFileUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadUniversityContractFileQueryKey = (id: number) => {
+  return [`/api/university-contracts/${id}/file`] as const;
+};
+
+export const getDownloadUniversityContractFileQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadUniversityContractFile>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadUniversityContractFile>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getDownloadUniversityContractFileQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof downloadUniversityContractFile>>
+  > = ({ signal }) =>
+    downloadUniversityContractFile(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadUniversityContractFile>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadUniversityContractFileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadUniversityContractFile>>
+>;
+export type DownloadUniversityContractFileQueryError = ErrorType<void>;
+
+/**
+ * @summary Download stored contract file
+ */
+
+export function useDownloadUniversityContractFile<
+  TData = Awaited<ReturnType<typeof downloadUniversityContractFile>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadUniversityContractFile>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadUniversityContractFileQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get inbox conversation detail with linked lead/student/agent, stage and AI summary
+ */
+export const getGetInboxConversationDetailUrl = (id: number) => {
+  return `/api/inbox/conversations/${id}`;
+};
+
+export const getInboxConversationDetail = async (
+  id: number,
+  options?: RequestInit,
+): Promise<InboxConversationDetailResponse> => {
+  return customFetch<InboxConversationDetailResponse>(
+    getGetInboxConversationDetailUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetInboxConversationDetailQueryKey = (id: number) => {
+  return [`/api/inbox/conversations/${id}`] as const;
+};
+
+export const getGetInboxConversationDetailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getInboxConversationDetail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getInboxConversationDetail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetInboxConversationDetailQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getInboxConversationDetail>>
+  > = ({ signal }) =>
+    getInboxConversationDetail(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getInboxConversationDetail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetInboxConversationDetailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getInboxConversationDetail>>
+>;
+export type GetInboxConversationDetailQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get inbox conversation detail with linked lead/student/agent, stage and AI summary
+ */
+
+export function useGetInboxConversationDetail<
+  TData = Awaited<ReturnType<typeof getInboxConversationDetail>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getInboxConversationDetail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetInboxConversationDetailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Generate (or return cached) AI summary for a conversation
+ */
+export const getSummarizeInboxConversationUrl = (id: number) => {
+  return `/api/inbox/conversations/${id}/summarize`;
+};
+
+export const summarizeInboxConversation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SummarizeInboxConversationResponse> => {
+  return customFetch<SummarizeInboxConversationResponse>(
+    getSummarizeInboxConversationUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getSummarizeInboxConversationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof summarizeInboxConversation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof summarizeInboxConversation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["summarizeInboxConversation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof summarizeInboxConversation>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return summarizeInboxConversation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SummarizeInboxConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof summarizeInboxConversation>>
+>;
+
+export type SummarizeInboxConversationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate (or return cached) AI summary for a conversation
+ */
+export const useSummarizeInboxConversation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof summarizeInboxConversation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof summarizeInboxConversation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getSummarizeInboxConversationMutationOptions(options));
+};
+
+/**
+ * @summary Add an internal note to the lead/student linked to a conversation
+ */
+export const getAddInboxConversationNoteUrl = (id: number) => {
+  return `/api/inbox/conversations/${id}/notes`;
+};
+
+export const addInboxConversationNote = async (
+  id: number,
+  addInboxConversationNoteBody: AddInboxConversationNoteBody,
+  options?: RequestInit,
+): Promise<AddInboxConversationNoteResponse> => {
+  return customFetch<AddInboxConversationNoteResponse>(
+    getAddInboxConversationNoteUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(addInboxConversationNoteBody),
+    },
+  );
+};
+
+export const getAddInboxConversationNoteMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addInboxConversationNote>>,
+    TError,
+    { id: number; data: BodyType<AddInboxConversationNoteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addInboxConversationNote>>,
+  TError,
+  { id: number; data: BodyType<AddInboxConversationNoteBody> },
+  TContext
+> => {
+  const mutationKey = ["addInboxConversationNote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addInboxConversationNote>>,
+    { id: number; data: BodyType<AddInboxConversationNoteBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addInboxConversationNote(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddInboxConversationNoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addInboxConversationNote>>
+>;
+export type AddInboxConversationNoteMutationBody =
+  BodyType<AddInboxConversationNoteBody>;
+export type AddInboxConversationNoteMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Add an internal note to the lead/student linked to a conversation
+ */
+export const useAddInboxConversationNote = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addInboxConversationNote>>,
+    TError,
+    { id: number; data: BodyType<AddInboxConversationNoteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addInboxConversationNote>>,
+  TError,
+  { id: number; data: BodyType<AddInboxConversationNoteBody> },
+  TContext
+> => {
+  return useMutation(getAddInboxConversationNoteMutationOptions(options));
+};
+
+/**
+ * @summary Add a follow-up task to the lead/student linked to a conversation
+ */
+export const getAddInboxConversationTaskUrl = (id: number) => {
+  return `/api/inbox/conversations/${id}/tasks`;
+};
+
+export const addInboxConversationTask = async (
+  id: number,
+  addInboxConversationTaskBody: AddInboxConversationTaskBody,
+  options?: RequestInit,
+): Promise<AddInboxConversationTaskResponse> => {
+  return customFetch<AddInboxConversationTaskResponse>(
+    getAddInboxConversationTaskUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(addInboxConversationTaskBody),
+    },
+  );
+};
+
+export const getAddInboxConversationTaskMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addInboxConversationTask>>,
+    TError,
+    { id: number; data: BodyType<AddInboxConversationTaskBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addInboxConversationTask>>,
+  TError,
+  { id: number; data: BodyType<AddInboxConversationTaskBody> },
+  TContext
+> => {
+  const mutationKey = ["addInboxConversationTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addInboxConversationTask>>,
+    { id: number; data: BodyType<AddInboxConversationTaskBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addInboxConversationTask(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddInboxConversationTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addInboxConversationTask>>
+>;
+export type AddInboxConversationTaskMutationBody =
+  BodyType<AddInboxConversationTaskBody>;
+export type AddInboxConversationTaskMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Add a follow-up task to the lead/student linked to a conversation
+ */
+export const useAddInboxConversationTask = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addInboxConversationTask>>,
+    TError,
+    { id: number; data: BodyType<AddInboxConversationTaskBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addInboxConversationTask>>,
+  TError,
+  { id: number; data: BodyType<AddInboxConversationTaskBody> },
+  TContext
+> => {
+  return useMutation(getAddInboxConversationTaskMutationOptions(options));
+};

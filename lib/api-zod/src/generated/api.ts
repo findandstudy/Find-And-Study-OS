@@ -1930,3 +1930,396 @@ export const GetOverviewStatsResponse = zod.object({
   totalRevenue: zod.number(),
   pendingCommissions: zod.number(),
 });
+
+/**
+ * @summary List university contracts (admin)
+ */
+export const listUniversityContractsQueryPageDefault = 1;
+export const listUniversityContractsQueryPageSizeDefault = 25;
+export const listUniversityContractsQueryPageSizeMax = 100;
+
+export const ListUniversityContractsQueryParams = zod.object({
+  country: zod.coerce.string().optional(),
+  universityId: zod.coerce.number().optional(),
+  year: zod.coerce.number().optional(),
+  status: zod
+    .enum(["active", "expiring_soon", "expired", "no_dates"])
+    .optional(),
+  search: zod.coerce.string().optional(),
+  page: zod.coerce.number().default(listUniversityContractsQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .max(listUniversityContractsQueryPageSizeMax)
+    .default(listUniversityContractsQueryPageSizeDefault),
+});
+
+export const ListUniversityContractsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      universityId: zod.number(),
+      destinationId: zod.number().nullish(),
+      country: zod.string(),
+      year: zod.number().nullish(),
+      effectiveDate: zod.date().nullish(),
+      expiryDate: zod.date().nullish(),
+      fileObjectKey: zod.string().nullish(),
+      fileName: zod.string().nullish(),
+      fileMime: zod.string().nullish(),
+      fileSize: zod.number().nullish(),
+      notes: zod.string().nullish(),
+      uploadedByUserId: zod.number().nullish(),
+      assignedUserIds: zod.array(zod.number()).optional(),
+      createdAt: zod.date().optional(),
+      updatedAt: zod.date().optional(),
+      status: zod.enum(["active", "expiring_soon", "expired", "no_dates"]),
+      universityName: zod.string().nullish(),
+      universityCity: zod.string().nullish(),
+      universityLogoUrl: zod.string().nullish(),
+      destinationName: zod.string().nullish(),
+      destinationCountry: zod.string().nullish(),
+      destinationFlagEmoji: zod.string().nullish(),
+    }),
+  ),
+  page: zod.number(),
+  pageSize: zod.number(),
+  hasMore: zod.boolean(),
+});
+
+/**
+ * @summary Create university contract
+ */
+export const CreateUniversityContractBody = zod.object({
+  universityId: zod.number(),
+  destinationId: zod.number().nullish(),
+  year: zod.number().nullish(),
+  effectiveDate: zod.date().nullish(),
+  expiryDate: zod.date().nullish(),
+  notes: zod.string().nullish(),
+  fileObjectKey: zod
+    .string()
+    .nullish()
+    .describe("Must match \/objects\/<uploadId>"),
+  fileName: zod.string().nullish(),
+  fileMime: zod.string().nullish().describe("PDF or DOCX MIME only"),
+  fileSize: zod.number().nullish(),
+  assignedUserIds: zod
+    .array(zod.number())
+    .optional()
+    .describe("Active staff that should also receive expiry warnings"),
+});
+
+/**
+ * @summary Get university contract by ID
+ */
+export const GetUniversityContractParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetUniversityContractResponse = zod.object({
+  data: zod.object({
+    id: zod.number(),
+    universityId: zod.number(),
+    destinationId: zod.number().nullish(),
+    country: zod.string(),
+    year: zod.number().nullish(),
+    effectiveDate: zod.date().nullish(),
+    expiryDate: zod.date().nullish(),
+    fileObjectKey: zod.string().nullish(),
+    fileName: zod.string().nullish(),
+    fileMime: zod.string().nullish(),
+    fileSize: zod.number().nullish(),
+    notes: zod.string().nullish(),
+    uploadedByUserId: zod.number().nullish(),
+    assignedUserIds: zod.array(zod.number()).optional(),
+    createdAt: zod.date().optional(),
+    updatedAt: zod.date().optional(),
+    status: zod.enum(["active", "expiring_soon", "expired", "no_dates"]),
+    universityName: zod.string().nullish(),
+    universityCity: zod.string().nullish(),
+    universityLogoUrl: zod.string().nullish(),
+    destinationName: zod.string().nullish(),
+    destinationCountry: zod.string().nullish(),
+    destinationFlagEmoji: zod.string().nullish(),
+  }),
+});
+
+/**
+ * @summary Update university contract
+ */
+export const UpdateUniversityContractParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateUniversityContractBody = zod.object({
+  universityId: zod.number(),
+  destinationId: zod.number().nullish(),
+  year: zod.number().nullish(),
+  effectiveDate: zod.date().nullish(),
+  expiryDate: zod.date().nullish(),
+  notes: zod.string().nullish(),
+  fileObjectKey: zod
+    .string()
+    .nullish()
+    .describe("Must match \/objects\/<uploadId>"),
+  fileName: zod.string().nullish(),
+  fileMime: zod.string().nullish().describe("PDF or DOCX MIME only"),
+  fileSize: zod.number().nullish(),
+  assignedUserIds: zod
+    .array(zod.number())
+    .optional()
+    .describe("Active staff that should also receive expiry warnings"),
+});
+
+export const UpdateUniversityContractResponse = zod.object({
+  data: zod.object({
+    id: zod.number(),
+    universityId: zod.number(),
+    destinationId: zod.number().nullish(),
+    country: zod.string(),
+    year: zod.number().nullish(),
+    effectiveDate: zod.date().nullish(),
+    expiryDate: zod.date().nullish(),
+    fileObjectKey: zod.string().nullish(),
+    fileName: zod.string().nullish(),
+    fileMime: zod.string().nullish(),
+    fileSize: zod.number().nullish(),
+    notes: zod.string().nullish(),
+    uploadedByUserId: zod.number().nullish(),
+    assignedUserIds: zod.array(zod.number()).optional(),
+    createdAt: zod.date().optional(),
+    updatedAt: zod.date().optional(),
+    status: zod.enum(["active", "expiring_soon", "expired", "no_dates"]),
+    universityName: zod.string().nullish(),
+    universityCity: zod.string().nullish(),
+    universityLogoUrl: zod.string().nullish(),
+    destinationName: zod.string().nullish(),
+    destinationCountry: zod.string().nullish(),
+    destinationFlagEmoji: zod.string().nullish(),
+  }),
+});
+
+/**
+ * @summary Soft-delete university contract (move to trash)
+ */
+export const DeleteUniversityContractParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Download stored contract file
+ */
+export const DownloadUniversityContractFileParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get inbox conversation detail with linked lead/student/agent, stage and AI summary
+ */
+export const GetInboxConversationDetailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetInboxConversationDetailResponse = zod.object({
+  conversation: zod.object({
+    id: zod.number(),
+    type: zod.string(),
+    title: zod.string().nullish(),
+    createdById: zod.number().nullish(),
+    isArchived: zod.boolean(),
+    lastMessageAt: zod.union([zod.date(), zod.null()]).optional(),
+    lastMessagePreview: zod.string().nullish(),
+    metadata: zod.record(zod.string(), zod.unknown()).nullish(),
+    channel: zod.string(),
+    channelAccountId: zod.number().nullish(),
+    externalContactId: zod.number().nullish(),
+    externalThreadId: zod.string().nullish(),
+    assignedToId: zod.number().nullish(),
+    status: zod.string(),
+    unmatched: zod.boolean(),
+    lastInboundAt: zod.union([zod.date(), zod.null()]).optional(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+    assignedTo: zod
+      .union([
+        zod.object({
+          id: zod.number(),
+          firstName: zod.string().nullish(),
+          lastName: zod.string().nullish(),
+          avatarUrl: zod.string().nullish(),
+        }),
+        zod.null(),
+      ])
+      .optional(),
+  }),
+  externalContact: zod
+    .union([
+      zod.object({
+        id: zod.number(),
+        channel: zod.string(),
+        externalId: zod.string(),
+        displayName: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        phoneE164: zod.string().nullish(),
+        email: zod.string().nullish(),
+        leadId: zod.number().nullish(),
+        studentId: zod.number().nullish(),
+        agentId: zod.number().nullish(),
+        metadata: zod.record(zod.string(), zod.unknown()).nullish(),
+        firstSeenAt: zod.date(),
+        lastSeenAt: zod.date(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  messages: zod.array(
+    zod.object({
+      id: zod.number(),
+      conversationId: zod.number(),
+      senderId: zod.number().nullish(),
+      content: zod.string(),
+      channel: zod.string(),
+      status: zod.string(),
+      direction: zod.string(),
+      externalMessageId: zod.string().nullish(),
+      failedReason: zod.string().nullish(),
+      sentAt: zod.union([zod.date(), zod.null()]).optional(),
+      replyToId: zod.number().nullish(),
+      metadata: zod.record(zod.string(), zod.unknown()).nullish(),
+      createdAt: zod.date(),
+    }),
+  ),
+  withinWindow: zod.boolean(),
+  lead: zod
+    .union([
+      zod.object({
+        id: zod.number(),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        email: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        status: zod.string(),
+        interestedProgram: zod.string().nullish(),
+        interestedCountry: zod.string().nullish(),
+        estimatedValue: zod.string().nullish(),
+        source: zod.string().nullish(),
+        originType: zod.string(),
+        originDisplayName: zod.string().nullish(),
+        agentId: zod.number().nullish(),
+        assignedToId: zod.number().nullish(),
+        createdAt: zod.date(),
+        convertedStudentId: zod.number().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  student: zod
+    .union([
+      zod.object({
+        id: zod.number(),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        email: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        status: zod.string(),
+        agentId: zod.number().nullish(),
+        assignedToId: zod.number().nullish(),
+        interestedLevel: zod.string().nullish(),
+        originType: zod.string(),
+        originDisplayName: zod.string().nullish(),
+        createdAt: zod.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  agent: zod
+    .union([
+      zod.object({
+        id: zod.number(),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        companyName: zod.string().nullish(),
+        email: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        status: zod.string(),
+        entityType: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  stage: zod
+    .union([
+      zod.object({
+        key: zod.string(),
+        label: zod.string(),
+        color: zod.string().nullish(),
+        variant: zod.string().nullish(),
+        icon: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  aiSummary: zod
+    .union([
+      zod.object({
+        content: zod.string(),
+        generatedAt: zod.date(),
+        messageCount: zod.number(),
+        model: zod.string(),
+        generatedByUserId: zod.number(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+
+/**
+ * @summary Generate (or return cached) AI summary for a conversation
+ */
+export const SummarizeInboxConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SummarizeInboxConversationResponse = zod.object({
+  data: zod.object({
+    content: zod.string(),
+    generatedAt: zod.date(),
+    messageCount: zod.number(),
+    model: zod.string(),
+    generatedByUserId: zod.number(),
+  }),
+  fromCache: zod.boolean(),
+});
+
+/**
+ * @summary Add an internal note to the lead/student linked to a conversation
+ */
+export const AddInboxConversationNoteParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const addInboxConversationNoteBodyContentMax = 2000;
+
+export const AddInboxConversationNoteBody = zod.object({
+  content: zod.string().min(1).max(addInboxConversationNoteBodyContentMax),
+});
+
+/**
+ * @summary Add a follow-up task to the lead/student linked to a conversation
+ */
+export const AddInboxConversationTaskParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const addInboxConversationTaskBodyTitleMax = 500;
+
+export const addInboxConversationTaskBodyNotesMax = 2000;
+
+export const AddInboxConversationTaskBody = zod.object({
+  title: zod.string().min(1).max(addInboxConversationTaskBodyTitleMax),
+  scheduledAt: zod.date(),
+  assignedToId: zod.number().min(1).optional(),
+  notes: zod.string().max(addInboxConversationTaskBodyNotesMax).optional(),
+});

@@ -33,6 +33,10 @@ tags:
     description: System settings
   - name: audit
     description: Audit log
+  - name: inbox
+    description: Inbox conversations (multi-channel messaging)
+  - name: ai
+    description: AI-powered features
 
 paths:
   /healthz:
@@ -1820,6 +1824,208 @@ paths:
               schema: { type: string, format: binary }
         "404": { description: No file attached or contract not found }
 
+  # INBOX
+  /inbox/conversations/{id}:
+    get:
+      operationId: getInboxConversationDetail
+      tags: [inbox]
+      summary: Get inbox conversation detail with linked lead/student/agent, stage and AI summary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxConversationDetailResponse"
+        "400":
+          description: Invalid id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/conversations/{id}/summarize:
+    post:
+      operationId: summarizeInboxConversation
+      tags: [inbox, ai]
+      summary: Generate (or return cached) AI summary for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Summary generated or returned from cache
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummarizeInboxConversationResponse"
+        "400":
+          description: No messages to summarize
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limited (Retry-After header included)
+          headers:
+            Retry-After:
+              schema:
+                type: string
+              description: Seconds to wait before retrying
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: AI service not configured or upstream failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/conversations/{id}/notes:
+    post:
+      operationId: addInboxConversationNote
+      tags: [inbox]
+      summary: Add an internal note to the lead/student linked to a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddInboxConversationNoteBody"
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddInboxConversationNoteResponse"
+        "400":
+          description: Conversation is not linked to a lead or student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/conversations/{id}/tasks:
+    post:
+      operationId: addInboxConversationTask
+      tags: [inbox]
+      summary: Add a follow-up task to the lead/student linked to a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddInboxConversationTaskBody"
+      responses:
+        "201":
+          description: Follow-up task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddInboxConversationTaskResponse"
+        "400":
+          description: Conversation is not linked to a lead or student, or invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -3579,3 +3785,478 @@ components:
         - pendingDocuments
         - totalRevenue
         - pendingCommissions
+
+    InboxAssignedUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - id
+
+    InboxConversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        title:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        isArchived:
+          type: boolean
+        lastMessageAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        lastMessagePreview:
+          type: ["string", "null"]
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+        channel:
+          type: string
+        channelAccountId:
+          type: ["integer", "null"]
+        externalContactId:
+          type: ["integer", "null"]
+        externalThreadId:
+          type: ["string", "null"]
+        assignedToId:
+          type: ["integer", "null"]
+        status:
+          type: string
+        unmatched:
+          type: boolean
+        lastInboundAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        assignedTo:
+          anyOf:
+            - $ref: "#/components/schemas/InboxAssignedUser"
+            - type: "null"
+      required:
+        - id
+        - type
+        - isArchived
+        - channel
+        - status
+        - unmatched
+        - createdAt
+        - updatedAt
+
+    InboxMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        senderId:
+          type: ["integer", "null"]
+        content:
+          type: string
+        channel:
+          type: string
+        status:
+          type: string
+        direction:
+          type: string
+        externalMessageId:
+          type: ["string", "null"]
+        failedReason:
+          type: ["string", "null"]
+        sentAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        replyToId:
+          type: ["integer", "null"]
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - conversationId
+        - content
+        - channel
+        - status
+        - direction
+        - createdAt
+
+    InboxExternalContact:
+      type: object
+      properties:
+        id:
+          type: integer
+        channel:
+          type: string
+        externalId:
+          type: string
+        displayName:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        phoneE164:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        leadId:
+          type: ["integer", "null"]
+        studentId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - channel
+        - externalId
+        - firstSeenAt
+        - lastSeenAt
+        - createdAt
+        - updatedAt
+
+    InboxLeadSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        status:
+          type: string
+        interestedProgram:
+          type: ["string", "null"]
+        interestedCountry:
+          type: ["string", "null"]
+        estimatedValue:
+          type: ["string", "null"]
+        source:
+          type: ["string", "null"]
+        originType:
+          type: string
+        originDisplayName:
+          type: ["string", "null"]
+        agentId:
+          type: ["integer", "null"]
+        assignedToId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        convertedStudentId:
+          type: ["integer", "null"]
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - originType
+        - createdAt
+
+    InboxStudentSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        status:
+          type: string
+        agentId:
+          type: ["integer", "null"]
+        assignedToId:
+          type: ["integer", "null"]
+        interestedLevel:
+          type: ["string", "null"]
+        originType:
+          type: string
+        originDisplayName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - originType
+        - createdAt
+
+    InboxAgentSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        companyName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        status:
+          type: string
+        entityType:
+          type: string
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - entityType
+
+    InboxPipelineStageSummary:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        color:
+          type: ["string", "null"]
+        variant:
+          type: ["string", "null"]
+        icon:
+          type: ["string", "null"]
+      required:
+        - key
+        - label
+
+    ConversationAiSummary:
+      type: object
+      properties:
+        content:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+        model:
+          type: string
+        generatedByUserId:
+          type: integer
+      required:
+        - content
+        - generatedAt
+        - messageCount
+        - model
+        - generatedByUserId
+
+    InboxConversationNote:
+      type: object
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        resourceType:
+          type: string
+          enum: [lead, student]
+        resourceId:
+          type: integer
+      required:
+        - id
+        - content
+        - createdAt
+        - resourceType
+        - resourceId
+
+    FollowUp:
+      type: object
+      properties:
+        id:
+          type: integer
+        leadId:
+          type: ["integer", "null"]
+        studentId:
+          type: ["integer", "null"]
+        resourceType:
+          type: string
+        title:
+          type: string
+        scheduledAt:
+          type: string
+          format: date-time
+        completed:
+          type: boolean
+        completedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        assignedToId:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        createdById:
+          type: ["integer", "null"]
+        updatedById:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - resourceType
+        - title
+        - scheduledAt
+        - completed
+        - createdAt
+        - updatedAt
+
+    InboxConversationDetailResponse:
+      type: object
+      properties:
+        conversation:
+          $ref: "#/components/schemas/InboxConversation"
+        externalContact:
+          anyOf:
+            - $ref: "#/components/schemas/InboxExternalContact"
+            - type: "null"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxMessage"
+        withinWindow:
+          type: boolean
+        lead:
+          anyOf:
+            - $ref: "#/components/schemas/InboxLeadSummary"
+            - type: "null"
+        student:
+          anyOf:
+            - $ref: "#/components/schemas/InboxStudentSummary"
+            - type: "null"
+        agent:
+          anyOf:
+            - $ref: "#/components/schemas/InboxAgentSummary"
+            - type: "null"
+        stage:
+          anyOf:
+            - $ref: "#/components/schemas/InboxPipelineStageSummary"
+            - type: "null"
+        aiSummary:
+          anyOf:
+            - $ref: "#/components/schemas/ConversationAiSummary"
+            - type: "null"
+      required:
+        - conversation
+        - messages
+        - withinWindow
+
+    SummarizeInboxConversationResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ConversationAiSummary"
+        fromCache:
+          type: boolean
+      required:
+        - data
+        - fromCache
+
+    AddInboxConversationNoteBody:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      required:
+        - content
+
+    AddInboxConversationNoteResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/InboxConversationNote"
+      required:
+        - data
+
+    AddInboxConversationTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        scheduledAt:
+          type: string
+          format: date-time
+        assignedToId:
+          type: integer
+          minimum: 1
+        notes:
+          type: string
+          maxLength: 2000
+      required:
+        - title
+        - scheduledAt
+
+    AddInboxConversationTaskResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/FollowUp"
+      required:
+        - data

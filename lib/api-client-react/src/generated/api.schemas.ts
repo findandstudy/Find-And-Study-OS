@@ -42,7 +42,6 @@ export interface UserProfile {
   phone?: string | null;
   language: string;
   isActive: boolean;
-  emailVerified: boolean;
   createdAt: string;
 }
 
@@ -1201,6 +1200,59 @@ export interface AuditLogsListResponse {
   meta: PaginationMeta;
 }
 
+export type UniversityContractStatus =
+  (typeof UniversityContractStatus)[keyof typeof UniversityContractStatus];
+
+export const UniversityContractStatus = {
+  active: "active",
+  expiring_soon: "expiring_soon",
+  expired: "expired",
+  no_dates: "no_dates",
+} as const;
+
+export interface UniversityContract {
+  id: number;
+  universityId: number;
+  destinationId?: number | null;
+  country: string;
+  year?: number | null;
+  effectiveDate?: string | null;
+  expiryDate?: string | null;
+  fileObjectKey?: string | null;
+  fileName?: string | null;
+  fileMime?: string | null;
+  fileSize?: number | null;
+  notes?: string | null;
+  uploadedByUserId?: number | null;
+  assignedUserIds?: number[];
+  createdAt?: string;
+  updatedAt?: string;
+  status: UniversityContractStatus;
+  universityName?: string | null;
+  universityCity?: string | null;
+  universityLogoUrl?: string | null;
+  destinationName?: string | null;
+  destinationCountry?: string | null;
+  destinationFlagEmoji?: string | null;
+}
+
+export interface UniversityContractWriteBody {
+  universityId: number;
+  destinationId?: number | null;
+  year?: number | null;
+  effectiveDate?: string | null;
+  expiryDate?: string | null;
+  notes?: string | null;
+  /** Must match /objects/<uploadId> */
+  fileObjectKey?: string | null;
+  fileName?: string | null;
+  /** PDF or DOCX MIME only */
+  fileMime?: string | null;
+  fileSize?: number | null;
+  /** Active staff that should also receive expiry warnings */
+  assignedUserIds?: number[];
+}
+
 export interface OverviewStats {
   totalLeads: number;
   totalStudents: number;
@@ -1210,6 +1262,276 @@ export interface OverviewStats {
   pendingDocuments: number;
   totalRevenue: number;
   pendingCommissions: number;
+}
+
+export interface InboxAssignedUser {
+  id: number;
+  /** @nullable */
+  firstName?: string | null;
+  /** @nullable */
+  lastName?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+/**
+ * @nullable
+ */
+export type InboxConversationMetadata = { [key: string]: unknown } | null;
+
+export interface InboxConversation {
+  id: number;
+  type: string;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  createdById?: number | null;
+  isArchived: boolean;
+  lastMessageAt?: string | null;
+  /** @nullable */
+  lastMessagePreview?: string | null;
+  /** @nullable */
+  metadata?: InboxConversationMetadata;
+  channel: string;
+  /** @nullable */
+  channelAccountId?: number | null;
+  /** @nullable */
+  externalContactId?: number | null;
+  /** @nullable */
+  externalThreadId?: string | null;
+  /** @nullable */
+  assignedToId?: number | null;
+  status: string;
+  unmatched: boolean;
+  lastInboundAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedTo?: InboxAssignedUser | null;
+}
+
+/**
+ * @nullable
+ */
+export type InboxMessageMetadata = { [key: string]: unknown } | null;
+
+export interface InboxMessage {
+  id: number;
+  conversationId: number;
+  /** @nullable */
+  senderId?: number | null;
+  content: string;
+  channel: string;
+  status: string;
+  direction: string;
+  /** @nullable */
+  externalMessageId?: string | null;
+  /** @nullable */
+  failedReason?: string | null;
+  sentAt?: string | null;
+  /** @nullable */
+  replyToId?: number | null;
+  /** @nullable */
+  metadata?: InboxMessageMetadata;
+  createdAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type InboxExternalContactMetadata = { [key: string]: unknown } | null;
+
+export interface InboxExternalContact {
+  id: number;
+  channel: string;
+  externalId: string;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  phoneE164?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  leadId?: number | null;
+  /** @nullable */
+  studentId?: number | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  metadata?: InboxExternalContactMetadata;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InboxLeadSummary {
+  id: number;
+  firstName: string;
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  status: string;
+  /** @nullable */
+  interestedProgram?: string | null;
+  /** @nullable */
+  interestedCountry?: string | null;
+  /** @nullable */
+  estimatedValue?: string | null;
+  /** @nullable */
+  source?: string | null;
+  originType: string;
+  /** @nullable */
+  originDisplayName?: string | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  assignedToId?: number | null;
+  createdAt: string;
+  /** @nullable */
+  convertedStudentId?: number | null;
+}
+
+export interface InboxStudentSummary {
+  id: number;
+  firstName: string;
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  status: string;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  assignedToId?: number | null;
+  /** @nullable */
+  interestedLevel?: string | null;
+  originType: string;
+  /** @nullable */
+  originDisplayName?: string | null;
+  createdAt: string;
+}
+
+export interface InboxAgentSummary {
+  id: number;
+  firstName: string;
+  lastName: string;
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  status: string;
+  entityType: string;
+}
+
+export interface InboxPipelineStageSummary {
+  key: string;
+  label: string;
+  /** @nullable */
+  color?: string | null;
+  /** @nullable */
+  variant?: string | null;
+  /** @nullable */
+  icon?: string | null;
+}
+
+export interface ConversationAiSummary {
+  content: string;
+  generatedAt: string;
+  messageCount: number;
+  model: string;
+  generatedByUserId: number;
+}
+
+export type InboxConversationNoteResourceType =
+  (typeof InboxConversationNoteResourceType)[keyof typeof InboxConversationNoteResourceType];
+
+export const InboxConversationNoteResourceType = {
+  lead: "lead",
+  student: "student",
+} as const;
+
+export interface InboxConversationNote {
+  id: number;
+  content: string;
+  createdAt: string;
+  resourceType: InboxConversationNoteResourceType;
+  resourceId: number;
+}
+
+export interface FollowUp {
+  id: number;
+  /** @nullable */
+  leadId?: number | null;
+  /** @nullable */
+  studentId?: number | null;
+  resourceType: string;
+  title: string;
+  scheduledAt: string;
+  completed: boolean;
+  completedAt?: string | null;
+  /** @nullable */
+  assignedToId?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  createdById?: number | null;
+  /** @nullable */
+  updatedById?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InboxConversationDetailResponse {
+  conversation: InboxConversation;
+  externalContact?: InboxExternalContact | null;
+  messages: InboxMessage[];
+  withinWindow: boolean;
+  lead?: InboxLeadSummary | null;
+  student?: InboxStudentSummary | null;
+  agent?: InboxAgentSummary | null;
+  stage?: InboxPipelineStageSummary | null;
+  aiSummary?: ConversationAiSummary | null;
+}
+
+export interface SummarizeInboxConversationResponse {
+  data: ConversationAiSummary;
+  fromCache: boolean;
+}
+
+export interface AddInboxConversationNoteBody {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  content: string;
+}
+
+export interface AddInboxConversationNoteResponse {
+  data: InboxConversationNote;
+}
+
+export interface AddInboxConversationTaskBody {
+  /**
+   * @minLength 1
+   * @maxLength 500
+   */
+  title: string;
+  scheduledAt: string;
+  /** @minimum 1 */
+  assignedToId?: number;
+  /** @maxLength 2000 */
+  notes?: string;
+}
+
+export interface AddInboxConversationTaskResponse {
+  data: FollowUp;
 }
 
 export type ListUsersParams = {
@@ -1349,4 +1671,46 @@ export type ListAuditLogsParams = {
   resource?: string;
   page?: number;
   limit?: number;
+};
+
+export type ListUniversityContractsParams = {
+  country?: string;
+  universityId?: number;
+  year?: number;
+  status?: ListUniversityContractsStatus;
+  search?: string;
+  page?: number;
+  /**
+   * @maximum 100
+   */
+  pageSize?: number;
+};
+
+export type ListUniversityContractsStatus =
+  (typeof ListUniversityContractsStatus)[keyof typeof ListUniversityContractsStatus];
+
+export const ListUniversityContractsStatus = {
+  active: "active",
+  expiring_soon: "expiring_soon",
+  expired: "expired",
+  no_dates: "no_dates",
+} as const;
+
+export type ListUniversityContracts200 = {
+  data: UniversityContract[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
+export type CreateUniversityContract201 = {
+  data: UniversityContract;
+};
+
+export type GetUniversityContract200 = {
+  data: UniversityContract;
+};
+
+export type UpdateUniversityContract200 = {
+  data: UniversityContract;
 };
