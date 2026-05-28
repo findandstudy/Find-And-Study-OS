@@ -1,6 +1,17 @@
 import { pgTable, serial, text, timestamp, integer, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
+// AI summary cache stored in conversations.metadata.aiSummary.
+// The pgTable schema itself does not change — this is the TypeScript
+// shape that inbox routes use when reading/writing that JSON slot.
+export interface ConversationAiSummary {
+  content: string;
+  generatedAt: string;
+  messageCount: number;
+  model: string;
+  generatedByUserId: number;
+}
+
 export const conversationsTable = pgTable("conversations", {
   id: serial("id").primaryKey(),
   type: text("type").notNull().default("direct"),

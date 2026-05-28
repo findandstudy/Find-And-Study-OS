@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   db,
+  pool,
   conversationsTable,
   conversationParticipantsTable,
   messagesTable,
@@ -11,9 +12,17 @@ import {
   usersTable,
   messageTemplatesTable,
   integrationsTable,
+  pipelineStagesTable,
+  notesTable,
+  followUpsTable,
 } from "@workspace/db";
-import { and, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import type { ConversationAiSummary } from "@workspace/db";
+import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { ExternalContact } from "@workspace/db";
+import { z } from "zod";
+import { RateLimiterPostgres } from "rate-limiter-flexible";
+import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
+import { validate, getValidated } from "../middlewares/validate";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
@@ -33,6 +42,114 @@ import { decryptConfig } from "../lib/encryption";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 
 const router: IRouter = Router();
+
+// ---------------------------------------------------------------------------
+// Inbox AI / notes / tasks helpers (Phase 2)
+// ---------------------------------------------------------------------------
+
+// Per-user rate limit for the AI summarize endpoint. Anthropic calls cost
+// money and are slow, so each staff/admin user gets 10 summarize requests
+// per minute. Shares the same `rate_limits` table as auth.ts; isolated by
+// `keyPrefix`.
+const summarizeRateLimiter = new RateLimiterPostgres({
+  storeClient: pool,
+  storeType: "pool",
+  tableName: "rate_limits",
+  keyPrefix: "inbox-summarize",
+  points: 10,
+  duration: 60,
+});
+
+function isAiSummary(value: unknown): value is ConversationAiSummary {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.content === "string" &&
+    typeof v.generatedAt === "string" &&
+    typeof v.messageCount === "number" &&
+    typeof v.model === "string" &&
+    typeof v.generatedByUserId === "number"
+  );
+}
+
+function readAiSummary(metadata: unknown): ConversationAiSummary | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const md = metadata as Record<string, unknown>;
+  return isAiSummary(md.aiSummary) ? md.aiSummary : null;
+}
+
+// Injection seam: the AI summarize endpoint calls `generateConversationSummary`,
+// which by default goes to Anthropic via `defaultGenerateSummary`. Tests can
+// override `__aiSummaryOverride` to assert cache behavior without spending
+// tokens or needing a live API key.
+export interface SummarizeInput {
+  messages: Array<{ direction: string; content: string; createdAt: Date | string | null }>;
+}
+let __aiSummaryOverride:
+  | ((input: SummarizeInput) => Promise<{ content: string; model: string }>)
+  | null = null;
+export function __setAiSummaryOverrideForTests(
+  fn: ((input: SummarizeInput) => Promise<{ content: string; model: string }>) | null,
+): void {
+  __aiSummaryOverride = fn;
+}
+
+const SUMMARIZE_MODEL = "claude-haiku-4-5-20251001";
+
+async function defaultGenerateSummary(input: SummarizeInput): Promise<{ content: string; model: string }> {
+  const anthropic = await getAnthropicClient();
+  const transcript = input.messages
+    .map((m) => {
+      const who = m.direction === "inbound" ? "Customer" : m.direction === "outbound" ? "Agent" : "Internal";
+      return `[${who}] ${m.content}`;
+    })
+    .join("\n");
+  const systemPrompt =
+    "You are a CRM assistant. Summarize the following customer conversation for staff " +
+    "in 3-5 sentences. Cover: (1) the customer's core need, (2) progress so far, " +
+    "(3) suggested next action. Respond in the same language the customer is using.";
+  const message = await anthropic.messages.create({
+    model: SUMMARIZE_MODEL,
+    max_tokens: 500,
+    system: systemPrompt,
+    messages: [{ role: "user", content: transcript }],
+  });
+  const textBlock = message.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("AI returned no text content");
+  }
+  return { content: textBlock.text.trim(), model: SUMMARIZE_MODEL };
+}
+
+async function generateConversationSummary(input: SummarizeInput): Promise<{ content: string; model: string }> {
+  return __aiSummaryOverride ? __aiSummaryOverride(input) : defaultGenerateSummary(input);
+}
+
+interface ConversationLink {
+  conversationId: number;
+  leadId: number | null;
+  studentId: number | null;
+}
+
+async function loadConversationLink(id: number): Promise<ConversationLink | null> {
+  const [conv] = await db
+    .select({ id: conversationsTable.id, externalContactId: conversationsTable.externalContactId })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, id));
+  if (!conv) return null;
+  if (!conv.externalContactId) {
+    return { conversationId: id, leadId: null, studentId: null };
+  }
+  const [contact] = await db
+    .select({ leadId: externalContactsTable.leadId, studentId: externalContactsTable.studentId })
+    .from(externalContactsTable)
+    .where(eq(externalContactsTable.id, conv.externalContactId));
+  return {
+    conversationId: id,
+    leadId: contact?.leadId ?? null,
+    studentId: contact?.studentId ?? null,
+  };
+}
 
 router.get("/inbox/live-mode", requireAuth, async (_req, res): Promise<void> => {
   res.json({ live: isLiveIntegrationsEnabled() });
@@ -220,11 +337,108 @@ router.get(
       .where(eq(messagesTable.conversationId, id))
       .orderBy(messagesTable.createdAt);
 
+    const leadId = externalContact?.leadId ?? null;
+    const studentId = externalContact?.studentId ?? null;
+    const agentId = externalContact?.agentId ?? null;
+
+    const [lead] = leadId
+      ? await db
+          .select({
+            id: leadsTable.id,
+            firstName: leadsTable.firstName,
+            lastName: leadsTable.lastName,
+            email: leadsTable.email,
+            phone: leadsTable.phone,
+            status: leadsTable.status,
+            interestedProgram: leadsTable.interestedProgram,
+            interestedCountry: leadsTable.interestedCountry,
+            estimatedValue: leadsTable.estimatedValue,
+            source: leadsTable.source,
+            originType: leadsTable.originType,
+            originDisplayName: leadsTable.originDisplayName,
+            agentId: leadsTable.agentId,
+            assignedToId: leadsTable.assignedToId,
+            createdAt: leadsTable.createdAt,
+            convertedStudentId: leadsTable.convertedStudentId,
+          })
+          .from(leadsTable)
+          .where(eq(leadsTable.id, leadId))
+      : [null];
+
+    const [student] = studentId
+      ? await db
+          .select({
+            id: studentsTable.id,
+            firstName: studentsTable.firstName,
+            lastName: studentsTable.lastName,
+            email: studentsTable.email,
+            phone: studentsTable.phone,
+            status: studentsTable.status,
+            agentId: studentsTable.agentId,
+            assignedToId: studentsTable.assignedToId,
+            interestedLevel: studentsTable.interestedLevel,
+            originType: studentsTable.originType,
+            originDisplayName: studentsTable.originDisplayName,
+            createdAt: studentsTable.createdAt,
+          })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, studentId!))
+      : [null];
+
+    const [agent] = agentId
+      ? await db
+          .select({
+            id: agentsTable.id,
+            firstName: agentsTable.firstName,
+            lastName: agentsTable.lastName,
+            companyName: agentsTable.companyName,
+            email: agentsTable.email,
+            phone: agentsTable.phone,
+            status: agentsTable.status,
+            entityType: agentsTable.entityType,
+          })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, agentId))
+      : [null];
+
+    let stage: {
+      key: string;
+      label: string;
+      color: string | null;
+      variant: string | null;
+      icon: string | null;
+    } | null = null;
+    const stageEntity: "lead" | "student" | null = lead ? "lead" : student ? "student" : null;
+    const stageKey = lead?.status ?? student?.status ?? null;
+    if (stageEntity && stageKey) {
+      const [row] = await db
+        .select({
+          key: pipelineStagesTable.key,
+          label: pipelineStagesTable.label,
+          color: pipelineStagesTable.color,
+          variant: pipelineStagesTable.variant,
+          icon: pipelineStagesTable.icon,
+        })
+        .from(pipelineStagesTable)
+        .where(and(
+          eq(pipelineStagesTable.entityType, stageEntity),
+          eq(pipelineStagesTable.key, stageKey),
+        ));
+      stage = row ?? null;
+    }
+
+    const aiSummary = readAiSummary(conv.metadata);
+
     res.json({
       conversation: { ...conv, assignedTo: assignedTo ?? null },
       externalContact,
       messages,
       withinWindow: conv.channel === "whatsapp" ? isWithin24hWindow(conv.lastInboundAt) : true,
+      lead: lead ?? null,
+      student: student ?? null,
+      agent: agent ?? null,
+      stage,
+      aiSummary,
     });
   },
 );
@@ -703,6 +917,277 @@ router.get(
           .limit(500)
       : [];
     res.json({ conversations, messages, externalContacts: contacts });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Phase 2 — AI summarize + inline notes + inline follow-up tasks
+// ---------------------------------------------------------------------------
+
+const conversationIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+router.post(
+  "/inbox/conversations/:id/summarize",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: conversationIdParamSchema }),
+  async (req, res): Promise<void> => {
+    const { params } = getValidated<{ params: typeof conversationIdParamSchema }>(req);
+    const conversationId = params.id;
+    const userId = req.user!.id;
+
+    // First, count messages — needed both to short-circuit empty conversations
+    // and to key the cache. Then probe the cache *before* consuming any rate-
+    // limit quota or acquiring a lock so repeated reads of a stable summary
+    // stay cheap.
+    const [conv] = await db
+      .select({ id: conversationsTable.id, metadata: conversationsTable.metadata })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, conversationId));
+    if (!conv) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+
+    const [{ count: rawCount } = { count: 0 }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messagesTable)
+      .where(eq(messagesTable.conversationId, conversationId));
+    const messageCount = Number(rawCount) || 0;
+    if (messageCount === 0) {
+      res.status(400).json({ error: "No messages to summarize" });
+      return;
+    }
+
+    const cached = readAiSummary(conv.metadata);
+    if (cached && cached.messageCount === messageCount) {
+      logAudit(userId, "conversation_summarize", "conversation", conversationId, {
+        messageCount,
+        fromCache: true,
+      }, req.ip);
+      res.json({ data: cached, fromCache: true });
+      return;
+    }
+
+    // Cache miss — now charge a token against the per-user rate limit so the
+    // expensive path is the only one that costs quota.
+    try {
+      await summarizeRateLimiter.consume(String(userId));
+    } catch (rlErr) {
+      const ms = (rlErr as { msBeforeNext?: number })?.msBeforeNext ?? 60000;
+      res.setHeader("Retry-After", String(Math.ceil(ms / 1000)));
+      res.status(429).json({ error: "Too many summarize requests. Please wait a moment." });
+      return;
+    }
+
+    // Per-conversation advisory lock so two concurrent summarize requests for
+    // the same conversation don't both call Anthropic. We use the
+    // `pg_advisory_xact_lock` variant inside a transaction — it's released
+    // automatically on COMMIT/ROLLBACK and survives if the request errors
+    // out. After acquiring the lock we re-read metadata and re-check the
+    // cache; the second caller will then hit the freshly-written summary.
+    let summary: ConversationAiSummary;
+    let fromCache = false;
+    try {
+      summary = await db.transaction(async (tx) => {
+        // First key is a fixed namespace constant for "inbox.summarize"
+        // (chosen arbitrarily — picked from task #216) so this lock cannot
+        // collide with other advisory locks the app might add later.
+        await tx.execute(sql`select pg_advisory_xact_lock(7216, ${conversationId})`);
+
+        const [fresh] = await tx
+          .select({ metadata: conversationsTable.metadata })
+          .from(conversationsTable)
+          .where(eq(conversationsTable.id, conversationId));
+        const reCached = readAiSummary(fresh?.metadata);
+        if (reCached && reCached.messageCount === messageCount) {
+          fromCache = true;
+          return reCached;
+        }
+
+        const transcript = await tx
+          .select({
+            direction: messagesTable.direction,
+            content: messagesTable.content,
+            createdAt: messagesTable.createdAt,
+          })
+          .from(messagesTable)
+          .where(eq(messagesTable.conversationId, conversationId))
+          .orderBy(asc(messagesTable.createdAt))
+          .limit(50);
+
+        const { content, model } = await generateConversationSummary({ messages: transcript });
+        const next: ConversationAiSummary = {
+          content,
+          generatedAt: new Date().toISOString(),
+          messageCount,
+          model,
+          generatedByUserId: userId,
+        };
+
+        // Atomic JSONB merge done in-database so a parallel writer that
+        // updates a different metadata key (e.g. channel state) is preserved
+        // instead of being clobbered by a stale read-modify-write.
+        await tx
+          .update(conversationsTable)
+          .set({
+            metadata: sql`coalesce(${conversationsTable.metadata}, '{}'::jsonb) || jsonb_build_object('aiSummary', ${JSON.stringify(next)}::jsonb)`,
+          })
+          .where(eq(conversationsTable.id, conversationId));
+
+        return next;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "AI service not configured";
+      const isConfigError = /not configured|API key/i.test(message);
+      res
+        .status(502)
+        .json({ error: isConfigError ? "AI service not configured" : `AI request failed: ${message}` });
+      return;
+    }
+
+    logAudit(userId, "conversation_summarize", "conversation", conversationId, {
+      messageCount,
+      fromCache,
+      model: summary.model,
+    }, req.ip);
+
+    res.json({ data: summary, fromCache });
+  },
+);
+
+const conversationNoteBodySchema = z.object({
+  content: z.string().min(1).max(2000),
+});
+
+router.post(
+  "/inbox/conversations/:id/notes",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: conversationIdParamSchema, body: conversationNoteBodySchema }),
+  async (req, res): Promise<void> => {
+    const { params, body } = getValidated<{
+      params: typeof conversationIdParamSchema;
+      body: typeof conversationNoteBodySchema;
+    }>(req);
+    const conversationId = params.id;
+    const userId = req.user!.id;
+
+    const link = await loadConversationLink(conversationId);
+    if (!link) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    if (!link.leadId && !link.studentId) {
+      res.status(400).json({ error: "This conversation is not linked to a lead or student" });
+      return;
+    }
+
+    const primaryResourceType: "lead" | "student" = link.leadId ? "lead" : "student";
+    const primaryResourceId = (link.leadId ?? link.studentId) as number;
+
+    // Both inserts share a transaction so a failed cross-link does not leave
+    // the primary note orphaned (or vice versa).
+    const primaryNote = await db.transaction(async (tx) => {
+      const [primary] = await tx
+        .insert(notesTable)
+        .values({
+          content: body.content,
+          authorId: userId,
+          resourceType: primaryResourceType,
+          resourceId: primaryResourceId,
+          isInternal: true,
+        })
+        .returning();
+
+      // Cross-link copy so a future inbox-side notes view can list notes by
+      // conversation id without joining through external_contacts.
+      await tx.insert(notesTable).values({
+        content: body.content,
+        authorId: userId,
+        resourceType: "conversation",
+        resourceId: conversationId,
+        isInternal: true,
+      });
+
+      return primary;
+    });
+
+    logAudit(userId, "conversation_note_create", "conversation", conversationId, {
+      noteId: primaryNote.id,
+      resourceType: primaryResourceType,
+      resourceId: primaryResourceId,
+    }, req.ip);
+
+    res.status(201).json({
+      data: {
+        id: primaryNote.id,
+        content: primaryNote.content,
+        createdAt: primaryNote.createdAt,
+        resourceType: primaryResourceType,
+        resourceId: primaryResourceId,
+      },
+    });
+  },
+);
+
+const conversationTaskBodySchema = z.object({
+  title: z.string().min(1).max(500),
+  scheduledAt: z.string().refine((s) => !Number.isNaN(Date.parse(s)), {
+    message: "scheduledAt must be a valid ISO datetime",
+  }),
+  assignedToId: z.number().int().positive().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+router.post(
+  "/inbox/conversations/:id/tasks",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: conversationIdParamSchema, body: conversationTaskBodySchema }),
+  async (req, res): Promise<void> => {
+    const { params, body } = getValidated<{
+      params: typeof conversationIdParamSchema;
+      body: typeof conversationTaskBodySchema;
+    }>(req);
+    const conversationId = params.id;
+    const userId = req.user!.id;
+
+    const link = await loadConversationLink(conversationId);
+    if (!link) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    if (!link.leadId && !link.studentId) {
+      res.status(400).json({ error: "This conversation is not linked to a lead or student" });
+      return;
+    }
+
+    const resourceType: "lead" | "student" = link.leadId ? "lead" : "student";
+    const [task] = await db
+      .insert(followUpsTable)
+      .values({
+        leadId: link.leadId,
+        studentId: link.studentId,
+        resourceType,
+        title: body.title,
+        scheduledAt: new Date(body.scheduledAt),
+        assignedToId: body.assignedToId ?? userId,
+        notes: body.notes ?? null,
+        createdById: userId,
+      })
+      .returning();
+
+    logAudit(userId, "conversation_task_create", "conversation", conversationId, {
+      taskId: task.id,
+      resourceType,
+      leadId: link.leadId,
+      studentId: link.studentId,
+    }, req.ip);
+
+    res.status(201).json({ data: task });
   },
 );
 
