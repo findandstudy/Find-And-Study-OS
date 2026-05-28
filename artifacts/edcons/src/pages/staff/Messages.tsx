@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { customFetch, type InboxConversationDetailResponse } from "@workspace/api-client-react";
+import {
+  customFetch,
+  useSummarizeInboxConversation,
+  useAddInboxConversationNote,
+  useAddInboxConversationTask,
+  type InboxConversationDetailResponse,
+} from "@workspace/api-client-react";
 import { LeadDetailSidebar } from "@/components/inbox/LeadDetailSidebar";
+import {
+  ChatNoteTaskTabs,
+  type ComposeTab,
+  type TaskDraft,
+} from "@/components/inbox/ChatNoteTaskTabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -224,6 +235,13 @@ function InboxTab() {
   const [detail, setDetail] = useState<InboxConversationDetailResponse | null>(null);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [composeTab, setComposeTab] = useState<ComposeTab>("chat");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [taskDraft, setTaskDraft] = useState<TaskDraft>({
+    title: "",
+    scheduledAt: "",
+    notes: "",
+  });
   const [matchOpen, setMatchOpen] = useState(false);
   const [matchSuggestions, setMatchSuggestions] = useState<any | null>(null);
   const [tplOpen, setTplOpen] = useState(false);
@@ -279,6 +297,12 @@ function InboxTab() {
   useEffect(() => {
     if (selectedId) fetchDetail(selectedId);
     else setDetail(null);
+    // Reset compose drafts when switching conversations so a half-written
+    // note/task/reply doesn't leak across tickets.
+    setComposeTab("chat");
+    setReply("");
+    setNoteDraft("");
+    setTaskDraft({ title: "", scheduledAt: "", notes: "" });
   }, [selectedId, fetchDetail]);
 
   // Live updates via Server-Sent Events. Refs let the long-lived EventSource
@@ -443,6 +467,78 @@ function InboxTab() {
       setSending(false);
     }
   }
+
+  // Faz 4.2: AI summary + note + task mutations.
+  // ApiError (lib/api-client-react custom-fetch.ts) exposes `.status` (number)
+  // and `.data` (parsed JSON error body). We re-fetch the detail on summarize
+  // success so the sidebar renders the freshly-generated content.
+  const summarizeMutation = useSummarizeInboxConversation({
+    mutation: {
+      onSuccess: (resp) => {
+        if (selectedId) fetchDetail(selectedId);
+        if (!resp.fromCache) toast({ title: t("inbox.aiSummary.generated") });
+      },
+      onError: (err: any) => {
+        const status: number | undefined = err?.status;
+        const errBody = err?.data ?? err?.body;
+        const errCode = String(errBody?.error ?? "");
+        let msg = t("inbox.aiSummary.errorGeneric");
+        if (status === 429) msg = t("inbox.aiSummary.errorRateLimit");
+        else if (status === 502) msg = t("inbox.aiSummary.errorService");
+        else if (status === 400 && /no.*messages|messages.*summarize/i.test(errCode)) {
+          msg = t("inbox.aiSummary.errorNoMessages");
+        } else if (status === 400) {
+          msg = t("inbox.aiSummary.errorNoLink");
+        }
+        toast({ variant: "destructive", title: msg });
+      },
+    },
+  });
+
+  const noteMutation = useAddInboxConversationNote({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: t("inbox.compose.noteSaved") });
+        setNoteDraft("");
+      },
+      onError: () => {
+        toast({ variant: "destructive", title: t("inbox.compose.noteFailed") });
+      },
+    },
+  });
+
+  const taskMutation = useAddInboxConversationTask({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: t("inbox.compose.taskCreated") });
+        setTaskDraft({ title: "", scheduledAt: "", notes: "" });
+      },
+      onError: () => {
+        toast({ variant: "destructive", title: t("inbox.compose.taskFailed") });
+      },
+    },
+  });
+
+  const handleSummarize = () => {
+    if (selectedId) summarizeMutation.mutate({ id: selectedId });
+  };
+  const handleSubmitNote = () => {
+    if (!selectedId || !noteDraft.trim()) return;
+    noteMutation.mutate({ id: selectedId, data: { content: noteDraft.trim() } });
+  };
+  const handleSubmitTask = () => {
+    if (!selectedId || !taskDraft.title.trim() || !taskDraft.scheduledAt) return;
+    const scheduled = new Date(taskDraft.scheduledAt);
+    if (Number.isNaN(scheduled.getTime())) return;
+    taskMutation.mutate({
+      id: selectedId,
+      data: {
+        title: taskDraft.title.trim(),
+        scheduledAt: scheduled.toISOString(),
+        notes: taskDraft.notes.trim() || undefined,
+      },
+    });
+  };
 
   async function openTemplateDialog() {
     try {
@@ -675,24 +771,40 @@ function InboxTab() {
                 })}
               </div>
 
-              <div className="border-t border-border/50 p-3 flex items-end gap-2">
-                <Textarea
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  placeholder={conv.channel === "whatsapp" && !detail.withinWindow ? "Outside 24h — use a template" : "Reply..."}
-                  rows={2}
-                  className="flex-1 rounded-lg text-sm"
-                  disabled={conv.channel === "whatsapp" && !detail.withinWindow}
-                />
-                {conv.channel === "whatsapp" && (
-                  <Button size="sm" variant="outline" onClick={openTemplateDialog} className="h-9 gap-1">
-                    <FileText className="w-3 h-3" /> {t("messagesPage.template")}
-                  </Button>
-                )}
-                <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || (conv.channel === "whatsapp" && !detail.withinWindow)} className="h-9 gap-1">
-                  {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Send
-                </Button>
-              </div>
+              <ChatNoteTaskTabs
+                activeTab={composeTab}
+                onTabChange={setComposeTab}
+                chatSlot={
+                  <div className="p-3 flex items-end gap-2">
+                    <Textarea
+                      value={reply}
+                      onChange={(e) => setReply(e.target.value)}
+                      placeholder={conv.channel === "whatsapp" && !detail.withinWindow ? "Outside 24h — use a template" : "Reply..."}
+                      rows={2}
+                      className="flex-1 rounded-lg text-sm"
+                      disabled={conv.channel === "whatsapp" && !detail.withinWindow}
+                    />
+                    {conv.channel === "whatsapp" && (
+                      <Button size="sm" variant="outline" onClick={openTemplateDialog} className="h-9 gap-1">
+                        <FileText className="w-3 h-3" /> {t("messagesPage.template")}
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || (conv.channel === "whatsapp" && !detail.withinWindow)} className="h-9 gap-1">
+                      {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Send
+                    </Button>
+                  </div>
+                }
+                noteDraft={noteDraft}
+                onNoteDraftChange={setNoteDraft}
+                onSubmitNote={handleSubmitNote}
+                noteSubmitting={noteMutation.isPending}
+                noteEnabled={Boolean(detail.lead || detail.student)}
+                taskDraft={taskDraft}
+                onTaskDraftChange={setTaskDraft}
+                onSubmitTask={handleSubmitTask}
+                taskSubmitting={taskMutation.isPending}
+                taskEnabled={Boolean(detail.lead || detail.student)}
+              />
             </>
           )}
         </div>
@@ -702,6 +814,8 @@ function InboxTab() {
             <LeadDetailSidebar
               detail={detail}
               onOpenMatchDialog={loadSuggestions}
+              onSummarize={handleSummarize}
+              isSummarizing={summarizeMutation.isPending}
             />
           </div>
         )}

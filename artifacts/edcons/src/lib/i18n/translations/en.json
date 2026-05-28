@@ -820,6 +820,37 @@
       "entityType": "Entity type",
       "viewFullDetail": "View full detail"
     },
+    "aiSummary": {
+      "title": "AI Summary",
+      "generate": "Summarize",
+      "regenerate": "Regenerate",
+      "generating": "Summarizing...",
+      "lastUpdated": "Updated {when}",
+      "messageCount": "from {count} messages",
+      "noSummaryYet": "No summary yet",
+      "generated": "Summary generated",
+      "errorGeneric": "Failed to generate summary",
+      "errorRateLimit": "Rate limit reached. Please try again in a minute.",
+      "errorService": "AI service unavailable. Please try again later.",
+      "errorNoMessages": "No messages to summarize yet",
+      "errorNoLink": "Link this conversation to a lead, student, or agent first"
+    },
+    "compose": {
+      "chatTab": "Chat",
+      "noteTab": "Note",
+      "taskTab": "Task",
+      "notePlaceholder": "Add an internal note...",
+      "noteDisabledHint": "Link this conversation to a lead or student to add notes.",
+      "saveNote": "Save note",
+      "noteSaved": "Note saved",
+      "noteFailed": "Failed to save note",
+      "taskTitle": "Task title",
+      "taskNotes": "Notes (optional)",
+      "taskDisabledHint": "Link this conversation to a lead or student to create tasks.",
+      "createTask": "Create task",
+      "taskCreated": "Task created",
+      "taskFailed": "Failed to create task"
+    },
     "title": "Inbox",
     "internal": "Internal",
     "tabs": {

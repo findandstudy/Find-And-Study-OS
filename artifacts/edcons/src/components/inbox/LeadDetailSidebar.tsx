@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import { PipelineStageBadge } from "./PipelineStageBadge";
+import { AiSummaryCard } from "./AiSummaryCard";
 
 interface LeadDetailSidebarProps {
   detail: InboxConversationDetailResponse;
   onOpenMatchDialog?: () => void;
+  onSummarize: () => void;
+  isSummarizing: boolean;
 }
 
 type LinkedType = "lead" | "student" | "agent";
@@ -22,7 +25,12 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function LeadDetailSidebar({ detail, onOpenMatchDialog }: LeadDetailSidebarProps) {
+export function LeadDetailSidebar({
+  detail,
+  onOpenMatchDialog,
+  onSummarize,
+  isSummarizing,
+}: LeadDetailSidebarProps) {
   const { t } = useI18n();
   const [, navigate] = useLocation();
 
@@ -88,6 +96,15 @@ export function LeadDetailSidebar({ detail, onOpenMatchDialog }: LeadDetailSideb
         </Badge>
       </div>
 
+      {/* AI Summary */}
+      <AiSummaryCard
+        summary={detail.aiSummary ?? null}
+        hasLink={true}
+        hasMessages={(detail.messages?.length ?? 0) > 0}
+        isSummarizing={isSummarizing}
+        onSummarize={onSummarize}
+      />
+
       {/* Contact info */}
       {(entity.email || entity.phone) && (
         <div className="space-y-2 text-sm">
@@ -152,7 +169,6 @@ export function LeadDetailSidebar({ detail, onOpenMatchDialog }: LeadDetailSideb
         </Button>
       </div>
 
-      {/* TODO Faz 4.2: AI Summarize button + summary block + Note/Task tabs */}
     </div>
   );
 }

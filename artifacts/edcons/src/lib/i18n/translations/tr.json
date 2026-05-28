@@ -820,6 +820,37 @@
       "entityType": "Tür",
       "viewFullDetail": "Tüm detayları gör"
     },
+    "aiSummary": {
+      "title": "AI Özet",
+      "generate": "Özetle",
+      "regenerate": "Yeniden özetle",
+      "generating": "Özetleniyor...",
+      "lastUpdated": "{when} güncellendi",
+      "messageCount": "{count} mesajdan",
+      "noSummaryYet": "Henüz özet yok",
+      "generated": "Özet oluşturuldu",
+      "errorGeneric": "Özet oluşturulamadı",
+      "errorRateLimit": "Hız limitine ulaşıldı. Lütfen bir dakika sonra tekrar deneyin.",
+      "errorService": "AI servisi şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
+      "errorNoMessages": "Özetlenecek mesaj yok",
+      "errorNoLink": "Önce bu görüşmeyi bir lead, öğrenci veya acenteye bağlayın"
+    },
+    "compose": {
+      "chatTab": "Sohbet",
+      "noteTab": "Not",
+      "taskTab": "Görev",
+      "notePlaceholder": "Dahili not ekle...",
+      "noteDisabledHint": "Not eklemek için bu görüşmeyi bir lead veya öğrenciye bağlayın.",
+      "saveNote": "Notu kaydet",
+      "noteSaved": "Not kaydedildi",
+      "noteFailed": "Not kaydedilemedi",
+      "taskTitle": "Görev başlığı",
+      "taskNotes": "Notlar (opsiyonel)",
+      "taskDisabledHint": "Görev oluşturmak için bu görüşmeyi bir lead veya öğrenciye bağlayın.",
+      "createTask": "Görev oluştur",
+      "taskCreated": "Görev oluşturuldu",
+      "taskFailed": "Görev oluşturulamadı"
+    },
     "title": "Gelen Kutusu",
     "internal": "Dahili",
     "tabs": {
