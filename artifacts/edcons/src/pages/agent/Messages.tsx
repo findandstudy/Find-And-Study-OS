@@ -50,7 +50,7 @@ export default function AgentMessages() {
     refetchInterval: 5000,
   });
 
-  const msgs: any[] = (messagesResp?.data || []).slice().reverse();
+  const msgs: any[] = messagesResp?.data || [];
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
