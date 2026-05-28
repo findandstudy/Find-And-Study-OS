@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { setStickyUser } from "@/lib/auth-cache";
+import { setAuthCache, setStickyUser } from "@/lib/auth-cache";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
@@ -181,7 +181,14 @@ export default function Login() {
         return;
       }
       if (data.user) {
+        // Persist the freshly-authenticated user across all three caches
+        // (in-memory sticky, React Query, and localStorage) BEFORE the
+        // redirect-effect navigates to the portal. Without the localStorage
+        // write, the next mount of `useAuth` could see neither a sticky
+        // user (race) nor a cached one and bounce the user back to /login,
+        // creating a redirect loop between /login and the portal.
         setStickyUser(data.user as any);
+        setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
       }
     } catch {
@@ -263,7 +270,14 @@ export default function Login() {
       // existing redirect-on-user-detect effect at the top of this
       // component logs the student straight into their portal.
       if (data.user) {
+        // Persist the freshly-authenticated user across all three caches
+        // (in-memory sticky, React Query, and localStorage) BEFORE the
+        // redirect-effect navigates to the portal. Without the localStorage
+        // write, the next mount of `useAuth` could see neither a sticky
+        // user (race) nor a cached one and bounce the user back to /login,
+        // creating a redirect loop between /login and the portal.
         setStickyUser(data.user as any);
+        setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
       } else {
         setTab("login");

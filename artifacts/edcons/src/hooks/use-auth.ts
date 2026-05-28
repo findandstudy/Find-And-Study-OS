@@ -1,7 +1,7 @@
 import { useGetMe } from "@workspace/api-client-react";
 import { useEffect, useMemo, startTransition } from "react";
 import { useLocation } from "wouter";
-import { getAuthCache, getStickyUser, setStickyUser } from "@/lib/auth-cache";
+import { getAuthCache, getStickyUser, setAuthCache, setStickyUser } from "@/lib/auth-cache";
 
 export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
   const initialUser = useMemo(() => getStickyUser() ?? getAuthCache(), []);
@@ -22,12 +22,22 @@ export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
     } as any,
   });
 
-  // Keep sticky updated whenever live data is available
-  if (liveUser) setStickyUser(liveUser);
+  // Keep sticky + localStorage caches updated whenever live data is
+  // available. Mirroring into localStorage here as well as in AuthPrefetch
+  // closes the window where a freshly logged-in user can navigate to a
+  // ProtectedRoute before AuthPrefetch has had a chance to write the cache.
+  if (liveUser) {
+    setStickyUser(liveUser);
+    setAuthCache(liveUser);
+  }
 
-  // Use live user first, then fall back to module-level sticky (survives
-  // transient refetch errors and brief undefined states during transitions).
-  const user = (liveUser ?? getStickyUser()) as typeof liveUser;
+  // Use live user first, then fall back to module-level sticky, then to
+  // the persisted localStorage cache. The third layer matters during the
+  // brief render where a SPA navigation has reset the closure-captured
+  // `initialUser` to undefined but `/api/auth/me` hasn't resolved yet —
+  // without it the redirect effect below would fire and bounce the user
+  // back to /login even though they are clearly authenticated.
+  const user = (liveUser ?? getStickyUser() ?? getAuthCache()) as typeof liveUser;
 
   const [, setLocation] = useLocation();
 
