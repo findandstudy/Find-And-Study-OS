@@ -43,6 +43,7 @@ import inboxRouter, { __setAiSummaryOverrideForTests } from "../src/routes/inbox
 interface SeededConv {
   conversationId: number;
   externalContactId: number;
+  leadId: number | null;
   cleanup: () => Promise<void>;
 }
 
@@ -91,6 +92,7 @@ async function seedConversation(opts: { withLeadLink: boolean }): Promise<Seeded
   return {
     conversationId: conv.id,
     externalContactId: contact.id,
+    leadId: leadIdToSet,
     cleanup: async () => {
       await db.delete(messagesTable).where(eq(messagesTable.conversationId, conv.id));
       await db.delete(conversationsTable).where(eq(conversationsTable.id, conv.id));
@@ -227,4 +229,53 @@ test("summarize/notes/tasks return 400 when conversation has no lead or student 
     { title: "Follow up", scheduledAt: new Date(Date.now() + 86_400_000).toISOString() },
   );
   assert.equal(taskRes.status, 400, "task on unlinked conversation must be rejected");
+});
+
+test("soft-deleted lead is hidden from GET detail and blocks summarize/notes/tasks", async (t) => {
+  const seeded = await seedConversation({ withLeadLink: true });
+  assert.ok(seeded.leadId, "test setup must produce a linked lead");
+  t.after(async () => {
+    __setAiSummaryOverrideForTests(null);
+    await seeded.cleanup();
+  });
+
+  await appendMessage(seeded.conversationId, "Merhaba, vize sürecini öğrenmek istiyorum.");
+
+  // Soft-delete the lead.
+  const { leadsTable } = await import("@workspace/db");
+  await db
+    .update(leadsTable)
+    .set({ deletedAt: new Date() })
+    .where(eq(leadsTable.id, seeded.leadId!));
+
+  __setAiSummaryOverrideForTests(async () => ({ content: "unused", model: "test-stub" }));
+
+  const app = buildApp();
+
+  // GET conv detail — lead and stage should both be null even though the
+  // external_contacts row still points at the (now soft-deleted) lead.
+  const detailRes = await request(app, "GET", `/api/inbox/conversations/${seeded.conversationId}`);
+  assert.equal(detailRes.status, 200, "detail still loads");
+  const detailBody = detailRes.body as { lead: unknown; stage: unknown };
+  assert.equal(detailBody.lead, null, "soft-deleted lead must be hidden");
+  assert.equal(detailBody.stage, null, "stage derives from lead/student so must also be null");
+
+  // summarize/notes/tasks should all behave as if there is no link.
+  // summarize still works because it operates on conversation metadata, but
+  // notes & tasks require a live lead/student — they should return 400.
+  const noteRes = await request(
+    app,
+    "POST",
+    `/api/inbox/conversations/${seeded.conversationId}/notes`,
+    { content: "test note" },
+  );
+  assert.equal(noteRes.status, 400, "note on soft-deleted-lead conversation must be rejected");
+
+  const taskRes = await request(
+    app,
+    "POST",
+    `/api/inbox/conversations/${seeded.conversationId}/tasks`,
+    { title: "Follow up", scheduledAt: new Date(Date.now() + 86_400_000).toISOString() },
+  );
+  assert.equal(taskRes.status, 400, "task on soft-deleted-lead conversation must be rejected");
 });

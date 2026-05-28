@@ -144,10 +144,31 @@ async function loadConversationLink(id: number): Promise<ConversationLink | null
     .select({ leadId: externalContactsTable.leadId, studentId: externalContactsTable.studentId })
     .from(externalContactsTable)
     .where(eq(externalContactsTable.id, conv.externalContactId));
+
+  // Re-resolve the lead/student against their live (non-soft-deleted) state
+  // so summarize/notes/tasks treat a soft-deleted entity as "no link" — same
+  // 400 they already return for an unmatched conversation. This keeps deleted
+  // personal data from being re-attached to new notes/tasks.
+  let liveLeadId: number | null = null;
+  if (contact?.leadId != null) {
+    const [row] = await db
+      .select({ id: leadsTable.id })
+      .from(leadsTable)
+      .where(and(eq(leadsTable.id, contact.leadId), isNull(leadsTable.deletedAt)));
+    if (row) liveLeadId = row.id;
+  }
+  let liveStudentId: number | null = null;
+  if (contact?.studentId != null) {
+    const [row] = await db
+      .select({ id: studentsTable.id })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.id, contact.studentId), isNull(studentsTable.deletedAt)));
+    if (row) liveStudentId = row.id;
+  }
   return {
     conversationId: id,
-    leadId: contact?.leadId ?? null,
-    studentId: contact?.studentId ?? null,
+    leadId: liveLeadId,
+    studentId: liveStudentId,
   };
 }
 
@@ -362,7 +383,7 @@ router.get(
             convertedStudentId: leadsTable.convertedStudentId,
           })
           .from(leadsTable)
-          .where(eq(leadsTable.id, leadId))
+          .where(and(eq(leadsTable.id, leadId), isNull(leadsTable.deletedAt)))
       : [null];
 
     const [student] = studentId
@@ -382,7 +403,7 @@ router.get(
             createdAt: studentsTable.createdAt,
           })
           .from(studentsTable)
-          .where(eq(studentsTable.id, studentId!))
+          .where(and(eq(studentsTable.id, studentId!), isNull(studentsTable.deletedAt)))
       : [null];
 
     const [agent] = agentId
@@ -398,7 +419,7 @@ router.get(
             entityType: agentsTable.entityType,
           })
           .from(agentsTable)
-          .where(eq(agentsTable.id, agentId))
+          .where(and(eq(agentsTable.id, agentId), isNull(agentsTable.deletedAt)))
       : [null];
 
     let stage: {
