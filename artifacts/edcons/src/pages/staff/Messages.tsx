@@ -22,13 +22,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
   FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download,
-  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw
+  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -222,7 +223,7 @@ function LiveStatusIndicator({
 }
 
 function InboxTab() {
-  const { t } = useI18n();
+  const { t, isRTL } = useI18n();
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -244,6 +245,7 @@ function InboxTab() {
   });
   const [matchOpen, setMatchOpen] = useState(false);
   const [matchSuggestions, setMatchSuggestions] = useState<any | null>(null);
+  const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplId, setTplId] = useState<string>("");
@@ -252,6 +254,11 @@ function InboxTab() {
   const [reconnectKey, setReconnectKey] = useState(0);
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
+
+  // Close the mobile lead-info drawer whenever the selected conversation changes
+  useEffect(() => {
+    setSidebarSheetOpen(false);
+  }, [selectedId]);
 
   // Tick once every 5s so the tooltip's "Xs ago" text stays roughly fresh
   // and the derived "stale" status flips after the threshold without needing
@@ -729,6 +736,16 @@ function InboxTab() {
                   {assignedNotice && (
                     <span className="text-xs text-green-600 font-medium">{t("messagesPage.assignedToYou")}</span>
                   )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="lg:hidden h-8 w-8"
+                    onClick={() => setSidebarSheetOpen(true)}
+                    aria-label={t("inbox.sidebar.openLeadInfo")}
+                    data-testid="button-open-lead-info"
+                  >
+                    <Info className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
 
@@ -820,6 +837,27 @@ function InboxTab() {
           </div>
         )}
       </div>
+
+      {detail && (
+        <Sheet open={sidebarSheetOpen} onOpenChange={setSidebarSheetOpen}>
+          <SheetContent
+            side={isRTL ? "left" : "right"}
+            className="w-[85vw] max-w-md p-0 lg:hidden flex flex-col"
+          >
+            <SheetHeader className="px-4 py-3 border-b border-border/50 text-start">
+              <SheetTitle className="text-sm">{t("inbox.sidebar.leadInfoTitle")}</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              <LeadDetailSidebar
+                detail={detail}
+                onOpenMatchDialog={() => { setSidebarSheetOpen(false); loadSuggestions(); }}
+                onSummarize={handleSummarize}
+                isSummarizing={summarizeMutation.isPending}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <Dialog open={matchOpen} onOpenChange={setMatchOpen}>
         <DialogContent className="max-w-md">

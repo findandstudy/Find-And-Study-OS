@@ -818,7 +818,9 @@
       "interestedLevel": "Interested level",
       "companyName": "Company",
       "entityType": "Entity type",
-      "viewFullDetail": "View full detail"
+      "viewFullDetail": "View full detail",
+      "openLeadInfo": "Show lead info",
+      "leadInfoTitle": "Lead info"
     },
     "aiSummary": {
       "title": "AI Summary",

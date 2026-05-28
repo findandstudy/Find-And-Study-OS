@@ -818,7 +818,9 @@
       "interestedLevel": "İlgilendiği seviye",
       "companyName": "Şirket",
       "entityType": "Tür",
-      "viewFullDetail": "Tüm detayları gör"
+      "viewFullDetail": "Tüm detayları gör",
+      "openLeadInfo": "Lead bilgisini göster",
+      "leadInfoTitle": "Lead bilgisi"
     },
     "aiSummary": {
       "title": "AI Özet",

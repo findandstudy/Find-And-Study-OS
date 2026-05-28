@@ -165,7 +165,7 @@ export function LeadDetailSidebar({
           data-testid="sidebar-view-full-detail"
         >
           {t("inbox.sidebar.viewFullDetail")}
-          <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+          <ArrowRight className="w-3.5 h-3.5 ms-1.5 rtl:rotate-180" />
         </Button>
       </div>
 
