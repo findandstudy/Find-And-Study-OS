@@ -804,6 +804,22 @@
     "countriesCount": "{count} ülke"
   },
   "inbox": {
+    "sidebar": {
+      "noLink": "Bir lead, öğrenci veya acenteye bağlı değil",
+      "matchButton": "Mevcut kayıtla eşleştir",
+      "typeLead": "Lead",
+      "typeStudent": "Öğrenci",
+      "typeAgent": "Acente",
+      "interestedProgram": "İlgilendiği program",
+      "interestedCountry": "İlgilendiği ülke",
+      "estimatedValue": "Tahmini değer",
+      "source": "Kaynak",
+      "origin": "Köken",
+      "interestedLevel": "İlgilendiği seviye",
+      "companyName": "Şirket",
+      "entityType": "Tür",
+      "viewFullDetail": "Tüm detayları gör"
+    },
     "title": "Gelen Kutusu",
     "internal": "Dahili",
     "tabs": {

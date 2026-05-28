@@ -804,6 +804,22 @@
     "countriesCount": "{count} countries"
   },
   "inbox": {
+    "sidebar": {
+      "noLink": "Not linked to a lead, student or agent",
+      "matchButton": "Match to existing record",
+      "typeLead": "Lead",
+      "typeStudent": "Student",
+      "typeAgent": "Agent",
+      "interestedProgram": "Interested program",
+      "interestedCountry": "Interested country",
+      "estimatedValue": "Estimated value",
+      "source": "Source",
+      "origin": "Origin",
+      "interestedLevel": "Interested level",
+      "companyName": "Company",
+      "entityType": "Entity type",
+      "viewFullDetail": "View full detail"
+    },
     "title": "Inbox",
     "internal": "Internal",
     "tabs": {

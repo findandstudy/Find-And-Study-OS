@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, type InboxConversationDetailResponse } from "@workspace/api-client-react";
+import { LeadDetailSidebar } from "@/components/inbox/LeadDetailSidebar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -220,7 +221,7 @@ function InboxTab() {
   const [convs, setConvs] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<any>(null);
+  const [detail, setDetail] = useState<InboxConversationDetailResponse | null>(null);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [matchOpen, setMatchOpen] = useState(false);
@@ -269,7 +270,7 @@ function InboxTab() {
   const fetchDetail = useCallback(async (id: number) => {
     try {
       const res = await customFetch(`/api/inbox/conversations/${id}`);
-      setDetail(res);
+      setDetail(res as InboxConversationDetailResponse);
     } catch {
       setDetail(null);
     }
@@ -481,7 +482,8 @@ function InboxTab() {
     { key: "all", label: t("messagesPage.all"), icon: Hash },
   ];
 
-  const conv = detail?.conversation;
+  // Safe non-null assertion: `conv` is only read inside the `!detail ? loader : (...)` JSX branch below.
+  const conv = detail?.conversation!;
   const ext = detail?.externalContact;
   const linked = ext && (ext.leadId || ext.studentId || ext.agentId);
   const linkedLabel = ext?.leadId ? "Lead" : ext?.studentId ? "Student" : ext?.agentId ? "Agent" : null;
@@ -572,7 +574,7 @@ function InboxTab() {
           </div>
         </div>
 
-        <div className={`lg:col-span-8 flex flex-col ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+        <div className={`lg:col-span-5 flex flex-col ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
           {!selectedId ? (
             <div className="text-center text-muted-foreground">
               <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
@@ -694,6 +696,15 @@ function InboxTab() {
             </>
           )}
         </div>
+
+        {selectedId !== null && detail && (
+          <div className="hidden lg:flex lg:col-span-3 lg:flex-col border-l border-border/50 bg-muted/20">
+            <LeadDetailSidebar
+              detail={detail}
+              onOpenMatchDialog={loadSuggestions}
+            />
+          </div>
+        )}
       </div>
 
       <Dialog open={matchOpen} onOpenChange={setMatchOpen}>
