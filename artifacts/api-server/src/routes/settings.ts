@@ -169,10 +169,15 @@ const objectStorageService = new ObjectStorageService();
 
 router.get("/settings/branding/logo", async (req, res): Promise<void> => {
   try {
-    const variant = req.query.variant === "dark" ? "logoDarkUrl" : "logoUrl";
+    const variant = req.query.variant === "dark"
+      ? "logoDarkUrl"
+      : req.query.variant === "square"
+        ? "logoSquareUrl"
+        : "logoUrl";
     const [settings] = await db.select({
       logoUrl: settingsTable.logoUrl,
       logoDarkUrl: settingsTable.logoDarkUrl,
+      logoSquareUrl: settingsTable.logoSquareUrl,
     }).from(settingsTable);
     const url = settings?.[variant] || settings?.logoUrl;
     if (!url) { res.status(404).json({ error: "No logo configured" }); return; }

@@ -440,14 +440,32 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
   const isOperationalRole = ["super_admin","admin","manager","staff","consultant","accountant","editor","agent","sub_agent"].includes(user.role);
 
-  const systemLogo = resolvedTheme === "dark" && themeSettings.logoDarkUrl
+  const LOGO_BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+  // Resolve a stored asset URL into something an <img> can load in any
+  // environment: absolute URLs pass through; root-relative API paths get the
+  // artifact base-path prefix so they don't escape the deployment sub-path.
+  const resolveAssetSrc = (u?: string | null) =>
+    !u ? null : /^https?:\/\//.test(u) ? u : `${LOGO_BASE_URL}${u.startsWith("/") ? "" : "/"}${u}`;
+
+  // Tenant brand logo is served through the PUBLIC, base-prefixed branding
+  // proxy (same pattern as PublicLayout) so it renders without an auth cookie
+  // and under any base path. Agent white-label logos fall back to the
+  // base-prefixed stored URL (agent dashboards are always authenticated).
+  const hasSystemLogo = resolvedTheme === "dark" && themeSettings.logoDarkUrl
     ? themeSettings.logoDarkUrl
     : themeSettings.logoUrl || null;
+  const tenantLogoSrc = hasSystemLogo
+    ? `${LOGO_BASE_URL}/api/settings/branding/logo${resolvedTheme === "dark" && themeSettings.logoDarkUrl ? "?variant=dark" : ""}`
+    : null;
+  // Prefer the dedicated square asset; otherwise fall back to the (dark-aware)
+  // tenant logo so dark-only branding setups don't show the wrong asset.
+  const tenantSquareLogoSrc = themeSettings.logoSquareUrl
+    ? `${LOGO_BASE_URL}/api/settings/branding/logo?variant=square`
+    : tenantLogoSrc;
+  const agentLogoSrc = (isAgentRole && agentProfile?.logoUrl) ? resolveAssetSrc(agentProfile.logoUrl) : null;
 
-  const sidebarLogo = (isAgentRole && agentProfile?.logoUrl) ? agentProfile.logoUrl : systemLogo;
-  const sidebarSquareLogo = (isAgentRole && agentProfile?.logoUrl)
-    ? agentProfile.logoUrl
-    : (themeSettings.logoSquareUrl || systemLogo);
+  const sidebarLogo = agentLogoSrc ?? tenantLogoSrc;
+  const sidebarSquareLogo = agentLogoSrc ?? tenantSquareLogoSrc;
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
