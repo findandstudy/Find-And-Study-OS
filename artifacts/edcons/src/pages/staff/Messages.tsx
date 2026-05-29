@@ -17,6 +17,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -29,7 +36,7 @@ import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
   FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download,
-  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info
+  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -601,44 +608,90 @@ function InboxTab() {
       <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
         <div className={`lg:col-span-4 border-r border-border/50 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
           <div className="p-3 border-b border-border/50 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <InboxIcon className="w-3.5 h-3.5" /> Inbox
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+              <div className="flex items-center gap-2">
+                <InboxIcon className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("messagesPage.inbox")}
+                </span>
+                <LiveStatusIndicator
+                  status={effectiveLiveStatus}
+                  lastEventAt={lastEventAt}
+                  now={now}
+                  onReconnect={reconnectLive}
+                />
               </div>
-              <LiveStatusIndicator
-                status={effectiveLiveStatus}
-                lastEventAt={lastEventAt}
-                now={now}
-                onReconnect={reconnectLive}
-              />
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              {tabs.map((t) => {
-                const Icon = t.icon;
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => setTab(t.key)}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${tab === t.key ? "bg-primary/10 text-primary border border-primary/30" : "text-muted-foreground hover:bg-secondary border border-transparent"}`}
-                  >
-                    <Icon className="w-3 h-3" /> {t.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              {channelOptions.map((ch) => {
-                const Icon = ch === "all" ? Hash : (channelIcon[ch] || MessageCircle);
-                return (
-                  <button
-                    key={ch}
-                    onClick={() => setChannel(ch)}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${channel === ch ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50"}`}
-                  >
-                    <Icon className="w-3 h-3" /> {ch}
-                  </button>
-                );
-              })}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex rounded-lg bg-muted/50 p-1 gap-0.5">
+                  {tabs.map((tb) => {
+                    const Icon = tb.icon;
+                    const active = tab === tb.key;
+                    return (
+                      <button
+                        key={tb.key}
+                        onClick={() => setTab(tb.key)}
+                        aria-pressed={active}
+                        className={cn(
+                          "px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                          active
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                        )}
+                      >
+                        <Icon className={cn("w-3.5 h-3.5", !active && "opacity-60")} />
+                        {tb.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2 h-8">
+                      {channel !== "all" && (
+                        <span
+                          className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            channel === "whatsapp" && "bg-green-500",
+                            channel === "web_form" && "bg-indigo-500",
+                            channel === "email" && "bg-purple-500",
+                            channel === "sms" && "bg-amber-500",
+                            channel === "telegram" && "bg-sky-500"
+                          )}
+                        />
+                      )}
+                      <Filter className="w-3.5 h-3.5" />
+                      {channel === "all"
+                        ? t("messagesPage.allChannels")
+                        : t(`inbox.channels.${channel}`)}
+                      <ChevronDown className="w-3 h-3 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {channelOptions.map((ch) => {
+                      const Icon = ch === "all" ? InboxIcon : (channelIcon[ch] || MessageCircle);
+                      return (
+                        <DropdownMenuItem key={ch} onClick={() => setChannel(ch)}>
+                          <Icon
+                            className={cn(
+                              "w-4 h-4 me-2",
+                              ch === "whatsapp" && "text-green-600",
+                              ch === "web_form" && "text-indigo-600",
+                              ch === "email" && "text-purple-600",
+                              ch === "sms" && "text-amber-600",
+                              ch === "telegram" && "text-sky-600"
+                            )}
+                          />
+                          {ch === "all"
+                            ? t("messagesPage.allChannels")
+                            : t(`inbox.channels.${ch}`)}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
