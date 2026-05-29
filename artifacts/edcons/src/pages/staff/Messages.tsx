@@ -1068,7 +1068,7 @@ function MessageThread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
-  const [channel, setChannel] = useState("internal");
+  const channel = "internal" as const;
   const [sending, setSending] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -1300,18 +1300,6 @@ function MessageThread({
       </div>
 
       <div className="p-4 border-t border-border/50">
-        <div className="flex gap-2 mb-2">
-          {Object.entries(channelIcon).map(([ch, Icon]) => (
-            <button
-              key={ch}
-              onClick={() => setChannel(ch)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${channel === ch ? channelColor[ch] + " ring-1 ring-current" : "text-muted-foreground hover:bg-secondary"}`}
-            >
-              <Icon className="w-3 h-3" />
-              <span className="capitalize hidden sm:inline">{ch}</span>
-            </button>
-          ))}
-        </div>
         {pendingFile && (
           <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-secondary/50 text-sm">
             <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" />
