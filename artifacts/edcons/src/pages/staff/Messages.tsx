@@ -6,8 +6,10 @@ import {
   useAddInboxConversationNote,
   useAddInboxConversationTask,
   type InboxConversationDetailResponse,
+  type ConversationAiSummary,
 } from "@workspace/api-client-react";
 import { LeadDetailSidebar } from "@/components/inbox/LeadDetailSidebar";
+import { AiSummaryCard } from "@/components/inbox/AiSummaryCard";
 import {
   ChatNoteTaskTabs,
   type ComposeTab,
@@ -1071,6 +1073,7 @@ function MessageThread({
   const channel = "internal" as const;
   const [sending, setSending] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
+  const [summary, setSummary] = useState<ConversationAiSummary | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1090,6 +1093,11 @@ function MessageThread({
     setLoading(true);
     justOpenedRef.current = true;
     wasAtBottomRef.current = true;
+    // Reset the AI summary so a stale summary from the previous conversation
+    // doesn't leak across threads. The internal thread is self-contained and
+    // has no detail endpoint that returns aiSummary, so we seed it on demand
+    // from the summarize response below.
+    setSummary(null);
     Promise.all([
       fetchMessages(),
       customFetch(`/api/conversations/${conversationId}/participants`).then((r: any) => setParticipants(r?.data || r || [])),
@@ -1114,6 +1122,39 @@ function MessageThread({
       justOpenedRef.current = false;
     }
   }, [messages]);
+
+  // AI summary for internal threads. The summarize endpoint is type/link-
+  // independent (it only needs messages), so we reuse the same hook + error
+  // mapping as the Inbox tab. The result is stored locally and seeded from the
+  // response since the internal thread has no detail endpoint returning it.
+  const summarizeMutation = useSummarizeInboxConversation({
+    mutation: {
+      onSuccess: (resp) => {
+        setSummary(resp.data);
+        if (!resp.fromCache) toast({ title: t("inbox.aiSummary.generated") });
+      },
+      onError: (err: any) => {
+        const status: number | undefined = err?.status;
+        const errBody = err?.data ?? err?.body;
+        const errCode = String(errBody?.error ?? "");
+        let msg = t("inbox.aiSummary.errorGeneric");
+        if (status === 429) msg = t("inbox.aiSummary.errorRateLimit");
+        else if (status === 502) msg = t("inbox.aiSummary.errorService");
+        else if (status === 400 && /no.*messages|messages.*summarize/i.test(errCode)) {
+          msg = t("inbox.aiSummary.errorNoMessages");
+        } else if (status === 400) {
+          // Internal conversations are link-independent, so a generic 400 here
+          // is effectively "nothing to summarize" rather than a missing link.
+          msg = t("inbox.aiSummary.errorNoMessages");
+        }
+        toast({ variant: "destructive", title: msg });
+      },
+    },
+  });
+
+  const handleSummarize = () => {
+    summarizeMutation.mutate({ id: conversationId });
+  };
 
   const uploadFile = async (file: File): Promise<MessageAttachment | null> => {
     try {
@@ -1225,6 +1266,16 @@ function MessageThread({
           <ChannelIcon className="w-3 h-3 mr-1" />
           {channel}
         </Badge>
+      </div>
+
+      <div className="px-4 pt-3 shrink-0">
+        <AiSummaryCard
+          summary={summary}
+          hasLink
+          hasMessages={messages.length > 0}
+          isSummarizing={summarizeMutation.isPending}
+          onSummarize={handleSummarize}
+        />
       </div>
 
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
