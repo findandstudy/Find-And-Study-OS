@@ -134,9 +134,56 @@ async function cleanupApplyFlowFixtures() {
   console.log("[e2e-teardown] Apply-flow fixtures cleaned up");
 }
 
+async function cleanupInboxFlowFixtures() {
+  // Rows produced by inbox-flow.spec.ts. The webhook posts a RUN_ID-tagged
+  // web_form submission (name "Playwright Inbox <run>", email
+  // "inbox_<run>@e2e.test"), which creates: an external_contacts row keyed by
+  // that email, a conversation pointing at it (messages cascade via FK), and
+  // inbox notifications fanned out to staff. Match on the e2e email prefix so
+  // every prior run's residue is swept up too (idempotent). The `_` in LIKE is
+  // escaped so it matches the literal underscore rather than any single char.
+  try {
+    // 1. Notifications have no FK to conversations — the link lives in the
+    //    jsonb `data.conversationId` — so they must be deleted explicitly
+    //    before the conversation rows go away.
+    await pool.query(
+      `DELETE FROM notifications
+        WHERE type LIKE 'inbox.%'
+          AND (data->>'conversationId') ~ '^[0-9]+$'
+          AND (data->>'conversationId')::int IN (
+            SELECT c.id FROM conversations c
+            JOIN external_contacts ec ON ec.id = c.external_contact_id
+            WHERE ec.channel = 'web_form'
+              AND ec.email LIKE 'inbox\\_%@e2e.test'
+          )`,
+    );
+
+    // 2. Delete the conversations (messages cascade via ON DELETE CASCADE).
+    await pool.query(
+      `DELETE FROM conversations c
+        USING external_contacts ec
+        WHERE c.external_contact_id = ec.id
+          AND ec.channel = 'web_form'
+          AND ec.email LIKE 'inbox\\_%@e2e.test'`,
+    );
+
+    // 3. Delete the external contacts themselves.
+    await pool.query(
+      `DELETE FROM external_contacts
+        WHERE channel = 'web_form'
+          AND email LIKE 'inbox\\_%@e2e.test'`,
+    );
+
+    console.log("[e2e-teardown] Inbox flow fixtures cleaned up");
+  } catch (err) {
+    console.warn("[e2e-teardown] inbox flow cleanup skipped:", (err as Error).message);
+  }
+}
+
 async function main() {
   await restoreWebFormIntegration();
   await cleanupApplyFlowFixtures();
+  await cleanupInboxFlowFixtures();
   process.exit(0);
 }
 
