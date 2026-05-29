@@ -835,7 +835,8 @@
       "errorRateLimit": "Rate limit reached. Please try again in a minute.",
       "errorService": "AI service unavailable. Please try again later.",
       "errorNoMessages": "No messages to summarize yet",
-      "errorNoLink": "Link this conversation to a lead, student, or agent first"
+      "errorNoLink": "Link this conversation to a lead, student, or agent first",
+      "dismiss": "Dismiss"
     },
     "compose": {
       "chatTab": "Chat",

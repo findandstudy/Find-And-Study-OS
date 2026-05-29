@@ -827,7 +827,8 @@
       "errorRateLimit": "Limite de débit atteinte. Veuillez réessayer dans une minute.",
       "errorService": "Service IA indisponible. Veuillez réessayer plus tard.",
       "errorNoMessages": "Aucun message à résumer pour le moment",
-      "errorNoLink": "Liez d'abord cette conversation à un prospect, étudiant ou agent"
+      "errorNoLink": "Liez d'abord cette conversation à un prospect, étudiant ou agent",
+      "dismiss": "Fermer"
     },
     "compose": {
       "chatTab": "Discussion",

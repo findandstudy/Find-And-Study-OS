@@ -827,7 +827,8 @@
       "errorRateLimit": "Batas permintaan tercapai. Silakan coba lagi dalam satu menit.",
       "errorService": "Layanan AI tidak tersedia. Silakan coba lagi nanti.",
       "errorNoMessages": "Belum ada pesan untuk diringkas",
-      "errorNoLink": "Tautkan dulu percakapan ini ke prospek, siswa, atau agen"
+      "errorNoLink": "Tautkan dulu percakapan ini ke prospek, siswa, atau agen",
+      "dismiss": "Tutup"
     },
     "compose": {
       "chatTab": "Obrolan",

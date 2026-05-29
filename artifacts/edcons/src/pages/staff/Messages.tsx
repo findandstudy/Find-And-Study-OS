@@ -1275,6 +1275,7 @@ function MessageThread({
           hasMessages={messages.length > 0}
           isSummarizing={summarizeMutation.isPending}
           onSummarize={handleSummarize}
+          onDismiss={() => setSummary(null)}
         />
       </div>
 

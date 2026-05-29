@@ -1,4 +1,4 @@
-import { Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import type { ConversationAiSummary } from "@workspace/api-client-react";
@@ -9,6 +9,7 @@ interface AiSummaryCardProps {
   hasMessages: boolean;
   isSummarizing: boolean;
   onSummarize: () => void;
+  onDismiss?: () => void;
 }
 
 function formatRelative(iso: string, locale: string): string {
@@ -38,6 +39,7 @@ export function AiSummaryCard({
   hasMessages,
   isSummarizing,
   onSummarize,
+  onDismiss,
 }: AiSummaryCardProps) {
   const { t, lang } = useI18n();
   const disabled = !hasLink || !hasMessages || isSummarizing;
@@ -83,23 +85,38 @@ export function AiSummaryCard({
           <Sparkles className="w-3.5 h-3.5 shrink-0 text-primary" />
           <span className="truncate">{t("inbox.aiSummary.title")}</span>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 text-xs px-2 gap-1 shrink-0"
-          onClick={onSummarize}
-          disabled={disabled}
-          data-testid="ai-summary-regenerate"
-        >
-          {isSummarizing ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            <RefreshCw className="w-3 h-3" />
+        <div className="flex items-center gap-0.5 shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs px-2 gap-1"
+            onClick={onSummarize}
+            disabled={disabled}
+            data-testid="ai-summary-regenerate"
+          >
+            {isSummarizing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3 h-3" />
+            )}
+            {isSummarizing
+              ? t("inbox.aiSummary.generating")
+              : t("inbox.aiSummary.regenerate")}
+          </Button>
+          {onDismiss && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0"
+              onClick={onDismiss}
+              aria-label={t("inbox.aiSummary.dismiss")}
+              title={t("inbox.aiSummary.dismiss")}
+              data-testid="ai-summary-dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
           )}
-          {isSummarizing
-            ? t("inbox.aiSummary.generating")
-            : t("inbox.aiSummary.regenerate")}
-        </Button>
+        </div>
       </div>
       <p className="text-xs leading-snug whitespace-pre-wrap break-words">
         {summary.content}

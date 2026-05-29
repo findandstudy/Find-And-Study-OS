@@ -835,7 +835,8 @@
       "errorRateLimit": "Hız limitine ulaşıldı. Lütfen bir dakika sonra tekrar deneyin.",
       "errorService": "AI servisi şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
       "errorNoMessages": "Özetlenecek mesaj yok",
-      "errorNoLink": "Önce bu görüşmeyi bir lead, öğrenci veya acenteye bağlayın"
+      "errorNoLink": "Önce bu görüşmeyi bir lead, öğrenci veya acenteye bağlayın",
+      "dismiss": "Kapat"
     },
     "compose": {
       "chatTab": "Sohbet",

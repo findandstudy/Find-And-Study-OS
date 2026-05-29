@@ -827,7 +827,8 @@
       "errorRateLimit": "Límite de solicitudes alcanzado. Inténtalo de nuevo en un minuto.",
       "errorService": "Servicio de IA no disponible. Inténtalo más tarde.",
       "errorNoMessages": "Aún no hay mensajes para resumir",
-      "errorNoLink": "Primero vincula esta conversación a un prospecto, estudiante o agente"
+      "errorNoLink": "Primero vincula esta conversación a un prospecto, estudiante o agente",
+      "dismiss": "Descartar"
     },
     "compose": {
       "chatTab": "Chat",

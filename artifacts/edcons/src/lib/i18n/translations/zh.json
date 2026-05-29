@@ -827,7 +827,8 @@
       "errorRateLimit": "已达到速率限制。请一分钟后重试。",
       "errorService": "AI 服务不可用。请稍后重试。",
       "errorNoMessages": "暂无可摘要的消息",
-      "errorNoLink": "请先将此对话关联到线索、学生或代理"
+      "errorNoLink": "请先将此对话关联到线索、学生或代理",
+      "dismiss": "关闭"
     },
     "compose": {
       "chatTab": "聊天",
