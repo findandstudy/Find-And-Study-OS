@@ -1212,8 +1212,8 @@ function MessageThread({
 
   return (
     <>
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-border/50 flex items-center gap-3">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="p-4 border-b border-border/50 flex items-center gap-3 shrink-0">
         <Button size="icon" variant="ghost" className="lg:hidden w-8 h-8" onClick={onBack}>
           <ArrowLeft className="w-4 h-4" />
         </Button>
@@ -1227,7 +1227,7 @@ function MessageThread({
         </Badge>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -1299,7 +1299,7 @@ function MessageThread({
         )}
       </div>
 
-      <div className="p-4 border-t border-border/50">
+      <div className="p-4 border-t border-border/50 shrink-0">
         {pendingFile && (
           <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-secondary/50 text-sm">
             <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -2067,7 +2067,7 @@ export default function MessagesPage() {
           <TabsContent value="messages">
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
               <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
-                <div className={`lg:col-span-4 border-r border-border/50 ${selectedConv !== null ? "hidden lg:block" : ""}`}>
+                <div className={`lg:col-span-4 h-full min-h-0 border-r border-border/50 ${selectedConv !== null ? "hidden lg:block" : ""}`}>
                   <ConversationList
                     conversations={conversations}
                     selectedId={selectedConv}
@@ -2077,7 +2077,7 @@ export default function MessagesPage() {
                     setSearch={setSearch}
                   />
                 </div>
-                <div className={`lg:col-span-8 ${selectedConv === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+                <div className={`lg:col-span-8 h-full min-h-0 ${selectedConv === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
                   {selectedConv === null ? (
                     <div className="text-center text-muted-foreground">
                       <MessageCircle className="w-16 h-16 mx-auto mb-3 opacity-20" />
