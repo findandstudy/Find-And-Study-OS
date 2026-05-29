@@ -606,93 +606,95 @@ function InboxTab() {
     <>
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
       <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
-        <div className={`lg:col-span-4 border-r border-border/50 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+        <div className={`lg:col-span-4 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
           <div className="p-3 border-b border-border/50 space-y-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-              <div className="flex items-center gap-2">
-                <InboxIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <InboxIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground truncate">
                   {t("messagesPage.inbox")}
                 </span>
-                <LiveStatusIndicator
-                  status={effectiveLiveStatus}
-                  lastEventAt={lastEventAt}
-                  now={now}
-                  onReconnect={reconnectLive}
-                />
               </div>
+              <LiveStatusIndicator
+                status={effectiveLiveStatus}
+                lastEventAt={lastEventAt}
+                now={now}
+                onReconnect={reconnectLive}
+              />
+            </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="inline-flex rounded-lg bg-muted/50 p-1 gap-0.5">
-                  {tabs.map((tb) => {
-                    const Icon = tb.icon;
-                    const active = tab === tb.key;
-                    return (
-                      <button
-                        key={tb.key}
-                        onClick={() => setTab(tb.key)}
-                        aria-pressed={active}
+            <div className="flex w-full rounded-lg bg-muted/50 p-1 gap-0.5">
+              {tabs.map((tb) => {
+                const Icon = tb.icon;
+                const active = tab === tb.key;
+                return (
+                  <button
+                    key={tb.key}
+                    onClick={() => setTab(tb.key)}
+                    aria-pressed={active}
+                    className={cn(
+                      "flex-1 min-w-0 px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1.5",
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                    )}
+                  >
+                    <Icon className={cn("w-3.5 h-3.5 shrink-0", !active && "opacity-60")} />
+                    <span className="truncate">{tb.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between gap-2 h-8">
+                  <span className="flex items-center gap-2 min-w-0">
+                    {channel !== "all" && (
+                      <span
                         className={cn(
-                          "px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
-                          active
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                          "w-1.5 h-1.5 rounded-full shrink-0",
+                          channel === "whatsapp" && "bg-green-500",
+                          channel === "web_form" && "bg-indigo-500",
+                          channel === "email" && "bg-purple-500",
+                          channel === "sms" && "bg-amber-500",
+                          channel === "telegram" && "bg-sky-500"
                         )}
-                      >
-                        <Icon className={cn("w-3.5 h-3.5", !active && "opacity-60")} />
-                        {tb.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2 h-8">
-                      {channel !== "all" && (
-                        <span
-                          className={cn(
-                            "w-1.5 h-1.5 rounded-full",
-                            channel === "whatsapp" && "bg-green-500",
-                            channel === "web_form" && "bg-indigo-500",
-                            channel === "email" && "bg-purple-500",
-                            channel === "sms" && "bg-amber-500",
-                            channel === "telegram" && "bg-sky-500"
-                          )}
-                        />
-                      )}
-                      <Filter className="w-3.5 h-3.5" />
+                      />
+                    )}
+                    <Filter className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">
                       {channel === "all"
                         ? t("messagesPage.allChannels")
                         : t(`inbox.channels.${channel}`)}
-                      <ChevronDown className="w-3 h-3 opacity-60" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {channelOptions.map((ch) => {
-                      const Icon = ch === "all" ? InboxIcon : (channelIcon[ch] || MessageCircle);
-                      return (
-                        <DropdownMenuItem key={ch} onClick={() => setChannel(ch)}>
-                          <Icon
-                            className={cn(
-                              "w-4 h-4 me-2",
-                              ch === "whatsapp" && "text-green-600",
-                              ch === "web_form" && "text-indigo-600",
-                              ch === "email" && "text-purple-600",
-                              ch === "sms" && "text-amber-600",
-                              ch === "telegram" && "text-sky-600"
-                            )}
-                          />
-                          {ch === "all"
-                            ? t("messagesPage.allChannels")
-                            : t(`inbox.channels.${ch}`)}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
+                    </span>
+                  </span>
+                  <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                {channelOptions.map((ch) => {
+                  const Icon = ch === "all" ? InboxIcon : (channelIcon[ch] || MessageCircle);
+                  return (
+                    <DropdownMenuItem key={ch} onClick={() => setChannel(ch)}>
+                      <Icon
+                        className={cn(
+                          "w-4 h-4 me-2",
+                          ch === "whatsapp" && "text-green-600",
+                          ch === "web_form" && "text-indigo-600",
+                          ch === "email" && "text-purple-600",
+                          ch === "sms" && "text-amber-600",
+                          ch === "telegram" && "text-sky-600"
+                        )}
+                      />
+                      {ch === "all"
+                        ? t("messagesPage.allChannels")
+                        : t(`inbox.channels.${ch}`)}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading ? (
