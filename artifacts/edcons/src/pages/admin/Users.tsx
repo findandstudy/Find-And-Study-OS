@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
@@ -20,12 +20,14 @@ import {
   Search, Users, UserPlus, Shield, MoreHorizontal, Mail, Edit2,
   Plus, Trash2, ChevronDown, ChevronRight, Check, X, Eye, Lock,
   Settings2, ShieldCheck, KeyRound, LogIn, ShieldOff, Loader2,
-  ArrowUpDown, ArrowUp, ArrowDown, Phone, IdCard
+  ArrowUpDown, ArrowUp, ArrowDown, Phone, IdCard, Camera
 } from "lucide-react";
 import { Link } from "wouter";
 import { CountryFlag } from "@/components/CountryFlag";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { useI18n } from "@/hooks/use-i18n";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
@@ -139,8 +141,11 @@ function UsersTab() {
   const users: any[] = (usersResp as any)?.data || usersResp || [];
   const [roles, setRoles] = useState<RoleData[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "" });
+  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
   const [creating, setCreating] = useState(false);
+  const [createAvatarUploading, setCreateAvatarUploading] = useState(false);
+  const createAvatarInputRef = useRef<HTMLInputElement>(null);
+  const createOpenRef = useRef(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", isActive: true });
@@ -157,6 +162,13 @@ function UsersTab() {
       setRoles(res?.data || res || []);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    createOpenRef.current = createOpen;
+    if (!createOpen) {
+      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
+    }
+  }, [createOpen]);
 
   function handleSort(key: UserSortKey) {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -181,6 +193,27 @@ function UsersTab() {
   });
   const { paged: pagedUsers, total: totalFilteredUsers } = pg.paginate(filtered);
 
+  async function handleCreateAvatarUpload(file: File) {
+    setCreateAvatarUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      const avatarUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
+      if (!createOpenRef.current) return;
+      setCreateForm(f => ({ ...f, avatarUrl }));
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setCreateAvatarUploading(false);
+    }
+  }
+
   const handleCreate = async () => {
     if (!createForm.email || !createForm.firstName || !createForm.lastName) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
@@ -188,9 +221,10 @@ function UsersTab() {
     }
     setCreating(true);
     try {
-      const { phoneCode, phone, password, ...rest } = createForm;
+      const { phoneCode, phone, password, avatarUrl, ...rest } = createForm;
       const payload: Record<string, string> = { ...rest, phone: phone ? `${phoneCode}${phone}` : "" };
       if (password) payload.password = password;
+      if (avatarUrl) payload.avatarUrl = avatarUrl;
       await customFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -198,7 +232,7 @@ function UsersTab() {
       });
       toast({ title: "User created successfully" });
       setCreateOpen(false);
-      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "" });
+      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
       refetch();
     } catch (err: any) {
       toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
@@ -506,6 +540,28 @@ function UsersTab() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="flex justify-center">
+              <div className="relative group">
+                {createForm.avatarUrl ? (
+                  <img src={createForm.avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shadow-lg" />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center">
+                    <UserPlus className="w-7 h-7 text-muted-foreground" />
+                  </div>
+                )}
+                <button type="button" onClick={() => createAvatarInputRef.current?.click()} disabled={createAvatarUploading}
+                  className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-100">
+                  {createAvatarUploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-6 h-6 text-white" />}
+                </button>
+                {createForm.avatarUrl && (
+                  <button type="button" onClick={() => setCreateForm(f => ({ ...f, avatarUrl: "" }))}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+                <input ref={createAvatarInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleCreateAvatarUpload(f); e.target.value = ""; }} />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name *</Label>
@@ -582,8 +638,8 @@ function UsersTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={creating}>
-              {creating ? "Creating..." : "Create User"}
+            <Button onClick={handleCreate} disabled={creating || createAvatarUploading}>
+              {creating ? "Creating..." : createAvatarUploading ? "Uploading photo..." : "Create User"}
             </Button>
           </DialogFooter>
         </DialogContent>

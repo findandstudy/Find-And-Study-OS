@@ -19,6 +19,7 @@ const createUserBodySchema = z.object({
   phone: z.string().trim().optional().nullable(),
   language: z.string().trim().optional(),
   password: z.string().optional(),
+  avatarUrl: z.string().trim().optional().nullable(),
 });
 
 const router: IRouter = Router();
@@ -67,7 +68,7 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
 });
 
 router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: createUserBodySchema }), async (req, res): Promise<void> => {
-  const { email: normalizedEmail, firstName, lastName, role, phone, language, password } =
+  const { email: normalizedEmail, firstName, lastName, role, phone, language, password, avatarUrl } =
     getValidated<{ body: typeof createUserBodySchema }>(req).body;
 
   const BUILTIN_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant", "student", "agent", "sub_agent", "pending"];
@@ -105,6 +106,7 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
       firstName, lastName, role,
       phone: phone || null,
       language: language || "en",
+      avatarUrl: avatarUrl || null,
       isActive: true,
       emailVerified: true,
       passwordHash: passwordHash || null,
