@@ -1095,6 +1095,8 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   open: boolean; onClose: () => void; lead: any; leadId: number;
 }) {
   const { t } = useI18n();
+  const { hasPermission } = useAuth();
+  const canSeeRevenue = hasPermission("leads.view_commission");
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "",
     source: "website", interestedProgram: "", interestedCountry: "", nationality: "", estimatedValue: "",
@@ -1197,10 +1199,12 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
             <Label>{t("leadDetailPage.interestedCountry")}</Label>
             <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
           </div>
-          <div className="space-y-1.5 col-span-2">
-            <Label>Estimated Value (USD)</Label>
-            <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
-          </div>
+          {canSeeRevenue && (
+            <div className="space-y-1.5 col-span-2">
+              <Label>Estimated Value (USD)</Label>
+              <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("leadDetailPage.cancel")}</Button>

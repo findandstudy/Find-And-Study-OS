@@ -1,0 +1,1 @@
+- [Role permission resolution](role-permissions.md) — `/auth/me` permissions are DB-authoritative; new default grants need a one-shot backfill, never a runtime union, or admin toggle-offs won't stick.

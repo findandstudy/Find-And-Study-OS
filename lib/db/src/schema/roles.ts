@@ -31,6 +31,7 @@ export const PERMISSION_CATEGORIES = {
       "leads.delete": "Delete Leads",
       "leads.assign": "Assign Leads",
       "leads.import": "Import Leads",
+      "leads.view_commission": "View Lead Revenue/Value",
     },
   },
   applications: {
@@ -40,6 +41,7 @@ export const PERMISSION_CATEGORIES = {
       "applications.create": "Create Applications",
       "applications.edit": "Edit Applications",
       "applications.delete": "Delete Applications",
+      "applications.view_commission": "View Commission",
     },
   },
   students: {
@@ -50,6 +52,7 @@ export const PERMISSION_CATEGORIES = {
       "students.edit": "Edit Students",
       "students.delete": "Delete Students",
       "students.import": "Import Students",
+      "students.view_commission": "View Student Revenue",
     },
   },
   documents: {
@@ -217,6 +220,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "finance.offset_manage",
     "documents.view",
     "documents.download",
+    "leads.view_commission",
+    "applications.view_commission",
+    "students.view_commission",
   ],
   student: [
     "dashboard.view",

@@ -629,6 +629,34 @@ async function seedClaudeIntegration() {
     await seedDocumentTypes(pool);
     await seedCurrencies(pool);
 
+    // One-shot backfill: grant the three *.view_commission permission keys to
+    // the roles that should see commission/earnings figures by default, for
+    // environments that were seeded before these keys existed. Gated by a
+    // system_flags marker so it runs exactly once — that way an admin who later
+    // turns a toggle OFF in the Roles & Permissions editor won't have it
+    // silently re-added on the next boot. Staff/consultant/editor are
+    // intentionally excluded so commission stays hidden for them by default.
+    try {
+      const permBackfill = await pool.query(
+        `INSERT INTO system_flags (key) VALUES ('role_commission_perms_backfilled') ON CONFLICT DO NOTHING RETURNING key`
+      );
+      if (permBackfill.rows.length > 0) {
+        await pool.query(`
+          UPDATE roles
+          SET permissions = (
+            SELECT jsonb_agg(DISTINCT elem)
+            FROM jsonb_array_elements_text(
+              permissions || '["leads.view_commission","applications.view_commission","students.view_commission"]'::jsonb
+            ) AS elem
+          )
+          WHERE name IN ('super_admin', 'admin', 'manager', 'accountant')
+        `);
+        console.log("[migrate] Backfilled *.view_commission permissions for default earnings roles");
+      }
+    } catch (err) {
+      console.error("[migrate] role commission permissions backfill:", err);
+    }
+
     // One-shot data cleanup (idempotent via system_flags). Runs on every
     // boot but exits early once the version flag is set. This ensures
     // Replit autoscale publishes — which don't execute deploy/deploy.sh —

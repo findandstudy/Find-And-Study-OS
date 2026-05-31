@@ -977,10 +977,10 @@ export default function LeadsPage() {
 
   const pg = useTablePagination(25);
 
-  const { user } = useAuth(true, [
+  const { user, hasPermission } = useAuth(true, [
     "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
   ]);
-  const canSeeRevenue = user?.role === "super_admin" || user?.role === "admin" || user?.role === "agent";
+  const canSeeRevenue = hasPermission("leads.view_commission");
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
 
   const { season } = useSeason();

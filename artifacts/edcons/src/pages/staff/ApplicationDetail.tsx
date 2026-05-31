@@ -70,7 +70,8 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [stageDocUpload, setStageDocUpload] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
   const [studentDocsMissing, setStudentDocsMissing] = useState<string[] | null>(null);
-  const { user: authUser } = useAuth();
+  const { user: authUser, hasPermission } = useAuth();
+  const canSeeCommission = hasPermission("applications.view_commission");
   const isAdmin = authUser && ["super_admin", "admin", "manager"].includes(authUser.role);
   const isStaffUser = authUser && ["super_admin", "admin", "manager", "staff"].includes(authUser.role);
 
@@ -230,10 +231,10 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("applicationDetailPage.deadline")} value={app?.deadline} />
                   <InfoRow icon={<DollarSign className="w-4 h-4" />} label={t("applicationDetailPage.tuitionFee")} value={formatCurrency(app?.tuitionFee)} />
                   <InfoRow icon={<DollarSign className="w-4 h-4" />} label={t("applicationDetailPage.scholarship")} value={formatCurrency(app?.scholarship)} />
-                  {app?.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
+                  {canSeeCommission && app?.commissionAmount && parseFloat(app.commissionAmount) > 0 && (
                     <InfoRow icon={<TrendingUp className="w-4 h-4" />} label={t("applicationDetailPage.commission")} value={formatCurrency(app.commissionAmount)} />
                   )}
-                  {app?.commissionStatus && (
+                  {canSeeCommission && app?.commissionStatus && (
                     <InfoRow icon={<TrendingUp className="w-4 h-4" />} label={t("applicationDetailPage.commissionStatus")} value={app.commissionStatus.replace(/_/g, " ")} />
                   )}
                 </div>
