@@ -779,8 +779,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          <main className="flex-1 overflow-y-auto p-5 lg:p-7">
-            <div className="max-w-7xl mx-auto">
+          <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+            <div className="max-w-[1800px] mx-auto">
               {children}
             </div>
           </main>

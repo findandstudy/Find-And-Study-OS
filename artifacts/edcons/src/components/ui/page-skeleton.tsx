@@ -1,6 +1,6 @@
 export function DashboardSkeleton() {
   return (
-    <div className="space-y-8 animate-pulse p-5 lg:p-7">
+    <div className="space-y-8 animate-pulse p-4 lg:p-6">
       <div className="space-y-2">
         <div className="h-8 w-48 bg-muted rounded-lg" />
         <div className="h-4 w-72 bg-muted rounded" />
@@ -20,7 +20,7 @@ export function DashboardSkeleton() {
 
 export function TableSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <div className="space-y-6 animate-pulse p-5 lg:p-7">
+    <div className="space-y-6 animate-pulse p-4 lg:p-6">
       <div className="flex items-center justify-between">
         <div className="h-8 w-40 bg-muted rounded-lg" />
         <div className="h-10 w-32 bg-muted rounded-lg" />
