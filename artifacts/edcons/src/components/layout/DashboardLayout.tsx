@@ -610,6 +610,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                                   <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
                                 </>
                               )}
+                              {item.url.endsWith("/tasks") && (sectionCounts?.tasks || 0) > 0 && (
+                                <>
+                                  <span className="ml-auto w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 group-data-[collapsible=icon]:hidden">
+                                    {(sectionCounts?.tasks || 0) > 99 ? "99+" : sectionCounts?.tasks}
+                                  </span>
+                                  <span className="hidden group-data-[collapsible=icon]:block absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-card" />
+                                </>
+                              )}
                               </a>
                             </SidebarMenuButton>
                             <SidebarMenuAction

@@ -105,6 +105,7 @@ export const NOTIFICATION_EVENTS = {
   tasks: {
     label: "Tasks",
     events: {
+      "task.assigned": { name: "Task Assigned", description: "When a task is assigned to you" },
       "task.mention": { name: "Mentioned in Task Note", description: "When a teammate mentions you with @ in a task note" },
     },
   },
@@ -144,6 +145,7 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "system.announcement", name: "Announcement", category: "system", channels: ["in_app"], recipientType: "all", recipientRoles: [] },
   { event: "message.new", name: "New Message", category: "messages", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
   { event: "message.mention", name: "Mentioned in Message", category: "messages", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "task.assigned", name: "Task Assigned", category: "tasks", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
   { event: "task.mention", name: "Mentioned in Task Note", category: "tasks", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "inbox.new_message", name: "New External Message", category: "inbox", channels: ["in_app"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager", "staff", "consultant"] },
   { event: "inbox.unmatched", name: "Unmatched External Message", category: "inbox", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager", "staff"] },

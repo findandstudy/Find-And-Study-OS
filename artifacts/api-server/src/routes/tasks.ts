@@ -120,6 +120,22 @@ router.post("/tasks", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
   }).returning();
 
   logAudit(req.user!.id, "task.create", "task", created.id, { title: created.title });
+
+  if (created.assignedTo) {
+    const actorName = `${req.user!.firstName ?? ""} ${req.user!.lastName ?? ""}`.trim() || req.user!.email || "Bir yönetici";
+    dispatchNotification({
+      actorUserId: req.user!.id,
+      event: "task.assigned",
+      title: "Yeni görev atandı",
+      body: `${actorName} size yeni bir görev atadı: "${created.title}"`,
+      actionUrl: `/staff/tasks?taskId=${created.id}`,
+      icon: "ClipboardList",
+      recipientUserIds: [created.assignedTo],
+      data: { resourceType: "task", taskId: created.id },
+      templateVars: { actorName, taskTitle: created.title },
+    }).catch(() => {});
+  }
+
   res.status(201).json(created);
 });
 
@@ -199,6 +215,26 @@ router.put("/tasks/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, r
   const [updated] = await db.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
   if (!updated) { res.status(404).json({ error: "Task not found" }); return; }
   logAudit(me.id, "task.update", "task", id, updates);
+
+  if (
+    updated.assignedTo &&
+    updated.assignedTo !== existing.assignedTo &&
+    updated.assignedTo !== me.id
+  ) {
+    const actorName = `${me.firstName ?? ""} ${me.lastName ?? ""}`.trim() || me.email || "Bir yönetici";
+    dispatchNotification({
+      actorUserId: me.id,
+      event: "task.assigned",
+      title: "Yeni görev atandı",
+      body: `${actorName} size bir görev atadı: "${updated.title}"`,
+      actionUrl: `/staff/tasks?taskId=${updated.id}`,
+      icon: "ClipboardList",
+      recipientUserIds: [updated.assignedTo],
+      data: { resourceType: "task", taskId: updated.id },
+      templateVars: { actorName, taskTitle: updated.title },
+    }).catch(() => {});
+  }
+
   res.json(updated);
 });
 

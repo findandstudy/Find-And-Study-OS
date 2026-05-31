@@ -1,1 +1,2 @@
 - [Role permission resolution](role-permissions.md) — `/auth/me` permissions are DB-authoritative; new default grants need a one-shot backfill, never a runtime union, or admin toggle-offs won't stick.
+- [Sidebar section badges](sidebar-section-badges.md) — nav count badges are driven by unread notifications; dispatchNotification no-ops without an active notification_rules row for the event.

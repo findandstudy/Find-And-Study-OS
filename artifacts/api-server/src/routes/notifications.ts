@@ -167,7 +167,7 @@ router.get("/notifications/section-counts", requireAuth, async (req, res): Promi
       liveResourceFilter,
     ));
 
-  const sections: Record<string, number> = { leads: 0, students: 0, applications: 0 };
+  const sections: Record<string, number> = { leads: 0, students: 0, applications: 0, tasks: 0 };
   for (const row of rows) {
     const t = row.type || "";
     const url = row.actionUrl || "";
@@ -179,6 +179,8 @@ router.get("/notifications/section-counts", requireAuth, async (req, res): Promi
       sections.students++;
     } else if (t.startsWith("application.") || resourceType === "application" || url.includes("/applications/")) {
       sections.applications++;
+    } else if (t.startsWith("task.") || resourceType === "task" || url.includes("/tasks")) {
+      sections.tasks++;
     }
   }
   res.json(sections);
