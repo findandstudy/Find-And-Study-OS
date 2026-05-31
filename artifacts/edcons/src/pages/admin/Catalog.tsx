@@ -21,6 +21,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import { useDocumentTypeCatalog } from "@/lib/programDocTypes";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
+import { useSeason } from "@/contexts/SeasonContext";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
@@ -1261,6 +1262,7 @@ function UniversitiesTab() {
 ══════════════════════════════════════════════════════════ */
 function ProgramsTab() {
   const qc = useQueryClient();
+  const { season } = useSeason();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [filterUni, setFilterUni] = useState("all");
@@ -1307,8 +1309,8 @@ function ProgramsTab() {
   const totalPages = data?.meta?.totalPages ?? 1;
 
   const { data: enrolledCounts = {} } = useQuery<Record<number, number>>({
-    queryKey: ["programs-enrolled-counts"],
-    queryFn: () => api("/api/programs/enrolled-counts"),
+    queryKey: ["programs-enrolled-counts", season],
+    queryFn: () => api(`/api/programs/enrolled-counts?season=${encodeURIComponent(season)}`),
     staleTime: 60_000,
   });
 

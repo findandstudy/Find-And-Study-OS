@@ -244,8 +244,9 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   res.status(201).json(prog);
 });
 
-router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLES), async (_req, res): Promise<void> => {
-  const currentYear = await getCurrentSeason();
+router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const seasonParam = typeof req.query.season === "string" && req.query.season ? req.query.season : null;
+  const season = seasonParam ?? await getCurrentSeason();
   const wonStages = await db.select({ key: pipelineStagesTable.key })
     .from(pipelineStagesTable)
     .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.variant, "won")));
@@ -257,7 +258,7 @@ router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLE
   })
     .from(applicationsTable)
     .where(and(
-      eq(applicationsTable.season, currentYear),
+      eq(applicationsTable.season, season),
       inArray(applicationsTable.stage, wonKeys),
       isNull(applicationsTable.deletedAt),
     ))

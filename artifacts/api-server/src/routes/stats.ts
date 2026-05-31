@@ -13,6 +13,11 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const isAgent = isAgentRole(user.role);
 
+  const seasonParam = typeof req.query.season === "string" && req.query.season ? req.query.season : null;
+  const seasonLead = seasonParam ? eq(leadsTable.season, seasonParam) : undefined;
+  const seasonStudent = seasonParam ? eq(studentsTable.season, seasonParam) : undefined;
+  const seasonApp = seasonParam ? eq(applicationsTable.season, seasonParam) : undefined;
+
   const wonStages = await db
     .select({ key: pipelineStagesTable.key })
     .from(pipelineStagesTable)
@@ -26,9 +31,9 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
   const lostKeys = lostStages.map(s => s.key);
   const terminalKeys = [...wonKeys, ...lostKeys];
 
-  let leadFilter = isNull(leadsTable.deletedAt);
-  let studentFilter = isNull(studentsTable.deletedAt);
-  let appFilter = isNull(applicationsTable.deletedAt);
+  let leadFilter = and(isNull(leadsTable.deletedAt), seasonLead)!;
+  let studentFilter = and(isNull(studentsTable.deletedAt), seasonStudent)!;
+  let appFilter = and(isNull(applicationsTable.deletedAt), seasonApp)!;
 
   if (isAgent) {
     const agentIds = await getAgentVisibleIds(user.id, user.role);
@@ -36,13 +41,13 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
       res.json({ totalLeads: 0, totalStudents: 0, totalApplications: 0, activeApplications: 0, enrolledStudents: 0, monthlyRevenue: 0 });
       return;
     }
-    leadFilter = and(isNull(leadsTable.deletedAt), inArray(leadsTable.agentId, agentIds))!;
-    studentFilter = and(isNull(studentsTable.deletedAt), inArray(studentsTable.agentId, agentIds))!;
-    appFilter = and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.agentId, agentIds))!;
+    leadFilter = and(isNull(leadsTable.deletedAt), inArray(leadsTable.agentId, agentIds), seasonLead)!;
+    studentFilter = and(isNull(studentsTable.deletedAt), inArray(studentsTable.agentId, agentIds), seasonStudent)!;
+    appFilter = and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.agentId, agentIds), seasonApp)!;
   } else if (!isAdmin) {
-    leadFilter = and(isNull(leadsTable.deletedAt), or(eq(leadsTable.assignedToId, user.id), isNull(leadsTable.assignedToId)))!;
-    studentFilter = and(isNull(studentsTable.deletedAt), or(eq(studentsTable.assignedToId, user.id), isNull(studentsTable.assignedToId)))!;
-    appFilter = and(isNull(applicationsTable.deletedAt), or(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId)))!;
+    leadFilter = and(isNull(leadsTable.deletedAt), or(eq(leadsTable.assignedToId, user.id), isNull(leadsTable.assignedToId)), seasonLead)!;
+    studentFilter = and(isNull(studentsTable.deletedAt), or(eq(studentsTable.assignedToId, user.id), isNull(studentsTable.assignedToId)), seasonStudent)!;
+    appFilter = and(isNull(applicationsTable.deletedAt), or(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId)), seasonApp)!;
   }
 
   const [[{ leads }], [{ students }], [{ applications }]] = await Promise.all([
@@ -59,19 +64,19 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
       const [{ active }] = await db
         .select({ active: sql<number>`count(*)` })
         .from(applicationsTable)
-        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.agentId, agentIds), terminalSql));
+        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.agentId, agentIds), terminalSql, seasonApp));
       activeApps = Number(active);
     } else if (!isAdmin) {
       const [{ active }] = await db
         .select({ active: sql<number>`count(*)` })
         .from(applicationsTable)
-        .where(and(isNull(applicationsTable.deletedAt), or(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId)), terminalSql));
+        .where(and(isNull(applicationsTable.deletedAt), or(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId)), terminalSql, seasonApp));
       activeApps = Number(active);
     } else {
       const [{ active }] = await db
         .select({ active: sql<number>`count(*)` })
         .from(applicationsTable)
-        .where(and(isNull(applicationsTable.deletedAt), terminalSql));
+        .where(and(isNull(applicationsTable.deletedAt), terminalSql, seasonApp));
       activeApps = Number(active);
     }
   }
@@ -83,19 +88,19 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
       const [{ enrolled }] = await db
         .select({ enrolled: sql<number>`count(DISTINCT student_id)` })
         .from(applicationsTable)
-        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.stage, wonKeys), inArray(applicationsTable.agentId, agentIds)));
+        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.stage, wonKeys), inArray(applicationsTable.agentId, agentIds), seasonApp));
       enrolledStudents = Number(enrolled);
     } else if (!isAdmin) {
       const [{ enrolled }] = await db
         .select({ enrolled: sql<number>`count(DISTINCT student_id)` })
         .from(applicationsTable)
-        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.stage, wonKeys), or(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId))));
+        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.stage, wonKeys), or(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId)), seasonApp));
       enrolledStudents = Number(enrolled);
     } else {
       const [{ enrolled }] = await db
         .select({ enrolled: sql<number>`count(DISTINCT student_id)` })
         .from(applicationsTable)
-        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.stage, wonKeys)));
+        .where(and(isNull(applicationsTable.deletedAt), inArray(applicationsTable.stage, wonKeys), seasonApp));
       enrolledStudents = Number(enrolled);
     }
   }
@@ -110,11 +115,14 @@ router.get("/stats/overview", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
     isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
   }
 
-  let revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd}`;
+  const revenuePeriodSql = seasonParam
+    ? sql`season = ${seasonParam}`
+    : sql`confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd}`;
+  let revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND ${revenuePeriodSql}`;
   if (isAgent) {
     const agentIds = await getAgentVisibleIds(user.id, user.role);
     const idCol = isSubAgentUser ? sql`sub_agent_id` : sql`agent_id`;
-    revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND confirmed_at >= ${monthStart} AND confirmed_at < ${monthEnd} AND ${idCol} IN (${sql.join(agentIds.map(id => sql`${id}`), sql`, `)})`;
+    revenueFilter = sql`status IN ('confirmed','collected_partial','collected_full','settled') AND ${revenuePeriodSql} AND ${idCol} IN (${sql.join(agentIds.map(id => sql`${id}`), sql`, `)})`;
   }
 
   const revenueRows = await db
@@ -159,14 +167,27 @@ router.get("/stats/growth", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const isAgent = isAgentRole(user.role);
 
+  const seasonParam = typeof req.query.season === "string" && /^\d{4}$/.test(req.query.season) ? req.query.season : null;
+  const seasonYear = seasonParam ? parseInt(seasonParam, 10) : NaN;
+
   const now = new Date();
   const months: { name: string; start: string; end: string }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const start = d.toISOString();
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString();
-    const name = d.toLocaleString("en-US", { month: "short" });
-    months.push({ name, start, end });
+  if (Number.isFinite(seasonYear)) {
+    for (let m = 0; m < 12; m++) {
+      const d = new Date(seasonYear, m, 1);
+      const start = d.toISOString();
+      const end = new Date(seasonYear, m + 1, 1).toISOString();
+      const name = d.toLocaleString("en-US", { month: "short" });
+      months.push({ name, start, end });
+    }
+  } else {
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const start = d.toISOString();
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString();
+      const name = d.toLocaleString("en-US", { month: "short" });
+      months.push({ name, start, end });
+    }
   }
 
   let agentIds: number[] = [];

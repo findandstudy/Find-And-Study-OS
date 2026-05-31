@@ -1673,6 +1673,10 @@ export type ListAuditLogsParams = {
   limit?: number;
 };
 
+export type GetOverviewStatsParams = {
+  season?: string;
+};
+
 export type ListUniversityContractsParams = {
   country?: string;
   universityId?: number;

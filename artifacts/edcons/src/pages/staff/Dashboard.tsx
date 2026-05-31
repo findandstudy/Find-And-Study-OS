@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatTimeAgo } from "@/lib/i18n";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
+import { useSeason } from "@/contexts/SeasonContext";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -65,12 +66,13 @@ export default function StaffDashboard() {
   const { t, lang } = useI18n();
   const dateLoc = DATE_LOCALE[lang] || "en-US";
   const showOfferDeadlines = user?.role !== "super_admin";
-  const { data: stats, isLoading } = useGetOverviewStats();
+  const { season } = useSeason();
+  const { data: stats, isLoading } = useGetOverviewStats({ season });
 
   const { data: growthData = [] } = useQuery<any[]>({
-    queryKey: ["/api/stats/growth"],
+    queryKey: ["/api/stats/growth", season],
     queryFn: async () => {
-      const r = await fetch(`${BASE}/api/stats/growth`, { credentials: "include" });
+      const r = await fetch(`${BASE}/api/stats/growth?season=${encodeURIComponent(season)}`, { credentials: "include" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
       return Array.isArray(j) ? j : [];

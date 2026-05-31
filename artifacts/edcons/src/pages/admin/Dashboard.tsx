@@ -10,6 +10,7 @@ import { formatMoney } from "@/lib/currency";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { Link } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
+import { useSeason } from "@/contexts/SeasonContext";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 function isOverdue(d: string) { return new Date(d) < new Date(); }
@@ -79,12 +80,13 @@ export default function AdminDashboard() {
   const { t, lang } = useI18n();
   const timeAgo = (d: string) => i18nTimeAgo(lang, d);
   const { user } = useAuth(true);
+  const { season } = useSeason();
   const showOfferDeadlines = user?.role !== "super_admin";
-  const { data: stats, isLoading } = useGetOverviewStats();
+  const { data: stats, isLoading } = useGetOverviewStats({ season });
 
   const { data: growthRaw } = useQuery<unknown>({
-    queryKey: ["/api/stats/growth"],
-    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()).catch(() => []),
+    queryKey: ["/api/stats/growth", season],
+    queryFn: () => fetch(`${BASE}/api/stats/growth?season=${encodeURIComponent(season)}`, { credentials: "include" }).then(r => r.json()).catch(() => []),
   });
   const growthData: any[] = toArray(growthRaw);
 

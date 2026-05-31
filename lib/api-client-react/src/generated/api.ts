@@ -51,6 +51,7 @@ import type {
   GetBlogPostParams,
   GetFinanceSummary200,
   GetFinanceSummaryParams,
+  GetOverviewStatsParams,
   GetUniversityContract200,
   HealthStatus,
   InboxConversationDetailResponse,
@@ -6716,41 +6717,60 @@ export function useListAuditLogs<
 /**
  * @summary Get dashboard overview stats
  */
-export const getGetOverviewStatsUrl = () => {
-  return `/api/stats/overview`;
+export const getGetOverviewStatsUrl = (params?: GetOverviewStatsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/overview?${stringifiedParams}`
+    : `/api/stats/overview`;
 };
 
 export const getOverviewStats = async (
+  params?: GetOverviewStatsParams,
   options?: RequestInit,
 ): Promise<OverviewStats> => {
-  return customFetch<OverviewStats>(getGetOverviewStatsUrl(), {
+  return customFetch<OverviewStats>(getGetOverviewStatsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetOverviewStatsQueryKey = () => {
-  return [`/api/stats/overview`] as const;
+export const getGetOverviewStatsQueryKey = (
+  params?: GetOverviewStatsParams,
+) => {
+  return [`/api/stats/overview`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetOverviewStatsQueryOptions = <
   TData = Awaited<ReturnType<typeof getOverviewStats>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getOverviewStats>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetOverviewStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOverviewStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetOverviewStatsQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getGetOverviewStatsQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getOverviewStats>>
-  > = ({ signal }) => getOverviewStats({ signal, ...requestOptions });
+  > = ({ signal }) => getOverviewStats(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getOverviewStats>>,
@@ -6771,15 +6791,18 @@ export type GetOverviewStatsQueryError = ErrorType<unknown>;
 export function useGetOverviewStats<
   TData = Awaited<ReturnType<typeof getOverviewStats>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getOverviewStats>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetOverviewStatsQueryOptions(options);
+>(
+  params?: GetOverviewStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOverviewStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOverviewStatsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

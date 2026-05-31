@@ -44,6 +44,7 @@ export * from "./followUp";
 export * from "./getBlogPostParams";
 export * from "./getFinanceSummary200";
 export * from "./getFinanceSummaryParams";
+export * from "./getOverviewStatsParams";
 export * from "./getUniversityContract200";
 export * from "./healthStatus";
 export * from "./inboxAgentSummary";

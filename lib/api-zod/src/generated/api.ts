@@ -1920,6 +1920,10 @@ export const ListAuditLogsResponse = zod.object({
 /**
  * @summary Get dashboard overview stats
  */
+export const GetOverviewStatsQueryParams = zod.object({
+  season: zod.coerce.string().optional(),
+});
+
 export const GetOverviewStatsResponse = zod.object({
   totalLeads: zod.number(),
   totalStudents: zod.number(),

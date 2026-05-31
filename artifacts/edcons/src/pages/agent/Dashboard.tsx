@@ -16,6 +16,7 @@ import {
   ExternalLink, UserPlus as AddStudent, Plus, ArrowUpRight,
 } from "lucide-react";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
+import { useSeason } from "@/contexts/SeasonContext";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -67,11 +68,12 @@ export default function AgentDashboard() {
   const { t, lang } = useI18n();
   const dateLoc = DATE_LOCALE[lang] || "en-US";
   const [, setLocation] = useLocation();
-  const { data: stats, isLoading: statsLoading } = useGetOverviewStats();
+  const { season } = useSeason();
+  const { data: stats, isLoading: statsLoading } = useGetOverviewStats({ season });
 
   const { data: growthData = [] } = useQuery<any[]>({
-    queryKey: ["/api/stats/growth"],
-    queryFn: () => fetch(`${BASE}/api/stats/growth`, { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/stats/growth", season],
+    queryFn: () => fetch(`${BASE}/api/stats/growth?season=${encodeURIComponent(season)}`, { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: agentProfile } = useQuery<any>({
