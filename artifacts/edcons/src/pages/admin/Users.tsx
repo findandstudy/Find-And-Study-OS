@@ -148,8 +148,11 @@ function UsersTab() {
   const createOpenRef = useRef(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", isActive: true });
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", isActive: true, avatarUrl: "" });
   const [saving, setSaving] = useState(false);
+  const [editAvatarUploading, setEditAvatarUploading] = useState(false);
+  const editAvatarInputRef = useRef<HTMLInputElement>(null);
+  const editOpenRef = useRef(false);
   const [passwordDialog, setPasswordDialog] = useState<{ userId: number; userName: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -169,6 +172,10 @@ function UsersTab() {
       setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
     }
   }, [createOpen]);
+
+  useEffect(() => {
+    editOpenRef.current = editOpen;
+  }, [editOpen]);
 
   function handleSort(key: UserSortKey) {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -318,8 +325,30 @@ function UsersTab() {
       phone: parsed.phone,
       language: user.language || "en",
       isActive: user.isActive ?? true,
+      avatarUrl: user.avatarUrl || "",
     });
     setEditOpen(true);
+  }
+
+  async function handleEditAvatarUpload(file: File) {
+    setEditAvatarUploading(true);
+    try {
+      const urlRes = await customFetch(`/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
+      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
+      const avatarUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
+      if (!editOpenRef.current) return;
+      setEditForm(f => ({ ...f, avatarUrl }));
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setEditAvatarUploading(false);
+    }
   }
 
   async function handleEditSave() {
@@ -330,11 +359,11 @@ function UsersTab() {
     }
     setSaving(true);
     try {
-      const { phoneCode, phone, ...rest } = editForm;
+      const { phoneCode, phone, avatarUrl, ...rest } = editForm;
       await customFetch(`/api/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "" }),
+        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "", avatarUrl: avatarUrl || null }),
       });
       toast({ title: "User updated successfully" });
       setEditOpen(false);
@@ -653,6 +682,28 @@ function UsersTab() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="flex justify-center">
+              <div className="relative group">
+                {editForm.avatarUrl ? (
+                  <img src={editForm.avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shadow-lg" />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center">
+                    <UserPlus className="w-7 h-7 text-muted-foreground" />
+                  </div>
+                )}
+                <button type="button" onClick={() => editAvatarInputRef.current?.click()} disabled={editAvatarUploading}
+                  className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-100">
+                  {editAvatarUploading ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Camera className="w-6 h-6 text-white" />}
+                </button>
+                {editForm.avatarUrl && (
+                  <button type="button" onClick={() => setEditForm(f => ({ ...f, avatarUrl: "" }))}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+                <input ref={editAvatarInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleEditAvatarUpload(f); e.target.value = ""; }} />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name *</Label>
@@ -740,8 +791,8 @@ function UsersTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditUser(null); }}>Cancel</Button>
-            <Button onClick={handleEditSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
+            <Button onClick={handleEditSave} disabled={saving || editAvatarUploading}>
+              {saving ? "Saving..." : editAvatarUploading ? "Uploading photo..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
