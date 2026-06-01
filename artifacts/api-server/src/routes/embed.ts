@@ -1044,9 +1044,12 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
       resultAppId = newAppResult.appId;
     }
 
-    // Attach the uploaded documents to the student/application so they
-    // surface in the application detail view, not just on the lead row.
-    if (docArray.length > 0 && resultStudentId && resultAppId) {
+    // Attach the uploaded documents to the student (and application when one
+    // exists) so they surface in the student/application detail view, not just
+    // on the lead row. When app creation was blocked (eligibility/quota),
+    // resultAppId is null but the docs must still ride with the student so they
+    // are not orphaned on a lead that is about to be converted away.
+    if (docArray.length > 0 && resultStudentId) {
       for (const doc of docArray) {
         if (!doc.label || !doc.data) continue;
         const docType = String(doc.label || "other").toLowerCase();
@@ -1085,10 +1088,11 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     // Auto-convert the lead → "converted" + flip student → "active" on
     // every successful full submit. Spec: hitting Submit at the end of
     // the widget IS the funnel-closing event for this lead, regardless
-    // of whether every required document group was uploaded — staff
-    // handle missing docs from the student/application detail view, not
-    // from the leads kanban "new" column.
-    if (resultStudentId && resultAppId) {
+    // of whether every required document group was uploaded OR whether an
+    // application could be created (eligibility/quota may block the app) —
+    // staff handle missing docs and ineligible applications from the
+    // student detail view, not from the leads kanban "new" column.
+    if (resultStudentId) {
       try {
         const [settingsRow] = await db.select({
           autoConvertLeadEnabled: settingsTable.autoConvertLeadEnabled,
