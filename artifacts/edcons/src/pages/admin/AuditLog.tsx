@@ -136,7 +136,7 @@ export default function AdminAuditLog() {
                     <td className="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3 h-3" />
-                        {formatDateTime(lang, log.createdAt, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {formatDateTime(lang, log.createdAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </div>
                     </td>
                     <td className="px-5 py-4">

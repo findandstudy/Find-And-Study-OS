@@ -389,7 +389,7 @@ function relativeTime(iso: string): string {
 }
 
 export function AuditLogSection({ resource, resourceId }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { user } = useAuth(true);
   const [open, setOpen] = useState(false);
   const isAdminLike = user && ["super_admin", "admin"].includes(user.role);
@@ -455,9 +455,9 @@ export function AuditLogSection({ resource, resourceId }: Props) {
                             </span>
                           </div>
                           <span className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(log.createdAt).toLocaleString("tr-TR")}>
-                            {formatDate(log.createdAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            {formatDate(log.createdAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" })}
                             {" "}
-                            {new Date(log.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                            {formatDate(log.createdAt, lang, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                             {rel && <span className="text-muted-foreground/60"> · {rel}</span>}
                           </span>
                         </div>
