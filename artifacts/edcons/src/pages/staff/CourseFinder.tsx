@@ -390,9 +390,9 @@ export default function CourseFinder() {
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
         hideServiceFee,
       });
-      toast({ title: "PDF generated", description: `Proposal with ${selected.length} program${selected.length !== 1 ? "s" : ""} downloaded.` });
+      toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
     } catch (err: any) {
-      toast({ title: "PDF generation failed", description: err.message || "Unknown error", variant: "destructive" });
+      toast({ title: t("courseFinderPage.pdfGenerationFailed"), description: err.message || t("courseFinderPage.unknownError"), variant: "destructive" });
     } finally {
       setGeneratingPdf(false);
     }
@@ -509,7 +509,7 @@ export default function CourseFinder() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Programs");
     XLSX.writeFile(wb, `programs_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast({ title: "Excel exported", description: `${rows.length} programs exported successfully.` });
+    toast({ title: t("courseFinderPage.excelExported"), description: t("courseFinderPage.programsExportedDesc", { n: rows.length }) });
   }
 
   return (
@@ -2033,7 +2033,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
       if (docCount > 0 && applicationId && resolvedStudentId) {
         const savedCount = await saveDocumentsForApplication(resolvedStudentId, applicationId, selectedStudent.firstName, selectedStudent.lastName);
         if (savedCount < docCount) {
-          toast({ title: "Warning", description: `${savedCount}/${docCount} documents uploaded. Some failed.`, variant: "destructive" });
+          toast({ title: t("courseFinderPage.warning"), description: t("courseFinderPage.documentsUploadedPartial", { saved: savedCount, total: docCount }), variant: "destructive" });
         }
       }
 
@@ -2100,11 +2100,11 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["students"] });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
-      const docMsg = docCount > 0 ? ` with ${docCount} document${docCount !== 1 ? "s" : ""}` : "";
-      toast({ title: "Application created", description: `${selectedStudent.firstName} ${selectedStudent.lastName} → ${p.name}${docMsg}` });
+      const docMsg = docCount > 0 ? t("courseFinderPage.withDocuments", { n: docCount }) : "";
+      toast({ title: t("courseFinderPage.applicationCreated"), description: t("courseFinderPage.applicationCreatedDesc", { student: `${selectedStudent.firstName} ${selectedStudent.lastName}`, program: p.name, docs: docMsg }) });
       setTimeout(() => handleClose(), 1500);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to create application", variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message || t("courseFinderPage.failedToCreateApplication"), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }

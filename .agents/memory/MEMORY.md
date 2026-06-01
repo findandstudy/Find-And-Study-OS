@@ -1,4 +1,1 @@
-- [Role permission resolution](role-permissions.md) — `/auth/me` permissions are DB-authoritative; new default grants need a one-shot backfill, never a runtime union, or admin toggle-offs won't stick.
-- [Sidebar section badges](sidebar-section-badges.md) — nav count badges are driven by unread notifications; dispatchNotification no-ops without an active notification_rules row for the event.
-- [Embed auto-convert gating](embed-autoconvert-gating.md) — public-apply/embed lead auto-convert + doc-attach must gate on student existing, not the application; createApplicationForStudent returns null appId on eligibility/quota.
-- [Per-user permission overrides](permission-overrides.md) — users.permission_overrides jsonb is a tri-state map layered over role perms; super_admin/admin always-all; new role grants need system_flags-gated one-shot backfill.
+- [edcons i18n conventions](edcons-i18n.md) — adding/using translation keys in the EduConsult web app; en+tr dual-write, en fallback, t() shadowing gotcha.

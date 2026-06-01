@@ -635,7 +635,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs">Stage</Label>
+            <Label className="text-xs">{t("applicationDetailPage.stage")}</Label>
             <Select value={form.stage} onValueChange={v => setForm({ ...form, stage: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -644,19 +644,19 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Country</Label>
+            <Label className="text-xs">{t("applicationDetailPage.country")}</Label>
             <Input value={form.country} onChange={e => setForm({ ...form, country: e.target.value })} />
           </div>
           <div className="col-span-2">
-            <Label className="text-xs">University</Label>
+            <Label className="text-xs">{t("applicationDetailPage.university")}</Label>
             <Input value={form.universityName} onChange={e => setForm({ ...form, universityName: e.target.value })} />
           </div>
           <div className="col-span-2">
-            <Label className="text-xs">Program</Label>
+            <Label className="text-xs">{t("applicationDetailPage.program")}</Label>
             <Input value={form.programName} onChange={e => setForm({ ...form, programName: e.target.value })} />
           </div>
           <div>
-            <Label className="text-xs">Level</Label>
+            <Label className="text-xs">{t("applicationDetailPage.level")}</Label>
             <Select value={form.level} onValueChange={v => setForm({ ...form, level: v })}>
               <SelectTrigger><SelectValue placeholder={t("applicationDetailPage.select")} /></SelectTrigger>
               <SelectContent>
@@ -665,34 +665,34 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Language</Label>
+            <Label className="text-xs">{t("applicationDetailPage.language")}</Label>
             <Input value={form.instructionLanguage} onChange={e => setForm({ ...form, instructionLanguage: e.target.value })} />
           </div>
           <div>
-            <Label className="text-xs">Intake</Label>
+            <Label className="text-xs">{t("applicationDetailPage.intake")}</Label>
             <Input value={form.intake} onChange={e => setForm({ ...form, intake: e.target.value })} />
           </div>
           <div>
-            <Label className="text-xs">Deadline</Label>
+            <Label className="text-xs">{t("applicationDetailPage.deadline")}</Label>
             <Input value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} />
           </div>
           <div>
-            <Label className="text-xs">Tuition Fee</Label>
+            <Label className="text-xs">{t("applicationDetailPage.tuitionFee")}</Label>
             <Input type="number" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
           </div>
           <div>
-            <Label className="text-xs">Scholarship</Label>
+            <Label className="text-xs">{t("applicationDetailPage.scholarship")}</Label>
             <Input type="number" value={form.scholarship} onChange={e => setForm({ ...form, scholarship: e.target.value })} />
           </div>
           <div className="col-span-2">
-            <Label className="text-xs">Notes</Label>
+            <Label className="text-xs">{t("applicationDetailPage.notes")}</Label>
             <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="resize-none min-h-[60px]" />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("applicationDetailPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Changes"}
+            {saving ? t("common.saving") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

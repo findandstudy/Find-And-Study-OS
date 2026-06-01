@@ -6,16 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { Mail, Phone, MessageSquare, Send, Loader2 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 type Channel = "email" | "whatsapp" | "internal";
 
-const CHANNELS: { key: Channel; label: string; icon: typeof Mail; color: string }[] = [
-  { key: "internal", label: "Internal", icon: MessageSquare, color: "bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20" },
-  { key: "email", label: "Email", icon: Mail, color: "bg-purple-500/10 text-purple-600 border-purple-200 hover:bg-purple-500/20" },
-  { key: "whatsapp", label: "WhatsApp", icon: Phone, color: "bg-green-500/10 text-green-600 border-green-200 hover:bg-green-500/20" },
+const CHANNELS: { key: Channel; labelKey: string; icon: typeof Mail; color: string }[] = [
+  { key: "internal", labelKey: "quickContact.internal", icon: MessageSquare, color: "bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20" },
+  { key: "email", labelKey: "common.email", icon: Mail, color: "bg-purple-500/10 text-purple-600 border-purple-200 hover:bg-purple-500/20" },
+  { key: "whatsapp", labelKey: "quickContact.whatsapp", icon: Phone, color: "bg-green-500/10 text-green-600 border-green-200 hover:bg-green-500/20" },
 ];
 
 interface QuickContactProps {
@@ -29,6 +30,7 @@ interface QuickContactProps {
 }
 
 export function QuickContactButtons({ name, email, phone, entityType, entityId, hideEmail, hideWhatsApp }: QuickContactProps) {
+  const { t } = useI18n();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [channel, setChannel] = useState<Channel>("internal");
 
@@ -42,7 +44,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId, 
       <div className="flex items-center gap-1">
         <button
           onClick={() => openDialog("internal")}
-          title="Message"
+          title={t("quickContact.messageTitle")}
           className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-blue-600 hover:bg-blue-500/10 transition-colors"
         >
           <MessageSquare className="w-3.5 h-3.5" />
@@ -50,7 +52,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId, 
         {email && !hideEmail && (
           <button
             onClick={() => openDialog("email")}
-            title="Email"
+            title={t("common.email")}
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
           >
             <Mail className="w-3.5 h-3.5" />
@@ -59,7 +61,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId, 
         {phone && !hideWhatsApp && (
           <button
             onClick={() => openDialog("whatsapp")}
-            title="WhatsApp"
+            title={t("quickContact.whatsapp")}
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
           >
             <Phone className="w-3.5 h-3.5" />
@@ -109,11 +111,13 @@ export function QuickContactDialog({
   hideWhatsApp?: boolean;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [message, setMessage] = useState("");
   const [subject, setSubject] = useState("");
   const [sending, setSending] = useState(false);
 
   const channelMeta = CHANNELS.find(c => c.key === channel)!;
+  const channelLabel = t(channelMeta.labelKey);
 
   async function handleSend() {
     if (!message.trim()) return;
@@ -135,15 +139,15 @@ export function QuickContactDialog({
         }),
       });
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Failed to send" }));
-        throw new Error(err.error || "Failed to send");
+        const err = await resp.json().catch(() => ({ error: t("quickContact.failedToSend") }));
+        throw new Error(err.error || t("quickContact.failedToSend"));
       }
-      toast({ title: "Message sent", description: `${channelMeta.label} message sent to ${name}` });
+      toast({ title: t("quickContact.messageSent"), description: t("quickContact.messageSentDesc", { channel: channelLabel, name }) });
       setMessage("");
       setSubject("");
       onClose();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("quickContact.error"), description: err.message, variant: "destructive" });
     } finally {
       setSending(false);
     }
@@ -155,13 +159,13 @@ export function QuickContactDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="w-5 h-5" />
-            Send Message to {name}
+            {t("quickContact.sendMessageTo", { name })}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Channel</Label>
+            <Label className="text-xs text-muted-foreground mb-2 block">{t("quickContact.channel")}</Label>
             <div className="flex gap-2">
               {CHANNELS.filter(ch => !(ch.key === "email" && hideEmail) && !(ch.key === "whatsapp" && hideWhatsApp)).map(ch => {
                 const disabled = (ch.key === "email" && !email) || (ch.key === "whatsapp" && !phone);
@@ -179,7 +183,7 @@ export function QuickContactDialog({
                     onClick={() => { if (!disabled) setChannel(ch.key); }}
                   >
                     <ch.icon className="w-3.5 h-3.5 mr-1" />
-                    {ch.label}
+                    {t(ch.labelKey)}
                   </Badge>
                 );
               })}
@@ -188,22 +192,22 @@ export function QuickContactDialog({
 
           <div className="text-xs text-muted-foreground flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
             {channel === "email" && email && (
-              <><Mail className="w-3.5 h-3.5" /> To: {email}</>
+              <><Mail className="w-3.5 h-3.5" /> {t("quickContact.to", { value: email })}</>
             )}
             {channel === "whatsapp" && phone && (
-              <><Phone className="w-3.5 h-3.5" /> To: {phone}</>
+              <><Phone className="w-3.5 h-3.5" /> {t("quickContact.to", { value: phone })}</>
             )}
             {channel === "internal" && (
-              <><MessageSquare className="w-3.5 h-3.5" /> Internal message to {name}</>
+              <><MessageSquare className="w-3.5 h-3.5" /> {t("quickContact.internalMessageTo", { name })}</>
             )}
           </div>
 
           {channel === "email" && (
             <div>
-              <Label>Subject</Label>
+              <Label>{t("quickContact.subject")}</Label>
               <Input
                 className="mt-1"
-                placeholder="Email subject..."
+                placeholder={t("quickContact.subjectPlaceholder")}
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
               />
@@ -211,22 +215,22 @@ export function QuickContactDialog({
           )}
 
           <div>
-            <Label>Message</Label>
+            <Label>{t("quickContact.message")}</Label>
             <Textarea
               className="mt-1 min-h-[120px]"
-              placeholder={`Type your ${channelMeta.label.toLowerCase()} message...`}
+              placeholder={t("quickContact.messagePlaceholder", { channel: channelLabel.toLowerCase() })}
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSend(); }}
             />
-            <p className="text-[10px] text-muted-foreground mt-1">Ctrl+Enter to send</p>
+            <p className="text-[10px] text-muted-foreground mt-1">{t("quickContact.ctrlEnterToSend")}</p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
           <Button onClick={handleSend} disabled={sending || !message.trim()}>
-            {sending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : <><Send className="w-4 h-4 mr-2" /> Send</>}
+            {sending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t("common.sending")}</> : <><Send className="w-4 h-4 mr-2" /> {t("common.send")}</>}
           </Button>
         </DialogFooter>
       </DialogContent>

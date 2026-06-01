@@ -126,6 +126,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
   assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void;
   staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean;
 }) {
+  const { t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
@@ -164,7 +165,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || "No contact info"}</p>
+        <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || t("leadsPage.noContactInfo")}</p>
         <OriginBadge originType={lead.originType || "direct"} originDisplayName={lead.originDisplayName} className="mt-1" />
         {lead.interestedProgram && (
           <p className="text-xs font-medium text-primary mt-2 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">
@@ -185,7 +186,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
           <span
             className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate"
             onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${lead.agentId}`); }}
-            title={`Agent: ${lead.agentName}`}
+            title={t("leadsPage.agentTooltip", { name: lead.agentName })}
           >
             <Building2 className="w-3 h-3 shrink-0" />{lead.agentName}
           </span>
@@ -204,9 +205,9 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
             <button
               onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }}
               className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
-              title="Assign to me"
+              title={t("leadsPage.assignToMe")}
             >
-              <UserPlus className="w-3 h-3 shrink-0" />Assign to me
+              <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
             </button>
           ) : assignedUserName ? (
             <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}>
@@ -215,18 +216,18 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title="Message"
+          <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title={t("leadsPage.message")}
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
             <MessageSquare className="w-3.5 h-3.5" />
           </button>
           {lead.email && (
-            <button onClick={(e) => { e.stopPropagation(); openContact("email"); }} title="Email"
+            <button onClick={(e) => { e.stopPropagation(); openContact("email"); }} title={t("common.email")}
               className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
               <Mail className="w-3.5 h-3.5" />
             </button>
           )}
           {lead.phone && (
-            <button onClick={(e) => { e.stopPropagation(); openContact("whatsapp"); }} title="WhatsApp"
+            <button onClick={(e) => { e.stopPropagation(); openContact("whatsapp"); }} title={t("leadsPage.whatsapp")}
               className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
             </button>
@@ -235,7 +236,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
             onClick={() => onView(lead.id)}
             className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
           >
-            <Eye className="w-3 h-3" /> View
+            <Eye className="w-3 h-3" /> {t("common.view")}
           </button>
         </div>
       </div>
@@ -263,6 +264,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
   staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean;
 }) {
+  const { t } = useI18n();
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   const totalRevenue = showRevenue ? leads.reduce((sum, l) => sum + (parseFloat(l.estimatedValue) || 0), 0) : 0;
   const v = col.variant ?? "default";
@@ -326,7 +328,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
           ))}
           {leads.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
-              Drop here
+              {t("leadsPage.dropHere")}
             </div>
           )}
         </SortableContext>
@@ -394,12 +396,12 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
       </PopoverTrigger>
       <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filters</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_LEAD_FILTERS })}>Clear</Button>}
+          <p className="text-sm font-semibold">{t("leadsPage.filters")}</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_LEAD_FILTERS })}>{t("leadsPage.clear")}</Button>}
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Source</Label>
+          <Label className="text-xs">{t("leadsPage.source")}</Label>
           <Select value={filters.source} onValueChange={v => onChange({ ...filters, source: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -412,7 +414,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Stage</Label>
+          <Label className="text-xs">{t("leadsPage.stage")}</Label>
           <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -425,7 +427,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Nationality</Label>
+          <Label className="text-xs">{t("leadsPage.nationality")}</Label>
           <Select value={filters.nationality} onValueChange={v => onChange({ ...filters, nationality: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -436,7 +438,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Agent</Label>
+          <Label className="text-xs">{t("leadsPage.agentLabel")}</Label>
           <Select value={filters.agent} onValueChange={v => onChange({ ...filters, agent: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -448,25 +450,25 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Origin</Label>
+          <Label className="text-xs">{t("leadsPage.origin")}</Label>
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               <SelectItem value="direct">{t("leadsPage.direct")}</SelectItem>
               <SelectItem value="agent">{t("leadsPage.agentLabel")}</SelectItem>
-              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+              <SelectItem value="sub_agent">{t("leadsPage.subAgent")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Assigned To</Label>
+          <Label className="text-xs">{t("leadsPage.assignedTo")}</Label>
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
-              <SelectItem value="mine">Me</SelectItem>
+              <SelectItem value="mine">{t("leadsPage.me")}</SelectItem>
               <SelectItem value="unassigned">{t("leadsPage.unassigned")}</SelectItem>
               {staffUsers.filter(u => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>
@@ -478,7 +480,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Applications</Label>
+          <Label className="text-xs">{t("leadsPage.applications")}</Label>
           <Select value={filters.appSource} onValueChange={v => onChange({ ...filters, appSource: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -490,27 +492,27 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Origin</Label>
+          <Label className="text-xs">{t("leadsPage.origin")}</Label>
           <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               <SelectItem value="direct">{t("leadsPage.direct")}</SelectItem>
               <SelectItem value="agent">{t("leadsPage.agentLabel")}</SelectItem>
-              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+              <SelectItem value="sub_agent">{t("leadsPage.subAgent")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Created Date</Label>
+          <Label className="text-xs">{t("leadsPage.createdDate")}</Label>
           <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               <SelectItem value="today">{t("leadsPage.today")}</SelectItem>
               <SelectItem value="yesterday">{t("leadsPage.yesterday")}</SelectItem>
-              <SelectItem value="last7">Last 7 Days</SelectItem>
+              <SelectItem value="last7">{t("leadsPage.last7Days")}</SelectItem>
               <SelectItem value="thisMonth">{t("leadsPage.thisMonth")}</SelectItem>
               <SelectItem value="thisYear">{t("leadsPage.thisYear")}</SelectItem>
             </SelectContent>
@@ -518,20 +520,20 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Next Follow-up</Label>
+          <Label className="text-xs">{t("leadsPage.nextFollowup")}</Label>
           <Select value={filters.followupRange} onValueChange={v => onChange({ ...filters, followupRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               <SelectItem value="overdue">{t("leadsPage.overdue")}</SelectItem>
               <SelectItem value="today">{t("leadsPage.today")}</SelectItem>
-              <SelectItem value="upcoming7">Next 7 Days</SelectItem>
+              <SelectItem value="upcoming7">{t("leadsPage.next7Days")}</SelectItem>
               <SelectItem value="none">{t("leadsPage.notSet")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>{t("leadsPage.apply")}</Button>
       </PopoverContent>
     </Popover>
     </>
@@ -540,6 +542,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
 
 /* ── NationalityCombobox ──────────────────────────────────── */
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n();
   const { data: allCountries = [] } = useCountries();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
@@ -568,12 +571,12 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
         value={open ? searchVal : value}
         onChange={e => { setSearchVal(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => { setSearchVal(""); setOpen(true); }}
-        placeholder={value || "Select or type..."}
+        placeholder={value || t("leadsPage.selectOrType")}
         autoComplete="off"
       />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? "No match — custom value OK" : "No countries loaded"}</div>}
+          {filtered.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{searchVal ? t("leadsPage.noMatchCustomOk") : t("leadsPage.noCountriesLoaded")}</div>}
           {filtered.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${c.name === value ? "bg-primary/10 font-medium" : ""}`}
               onMouseDown={e => { e.preventDefault(); onChange(c.name); setSearchVal(""); setOpen(false); }}>
@@ -590,6 +593,7 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
 
 /* ── MultiCountrySelect (countries from Course Finder – universities with active programs) ── */
 function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n();
   const { data: cfFilters } = useQuery<{ countries: string[] }>({
     queryKey: ["course-finder-filters"],
     queryFn: async () => {
@@ -644,7 +648,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background hover:bg-accent/50 transition-colors"
       >
         <span className={`truncate ${localSelected.length === 0 ? "text-muted-foreground" : ""}`}>
-          {localSelected.length === 0 ? "Select countries..." : localSelected.length === 1 ? localSelected[0] : `${localSelected.length} countries selected`}
+          {localSelected.length === 0 ? t("leadsPage.selectCountries") : localSelected.length === 1 ? localSelected[0] : t("leadsPage.countriesSelected", { n: localSelected.length })}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </button>
@@ -664,7 +668,7 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
       )}
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">No active destinations</div>}
+          {activeDestinations.length === 0 && <div className="p-3 text-sm text-muted-foreground text-center">{t("leadsPage.noActiveDestinations")}</div>}
           {activeDestinations.map(c => (
             <button key={c.id} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary/70 transition-colors flex items-center gap-2 ${localSelected.includes(c.name) ? "bg-primary/10 font-medium" : ""}`}
               onClick={e => { e.preventDefault(); e.stopPropagation(); toggle(c.name); }}>
@@ -721,12 +725,12 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
       { id: lead.id, data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Lead updated" });
+          toast({ title: t("leadsPage.leadUpdated") });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           onClose();
         },
         onError: () => {
-          toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+          toast({ title: t("common.error"), description: t("leadsPage.failedToUpdateLead"), variant: "destructive" });
         },
       }
     );
@@ -739,19 +743,19 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
         <DialogHeader><DialogTitle>{t("leadsPage.editLead")}</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label>First Name *</Label>
+            <Label>{t("leadsPage.firstNameRequired")}</Label>
             <Input value={form.firstName} onChange={e => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Last Name *</Label>
+            <Label>{t("leadsPage.lastNameRequired")}</Label>
             <Input value={form.lastName} onChange={e => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} className="uppercase" />
           </div>
           <div className="space-y-1.5">
-            <Label>Email *</Label>
+            <Label>{t("leadsPage.emailRequired")}</Label>
             <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Phone *</Label>
+            <Label>{t("leadsPage.phoneRequired")}</Label>
             <div className="flex gap-1">
               <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
                 <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
@@ -804,7 +808,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
             <div className="space-y-1.5 col-span-2">
               <Label className="flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                Estimated Value (USD)
+                {t("leadsPage.estimatedValueUsd")}
               </Label>
               <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={e => setForm({ ...form, estimatedValue: e.target.value })} />
             </div>
@@ -813,7 +817,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("leadsPage.cancel")}</Button>
           <Button onClick={handleSave} disabled={updateLead.isPending || !form.firstName || !form.lastName}>
-            {updateLead.isPending ? "Saving…" : "Save Changes"}
+            {updateLead.isPending ? t("common.saving") : t("leadsPage.saveChanges")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -832,15 +836,15 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete {count} Lead{count > 1 ? "s" : ""}?</DialogTitle>
+          <DialogTitle>{t("leadsPage.deleteLeadsTitle", { count })}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground py-2">
-          This action cannot be undone. The selected lead{count > 1 ? "s" : ""} and all associated data will be permanently removed.
+          {t("leadsPage.deleteLeadsWarning", { count })}
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("leadsPage.cancel")}</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
-            {isPending ? "Deleting…" : `Delete ${count} Lead${count > 1 ? "s" : ""}`}
+            {isPending ? t("leadsPage.deleting") : t("leadsPage.deleteLeadsConfirm", { count })}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1022,9 +1026,9 @@ export default function LeadsPage() {
         body: JSON.stringify({ assignedTo: userId }),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-      toast({ title: "Lead assigned" });
+      toast({ title: t("leadsPage.leadAssigned") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -1150,8 +1154,8 @@ export default function LeadsPage() {
       const res = await fetch(`${BASE_URL}/api/leads/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "delete" }) });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
-      toast({ title: `${data.updated} lead${data.updated !== 1 ? "s" : ""} deleted` });
-    } catch { toast({ title: "Some leads could not be deleted", variant: "destructive" }); }
+      toast({ title: t("leadsPage.leadsDeleted", { count: data.updated }) });
+    } catch { toast({ title: t("leadsPage.someLeadsNotDeleted"), variant: "destructive" }); }
     setDeleteInProgress(false); setDeleteOpen(false); setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
   }
@@ -1161,8 +1165,8 @@ export default function LeadsPage() {
       const res = await fetch(`${BASE_URL}/api/leads/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
-      toast({ title: `${data.updated} lead${data.updated !== 1 ? "s" : ""} assigned` });
-    } catch { toast({ title: "Could not assign leads", variant: "destructive" }); }
+      toast({ title: t("leadsPage.leadsAssigned", { count: data.updated }) });
+    } catch { toast({ title: t("leadsPage.couldNotAssignLeads"), variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
   }
@@ -1172,8 +1176,8 @@ export default function LeadsPage() {
       const res = await fetch(`${BASE_URL}/api/leads/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() }, credentials: "include", body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", status }) });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
-      toast({ title: `${data.updated} lead${data.updated !== 1 ? "s" : ""} moved` });
-    } catch { toast({ title: "Could not move leads", variant: "destructive" }); }
+      toast({ title: t("leadsPage.leadsMoved", { count: data.updated }) });
+    } catch { toast({ title: t("leadsPage.couldNotMoveLeads"), variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
   }
@@ -1190,7 +1194,7 @@ export default function LeadsPage() {
     if (!over) return;
 
     if (!canMoveCards) {
-      toast({ title: "You don't have permission to move cards", variant: "destructive" });
+      toast({ title: t("leadsPage.noPermissionMoveCards"), variant: "destructive" });
       return;
     }
 
@@ -1220,18 +1224,18 @@ export default function LeadsPage() {
           queryClient.refetchQueries({ queryKey: ["/api/students"] }),
         ]);
         if (result.alreadyConverted) {
-          toast({ title: "Lead already converted", description: "This lead has already been converted to a student." });
+          toast({ title: t("leadsPage.leadAlreadyConverted"), description: t("leadsPage.leadAlreadyConvertedDesc") });
         } else {
           const studentName = `${result.student?.firstName || ""} ${result.student?.lastName || ""}`.trim();
           toast({
-            title: "Lead converted to student",
+            title: t("leadsPage.leadConverted"),
             description: result.merged
-              ? `Merged with existing student: ${studentName}`
-              : `New student created: ${studentName}`,
+              ? t("leadsPage.mergedWithStudent", { name: studentName })
+              : t("leadsPage.newStudentCreated", { name: studentName }),
           });
         }
       } catch (err: any) {
-        toast({ title: "Conversion failed", description: err.message || "Failed to convert lead", variant: "destructive" });
+        toast({ title: t("leadsPage.conversionFailed"), description: err.message || t("leadsPage.failedToConvertLead"), variant: "destructive" });
         await queryClient.refetchQueries({ queryKey: ["/api/leads"] });
       }
       return;
@@ -1244,10 +1248,10 @@ export default function LeadsPage() {
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
           const colLabel = targetCol?.title ?? targetStatus;
-          toast({ title: `Lead moved to ${colLabel}` });
+          toast({ title: t("leadsPage.leadMovedTo", { stage: colLabel }) });
         },
         onError: () => {
-          toast({ title: "Error", description: "Failed to move lead", variant: "destructive" });
+          toast({ title: t("common.error"), description: t("leadsPage.failedToMoveLead"), variant: "destructive" });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
           queryClient.invalidateQueries({ queryKey: [`/api/leads/${leadId}`] });
         },
@@ -1268,7 +1272,7 @@ export default function LeadsPage() {
       { data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Lead created" });
+          toast({ title: t("leadsPage.leadCreated") });
           setCreateOpen(false);
           setForm(EMPTY_FORM);
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
@@ -1312,14 +1316,14 @@ export default function LeadsPage() {
               <button
                 onClick={() => toggleView("pipeline")}
                 className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-                title="Pipeline view"
+                title={t("leadsPage.pipelineView")}
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
               <button
                 onClick={() => toggleView("list")}
                 className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-                title="List view"
+                title={t("leadsPage.listView")}
               >
                 <List className="w-4 h-4" />
               </button>
@@ -1332,17 +1336,17 @@ export default function LeadsPage() {
               onMove={handleBulkMove}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
               staffUsers={staffUsersList}
-              entityLabel="leads"
-              moveLabel="Move Status"
+              entityLabel={t("leadsPage.entityLeads")}
+              moveLabel={t("leadsPage.moveStatus")}
             />
 
             {isAdmin && (
               <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); a.href = `${BASE_URL}/api/export/leads?season=${encodeURIComponent(season || "")}`; a.click(); }}>
-                <Download className="w-3.5 h-3.5" /> Excel
+                <Download className="w-3.5 h-3.5" /> {t("leadsPage.excel")}
               </Button>
             )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Add Lead
+              <Plus className="w-4 h-4 mr-2" /> {t("leadsPage.addLead")}
             </Button>
           </div>
         </div>
@@ -1385,7 +1389,7 @@ export default function LeadsPage() {
                         </h4>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {activeCard.email || activeCard.phone || "No contact info"}
+                        {activeCard.email || activeCard.phone || t("leadsPage.noContactInfo")}
                       </p>
                       {activeCard.interestedProgram && (
                         <p className="text-xs font-medium text-primary mt-2 bg-primary/5 block max-w-full px-2 py-1 rounded-md leading-relaxed">
@@ -1422,42 +1426,42 @@ export default function LeadsPage() {
                       />
                     </TableHead>
                     <ColumnHeader
-                      label="Name"
+                      label={t("common.name")}
                       sort={{ sortKey: "name", current: sort, onSort: handleSort }}
                     />
                     <ColumnHeader
-                      label="Email"
+                      label={t("common.email")}
                       sort={{ sortKey: "email", current: sort, onSort: handleSort }}
                     />
                     <ColumnHeader
-                      label="Status"
+                      label={t("leadsPage.status")}
                       sort={{ sortKey: "status", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.status, onChange: v => setFilters(f => ({ ...f, status: v })), options: columns.map(c => ({ value: c.id, label: c.title })), label: "Status" }}
+                      filter={{ type: "select", value: filters.status, onChange: v => setFilters(f => ({ ...f, status: v })), options: columns.map(c => ({ value: c.id, label: c.title })), label: t("leadsPage.status") }}
                     />
                     <ColumnHeader
-                      label="Source"
+                      label={t("leadsPage.source")}
                       sort={{ sortKey: "source", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.source, onChange: v => setFilters(f => ({ ...f, source: v })), options: SOURCES.map(s => ({ value: s, label: s.replace(/_/g, " ") })), label: "Source" }}
+                      filter={{ type: "select", value: filters.source, onChange: v => setFilters(f => ({ ...f, source: v })), options: SOURCES.map(s => ({ value: s, label: s.replace(/_/g, " ") })), label: t("leadsPage.source") }}
                     />
                     <ColumnHeader
-                      label="Program"
+                      label={t("leadsPage.program")}
                       sort={{ sortKey: "program", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: "Filter by program…", label: "Program contains" }}
+                      filter={{ type: "text", value: colFilters.program, onChange: v => setColFilters(f => ({ ...f, program: v })), placeholder: t("leadsPage.filterByProgram"), label: t("leadsPage.programContains") }}
                     />
                     <ColumnHeader
-                      label="Country"
+                      label={t("leadsPage.country")}
                       sort={{ sortKey: "country", current: sort, onSort: handleSort }}
-                      filter={{ type: "text", value: colFilters.country, onChange: v => setColFilters(f => ({ ...f, country: v })), placeholder: "Filter by country…", label: "Country contains" }}
+                      filter={{ type: "text", value: colFilters.country, onChange: v => setColFilters(f => ({ ...f, country: v })), placeholder: t("leadsPage.filterByCountry"), label: t("leadsPage.countryContains") }}
                     />
                     {canSeeRevenue && (
                       <ColumnHeader
-                        label="Value"
+                        label={t("leadsPage.value")}
                         sort={{ sortKey: "value", current: sort, onSort: handleSort }}
-                        filter={{ type: "text", value: colFilters.value, onChange: v => setColFilters(f => ({ ...f, value: v })), placeholder: "Min value…", label: "Minimum value" }}
+                        filter={{ type: "text", value: colFilters.value, onChange: v => setColFilters(f => ({ ...f, value: v })), placeholder: t("leadsPage.minValue"), label: t("leadsPage.minimumValue") }}
                       />
                     )}
                     <ColumnHeader
-                      label="Assigned"
+                      label={t("leadsPage.assigned")}
                       filter={{
                         type: "select",
                         value: filters.assignment,
@@ -1471,36 +1475,36 @@ export default function LeadsPage() {
                       }}
                     />
                     <ColumnHeader
-                      label="Created"
+                      label={t("leadsPage.created")}
                       sort={{ sortKey: "date", current: sort, onSort: handleSort }}
                       filter={{
                         type: "select",
                         value: filters.dateRange,
                         onChange: v => setFilters(f => ({ ...f, dateRange: v })),
                         options: [
-                          { value: "today", label: "Today" },
-                          { value: "yesterday", label: "Yesterday" },
-                          { value: "last7", label: "Last 7 Days" },
-                          { value: "thisMonth", label: "This Month" },
-                          { value: "thisYear", label: "This Year" },
+                          { value: "today", label: t("leadsPage.today") },
+                          { value: "yesterday", label: t("leadsPage.yesterday") },
+                          { value: "last7", label: t("leadsPage.last7Days") },
+                          { value: "thisMonth", label: t("leadsPage.thisMonth") },
+                          { value: "thisYear", label: t("leadsPage.thisYear") },
                         ],
-                        label: "Created date",
+                        label: t("leadsPage.createdDate"),
                       }}
                     />
-                    <TableHead className="w-20 text-right">Actions</TableHead>
+                    <TableHead className="w-20 text-right">{t("common.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
                       <TableCell colSpan={canSeeRevenue ? 11 : 10} className="text-center py-12 text-muted-foreground">
-                        Loading...
+                        {t("common.loading")}
                       </TableCell>
                     </TableRow>
                   ) : pagedLeads.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={canSeeRevenue ? 11 : 10} className="text-center py-12 text-muted-foreground">
-                        No leads found
+                        {t("leadsPage.noLeadsFound")}
                       </TableCell>
                     </TableRow>
                   ) : pagedLeads.map((lead: any) => (
@@ -1572,11 +1576,11 @@ export default function LeadsPage() {
                             onClick={() => handleAssign(lead.id, user.id)}
                             className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
                           >
-                            <UserPlus className="w-3 h-3" />Assign to me
+                            <UserPlus className="w-3 h-3" />{t("leadsPage.assignToMe")}
                           </button>
                         ) : lead.assignedToId ? (
                           <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                            <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || "Assigned"}
+                            <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || t("leadsPage.assigned")}
                           </span>
                         ) : null}
                       </TableCell>
@@ -1646,19 +1650,19 @@ export default function LeadsPage() {
           <DialogHeader><DialogTitle>{t("leadsPage.addNewLead")}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-2">
             <div className="space-y-1.5">
-              <Label>First Name *</Label>
-              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} placeholder="First name" className="uppercase" />
+              <Label>{t("leadsPage.firstNameRequired")}</Label>
+              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} placeholder={t("leadsPage.firstNamePlaceholder")} className="uppercase" />
             </div>
             <div className="space-y-1.5">
-              <Label>Last Name *</Label>
-              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} placeholder="Last name" className="uppercase" />
+              <Label>{t("leadsPage.lastNameRequired")}</Label>
+              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} placeholder={t("leadsPage.lastNamePlaceholder")} className="uppercase" />
             </div>
             <div className="space-y-1.5">
-              <Label>Email *</Label>
+              <Label>{t("leadsPage.emailRequired")}</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
             </div>
             <div className="space-y-1.5">
-              <Label>Phone *</Label>
+              <Label>{t("leadsPage.phoneRequired")}</Label>
               <div className="flex gap-1">
                 <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
                   <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
@@ -1690,7 +1694,7 @@ export default function LeadsPage() {
             </div>
             <div className="space-y-1.5 col-span-2">
               <Label>{t("leadsPage.interestedProgram")}</Label>
-              <Input value={form.interestedProgram} onChange={(e) => setForm({ ...form, interestedProgram: e.target.value })} placeholder="e.g. Computer Science" />
+              <Input value={form.interestedProgram} onChange={(e) => setForm({ ...form, interestedProgram: e.target.value })} placeholder={t("leadsPage.interestedProgramPlaceholder")} />
             </div>
             <div className="space-y-1.5 col-span-2">
               <Label>{t("leadsPage.interestedCountry")}</Label>
@@ -1702,14 +1706,14 @@ export default function LeadsPage() {
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                   Estimated Value (USD)
                 </Label>
-                <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder="e.g. 5000" />
+                <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder={t("leadsPage.estimatedValuePlaceholder")} />
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("leadsPage.cancel")}</Button>
             <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName || !form.email || !form.phone}>
-              {createLead.isPending ? "Creating…" : "Create Lead"}
+              {createLead.isPending ? t("leadsPage.creating") : t("leadsPage.createLead")}
             </Button>
           </DialogFooter>
         </DialogContent>

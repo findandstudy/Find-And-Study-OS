@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   Bell, Mail, MessageCircle, Send, Smartphone, Check, X,
   Loader2, ChevronDown, ChevronRight, Settings2, Pencil, Eye, Save,
@@ -93,6 +94,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (isAdmin) fetchRules();
@@ -107,7 +109,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
       ((res as any)?.data || []).forEach((r: NotificationRule) => cats.add(r.category));
       setExpandedCategories(cats);
     } catch {
-      toast({ title: "Failed to load notification rules", variant: "destructive" });
+      toast({ title: t("notificationRules.failedToLoad"), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -128,7 +130,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
       });
       setRules(prev => prev.map(r => r.id === rule.id ? { ...r, channels: newChannels } : r));
     } catch {
-      toast({ title: "Failed to update rule", variant: "destructive" });
+      toast({ title: t("notificationRules.failedToUpdate"), variant: "destructive" });
     } finally {
       setSaving(null);
     }
@@ -144,7 +146,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
       });
       setRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r));
     } catch {
-      toast({ title: "Failed to update rule", variant: "destructive" });
+      toast({ title: t("notificationRules.failedToUpdate"), variant: "destructive" });
     } finally {
       setSaving(null);
     }
@@ -181,10 +183,10 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
           ? { ...r, template: { subject: templateSubject, body: templateBody } }
           : r
       ));
-      toast({ title: "Template saved successfully" });
+      toast({ title: t("notificationRules.templateSaved") });
       setEditingTemplate(null);
     } catch {
-      toast({ title: "Failed to save template", variant: "destructive" });
+      toast({ title: t("notificationRules.failedToSaveTemplate"), variant: "destructive" });
     } finally {
       setSavingTemplate(false);
     }
@@ -216,16 +218,16 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   }, {});
 
   const personalPrefs = [
-    { key: "newLeads", label: "New Leads", desc: "Notify when a new lead is created or assigned" },
-    { key: "applicationUpdates", label: "Application Updates", desc: "Notify when application stage changes" },
-    { key: "documentAlerts", label: "Document Alerts", desc: "Notify when documents are uploaded or need review" },
-    { key: "financeAlerts", label: "Finance Alerts", desc: "Notify for new invoices and overdue payments" },
+    { key: "newLeads", label: t("notificationRules.prefNewLeads"), desc: t("notificationRules.prefNewLeadsDesc") },
+    { key: "applicationUpdates", label: t("notificationRules.prefApplicationUpdates"), desc: t("notificationRules.prefApplicationUpdatesDesc") },
+    { key: "documentAlerts", label: t("notificationRules.prefDocumentAlerts"), desc: t("notificationRules.prefDocumentAlertsDesc") },
+    { key: "financeAlerts", label: t("notificationRules.prefFinanceAlerts"), desc: t("notificationRules.prefFinanceAlertsDesc") },
   ];
 
   return (
     <div className="space-y-6">
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <h2 className="font-display font-bold text-lg mb-6">Personal Notification Preferences</h2>
+        <h2 className="font-display font-bold text-lg mb-6">{t("notificationRules.personalPreferences")}</h2>
         <div className="space-y-3">
           {personalPrefs.map(n => (
             <div key={n.key} className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:border-primary/30 transition-colors">
@@ -249,14 +251,14 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
             <div>
               <h2 className="font-display font-bold text-lg flex items-center gap-2">
                 <Settings2 className="w-5 h-5 text-primary" />
-                System Notification Rules
+                {t("notificationRules.systemRules")}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Configure channels, toggle rules, and customize email templates for each event.
+                {t("notificationRules.systemRulesDesc")}
               </p>
             </div>
             <Badge className="bg-primary/10 text-primary border-primary/20">
-              {rules.length} rules
+              {t("notificationRules.rulesCount", { count: rules.length })}
             </Badge>
           </div>
 
@@ -279,11 +281,11 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       )}
                       <span className="font-display font-bold text-sm uppercase tracking-wider text-foreground">
-                        {CATEGORY_LABELS[cat] || cat}
+                        {CATEGORY_LABELS[cat] ? t(`notificationRules.cat_${cat}`) : cat}
                       </span>
                     </div>
                     <Badge variant="secondary" className="text-xs">
-                      {catRules.filter(r => r.isActive).length}/{catRules.length} active
+                      {t("notificationRules.activeCount", { active: catRules.filter(r => r.isActive).length, total: catRules.length })}
                     </Badge>
                   </button>
 
@@ -301,12 +303,12 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                 {rule.template?.subject && (
                                   <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[10px] px-1.5">
                                     <FileText className="w-2.5 h-2.5 mr-0.5" />
-                                    Template
+                                    {t("notificationRules.templateBadge")}
                                   </Badge>
                                 )}
                               </div>
                               <p className="text-xs text-muted-foreground mb-3">
-                                Recipients: {RECIPIENT_LABELS[rule.recipientType] || rule.recipientType}
+                                {t("notificationRules.recipients")} {RECIPIENT_LABELS[rule.recipientType] ? t(`notificationRules.rcp_${rule.recipientType}`) : rule.recipientType}
                                 {rule.recipientRoles?.length > 0 && (
                                   <span className="ml-1">
                                     ({rule.recipientRoles.join(", ")})
@@ -329,7 +331,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                       }`}
                                     >
                                       <Icon className="w-3 h-3" />
-                                      {meta.label}
+                                      {CHANNEL_META[ch] ? t(`notificationRules.ch_${ch}`) : meta.label}
                                       {active && <Check className="w-3 h-3 ml-0.5" />}
                                     </button>
                                   );
@@ -340,7 +342,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border border-orange-200 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 transition-all ml-1"
                                 >
                                   <Pencil className="w-3 h-3" />
-                                  Email Template
+                                  {t("notificationRules.emailTemplate")}
                                 </button>
                               </div>
                             </div>
@@ -377,7 +379,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
             <div className="p-6 border-b border-border/50">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-display font-bold text-lg">Edit Email Template</h3>
+                  <h3 className="font-display font-bold text-lg">{t("notificationRules.editEmailTemplate")}</h3>
                   <p className="text-sm text-muted-foreground mt-1">
                     {editingTemplate.name} — <span className="font-mono text-xs">{editingTemplate.event}</span>
                   </p>
@@ -396,7 +398,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Available Variables</p>
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">{t("notificationRules.availableVariables")}</p>
                     <div className="flex flex-wrap gap-1">
                       {(TEMPLATE_VARS[editingTemplate.event] || []).map(v => (
                         <code
@@ -411,27 +413,27 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                         </code>
                       ))}
                     </div>
-                    <p className="text-[10px] text-blue-500 mt-1">Click a variable to insert it into the body.</p>
+                    <p className="text-[10px] text-blue-500 mt-1">{t("notificationRules.clickVariableHint")}</p>
                   </div>
                 </div>
               </div>
 
               <div>
-                <Label className="text-sm font-medium mb-2 block">Email Subject</Label>
+                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailSubject")}</Label>
                 <Input
                   value={templateSubject}
                   onChange={e => setTemplateSubject(e.target.value)}
-                  placeholder={`e.g. ${editingTemplate.name} — {{firstName}} {{lastName}}`}
+                  placeholder={t("notificationRules.emailSubjectPlaceholder", { name: editingTemplate.name })}
                   className="bg-secondary/30"
                 />
               </div>
 
               <div>
-                <Label className="text-sm font-medium mb-2 block">Email Body</Label>
+                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailBody")}</Label>
                 <Textarea
                   value={templateBody}
                   onChange={e => setTemplateBody(e.target.value)}
-                  placeholder="Write the email body content. Use {{variable}} for dynamic values."
+                  placeholder={t("notificationRules.emailBodyPlaceholder")}
                   rows={6}
                   className="bg-secondary/30 font-mono text-sm"
                 />
@@ -445,7 +447,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                   className="gap-1.5"
                 >
                   <Eye className="w-4 h-4" />
-                  {showPreview ? "Hide Preview" : "Show Preview"}
+                  {showPreview ? t("notificationRules.hidePreview") : t("notificationRules.showPreview")}
                 </Button>
               </div>
 
@@ -455,21 +457,21 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                   <div className="border border-border/50 rounded-xl overflow-hidden">
                     <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center">
                       <h3 className="text-white font-bold text-xl">Find And Study OS</h3>
-                      <p className="text-white/70 text-sm mt-1">Notification</p>
+                      <p className="text-white/70 text-sm mt-1">{t("notificationRules.notification")}</p>
                     </div>
                     <div className="p-6 bg-white dark:bg-background">
-                      <h4 className="font-bold text-lg mb-3 text-foreground">{previewSubject || "(No subject)"}</h4>
+                      <h4 className="font-bold text-lg mb-3 text-foreground">{previewSubject || t("notificationRules.noSubject")}</h4>
                       <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap mb-4">
-                        {previewBody || "(No body)"}
+                        {previewBody || t("notificationRules.noBody")}
                       </p>
                       <div className="text-center">
                         <span className="inline-block bg-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">
-                          View Details
+                          {t("notificationRules.viewDetails")}
                         </span>
                       </div>
                       <hr className="my-4 border-border/30" />
                       <p className="text-[11px] text-muted-foreground text-center">
-                        This is an automated notification from Find And Study OS.
+                        {t("notificationRules.automatedFooter")}
                       </p>
                     </div>
                   </div>
@@ -479,7 +481,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
 
             <div className="p-6 border-t border-border/50 flex justify-end gap-3">
               <Button variant="outline" onClick={() => setEditingTemplate(null)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 onClick={saveTemplate}
@@ -487,7 +489,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                 className="gap-1.5"
               >
                 {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Template
+                {t("notificationRules.saveTemplate")}
               </Button>
             </div>
           </div>

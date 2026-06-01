@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   ClipboardList, Plus, Pencil, Trash2, Loader2, Check, GripVertical,
   ChevronUp, ChevronDown, Eye, EyeOff, Inbox, ExternalLink, Copy,
@@ -88,15 +89,15 @@ interface FieldFormData {
 }
 
 const FIELD_TYPES = [
-  { value: "text", label: "Text" },
-  { value: "email", label: "Email" },
-  { value: "phone", label: "Phone" },
-  { value: "textarea", label: "Text Area" },
-  { value: "select", label: "Dropdown" },
-  { value: "checkbox", label: "Checkbox" },
-  { value: "number", label: "Number" },
-  { value: "date", label: "Date" },
-  { value: "url", label: "URL" },
+  { value: "text", labelKey: "websiteForms.fieldTypeText" },
+  { value: "email", labelKey: "websiteForms.fieldTypeEmail" },
+  { value: "phone", labelKey: "websiteForms.fieldTypePhone" },
+  { value: "textarea", labelKey: "websiteForms.fieldTypeTextarea" },
+  { value: "select", labelKey: "websiteForms.fieldTypeSelect" },
+  { value: "checkbox", labelKey: "websiteForms.fieldTypeCheckbox" },
+  { value: "number", labelKey: "websiteForms.fieldTypeNumber" },
+  { value: "date", labelKey: "websiteForms.fieldTypeDate" },
+  { value: "url", labelKey: "websiteForms.fieldTypeUrl" },
 ];
 
 function slugify(s: string) {
@@ -105,6 +106,7 @@ function slugify(s: string) {
 
 export default function WebsiteForms() {
   const { toast } = useToast();
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [formDialog, setFormDialog] = useState(false);
   const [editingForm, setEditingForm] = useState<WebsiteForm | null>(null);
@@ -125,8 +127,8 @@ export default function WebsiteForms() {
 
   const [formData, setFormData] = useState<FormFormData>({
     name: "", slug: "", description: "", submitAction: "crm",
-    submitEmail: "", submitWebhookUrl: "", successMessage: "Thank you! Your submission has been received.",
-    errorMessage: "Something went wrong. Please try again later.",
+    submitEmail: "", submitWebhookUrl: "", successMessage: t("websiteForms.successDefault"),
+    errorMessage: t("websiteForms.errorDefault"),
     crmSource: "", crmPipelineStage: "", pageSourceTag: "", isActive: true,
   });
 
@@ -168,9 +170,9 @@ export default function WebsiteForms() {
       qc.invalidateQueries({ queryKey: ["/api/website/forms"] });
       setFormDialog(false);
       setEditingForm(null);
-      toast({ title: editingForm ? "Form updated" : "Form created" });
+      toast({ title: editingForm ? t("websiteForms.formUpdated") : t("websiteForms.formCreated") });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("websiteForms.error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteFormMutation = useMutation({
@@ -178,7 +180,7 @@ export default function WebsiteForms() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/website/forms"] });
       if (selectedForm) setSelectedForm(null);
-      toast({ title: "Form deleted" });
+      toast({ title: t("websiteForms.formDeleted") });
     },
   });
 
@@ -199,16 +201,16 @@ export default function WebsiteForms() {
       qc.invalidateQueries({ queryKey: ["/api/website/forms", selectedForm?.id, "fields"] });
       setFieldDialog(false);
       setEditingField(null);
-      toast({ title: editingField ? "Field updated" : "Field added" });
+      toast({ title: editingField ? t("websiteForms.fieldUpdated") : t("websiteForms.fieldAdded") });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("websiteForms.error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteFieldMutation = useMutation({
     mutationFn: (id: number) => customFetch(`/api/website/form-fields/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/website/forms", selectedForm?.id, "fields"] });
-      toast({ title: "Field removed" });
+      toast({ title: t("websiteForms.fieldRemoved") });
     },
   });
 
@@ -229,7 +231,7 @@ export default function WebsiteForms() {
         name: form.name, slug: form.slug, description: form.description || "",
         submitAction: form.submitAction, submitEmail: form.submitEmail || "",
         submitWebhookUrl: form.submitWebhookUrl || "", successMessage: form.successMessage || "",
-        errorMessage: (meta.errorMessage as string) || "Something went wrong. Please try again later.",
+        errorMessage: (meta.errorMessage as string) || t("websiteForms.errorDefault"),
         crmSource: form.crmSource || "",
         crmPipelineStage: form.crmPipelineStage || "",
         pageSourceTag: form.pageSourceTag || "",
@@ -239,8 +241,8 @@ export default function WebsiteForms() {
       setEditingForm(null);
       setFormData({
         name: "", slug: "", description: "", submitAction: "crm",
-        submitEmail: "", submitWebhookUrl: "", successMessage: "Thank you! Your submission has been received.",
-        errorMessage: "Something went wrong. Please try again later.",
+        submitEmail: "", submitWebhookUrl: "", successMessage: t("websiteForms.successDefault"),
+        errorMessage: t("websiteForms.errorDefault"),
         crmSource: "", crmPipelineStage: "", pageSourceTag: "", isActive: true,
       });
     }
@@ -308,8 +310,8 @@ export default function WebsiteForms() {
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" /> Forms</h1>
-            <p className="text-sm text-muted-foreground mt-1">Build and manage website forms with CRM integration.</p>
+            <h1 className="text-2xl font-bold flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" /> {t("websiteForms.title")}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{t("websiteForms.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <ExportImportToolbar
@@ -321,7 +323,7 @@ export default function WebsiteForms() {
               onImported={() => { qc.invalidateQueries({ queryKey: ["/api/website/forms"] }); setSelectedFormIds([]); }}
             />
             <Button onClick={() => openFormDialog()} className="gap-2">
-              <Plus className="w-4 h-4" /> New Form
+              <Plus className="w-4 h-4" /> {t("websiteForms.newForm")}
             </Button>
           </div>
         </div>
@@ -333,9 +335,9 @@ export default function WebsiteForms() {
             ) : forms.length === 0 ? (
               <Card className="p-10 text-center">
                 <ClipboardList className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-lg font-semibold">No forms yet</p>
-                <p className="text-muted-foreground text-sm mb-4">Create your first form to collect submissions.</p>
-                <Button onClick={() => openFormDialog()} className="gap-2"><Plus className="w-4 h-4" /> Create Form</Button>
+                <p className="text-lg font-semibold">{t("websiteForms.noFormsYet")}</p>
+                <p className="text-muted-foreground text-sm mb-4">{t("websiteForms.noFormsDesc")}</p>
+                <Button onClick={() => openFormDialog()} className="gap-2"><Plus className="w-4 h-4" /> {t("websiteForms.createForm")}</Button>
               </Card>
             ) : (
               <div className="grid md:grid-cols-2 gap-4">
@@ -347,14 +349,14 @@ export default function WebsiteForms() {
                           checked={selectedFormIds.includes(form.id)}
                           onCheckedChange={() => toggleFormSelect(form.id)}
                           onClick={(e) => e.stopPropagation()}
-                          aria-label={`Select ${form.name}`}
+                          aria-label={t("websiteForms.selectForm", { name: form.name })}
                           data-testid={`checkbox-form-${form.id}`}
                           className="mt-1"
                         />
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-semibold">{form.name}</p>
-                          <Badge variant={form.isActive ? "default" : "secondary"} className="text-[10px]">{form.isActive ? "Active" : "Inactive"}</Badge>
+                          <Badge variant={form.isActive ? "default" : "secondary"} className="text-[10px]">{form.isActive ? t("common.active") : t("common.inactive")}</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">/{form.slug}</p>
                         {form.description && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{form.description}</p>}
@@ -362,7 +364,7 @@ export default function WebsiteForms() {
                       </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); openFormDialog(form); }}><Pencil className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); if (confirm("Delete this form?")) deleteFormMutation.mutate(form.id); }}>
+                        <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); if (confirm(t("websiteForms.confirmDeleteForm"))) deleteFormMutation.mutate(form.id); }}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
                       </div>
@@ -378,30 +380,30 @@ export default function WebsiteForms() {
         ) : (
           <>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedForm(null)} className="gap-1 text-muted-foreground">← Back</Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedForm(null)} className="gap-1 text-muted-foreground">← {t("common.back")}</Button>
               <div>
                 <h2 className="font-semibold">{selectedForm.name}</h2>
                 <p className="text-xs text-muted-foreground">/{selectedForm.slug}</p>
               </div>
               <div className="ml-auto flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => openFormDialog(selectedForm)} className="gap-1"><Pencil className="w-3 h-3" /> Edit</Button>
+                <Button variant="outline" size="sm" onClick={() => openFormDialog(selectedForm)} className="gap-1"><Pencil className="w-3 h-3" /> {t("common.edit")}</Button>
               </div>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList>
-                <TabsTrigger value="fields" className="gap-1"><GripVertical className="w-3 h-3" /> Fields ({fields.length})</TabsTrigger>
-                <TabsTrigger value="submissions" className="gap-1"><Inbox className="w-3 h-3" /> Submissions ({totalSubmissions})</TabsTrigger>
-                <TabsTrigger value="embed" className="gap-1"><ExternalLink className="w-3 h-3" /> Embed</TabsTrigger>
+                <TabsTrigger value="fields" className="gap-1"><GripVertical className="w-3 h-3" /> {t("websiteForms.fieldsTab", { n: fields.length })}</TabsTrigger>
+                <TabsTrigger value="submissions" className="gap-1"><Inbox className="w-3 h-3" /> {t("websiteForms.submissionsTab", { n: totalSubmissions })}</TabsTrigger>
+                <TabsTrigger value="embed" className="gap-1"><ExternalLink className="w-3 h-3" /> {t("websiteForms.embedTab")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="fields" className="space-y-4 mt-4">
                 <div className="flex justify-end">
-                  <Button size="sm" onClick={() => openFieldDialog()} className="gap-1"><Plus className="w-3 h-3" /> Add Field</Button>
+                  <Button size="sm" onClick={() => openFieldDialog()} className="gap-1"><Plus className="w-3 h-3" /> {t("websiteForms.addField")}</Button>
                 </div>
                 {fields.length === 0 ? (
                   <Card className="p-8 text-center">
-                    <p className="text-muted-foreground text-sm">No fields yet. Add fields to build your form.</p>
+                    <p className="text-muted-foreground text-sm">{t("websiteForms.noFieldsYet")}</p>
                   </Card>
                 ) : (
                   <div className="space-y-2">
@@ -412,15 +414,15 @@ export default function WebsiteForms() {
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{field.label}</span>
                             <Badge variant="outline" className="text-[10px]">{field.fieldType}</Badge>
-                            {field.isRequired && <Badge variant="destructive" className="text-[10px]">Required</Badge>}
+                            {field.isRequired && <Badge variant="destructive" className="text-[10px]">{t("common.required")}</Badge>}
                           </div>
-                          <p className="text-xs text-muted-foreground">name: {field.name}{field.placeholder ? ` · placeholder: "${field.placeholder}"` : ""}</p>
+                          <p className="text-xs text-muted-foreground">{t("websiteForms.fieldNamePrefix")} {field.name}{field.placeholder ? ` · ${t("websiteForms.fieldPlaceholderPrefix")} "${field.placeholder}"` : ""}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => moveField(field, "up")}><ChevronUp className="w-3 h-3" /></Button>
                           <Button variant="ghost" size="sm" disabled={i === fields.length - 1} onClick={() => moveField(field, "down")}><ChevronDown className="w-3 h-3" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => openFieldDialog(field)}><Pencil className="w-3 h-3" /></Button>
-                          <Button variant="ghost" size="sm" onClick={() => { if (confirm("Remove this field?")) deleteFieldMutation.mutate(field.id); }}>
+                          <Button variant="ghost" size="sm" onClick={() => { if (confirm(t("websiteForms.confirmRemoveField"))) deleteFieldMutation.mutate(field.id); }}>
                             <Trash2 className="w-3 h-3 text-destructive" />
                           </Button>
                         </div>
@@ -430,7 +432,7 @@ export default function WebsiteForms() {
                 )}
                 <Card className="p-3 bg-muted/30 border-dashed">
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <EyeOff className="w-3 h-3" /> A hidden honeypot field is automatically injected to prevent spam.
+                    <EyeOff className="w-3 h-3" /> {t("websiteForms.honeypotNote")}
                   </p>
                 </Card>
               </TabsContent>
@@ -439,7 +441,7 @@ export default function WebsiteForms() {
                 {submissions.length === 0 ? (
                   <Card className="p-8 text-center">
                     <MailOpen className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground text-sm">No submissions yet.</p>
+                    <p className="text-muted-foreground text-sm">{t("websiteForms.noSubmissionsYet")}</p>
                   </Card>
                 ) : (
                   <div className="space-y-3">
@@ -457,8 +459,8 @@ export default function WebsiteForms() {
                             </div>
                           ))}
                         </div>
-                        {sub.leadId && <p className="text-xs text-muted-foreground mt-2">Lead ID: #{sub.leadId}</p>}
-                        {sub.sourceUrl && <p className="text-xs text-muted-foreground">Source: {sub.sourceUrl}</p>}
+                        {sub.leadId && <p className="text-xs text-muted-foreground mt-2">{t("websiteForms.leadIdLabel", { id: sub.leadId })}</p>}
+                        {sub.sourceUrl && <p className="text-xs text-muted-foreground">{t("websiteForms.sourceLabel", { url: sub.sourceUrl })}</p>}
                       </Card>
                     ))}
                   </div>
@@ -467,12 +469,12 @@ export default function WebsiteForms() {
 
               <TabsContent value="embed" className="mt-4">
                 <Card className="p-5 space-y-4">
-                  <h3 className="font-semibold">Embed Code</h3>
-                  <p className="text-sm text-muted-foreground">Use this endpoint to submit form data from your website:</p>
+                  <h3 className="font-semibold">{t("websiteForms.embedCode")}</h3>
+                  <p className="text-sm text-muted-foreground">{t("websiteForms.embedIntro")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
                     <code className="text-xs break-all">POST /api/public/website-forms/{selectedForm.slug}/submit</code>
                   </div>
-                  <p className="text-sm text-muted-foreground">Include a hidden <code className="text-xs">_hp</code> field (leave empty) for honeypot spam protection.</p>
+                  <p className="text-sm text-muted-foreground">{t("websiteForms.honeypotEmbedBefore")}<code className="text-xs">_hp</code>{t("websiteForms.honeypotEmbedAfter")}</p>
                   <div className="bg-muted/50 rounded-lg p-4">
                     <pre className="text-xs whitespace-pre-wrap">{`<form action="/api/public/website-forms/${selectedForm.slug}/submit" method="POST">
   <input type="hidden" name="_hp" value="" style="display:none" />
@@ -483,9 +485,9 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
                   <Button variant="outline" size="sm" className="gap-1"
                     onClick={() => {
                       navigator.clipboard.writeText(`POST /api/public/website-forms/${selectedForm.slug}/submit`);
-                      toast({ title: "Copied to clipboard" });
+                      toast({ title: t("websiteForms.copiedToClipboard") });
                     }}>
-                    <Copy className="w-3 h-3" /> Copy Endpoint
+                    <Copy className="w-3 h-3" /> {t("websiteForms.copyEndpoint")}
                   </Button>
                 </Card>
               </TabsContent>
@@ -497,92 +499,92 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
       <Dialog open={formDialog} onOpenChange={setFormDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingForm ? "Edit Form" : "New Form"}</DialogTitle>
+            <DialogTitle>{editingForm ? t("websiteForms.editForm") : t("websiteForms.newForm")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-xs">Form Name</Label>
+              <Label className="text-xs">{t("websiteForms.formName")}</Label>
               <Input value={formData.name} onChange={e => {
                 const name = e.target.value;
                 setFormData(f => ({ ...f, name, slug: editingForm ? f.slug : slugify(name) }));
-              }} placeholder="Contact Form" className="mt-1" />
+              }} placeholder={t("websiteForms.formNamePlaceholder")} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs">Slug</Label>
+              <Label className="text-xs">{t("websiteForms.slug")}</Label>
               <Input value={formData.slug} onChange={e => setFormData(f => ({ ...f, slug: slugify(e.target.value) }))} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs">Description</Label>
+              <Label className="text-xs">{t("common.description")}</Label>
               <Textarea value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))} rows={2} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs">Submit Action</Label>
+              <Label className="text-xs">{t("websiteForms.submitAction")}</Label>
               <Select value={formData.submitAction} onValueChange={v => setFormData(f => ({ ...f, submitAction: v }))}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="crm">CRM / Web-to-Lead</SelectItem>
-                  <SelectItem value="email">Email Notification</SelectItem>
-                  <SelectItem value="webhook">Webhook</SelectItem>
+                  <SelectItem value="crm">{t("websiteForms.submitActionCrm")}</SelectItem>
+                  <SelectItem value="email">{t("websiteForms.submitActionEmail")}</SelectItem>
+                  <SelectItem value="webhook">{t("websiteForms.submitActionWebhook")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {formData.submitAction === "email" && (
               <div>
-                <Label className="text-xs">Notification Email</Label>
+                <Label className="text-xs">{t("websiteForms.notificationEmail")}</Label>
                 <Input type="email" value={formData.submitEmail} onChange={e => setFormData(f => ({ ...f, submitEmail: e.target.value }))} className="mt-1" />
               </div>
             )}
             {formData.submitAction === "webhook" && (
               <div>
-                <Label className="text-xs">Webhook URL</Label>
+                <Label className="text-xs">{t("websiteForms.webhookUrl")}</Label>
                 <Input value={formData.submitWebhookUrl} onChange={e => setFormData(f => ({ ...f, submitWebhookUrl: e.target.value }))} placeholder="https://..." className="mt-1" />
               </div>
             )}
             {formData.submitAction === "crm" && (
               <>
                 <div>
-                  <Label className="text-xs">CRM Lead Source Tag</Label>
-                  <Input value={formData.crmSource} onChange={e => setFormData(f => ({ ...f, crmSource: e.target.value }))} placeholder="e.g. contact-page, landing-1" className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Used as the lead source. Defaults to "website-form:{'{'}slug{'}'}" if empty.</p>
+                  <Label className="text-xs">{t("websiteForms.crmSourceLabel")}</Label>
+                  <Input value={formData.crmSource} onChange={e => setFormData(f => ({ ...f, crmSource: e.target.value }))} placeholder={t("websiteForms.crmSourcePlaceholder")} className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-1">{t("websiteForms.crmSourceHelpBefore")}"website-form:{'{'}slug{'}'}"{t("websiteForms.crmSourceHelpAfter")}</p>
                 </div>
                 <div>
-                  <Label className="text-xs">Page Source Tag</Label>
-                  <Input value={formData.pageSourceTag} onChange={e => setFormData(f => ({ ...f, pageSourceTag: e.target.value }))} placeholder="e.g. homepage, pricing, about-us" className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Identifies which page this form is embedded on for analytics/CRM tracking.</p>
+                  <Label className="text-xs">{t("websiteForms.pageSourceLabel")}</Label>
+                  <Input value={formData.pageSourceTag} onChange={e => setFormData(f => ({ ...f, pageSourceTag: e.target.value }))} placeholder={t("websiteForms.pageSourcePlaceholder")} className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-1">{t("websiteForms.pageSourceHelp")}</p>
                 </div>
                 <div>
-                  <Label className="text-xs">Destination Pipeline Stage</Label>
+                  <Label className="text-xs">{t("websiteForms.pipelineStageLabel")}</Label>
                   <Select value={formData.crmPipelineStage || "__none__"} onValueChange={v => setFormData(f => ({ ...f, crmPipelineStage: v === "__none__" ? "" : v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Default (first stage)" /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("websiteForms.pipelineDefault")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Default (first stage)</SelectItem>
+                      <SelectItem value="__none__">{t("websiteForms.pipelineDefault")}</SelectItem>
                       {(pipelineStages || []).map((s: { key: string; label: string }) => (
                         <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10px] text-muted-foreground mt-1">Pipeline stage where new leads from this form will be placed.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{t("websiteForms.pipelineStageHelp")}</p>
                 </div>
               </>
             )}
             <div>
-              <Label className="text-xs">Success Message</Label>
+              <Label className="text-xs">{t("websiteForms.successMessageLabel")}</Label>
               <Textarea value={formData.successMessage} onChange={e => setFormData(f => ({ ...f, successMessage: e.target.value }))} rows={2} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs">Error Message</Label>
-              <Textarea value={formData.errorMessage} onChange={e => setFormData(f => ({ ...f, errorMessage: e.target.value }))} rows={2} className="mt-1" placeholder="Shown to visitors if submission fails" />
+              <Label className="text-xs">{t("websiteForms.errorMessageLabel")}</Label>
+              <Textarea value={formData.errorMessage} onChange={e => setFormData(f => ({ ...f, errorMessage: e.target.value }))} rows={2} className="mt-1" placeholder={t("websiteForms.errorMessagePlaceholder")} />
             </div>
             <div className="flex items-center gap-2">
               <Switch checked={formData.isActive} onCheckedChange={v => setFormData(f => ({ ...f, isActive: v }))} />
-              <Label className="text-xs">Active</Label>
+              <Label className="text-xs">{t("common.active")}</Label>
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-4">
-            <Button variant="outline" onClick={() => setFormDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setFormDialog(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleSaveForm} disabled={!formData.name || saveFormMutation.isPending}>
               {saveFormMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-              {editingForm ? "Update" : "Create"}
+              {editingForm ? t("common.update") : t("common.create")}
             </Button>
           </div>
         </DialogContent>
@@ -591,68 +593,68 @@ ${fields.map(f => `  <label>${f.label}</label>\n  <input type="${f.fieldType}" n
       <Dialog open={fieldDialog} onOpenChange={setFieldDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingField ? "Edit Field" : "Add Field"}</DialogTitle>
+            <DialogTitle>{editingField ? t("websiteForms.editField") : t("websiteForms.addField")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-xs">Field Type</Label>
+              <Label className="text-xs">{t("websiteForms.fieldTypeLabel")}</Label>
               <Select value={fieldData.fieldType} onValueChange={v => setFieldData(f => ({ ...f, fieldType: v }))}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {FIELD_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  {FIELD_TYPES.map(ft => <SelectItem key={ft.value} value={ft.value}>{t(ft.labelKey)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Label</Label>
+              <Label className="text-xs">{t("websiteForms.labelLabel")}</Label>
               <Input value={fieldData.label} onChange={e => {
                 const label = e.target.value;
                 setFieldData(f => ({ ...f, label, name: editingField ? f.name : slugify(label) }));
-              }} placeholder="Full Name" className="mt-1" />
+              }} placeholder={t("websiteForms.labelPlaceholder")} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs">Field Name (API key)</Label>
+              <Label className="text-xs">{t("websiteForms.fieldNameApiLabel")}</Label>
               <Input value={fieldData.name} onChange={e => setFieldData(f => ({ ...f, name: slugify(e.target.value) }))} className="mt-1 font-mono text-xs" />
             </div>
             <div>
-              <Label className="text-xs">Placeholder</Label>
+              <Label className="text-xs">{t("websiteForms.placeholderLabel")}</Label>
               <Input value={fieldData.placeholder} onChange={e => setFieldData(f => ({ ...f, placeholder: e.target.value }))} className="mt-1" />
             </div>
             {(fieldData.fieldType === "select") && (
               <div>
-                <Label className="text-xs">Options (comma-separated)</Label>
-                <Input value={fieldData.options} onChange={e => setFieldData(f => ({ ...f, options: e.target.value }))} placeholder="Option 1, Option 2, Option 3" className="mt-1" />
+                <Label className="text-xs">{t("websiteForms.optionsLabel")}</Label>
+                <Input value={fieldData.options} onChange={e => setFieldData(f => ({ ...f, options: e.target.value }))} placeholder={t("websiteForms.optionsPlaceholder")} className="mt-1" />
               </div>
             )}
             <div className="flex items-center gap-2">
               <Switch checked={fieldData.isRequired} onCheckedChange={v => setFieldData(f => ({ ...f, isRequired: v }))} />
-              <Label className="text-xs">Required</Label>
+              <Label className="text-xs">{t("common.required")}</Label>
             </div>
             {["text", "textarea", "email", "phone", "url"].includes(fieldData.fieldType) && (
               <div className="space-y-3 pt-2 border-t">
-                <Label className="text-xs font-semibold text-muted-foreground">Validation Rules</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">{t("websiteForms.validationRules")}</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-[10px]">Min Length</Label>
+                    <Label className="text-[10px]">{t("websiteForms.minLength")}</Label>
                     <Input type="number" value={fieldData.minLength} onChange={e => setFieldData(f => ({ ...f, minLength: e.target.value }))} placeholder="0" className="mt-0.5 h-7 text-xs" />
                   </div>
                   <div>
-                    <Label className="text-[10px]">Max Length</Label>
+                    <Label className="text-[10px]">{t("websiteForms.maxLength")}</Label>
                     <Input type="number" value={fieldData.maxLength} onChange={e => setFieldData(f => ({ ...f, maxLength: e.target.value }))} placeholder="255" className="mt-0.5 h-7 text-xs" />
                   </div>
                 </div>
                 <div>
-                  <Label className="text-[10px]">Pattern (RegEx)</Label>
-                  <Input value={fieldData.pattern} onChange={e => setFieldData(f => ({ ...f, pattern: e.target.value }))} placeholder="e.g. ^[A-Za-z]+$" className="mt-0.5 h-7 text-xs font-mono" />
+                  <Label className="text-[10px]">{t("websiteForms.pattern")}</Label>
+                  <Input value={fieldData.pattern} onChange={e => setFieldData(f => ({ ...f, pattern: e.target.value }))} placeholder={t("websiteForms.patternPlaceholder")} className="mt-0.5 h-7 text-xs font-mono" />
                 </div>
               </div>
             )}
           </div>
           <div className="flex justify-end gap-3 mt-4">
-            <Button variant="outline" onClick={() => setFieldDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setFieldDialog(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleSaveField} disabled={!fieldData.label || saveFieldMutation.isPending}>
               {saveFieldMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-              {editingField ? "Update" : "Add"}
+              {editingField ? t("common.update") : t("common.add")}
             </Button>
           </div>
         </DialogContent>

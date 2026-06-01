@@ -129,6 +129,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
   notesRows?: Record<string, any>[];
   onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
 }) {
+  const { t } = useI18n();
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -139,24 +140,24 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
     if (!file) return;
     try {
       const rows = await parseExcel(file);
-      if (rows.length === 0) { setError("File is empty or has invalid format"); return; }
+      if (rows.length === 0) { setError(t("catalogPage.fileEmptyInvalid")); return; }
       setLoading(true);
       setError("");
       const res = await onImport(rows);
       setResult(res);
     } catch (err) {
-      const msg = err instanceof Error && err.message ? err.message : "Unknown error";
+      const msg = err instanceof Error && err.message ? err.message : t("catalogPage.unknownError");
       console.error("[BulkImport] failed:", err);
       // Detect auth/CSRF errors and tell the user to sign in again instead of
       // showing a confusing generic "Import failed" message.
       if (/HTTP\s*401/i.test(msg) || /Authentication required/i.test(msg)) {
-        setError("Your session has expired. Please sign out and log back in, then try the import again.");
+        setError(t("catalogPage.sessionExpired"));
       } else if (/HTTP\s*403/i.test(msg) || /CSRF/i.test(msg)) {
-        setError("Permission denied or security token expired. Refresh the page and try again.");
+        setError(t("catalogPage.permissionDenied"));
       } else {
         // Surface the backend's reason (e.g. unknown university names) so the
         // user knows what to fix instead of seeing a generic "Import failed".
-        setError(`Import failed: ${msg}`);
+        setError(t("catalogPage.importFailedDetail", { msg }));
       }
     }
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
@@ -168,26 +169,26 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
     <>
     <Dialog open={open} onOpenChange={reset}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Bulk Import — {title}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("catalogPage.bulkImport")} — {title}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <Button variant="outline" size="sm" onClick={() => downloadExcelTemplate(templateRows, title, `${title.toLowerCase().replace(/\s/g, "_")}_template.xlsx`, notesRows)}>
-            <Download className="h-4 w-4 mr-2" /> Download Template (.xlsx)
+            <Download className="h-4 w-4 mr-2" /> {t("catalogPage.downloadTemplate")}
           </Button>
           <div>
-            <Label htmlFor="xlsxfile">Select Excel File (.xlsx, .xls)</Label>
+            <Label htmlFor="xlsxfile">{t("catalogPage.selectExcelFile")}</Label>
             <Input id="xlsxfile" ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="mt-1" onChange={handleFile} disabled={loading} />
           </div>
-          {loading && <p className="text-sm text-muted-foreground animate-pulse">Processing…</p>}
+          {loading && <p className="text-sm text-muted-foreground animate-pulse">{t("catalogPage.processing")}</p>}
           {error && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{error}</p>}
           {result && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
-              <p className="font-medium text-green-700">Import completed</p>
-              <p className="text-green-600">Added: <strong>{result.inserted}</strong>{result.updated ? <> — Updated: <strong>{result.updated}</strong></> : null} — Skipped: <strong>{result.skipped}</strong></p>
+              <p className="font-medium text-green-700">{t("catalogPage.importCompleted")}</p>
+              <p className="text-green-600">{t("catalogPage.importAdded", { n: result.inserted })}{result.updated ? ` — ${t("catalogPage.importUpdated", { n: result.updated })}` : null} — {t("catalogPage.importSkipped", { n: result.skipped })}</p>
               {(result.docsTouched !== undefined || result.invalidDocCells !== undefined) && (
                 <p className="text-green-600 text-xs">
-                  {result.docsTouched !== undefined && <>Doc requirements updated for: <strong>{result.docsTouched}</strong> program(s).</>}
+                  {result.docsTouched !== undefined && t("catalogPage.docReqsUpdated", { n: result.docsTouched })}
                   {result.invalidDocCells !== undefined && result.invalidDocCells > 0 && (
-                    <span className="ml-2 text-amber-700">Skipped invalid doc cells: <strong>{result.invalidDocCells}</strong> (only "mandatory", "optional", or blank are accepted).</span>
+                    <span className="ml-2 text-amber-700">{t("catalogPage.skippedInvalidDocCells", { n: result.invalidDocCells })}</span>
                   )}
                 </p>
               )}
@@ -197,7 +198,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
               <p className="font-medium text-amber-800 flex items-center gap-1.5">
                 <AlertTriangle className="h-4 w-4" />
-                Bu sütunlar katalogda yok, atlandı:
+                {t("catalogPage.unknownDocColumns")}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {result.unknownDocColumns.map(col => (
@@ -210,12 +211,12 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
                 href="/admin/catalog"
                 className="inline-flex items-center gap-1 text-amber-900 underline hover:no-underline text-xs font-medium"
               >
-                Belge kataloğuna git <ExternalLink className="h-3 w-3" />
+                {t("catalogPage.goToDocCatalog")} <ExternalLink className="h-3 w-3" />
               </a>
             </div>
           )}
         </div>
-        <DialogFooter><Button variant="outline" onClick={reset}>Close</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={reset}>{t("common.close")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
     </>
@@ -272,6 +273,7 @@ function SortTh({ label, col, sort, onSort, className }: { label: string; col: s
    COUNTRIES TAB
 ══════════════════════════════════════════════════════════ */
 function CountriesTab() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -363,14 +365,14 @@ function CountriesTab() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search countries…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
+          <Input placeholder={t("catalogPage.searchCountries")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
         <Button variant="outline" onClick={async () => {
           try {
             const all = await api("/api/countries?limit=5000");
@@ -380,8 +382,8 @@ function CountriesTab() {
             }));
             await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
           } catch {}
-        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
-        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Add Country</Button>
+        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCountry")}</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -391,22 +393,22 @@ function CountriesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <ColumnHeader asTh label="Country"
+              <ColumnHeader asTh label={t("catalogPage.country")}
                 sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "Country" }} />
-              <ColumnHeader asTh label="Code"
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.country") }} />
+              <ColumnHeader asTh label={t("catalogPage.code")}
                 sort={{ sortKey: "code", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fCode, onChange: v => { setFCode(v.toUpperCase()); setPage(1); }, placeholder: "TR, GB…", label: "ISO Code" }} />
-              <ColumnHeader asTh label="Status"
+                filter={{ type: "text", value: fCode, onChange: v => { setFCode(v.toUpperCase()); setPage(1); }, placeholder: t("catalogPage.codePlaceholder"), label: t("catalogPage.isoCode") }} />
+              <ColumnHeader asTh label={t("common.status")}
                 sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
-                  options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], allLabel: "All", label: "Status" }} />
+                  options: [{ value: "active", label: t("common.active") }, { value: "inactive", label: t("common.inactive") }], allLabel: t("common.all"), label: t("common.status") }} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No countries found</td></tr>
+              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">{t("catalogPage.noCountriesFound")}</td></tr>
             )}
             {sorted.map(c => (
               <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
@@ -416,7 +418,7 @@ function CountriesTab() {
                 <td className="px-4 py-2.5 font-medium"><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="md" /> : null}{c.name}</span></td>
                 <td className="px-4 py-2.5 text-muted-foreground font-mono">{c.code}</td>
                 <td className="px-4 py-2.5">
-                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Active" : "Inactive"}</Badge>
+                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? t("common.active") : t("common.inactive")}</Badge>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
@@ -434,19 +436,19 @@ function CountriesTab() {
       {/* Add/Edit Modal */}
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{form?.id ? "Edit Country" : "New Country"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{form?.id ? t("catalogPage.editCountry") : t("catalogPage.newCountry")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Country Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><Label>ISO Code (2 letters) *</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
-            <div><Label>Flag Emoji</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.countryNameReq")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.isoCode2Req")}</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
+            <div><Label>{t("catalogPage.flagEmoji")}</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
             <div className="flex items-center justify-between">
-              <Label>Active</Label>
+              <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code}>Save</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.code}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -454,11 +456,11 @@ function CountriesTab() {
       {/* Single delete confirm */}
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Country</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete this country?</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.deleteCountry")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteCountry")}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>{t("common.delete")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -466,18 +468,18 @@ function CountriesTab() {
       {/* Bulk delete confirm */}
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected countries? This action cannot be undone.</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.bulkDelete")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmBulkDeleteCountries", { n: selected.size })}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Countries`}
+              {bulkDeleting ? t("catalogPage.deleting") : t("catalogPage.deleteNCountries", { n: selected.size })}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Countries" templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabCountries")} templateRows={templateRows} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -487,6 +489,7 @@ function CountriesTab() {
    CITIES TAB
 ══════════════════════════════════════════════════════════ */
 function CitiesTab() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -591,15 +594,15 @@ function CitiesTab() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search cities…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
+          <Input placeholder={t("catalogPage.searchCities")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); setSelected(new Set()); }} />
         </div>
         <SearchableSelect
           value={filterCountry}
           onValueChange={v => { setFilterCountry(v); setPage(1); setSelected(new Set()); }}
-          placeholder="All countries"
+          placeholder={t("catalogPage.allCountries")}
           className="w-[200px]"
           options={[
-            { value: "all", label: "All countries" },
+            { value: "all", label: t("catalogPage.allCountries") },
             ...countries.map(c => ({
               value: String(c.id),
               label: c.name,
@@ -609,10 +612,10 @@ function CitiesTab() {
         />
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
         <Button variant="outline" onClick={async () => {
           try {
             const allCities = await api("/api/cities?limit=5000");
@@ -623,8 +626,8 @@ function CitiesTab() {
             }));
             await exportToExcel(rows, "Cities", `cities-${new Date().toISOString().slice(0, 10)}.xlsx`);
           } catch {}
-        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
-        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />Add City</Button>
+        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCity")}</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -634,23 +637,23 @@ function CitiesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <ColumnHeader asTh label="City"
+              <ColumnHeader asTh label={t("catalogPage.city")}
                 sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "City" }} />
-              <ColumnHeader asTh label="Country"
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.city") }} />
+              <ColumnHeader asTh label={t("catalogPage.country")}
                 sort={{ sortKey: "country", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: filterCountry, onChange: v => { setFilterCountry(v); setPage(1); setSelected(new Set()); },
-                  options: countries.map(c => ({ value: String(c.id), label: c.name })), allLabel: "All countries", allValue: "all", label: "Country" }} />
-              <ColumnHeader asTh label="Status"
+                  options: countries.map(c => ({ value: String(c.id), label: c.name })), allLabel: t("catalogPage.allCountries"), allValue: "all", label: t("catalogPage.country") }} />
+              <ColumnHeader asTh label={t("common.status")}
                 sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
-                  options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }], allLabel: "All", label: "Status" }} />
+                  options: [{ value: "active", label: t("common.active") }, { value: "inactive", label: t("common.inactive") }], allLabel: t("common.all"), label: t("common.status") }} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No cities found</td></tr>
+              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">{t("catalogPage.noCitiesFound")}</td></tr>
             )}
             {sorted.map(c => (
               <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
@@ -660,7 +663,7 @@ function CitiesTab() {
                 <td className="px-4 py-2.5 font-medium">{c.name}</td>
                 <td className="px-4 py-2.5 text-muted-foreground"><span className="inline-flex items-center gap-1.5">{countryMap[c.countryId]?.code ? <CountryFlag code={countryMap[c.countryId].code} size="sm" /> : null}{countryMap[c.countryId]?.name ?? c.countryId}</span></td>
                 <td className="px-4 py-2.5">
-                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? "Active" : "Inactive"}</Badge>
+                  <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? t("common.active") : t("common.inactive")}</Badge>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
@@ -677,16 +680,16 @@ function CitiesTab() {
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{form?.id ? "Edit City" : "New City"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{form?.id ? t("catalogPage.editCity") : t("catalogPage.newCity")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>City Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.cityNameReq")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div>
-              <Label>Country *</Label>
+              <Label>{t("catalogPage.countryReq")}</Label>
               <SearchableSelect
                 className="mt-1"
                 value={form?.countryId ? String(form.countryId) : ""}
                 onValueChange={v => setForm(f => ({ ...f, countryId: Number(v) }))}
-                placeholder="Select country"
+                placeholder={t("catalogPage.selectCountry")}
                 options={countries.map(c => ({
                   value: String(c.id),
                   label: c.name,
@@ -695,42 +698,42 @@ function CitiesTab() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label>Active</Label>
+              <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.countryId}>Save</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.countryId}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete City</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete this city?</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.deleteCity")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteCity")}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>{t("common.delete")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected cities? This action cannot be undone.</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.bulkDelete")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmBulkDeleteCities", { n: selected.size })}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Cities`}
+              {bulkDeleting ? t("catalogPage.deleting") : t("catalogPage.deleteNCities", { n: selected.size })}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Cities" templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabCities")} templateRows={templateRows} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -740,6 +743,7 @@ function CitiesTab() {
    UNIVERSITIES TAB
 ══════════════════════════════════════════════════════════ */
 function UniversitiesTab() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -848,9 +852,9 @@ function UniversitiesTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["universities"] });
       setForm(null);
-      toast({ title: "Saved", description: "University saved successfully." });
+      toast({ title: t("common.saved"), description: t("catalogPage.universitySaved") });
     },
-    onError: (e: any) => toast({ title: "Save failed", description: String(e?.message || e), variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("catalogPage.saveFailed"), description: String(e?.message || e), variant: "destructive" }),
   });
 
   const del = useMutation({
@@ -889,14 +893,14 @@ function UniversitiesTab() {
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search universities…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder={t("catalogPage.searchUniversities")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
         <Button variant="outline" onClick={async () => {
           try {
             const all = await api("/api/universities?limit=5000");
@@ -915,8 +919,8 @@ function UniversitiesTab() {
             }));
             await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
           } catch {}
-        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
-        <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />Add University</Button>
+        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addUniversity")}</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -926,33 +930,33 @@ function UniversitiesTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <ColumnHeader asTh label="University"
+              <ColumnHeader asTh label={t("catalogPage.university")}
                 sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "University" }} />
-              <ColumnHeader asTh label="Country"
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.university") }} />
+              <ColumnHeader asTh label={t("catalogPage.country")}
                 sort={{ sortKey: "country", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fCountry || "all", onChange: v => { setFCountry(v === "all" ? "" : v); setPage(1); },
-                  options: allCountries.map(c => ({ value: c.name, label: c.name })), allLabel: "All countries", label: "Country" }} />
-              <ColumnHeader asTh label="City"
+                  options: allCountries.map(c => ({ value: c.name, label: c.name })), allLabel: t("catalogPage.allCountries"), label: t("catalogPage.country") }} />
+              <ColumnHeader asTh label={t("catalogPage.city")}
                 sort={{ sortKey: "city", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fCity, onChange: v => { setFCity(v); setPage(1); }, placeholder: "Filter by city…", label: "City" }} />
-              <ColumnHeader asTh label="Type"
+                filter={{ type: "text", value: fCity, onChange: v => { setFCity(v); setPage(1); }, placeholder: t("catalogPage.filterByCity"), label: t("catalogPage.city") }} />
+              <ColumnHeader asTh label={t("catalogPage.type")}
                 sort={{ sortKey: "type", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fType || "all", onChange: v => { setFType(v === "all" ? "" : v); setPage(1); },
-                  options: uniTypeOpts.map((t: string) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) })), allLabel: "All types", label: "Type" }} />
-              <ColumnHeader asTh label="QS"
+                  options: uniTypeOpts.map((ut: string) => ({ value: ut, label: ut.charAt(0).toUpperCase() + ut.slice(1) })), allLabel: t("catalogPage.allTypes"), label: t("catalogPage.type") }} />
+              <ColumnHeader asTh label={t("catalogPage.qs")}
                 sort={{ sortKey: "qs", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fQs, onChange: v => { setFQs(v.replace(/[^\d]/g, "")); setPage(1); }, placeholder: "Exact QS rank…", label: "QS Ranking" }} />
-              <ColumnHeader asTh label="Status"
+                filter={{ type: "text", value: fQs, onChange: v => { setFQs(v.replace(/[^\d]/g, "")); setPage(1); }, placeholder: t("catalogPage.exactQsRank"), label: t("catalogPage.qsRanking") }} />
+              <ColumnHeader asTh label={t("common.status")}
                 sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
-                  options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }], allLabel: "All", label: "Status" }} />
+                  options: [{ value: "open", label: t("catalogPage.open") }, { value: "closed", label: t("catalogPage.closed") }], allLabel: t("common.all"), label: t("common.status") }} />
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No universities found</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">{t("catalogPage.noUniversitiesFound")}</td></tr>
             )}
             {sorted.map(u => (
               <tr key={u.id} className={`hover:bg-muted/20 transition-colors ${selected.has(u.id) ? "bg-primary/5" : ""}`}>
@@ -974,15 +978,15 @@ function UniversitiesTab() {
                 <td className="px-4 py-2.5 text-muted-foreground">{u.country ?? "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.city ?? "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                  {u.universityType === "state" ? "State" : u.universityType === "private" ? "Private" : u.universityType === "foundation" ? "Foundation" : u.universityType ?? "—"}
+                  {u.universityType === "state" ? t("catalogPage.uniTypeState") : u.universityType === "private" ? t("catalogPage.uniTypePrivate") : u.universityType === "foundation" ? t("catalogPage.uniTypeFoundation") : u.universityType ?? "—"}
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.qsRanking ?? "—"}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex flex-col gap-0.5">
                     <Badge variant={u.status === "open" ? "default" : "secondary"} className="text-xs w-fit">
-                      {u.status === "open" ? "Open" : "Closed"}
+                      {u.status === "open" ? t("catalogPage.open") : t("catalogPage.closed")}
                     </Badge>
-                    {!u.isActive && <Badge variant="outline" className="text-xs w-fit text-muted-foreground">Inactive</Badge>}
+                    {!u.isActive && <Badge variant="outline" className="text-xs w-fit text-muted-foreground">{t("common.inactive")}</Badge>}
                   </div>
                 </td>
                 <td className="px-4 py-2.5">
@@ -1001,7 +1005,7 @@ function UniversitiesTab() {
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{form?.id ? "Edit University" : "New University"}</DialogTitle>
+            <DialogTitle>{form?.id ? t("catalogPage.editUniversity") : t("catalogPage.newUniversity")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
 
@@ -1014,21 +1018,21 @@ function UniversitiesTab() {
                 }
               </div>
               <div className="flex-1">
-                <Label className="text-sm font-medium">University Logo</Label>
-                <p className="text-xs text-muted-foreground mt-0.5 mb-2">Upload PNG, JPG or SVG</p>
+                <Label className="text-sm font-medium">{t("catalogPage.universityLogo")}</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-2">{t("catalogPage.uploadLogoHint")}</p>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />Choose File
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />{t("catalogPage.chooseFile")}
                   </Button>
                   {form?.logoUrl && (
                     <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setF({ logoUrl: undefined })}>
-                      Remove
+                      {t("catalogPage.remove")}
                     </Button>
                   )}
                 </div>
                 <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                 <div className="mt-2">
-                  <Input placeholder="or paste Logo URL…" className="text-xs h-8"
+                  <Input placeholder={t("catalogPage.pasteLogoUrl")} className="text-xs h-8"
                     value={form?.logoUrl?.startsWith("data:") ? "" : form?.logoUrl ?? ""}
                     onChange={e => setF({ logoUrl: e.target.value || undefined })}
                   />
@@ -1038,14 +1042,14 @@ function UniversitiesTab() {
 
             {/* ── Basic Information ───────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Basic Information</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("catalogPage.basicInformation")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <Label>University Name *</Label>
+                  <Label>{t("catalogPage.universityNameReq")}</Label>
                   <Input className="mt-1" value={form?.name ?? ""} onChange={e => setF({ name: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Country *</Label>
+                  <Label>{t("catalogPage.countryReq")}</Label>
                   <SearchableSelect
                     className="mt-1"
                     value={form?.country ?? ""}
@@ -1054,7 +1058,7 @@ function UniversitiesTab() {
                       setF({ country: v, city: null });
                       setSelCountryId(found?.id ?? null);
                     }}
-                    placeholder="Select country…"
+                    placeholder={t("catalogPage.selectCountry")}
                     options={allCountries.map(c => ({
                       value: c.name,
                       label: c.name,
@@ -1063,48 +1067,48 @@ function UniversitiesTab() {
                   />
                 </div>
                 <div>
-                  <Label>City</Label>
+                  <Label>{t("catalogPage.city")}</Label>
                   <SearchableSelect
                     className="mt-1"
                     value={form?.city ?? ""}
                     onValueChange={v => setF({ city: v === "__none__" ? null : (v || null) })}
                     disabled={!selCountryId}
-                    placeholder={selCountryId ? "Select city…" : "Select country first"}
+                    placeholder={selCountryId ? t("catalogPage.selectCity") : t("catalogPage.selectCountryFirst")}
                     options={[
-                      { value: "__none__", label: "— No city —" },
+                      { value: "__none__", label: t("catalogPage.noCity") },
                       ...formCities.map(c => ({ value: c.name, label: c.name })),
                     ]}
                   />
                 </div>
                 <div>
-                  <Label>University Type</Label>
+                  <Label>{t("catalogPage.universityType")}</Label>
                   <Select value={form?.universityType ?? ""} onValueChange={v => setF({ universityType: v || null })}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select type…" /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.selectType")} /></SelectTrigger>
                     <SelectContent>
                       {uniTypeOpts.map((t: string) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Application Status</Label>
+                  <Label>{t("catalogPage.applicationStatus")}</Label>
                   <Select value={form?.status ?? "open"} onValueChange={v => setF({ status: v })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
+                      <SelectItem value="open">{t("catalogPage.open")}</SelectItem>
+                      <SelectItem value="closed">{t("catalogPage.closed")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="col-span-2">
-                  <Label>Address</Label>
-                  <Input className="mt-1" placeholder="Full address…" value={form?.address ?? ""} onChange={e => setF({ address: e.target.value })} />
+                  <Label>{t("catalogPage.address")}</Label>
+                  <Input className="mt-1" placeholder={t("catalogPage.fullAddress")} value={form?.address ?? ""} onChange={e => setF({ address: e.target.value })} />
                 </div>
                 <div className="col-span-2">
-                  <Label>Description</Label>
+                  <Label>{t("common.description")}</Label>
                   <Textarea className="mt-1" rows={2} value={form?.description ?? ""} onChange={e => setF({ description: e.target.value })} />
                 </div>
                 <div className="col-span-2 flex items-center justify-between">
-                  <Label>Active in System</Label>
+                  <Label>{t("catalogPage.activeInSystem")}</Label>
                   <Switch checked={form?.isActive ?? true} onCheckedChange={v => setF({ isActive: v })} />
                 </div>
               </div>
@@ -1112,14 +1116,14 @@ function UniversitiesTab() {
 
             {/* ── Tax ───────────────────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tax Information</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("catalogPage.taxInformation")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Tax Type</Label>
-                  <Input className="mt-1" placeholder="VAT, Withholding…" value={form?.taxType ?? ""} onChange={e => setF({ taxType: e.target.value })} />
+                  <Label>{t("catalogPage.taxType")}</Label>
+                  <Input className="mt-1" placeholder={t("catalogPage.taxTypePlaceholder")} value={form?.taxType ?? ""} onChange={e => setF({ taxType: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Tax Rate (%)</Label>
+                  <Label>{t("catalogPage.taxRate")}</Label>
                   <Input className="mt-1" type="number" step="0.01" placeholder="18" value={form?.taxPercent ?? ""} onChange={e => setF({ taxPercent: e.target.value ? Number(e.target.value) : undefined })} />
                 </div>
               </div>
@@ -1127,22 +1131,22 @@ function UniversitiesTab() {
 
             {/* ── Rankings ──────────────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">World Rankings</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("catalogPage.worldRankings")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>QS World Ranking</Label>
+                  <Label>{t("catalogPage.qsWorldRanking")}</Label>
                   <Input className="mt-1" type="number" placeholder="—" value={form?.qsRanking ?? ""} onChange={e => setF({ qsRanking: e.target.value ? Number(e.target.value) : undefined })} />
                 </div>
                 <div>
-                  <Label>Times Higher Education</Label>
+                  <Label>{t("catalogPage.timesHigherEducation")}</Label>
                   <Input className="mt-1" type="number" placeholder="—" value={form?.timesRanking ?? ""} onChange={e => setF({ timesRanking: e.target.value ? Number(e.target.value) : undefined })} />
                 </div>
                 <div>
-                  <Label>Shanghai (ARWU)</Label>
+                  <Label>{t("catalogPage.shanghaiArwu")}</Label>
                   <Input className="mt-1" type="number" placeholder="—" value={form?.shanghaiRanking ?? ""} onChange={e => setF({ shanghaiRanking: e.target.value ? Number(e.target.value) : undefined })} />
                 </div>
                 <div>
-                  <Label>CWTS Leiden</Label>
+                  <Label>{t("catalogPage.cwtsLeiden")}</Label>
                   <Input className="mt-1" type="number" placeholder="—" value={form?.cwtsLeidenRanking ?? ""} onChange={e => setF({ cwtsLeidenRanking: e.target.value ? Number(e.target.value) : undefined })} />
                 </div>
               </div>
@@ -1150,29 +1154,29 @@ function UniversitiesTab() {
 
             {/* ── Links ─────────────────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Links & Documents</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("catalogPage.linksDocuments")}</p>
               <div className="grid grid-cols-1 gap-3">
                 <div>
-                  <Label>Website</Label>
+                  <Label>{t("catalogPage.website")}</Label>
                   <div className="flex gap-2 mt-1">
                     <Input placeholder="https://university.edu" value={form?.website ?? ""} onChange={e => setF({ website: e.target.value })} />
                     {form?.website && <a href={form.website} target="_blank" rel="noopener noreferrer"><Button type="button" variant="ghost" size="icon"><ExternalLink className="h-4 w-4" /></Button></a>}
                   </div>
                 </div>
                 <div>
-                  <Label>Online Payment Link</Label>
+                  <Label>{t("catalogPage.onlinePaymentLink")}</Label>
                   <Input className="mt-1" placeholder="https://…" value={form?.onlinePaymentUrl ?? ""} onChange={e => setF({ onlinePaymentUrl: e.target.value })} />
                 </div>
                 <div>
-                  <Label>CRICOS Link</Label>
+                  <Label>{t("catalogPage.cricosLink")}</Label>
                   <Input className="mt-1" placeholder="https://cricos.education.gov.au/…" value={form?.cricosLink ?? ""} onChange={e => setF({ cricosLink: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Documents Link</Label>
+                  <Label>{t("catalogPage.documentsLink")}</Label>
                   <Input className="mt-1" placeholder="https://…" value={form?.documentsLink ?? ""} onChange={e => setF({ documentsLink: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Current Fee List</Label>
+                  <Label>{t("catalogPage.currentFeeList")}</Label>
                   <Input className="mt-1" placeholder="https://…" value={form?.currentFeeListLink ?? ""} onChange={e => setF({ currentFeeListLink: e.target.value })} />
                 </div>
               </div>
@@ -1180,15 +1184,15 @@ function UniversitiesTab() {
 
             {/* ── Admission Process ─────────────────── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Admission Process</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t("catalogPage.admissionProcess")}</p>
               <div className="space-y-3">
                 <div>
-                  <Label>Initial Deposit Options</Label>
-                  <Textarea className="mt-1" rows={2} placeholder="Deposit amounts and conditions…" value={form?.initialDepositOptions ?? ""} onChange={e => setF({ initialDepositOptions: e.target.value })} />
+                  <Label>{t("catalogPage.initialDepositOptions")}</Label>
+                  <Textarea className="mt-1" rows={2} placeholder={t("catalogPage.depositOptionsPlaceholder")} value={form?.initialDepositOptions ?? ""} onChange={e => setF({ initialDepositOptions: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Admission Process Description</Label>
-                  <Textarea className="mt-1" rows={3} placeholder="Step-by-step application and admission process…" value={form?.admissionProcess ?? ""} onChange={e => setF({ admissionProcess: e.target.value })} />
+                  <Label>{t("catalogPage.admissionProcessDesc")}</Label>
+                  <Textarea className="mt-1" rows={3} placeholder={t("catalogPage.admissionProcessPlaceholder")} value={form?.admissionProcess ?? ""} onChange={e => setF({ admissionProcess: e.target.value })} />
                 </div>
               </div>
             </div>
@@ -1198,19 +1202,19 @@ function UniversitiesTab() {
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Lock className="h-4 w-4 text-amber-600" />
-                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Contact Person — Super Admin Only</p>
+                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">{t("catalogPage.contactPersonSuperAdmin")}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <Label>Full Name</Label>
-                    <Input className="mt-1 bg-white" placeholder="John Doe" value={form?.contactPersonName ?? ""} onChange={e => setF({ contactPersonName: e.target.value })} />
+                    <Label>{t("catalogPage.fullName")}</Label>
+                    <Input className="mt-1 bg-white" placeholder={t("catalogPage.fullNamePlaceholder")} value={form?.contactPersonName ?? ""} onChange={e => setF({ contactPersonName: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Phone</Label>
+                    <Label>{t("common.phone")}</Label>
                     <Input className="mt-1 bg-white" placeholder="+1 555 000 0000" value={form?.contactPersonPhone ?? ""} onChange={e => setF({ contactPersonPhone: e.target.value })} />
                   </div>
                   <div>
-                    <Label>Email</Label>
+                    <Label>{t("common.email")}</Label>
                     <Input className="mt-1 bg-white" type="email" placeholder="contact@university.edu" value={form?.contactPersonEmail ?? ""} onChange={e => setF({ contactPersonEmail: e.target.value })} />
                   </div>
                 </div>
@@ -1219,9 +1223,9 @@ function UniversitiesTab() {
           </div>
 
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
             <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.country}>
-              {save.isPending ? "Saving…" : "Save"}
+              {save.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1229,29 +1233,29 @@ function UniversitiesTab() {
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete University</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete this university? Linked programs may also be affected.</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.deleteUniversity")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteUniversity")}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>{t("common.delete")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected universities? This action cannot be undone.</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.bulkDelete")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmBulkDeleteUniversities", { n: selected.size })}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Universities`}
+              {bulkDeleting ? t("catalogPage.deleting") : t("catalogPage.deleteNUniversities", { n: selected.size })}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Universities" templateRows={templateRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabUniversities")} templateRows={templateRows} onImport={handleBulkImport} />
     </div>
     </>
   );
@@ -1261,6 +1265,7 @@ function UniversitiesTab() {
    PROGRAMS TAB
 ══════════════════════════════════════════════════════════ */
 function ProgramsTab() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { season } = useSeason();
   const [page, setPage] = useState(1);
@@ -1502,15 +1507,15 @@ function ProgramsTab() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search programs…" className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder={t("catalogPage.searchPrograms")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <SearchableSelect
           value={filterUni}
           onValueChange={v => { setFilterUni(v); setPage(1); }}
-          placeholder="All universities"
+          placeholder={t("catalogPage.allUniversities")}
           className="w-[220px]"
           options={[
-            { value: "all", label: "All universities" },
+            { value: "all", label: t("catalogPage.allUniversities") },
             ...universities.map(u => ({
               value: String(u.id),
               label: u.name,
@@ -1519,13 +1524,13 @@ function ProgramsTab() {
         />
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
-            <Trash2 className="h-4 w-4 mr-2" />Delete Selected ({selected.size})
+            <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
         <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => setDelAllOpen(true)}>
-          <Trash2 className="h-4 w-4" />Delete All
+          <Trash2 className="h-4 w-4" />{t("catalogPage.deleteAll")}
         </Button>
-        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Excel</Button>
+        <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
         <Button variant="outline" onClick={async () => {
           try {
             const all = await api(`/api/programs?limit=5000${filterUni !== "all" ? `&universityId=${filterUni}` : ""}`);
@@ -1545,8 +1550,8 @@ function ProgramsTab() {
             }));
             await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
           } catch {}
-        }}><Download className="h-4 w-4 mr-2" />Export Excel</Button>
-        <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />Add Program</Button>
+        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addProgram")}</Button>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -1556,30 +1561,30 @@ function ProgramsTab() {
               <th className="px-4 py-2 w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded cursor-pointer" />
               </th>
-              <ColumnHeader asTh label="Program"
+              <ColumnHeader asTh label={t("catalogPage.program")}
                 sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: "Filter by name…", label: "Program" }} />
-              <ColumnHeader asTh label="University"
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.program") }} />
+              <ColumnHeader asTh label={t("catalogPage.university")}
                 sort={{ sortKey: "university", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: filterUni, onChange: v => { setFilterUni(v); setPage(1); setSelected(new Set()); },
-                  options: universities.map(u => ({ value: String(u.id), label: u.name })), allLabel: "All universities", allValue: "all", label: "University" }} />
-              <ColumnHeader asTh label="Degree"
+                  options: universities.map(u => ({ value: String(u.id), label: u.name })), allLabel: t("catalogPage.allUniversities"), allValue: "all", label: t("catalogPage.university") }} />
+              <ColumnHeader asTh label={t("catalogPage.degree")}
                 sort={{ sortKey: "degree", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fDegree || "all", onChange: v => { setFDegree(v === "all" ? "" : v); setPage(1); },
-                  options: activeOpts("degree").map(d => ({ value: d, label: d })), allLabel: "All", label: "Degree" }} />
-              <ColumnHeader asTh label="Field"
+                  options: activeOpts("degree").map(d => ({ value: d, label: d })), allLabel: t("common.all"), label: t("catalogPage.degree") }} />
+              <ColumnHeader asTh label={t("catalogPage.field")}
                 sort={{ sortKey: "field", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fField || "all", onChange: v => { setFField(v === "all" ? "" : v); setPage(1); },
-                  options: activeOpts("field").map(f => ({ value: f, label: f })), allLabel: "All", label: "Field" }} />
-              <SortTh label="Fee" col="fee" sort={sort} onSort={handleSort} />
-              <SortTh label="Commission" col="commission" sort={sort} onSort={handleSort} />
-              <th className="px-4 py-2 text-xs font-medium text-left">Quota</th>
+                  options: activeOpts("field").map(f => ({ value: f, label: f })), allLabel: t("common.all"), label: t("catalogPage.field") }} />
+              <SortTh label={t("common.fee")} col="fee" sort={sort} onSort={handleSort} />
+              <SortTh label={t("catalogPage.commission")} col="commission" sort={sort} onSort={handleSort} />
+              <th className="px-4 py-2 text-xs font-medium text-left">{t("catalogPage.quota")}</th>
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">No programs found</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">{t("catalogPage.noProgramsFound")}</td></tr>
             )}
             {sorted.map(p => (
               <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${selected.has(p.id) ? "bg-primary/5" : ""}`}>
@@ -1615,59 +1620,59 @@ function ProgramsTab() {
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
-          <DialogHeader><DialogTitle>{form?.id ? "Edit Program" : "New Program"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{form?.id ? t("catalogPage.editProgram") : t("catalogPage.newProgram")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>University *</Label>
+              <Label>{t("catalogPage.universityRequired")}</Label>
               <Select value={form?.universityId ? String(form.universityId) : ""} onValueChange={v => setForm(f => ({ ...f, universityId: Number(v) }))}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select university" /></SelectTrigger>
+                <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.selectUniversity")} /></SelectTrigger>
                 <SelectContent>{universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Program Name *</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.programNameRequired")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Degree</Label>
+                <Label>{t("catalogPage.degree")}</Label>
                 <Select value={form?.degree ?? ""} onValueChange={v => setForm(f => ({ ...f, degree: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.select")} /></SelectTrigger>
                   <SelectContent>
                     {activeOpts("degree").map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Field</Label>
+                <Label>{t("catalogPage.field")}</Label>
                 <Select value={form?.field ?? ""} onValueChange={v => setForm(f => ({ ...f, field: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.select")} /></SelectTrigger>
                   <SelectContent>
                     {activeOpts("field").map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Language</Label>
+                <Label>{t("catalogPage.language")}</Label>
                 <Select value={form?.language ?? ""} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.select")} /></SelectTrigger>
                   <SelectContent>
                     {activeOpts("language").map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Duration</Label>
+                <Label>{t("catalogPage.duration")}</Label>
                 <Select value={form?.duration ?? ""} onValueChange={v => setForm(f => ({ ...f, duration: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.select")} /></SelectTrigger>
                   <SelectContent>
                     {activeOpts("duration").map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Annual Fee</Label>
+                <Label>{t("catalogPage.annualFee")}</Label>
                 <Input className="mt-1" type="number" value={form?.tuitionFee ?? ""} onChange={e => setForm(f => ({ ...f, tuitionFee: e.target.value ? Number(e.target.value) : undefined }))} />
               </div>
               <div>
-                <Label>Currency</Label>
+                <Label>{t("catalogPage.currency")}</Label>
                 <Select value={form?.currency ?? "USD"} onValueChange={v => setForm(f => ({ ...f, currency: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1676,69 +1681,69 @@ function ProgramsTab() {
                 </Select>
               </div>
               <div>
-                <Label>Fee Type</Label>
+                <Label>{t("catalogPage.feeType")}</Label>
                 <Select value={form?.feeType ?? ""} onValueChange={v => setForm(f => ({ ...f, feeType: v || null }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={t("catalogPage.select")} /></SelectTrigger>
                   <SelectContent>
                     {activeOpts("fee_type").map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Scholarship</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : null }))} /></div>
-              <div><Label>Commission %</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : null }))} /></div>
+              <div><Label>{t("catalogPage.scholarship")}</Label><Input className="mt-1" type="number" value={form?.scholarship ?? ""} onChange={e => setForm(f => ({ ...f, scholarship: e.target.value ? Number(e.target.value) : null }))} /></div>
+              <div><Label>{t("catalogPage.commissionPercent")}</Label><Input className="mt-1" type="number" value={form?.commissionRate ?? ""} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value ? Number(e.target.value) : null }))} /></div>
             </div>
 
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-3">
-              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Minimum Requirements</p>
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">{t("catalogPage.minimumRequirements")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Min. Diploma GPA</Label>
-                  <Input className="mt-1" type="number" step="0.01" placeholder="e.g. 2.5" value={form?.minGpa ?? ""} onChange={e => setForm(f => ({ ...f, minGpa: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.minDiplomaGpa")}</Label>
+                  <Input className="mt-1" type="number" step="0.01" placeholder={t("catalogPage.egGpa")} value={form?.minGpa ?? ""} onChange={e => setForm(f => ({ ...f, minGpa: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Min. Language Score</Label>
-                  <Input className="mt-1" type="number" step="0.5" placeholder="e.g. 6.0" value={form?.minLanguageScore ?? ""} onChange={e => setForm(f => ({ ...f, minLanguageScore: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.minLanguageScore")}</Label>
+                  <Input className="mt-1" type="number" step="0.5" placeholder={t("catalogPage.egLanguageScore")} value={form?.minLanguageScore ?? ""} onChange={e => setForm(f => ({ ...f, minLanguageScore: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Quota (Kontenjan)</Label>
-                  <Input className="mt-1" type="number" step="1" min="1" placeholder="e.g. 50 (empty = unlimited)" value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.quota")}</Label>
+                  <Input className="mt-1" type="number" step="1" min="1" placeholder={t("catalogPage.quotaPlaceholder")} value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null }))} />
                 </div>
               </div>
             </div>
 
             {/* ── Additional Fees ────────────────────────────── */}
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Additional Fees ({form?.currency ?? "USD"})</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t("catalogPage.additionalFees")} ({form?.currency ?? "USD"})</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Application Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.applicationFee")}</Label>
+                  <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.applicationFee ?? ""} onChange={e => setForm(f => ({ ...f, applicationFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Advanced Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.advancedFee")}</Label>
+                  <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.advancedFee ?? ""} onChange={e => setForm(f => ({ ...f, advancedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Deposit Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.depositFee")}</Label>
+                  <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.depositFee ?? ""} onChange={e => setForm(f => ({ ...f, depositFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Service Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.serviceFee")}</Label>
+                  <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.serviceFeeAmount ?? ""} onChange={e => setForm(f => ({ ...f, serviceFeeAmount: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Discounted Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="Discounted amount" value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.discountedFee")}</Label>
+                  <Input className="mt-1" type="number" placeholder={t("catalogPage.discountedAmount")} value={form?.discountedFee ?? ""} onChange={e => setForm(f => ({ ...f, discountedFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <Label className="text-xs">Language Fee</Label>
-                  <Input className="mt-1" type="number" placeholder="0 = None" value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
+                  <Label className="text-xs">{t("catalogPage.languageFee")}</Label>
+                  <Input className="mt-1" type="number" placeholder={t("catalogPage.zeroNone")} value={form?.languageFee ?? ""} onChange={e => setForm(f => ({ ...f, languageFee: e.target.value ? Number(e.target.value) : null }))} />
                 </div>
               </div>
             </div>
 
             <div>
-              <Label>Intake Periods</Label>
+              <Label>{t("catalogPage.intakePeriods")}</Label>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {activeOpts("intake").map(ip => {
                   const selected = (form?.intakes ?? "").split(",").map(s => s.trim()).filter(Boolean).includes(ip);
@@ -1757,20 +1762,20 @@ function ProgramsTab() {
                 })}
               </div>
             </div>
-            <div><Label>Requirements</Label><Textarea className="mt-1" rows={2} placeholder="IELTS 6.0, GPA 3.0…" value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.requirements")}</Label><Textarea className="mt-1" rows={2} placeholder={t("catalogPage.requirementsPlaceholder")} value={form?.requirements ?? ""} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} /></div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Required Documents</p>
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{t("catalogPage.requiredDocuments")}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {Object.values(docReqs).filter(v => v !== "none").length} required · {Object.values(docReqs).filter(v => v === "mandatory").length} mandatory
+                  {t("catalogPage.docReqSummary", { req: Object.values(docReqs).filter(v => v !== "none").length, mand: Object.values(docReqs).filter(v => v === "mandatory").length })}
                 </p>
               </div>
-              <p className="text-[11px] text-muted-foreground">Set per program. Mandatory items block submission. Leave as None to omit.</p>
+              <p className="text-[11px] text-muted-foreground">{t("catalogPage.docReqHelp")}</p>
               <Input
                 value={docSearch}
                 onChange={e => setDocSearch(e.target.value)}
-                placeholder="Search documents…"
+                placeholder={t("catalogPage.searchDocuments")}
                 className="h-8 text-xs"
               />
               <div className="max-h-[260px] overflow-y-auto rounded border bg-background">
@@ -1786,7 +1791,7 @@ function ProgramsTab() {
                         : PROGRAM_DOC_TYPE_KEYS;
                       if (filtered.length === 0) {
                         return (
-                          <tr><td className="px-2 py-3 text-center text-muted-foreground">No documents match "{docSearch}"</td></tr>
+                          <tr><td className="px-2 py-3 text-center text-muted-foreground">{t("catalogPage.noDocsMatch", { q: docSearch })}</td></tr>
                         );
                       }
                       return filtered.map(dt => {
@@ -1808,7 +1813,7 @@ function ProgramsTab() {
                                         : "bg-muted text-foreground"
                                       : "bg-background hover:bg-muted/50 text-muted-foreground"
                                   }`}
-                                >{opt === "none" ? "None" : opt === "optional" ? "Optional" : "Mandatory"}</button>
+                                >{opt === "none" ? t("catalogPage.none") : opt === "optional" ? t("common.optional") : t("catalogPage.mandatory")}</button>
                               ))}
                             </div>
                           </td>
@@ -1822,51 +1827,51 @@ function ProgramsTab() {
             </div>
 
             <div className="flex items-center justify-between">
-              <Label>Active</Label>
+              <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
-            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.universityId}>Save</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>{t("common.cancel")}</Button>
+            <Button onClick={() => save.mutate(form!)} disabled={save.isPending || !form?.name || !form?.universityId}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={delId !== null} onOpenChange={o => !o && setDelId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Program</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete this program?</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.deleteProgram")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteProgram")}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>Delete</Button>
+            <Button variant="outline" onClick={() => setDelId(null)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => del.mutate(delId!)} disabled={del.isPending}>{t("common.delete")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={bulkDelOpen} onOpenChange={o => !o && setBulkDelOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Bulk Delete</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>{selected.size}</strong> selected programs? This action cannot be undone.</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.bulkDelete")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmBulkDeletePrograms", { n: selected.size })}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setBulkDelOpen(false)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
-              {bulkDeleting ? "Deleting…" : `Delete ${selected.size} Programs`}
+              {bulkDeleting ? t("catalogPage.deleting") : t("catalogPage.deleteNPrograms", { n: selected.size })}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Programs" templateRows={templateRows} notesRows={notesRows} onImport={handleBulkImport} />
+      <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("adminCatalog.tabPrograms")} templateRows={templateRows} notesRows={notesRows} onImport={handleBulkImport} />
 
       <Dialog open={delAllOpen} onOpenChange={o => !o && setDelAllOpen(false)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete All Programs</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete <strong>all programs</strong> from the system? This action cannot be undone.</p>
+          <DialogHeader><DialogTitle>{t("catalogPage.deleteAllPrograms")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("catalogPage.confirmDeleteAllPrograms")}</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDelAllOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDelAllOpen(false)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={handleDeleteAll} disabled={delAllInProgress}>
-              {delAllInProgress ? "Deleting…" : "Delete All Programs"}
+              {delAllInProgress ? t("catalogPage.deleting") : t("catalogPage.deleteAllPrograms")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1884,15 +1889,15 @@ type CatalogOptionMetadata = { label?: string; icon?: string; accept?: string } 
 type CatalogOption = { id: number; category: string; value: string; sortOrder: number; isActive: boolean; metadata?: CatalogOptionMetadata };
 
 const OPTION_CATEGORIES = [
-  { key: "degree", label: "Degree", description: "Academic degree types (Bachelor, Master, etc.)" },
-  { key: "language", label: "Language", description: "Languages of instruction" },
-  { key: "duration", label: "Duration", description: "Program duration options" },
-  { key: "fee_type", label: "Fee Type", description: "Fee calculation types" },
-  { key: "intake", label: "Intake Periods", description: "Enrollment periods" },
-  { key: "field", label: "Field", description: "Academic fields / study areas" },
-  { key: "university_type", label: "University Type", description: "Types of universities (Public, Private, etc.)" },
-  { key: "documents", label: "Documents", description: "Tüm belge türlerinin ana listesi — buraya eklediğiniz belgeler, başvuru ve derece sayfalarında seçenek olarak görünür" },
-  { key: "currency", label: "Currencies", description: "Program ücretleri, komisyonlar ve hizmet bedellerinde kullanılan para birimleri. Yeni eklenenler dropdown'larda hemen görünür; kullanımdaki bir kod silinemez." },
+  { key: "degree", labelKey: "catalogPage.optDegree", descKey: "catalogPage.optDegreeDesc" },
+  { key: "language", labelKey: "catalogPage.optLanguage", descKey: "catalogPage.optLanguageDesc" },
+  { key: "duration", labelKey: "catalogPage.optDuration", descKey: "catalogPage.optDurationDesc" },
+  { key: "fee_type", labelKey: "catalogPage.optFeeType", descKey: "catalogPage.optFeeTypeDesc" },
+  { key: "intake", labelKey: "catalogPage.optIntake", descKey: "catalogPage.optIntakeDesc" },
+  { key: "field", labelKey: "catalogPage.optField", descKey: "catalogPage.optFieldDesc" },
+  { key: "university_type", labelKey: "catalogPage.optUniversityType", descKey: "catalogPage.optUniversityTypeDesc" },
+  { key: "documents", labelKey: "catalogPage.optDocuments", descKey: "catalogPage.optDocumentsDesc" },
+  { key: "currency", labelKey: "catalogPage.optCurrency", descKey: "catalogPage.optCurrencyDesc" },
 ];
 
 
@@ -2078,6 +2083,7 @@ type DeleteBlockedCurrencyPayload = {
 type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload | DeleteBlockedCurrencyPayload;
 
 function OptionsTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
   const [editItem, setEditItem] = useState<CatalogOption | null>(null);
@@ -2099,13 +2105,14 @@ function OptionsTab() {
   const grouped: Record<string, CatalogOption[]> = (optionsResp as any)?.grouped || {};
   const items = grouped[activeCategory] || [];
   const catMeta = OPTION_CATEGORIES.find(c => c.key === activeCategory)!;
+  const catLabel = t(catMeta.labelKey);
 
   async function handleAdd() {
     const trimmed = newValue.trim();
     if (!trimmed) return;
     const duplicate = items.some(o => o.value.trim().toLowerCase() === trimmed.toLowerCase());
     if (duplicate) {
-      toast({ title: "Duplicate value", description: `"${trimmed}" already exists in ${catMeta.label}.`, variant: "destructive" });
+      toast({ title: t("catalogPage.duplicateValue"), description: t("catalogPage.duplicateValueDesc", { value: trimmed, category: catLabel }), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -2119,9 +2126,9 @@ function OptionsTab() {
       setAddMode(false);
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
       qc.invalidateQueries({ queryKey: ["catalog-options", "degree"] });
-      toast({ title: "Added", description: `"${trimmed}" added to ${catMeta.label}.` });
+      toast({ title: t("catalogPage.added"), description: t("catalogPage.addedDesc", { value: trimmed, category: catLabel }) });
     } catch (err: any) {
-      toast({ title: "Add failed", description: err?.message || "Try again.", variant: "destructive" });
+      toast({ title: t("catalogPage.addFailed"), description: err?.message || t("catalogPage.tryAgain"), variant: "destructive" });
     }
     setSaving(false);
   }
@@ -2135,9 +2142,9 @@ function OptionsTab() {
       });
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
       setEditItem(null);
-      toast({ title: "Saved", description: `${catMeta.label} updated.` });
+      toast({ title: t("common.saved"), description: t("catalogPage.optionUpdated", { category: catLabel }) });
     } catch (err: any) {
-      toast({ title: "Update failed", description: err?.message || "Try again.", variant: "destructive" });
+      toast({ title: t("catalogPage.updateFailed"), description: err?.message || t("catalogPage.tryAgain"), variant: "destructive" });
     }
   }
 
@@ -2154,7 +2161,7 @@ function OptionsTab() {
           setConfirmDelete(null);
           return;
         }
-        toast({ title: "Silinemedi", description: "Bu kayıt başka yerlerde kullanılıyor.", variant: "destructive" });
+        toast({ title: t("catalogPage.couldNotDelete"), description: t("catalogPage.recordInUse"), variant: "destructive" });
         return;
       }
       if (!r.ok) {
@@ -2165,9 +2172,9 @@ function OptionsTab() {
       qc.invalidateQueries({ queryKey: ["catalog-orphans"] });
       qc.invalidateQueries({ queryKey: ["document-type-catalog"] });
       setConfirmDelete(null);
-      toast({ title: "Silindi", description: `${catMeta.label} listesinden kaldırıldı.` });
+      toast({ title: t("catalogPage.deleted"), description: t("catalogPage.removedFromList", { category: catLabel }) });
     } catch (err: any) {
-      toast({ title: "Silme başarısız", description: err?.message || "Tekrar deneyin.", variant: "destructive" });
+      toast({ title: t("catalogPage.deleteFailed"), description: err?.message || t("catalogPage.tryAgain"), variant: "destructive" });
     }
   }
 
@@ -2183,7 +2190,7 @@ function OptionsTab() {
             onClick={() => { setActiveCategory(cat.key); setAddMode(false); setEditItem(null); }}
             className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
           >
-            {cat.label}
+            {t(cat.labelKey)}
             <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
           </button>
         ))}
@@ -2192,8 +2199,8 @@ function OptionsTab() {
       <div className="border rounded-lg">
         <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
           <div>
-            <h3 className="text-sm font-semibold">{catMeta.label}</h3>
-            <p className="text-xs text-muted-foreground">{catMeta.description}</p>
+            <h3 className="text-sm font-semibold">{catLabel}</h3>
+            <p className="text-xs text-muted-foreground">{t(catMeta.descKey)}</p>
           </div>
           <div className="flex items-center gap-2">
             {activeCategory === "documents" && (
@@ -2216,21 +2223,21 @@ function OptionsTab() {
                     a.click();
                     a.remove();
                     URL.revokeObjectURL(url);
-                    toast({ title: "Şablon indirildi", description: "Programs Excel şablonu hazır." });
+                    toast({ title: t("catalogPage.templateDownloaded"), description: t("catalogPage.templateReady") });
                   } catch (err: any) {
                     toast({
-                      title: "Şablon indirilemedi",
-                      description: err?.message || "Tekrar deneyin.",
+                      title: t("catalogPage.templateDownloadFailed"),
+                      description: err?.message || t("catalogPage.tryAgain"),
                       variant: "destructive",
                     });
                   }
                 }}
               >
-                <Download className="w-4 h-4 mr-1" /> Program Excel şablonu indir
+                <Download className="w-4 h-4 mr-1" /> {t("catalogPage.downloadProgramTemplate")}
               </Button>
             )}
             <Button size="sm" onClick={() => { setAddMode(true); setNewValue(""); }} disabled={addMode}>
-              <Plus className="w-4 h-4 mr-1" /> Add
+              <Plus className="w-4 h-4 mr-1" /> {t("common.add")}
             </Button>
           </div>
         </div>
@@ -2242,7 +2249,7 @@ function OptionsTab() {
               value={newValue}
               onChange={e => setNewValue(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAddMode(false); }}
-              placeholder={`Enter new ${catMeta.label.toLowerCase()} value...`}
+              placeholder={t("catalogPage.enterNewValue", { category: catLabel.toLowerCase() })}
               className="flex-1"
             />
             <Button size="sm" onClick={handleAdd} disabled={saving || !newValue.trim()}>
@@ -2256,7 +2263,7 @@ function OptionsTab() {
 
         <div className="divide-y">
           {items.length === 0 && !addMode && (
-            <p className="text-center text-muted-foreground text-sm py-8">No options yet. Click "Add" to create one.</p>
+            <p className="text-center text-muted-foreground text-sm py-8">{t("catalogPage.noOptionsYet")}</p>
           )}
           {items.map((item, idx) => {
             const isDoc = activeCategory === "documents";
@@ -2289,7 +2296,7 @@ function OptionsTab() {
               {isDoc && docAccept && (
                 <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">{docAccept}</Badge>
               )}
-              {!item.isActive && <Badge variant="outline" className="text-[10px] bg-muted">Inactive</Badge>}
+              {!item.isActive && <Badge variant="outline" className="text-[10px] bg-muted">{t("common.inactive")}</Badge>}
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {editItem?.id === item.id ? (
                   <>
@@ -2300,12 +2307,12 @@ function OptionsTab() {
                   <>
                     {activeCategory === "degree" && (
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => setDocsForOption(item)}>
-                        <FileText className="w-3.5 h-3.5" /> Documents
+                        <FileText className="w-3.5 h-3.5" /> {t("catalogPage.documents")}
                       </Button>
                     )}
                     {isDoc && (
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => setDocMetaItem(item)}>
-                        <Settings2 className="w-3.5 h-3.5" /> Meta
+                        <Settings2 className="w-3.5 h-3.5" /> {t("catalogPage.meta")}
                       </Button>
                     )}
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditItem({ ...item })}><Pencil className="w-3.5 h-3.5" /></Button>
@@ -2347,9 +2354,10 @@ function OptionsTab() {
 function DeleteCatalogOptionDialog({ item, onCancel, onConfirm }: {
   item: CatalogOption | null; onCancel: () => void; onConfirm: () => void;
 }) {
+  const { t } = useI18n();
   const isDoc = item?.category === "documents";
   const isDegree = item?.category === "degree";
-  const label = isDoc ? "belge tipini" : isDegree ? "akademik dereceyi" : "seçeneği";
+  const label = isDoc ? t("catalogPage.docTypeAccusative") : isDegree ? t("catalogPage.degreeAccusative") : t("catalogPage.optionAccusative");
   // Proactive usage preview: only fetched when the option is documents/degree
   // (the only two categories that can be blocked server-side). Saves the
   // admin from clicking Delete just to learn it's in use.
@@ -2370,27 +2378,27 @@ function DeleteCatalogOptionDialog({ item, onCancel, onConfirm }: {
   return (
     <Dialog open={item !== null} onOpenChange={o => !o && onCancel()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Silme onayı</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("catalogPage.deleteConfirmation")}</DialogTitle></DialogHeader>
         <div className="text-sm text-muted-foreground space-y-2">
-          <p>"<strong>{item?.value}</strong>" {label} silmek istediğinize emin misiniz?</p>
+          <p>{t("catalogPage.confirmDeleteOption", { value: item?.value ?? "", label })}</p>
           {(isDoc || isDegree) && (
             usageLoading ? (
-              <p className="text-xs flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Kullanım kontrol ediliyor…</p>
+              <p className="text-xs flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> {t("catalogPage.checkingUsage")}</p>
             ) : willBeBlocked ? (
               <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                 <div className="flex items-center gap-1.5 font-medium">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Bu kayıt {isDoc ? `${usage?.totals?.programs ?? 0} program ve ${usage?.totals?.degrees ?? 0} derecede` : `${blockedCount} belge gereksiniminde`} kullanılıyor.
+                  <AlertTriangle className="h-3.5 w-3.5" /> {isDoc ? t("catalogPage.recordUsedInPrograms", { programs: usage?.totals?.programs ?? 0, degrees: usage?.totals?.degrees ?? 0 }) : t("catalogPage.recordUsedInDocs", { count: blockedCount })}
                 </div>
-                <p className="mt-1">Silmeye çalışırsanız bloklanacak ve nerede kullanıldığı listelenecek.</p>
+                <p className="mt-1">{t("catalogPage.deleteWillBeBlocked")}</p>
               </div>
             ) : (
-              <p className="text-xs">Aktif kullanım bulunamadı.</p>
+              <p className="text-xs">{t("catalogPage.noActiveUsage")}</p>
             )
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>İptal</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={usageLoading}>Sil</Button>
+          <Button variant="outline" onClick={onCancel}>{t("common.cancel")}</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={usageLoading}>{t("common.delete")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2400,48 +2408,49 @@ function DeleteCatalogOptionDialog({ item, onCancel, onConfirm }: {
 function DeleteBlockedDialog({ payload, onClose }: {
   payload: DeleteBlockedPayload | null; onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <Dialog open={payload !== null} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Silme bloklandı
+            {t("catalogPage.deleteBlocked")}
           </DialogTitle>
         </DialogHeader>
         {payload && (
           <div className="space-y-3 text-sm">
             <p className="text-muted-foreground">
-              {payload.message || "Bu kayıt sistemde başka yerlerde kullanıldığı için silinemez."}
+              {payload.message || t("catalogPage.deleteBlockedDefault")}
             </p>
             <p>
-              <span className="text-muted-foreground">Anahtar:</span>{" "}
+              <span className="text-muted-foreground">{t("catalogPage.keyLabel")}</span>{" "}
               <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">{payload.value}</code>
             </p>
             {payload.category === "documents" && (
               <>
                 {payload.programs.length > 0 && (
                   <div>
-                    <p className="font-medium mb-1.5">Programlar ({payload.programs.length})</p>
+                    <p className="font-medium mb-1.5">{t("catalogPage.programsCount", { n: payload.programs.length })}</p>
                     <div className="max-h-48 overflow-auto rounded border bg-muted/30 divide-y">
                       {payload.programs.slice(0, 50).map(p => (
                         <a
                           key={p.id}
                           href={`/admin/programs?focus=${p.id}`}
                           className="flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/60"
-                          title="Programa git"
+                          title={t("catalogPage.goToProgram")}
                         >
                           <span className="truncate text-blue-600 hover:underline">
                             <span className="text-muted-foreground">{p.universityName}</span> — {p.name}
                           </span>
                           <Badge variant={p.mandatory ? "default" : "secondary"} className="ml-2 shrink-0 text-[10px]">
-                            {p.mandatory ? "Zorunlu" : "Opsiyonel"}
+                            {p.mandatory ? t("catalogPage.badgeMandatory") : t("catalogPage.badgeOptional")}
                           </Badge>
                         </a>
                       ))}
                       {payload.programs.length > 50 && (
                         <div className="px-3 py-1.5 text-[10px] text-muted-foreground italic">
-                          ve {payload.programs.length - 50} program daha…
+                          {t("catalogPage.moreProgramsCount", { n: payload.programs.length - 50 })}
                         </div>
                       )}
                     </div>
@@ -2449,18 +2458,18 @@ function DeleteBlockedDialog({ payload, onClose }: {
                 )}
                 {payload.degrees.length > 0 && (
                   <div>
-                    <p className="font-medium mb-1.5">Akademik dereceler ({payload.degrees.length})</p>
+                    <p className="font-medium mb-1.5">{t("catalogPage.academicDegreesCount", { n: payload.degrees.length })}</p>
                     <div className="rounded border bg-muted/30 divide-y">
                       {payload.degrees.map(d => (
                         <a
                           key={d.id}
                           href={`/admin/catalog?tab=options&category=degree&focus=${d.id}`}
                           className="flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/60"
-                          title="Dereceye git"
+                          title={t("catalogPage.goToDegree")}
                         >
                           <span className="text-blue-600 hover:underline">{d.value}</span>
                           <Badge variant={d.mandatory ? "default" : "secondary"} className="text-[10px]">
-                            {d.mandatory ? "Zorunlu" : "Opsiyonel"}
+                            {d.mandatory ? t("catalogPage.badgeMandatory") : t("catalogPage.badgeOptional")}
                           </Badge>
                         </a>
                       ))}
@@ -2471,23 +2480,23 @@ function DeleteBlockedDialog({ payload, onClose }: {
             )}
             {payload.category === "currency" && (
               <div>
-                <p className="font-medium mb-1.5">Kullanım yerleri ({payload.usage.total})</p>
+                <p className="font-medium mb-1.5">{t("catalogPage.usageLocationsCount", { n: payload.usage.total })}</p>
                 <div className="rounded border bg-muted/30 divide-y">
                   {payload.usage.programs > 0 && (
                     <div className="flex items-center justify-between px-3 py-1.5 text-xs">
-                      <span>Programlar</span>
+                      <span>{t("catalogPage.usagePrograms")}</span>
                       <Badge variant="secondary" className="text-[10px]">{payload.usage.programs}</Badge>
                     </div>
                   )}
                   {payload.usage.commissions > 0 && (
                     <div className="flex items-center justify-between px-3 py-1.5 text-xs">
-                      <span>Komisyonlar</span>
+                      <span>{t("catalogPage.usageCommissions")}</span>
                       <Badge variant="secondary" className="text-[10px]">{payload.usage.commissions}</Badge>
                     </div>
                   )}
                   {payload.usage.serviceFees > 0 && (
                     <div className="flex items-center justify-between px-3 py-1.5 text-xs">
-                      <span>Hizmet bedelleri</span>
+                      <span>{t("catalogPage.usageServiceFees")}</span>
                       <Badge variant="secondary" className="text-[10px]">{payload.usage.serviceFees}</Badge>
                     </div>
                   )}
@@ -2496,13 +2505,13 @@ function DeleteBlockedDialog({ payload, onClose }: {
             )}
             {payload.category === "degree" && (
               <div>
-                <p className="font-medium mb-1.5">Bu dereceye bağlı belge gereksinimleri ({payload.documents.length})</p>
+                <p className="font-medium mb-1.5">{t("catalogPage.docReqsForDegreeCount", { n: payload.documents.length })}</p>
                 <div className="max-h-48 overflow-auto rounded border bg-muted/30 divide-y">
                   {payload.documents.map(d => (
                     <div key={d.documentType} className="flex items-center justify-between px-3 py-1.5 text-xs">
                       <code className="font-mono">{d.documentType}</code>
                       <Badge variant={d.mandatory ? "default" : "secondary"} className="text-[10px]">
-                        {d.mandatory ? "Zorunlu" : "Opsiyonel"}
+                        {d.mandatory ? t("catalogPage.badgeMandatory") : t("catalogPage.badgeOptional")}
                       </Badge>
                     </div>
                   ))}
@@ -2510,12 +2519,12 @@ function DeleteBlockedDialog({ payload, onClose }: {
               </div>
             )}
             <p className="text-xs text-muted-foreground border-t pt-3">
-              Silmek için önce yukarıdaki yerlerden bu kaydı kaldırın.
+              {t("catalogPage.removeFromAboveToDelete")}
             </p>
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Kapat</Button>
+          <Button variant="outline" onClick={onClose}>{t("common.close")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2525,6 +2534,7 @@ function DeleteBlockedDialog({ payload, onClose }: {
 type OrphanRow = { documentType: string; programCount: number; degreeCount: number; total: number };
 
 function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => void }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data, isLoading } = useQuery<{ orphans: OrphanRow[] }>({
@@ -2546,12 +2556,12 @@ function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: bo
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
       qc.invalidateQueries({ queryKey: ["document-type-catalog"] });
       if (action === "delete_refs") {
-        toast({ title: "Referanslar temizlendi", description: `${documentType}: ${res?.removed ?? 0} kayıt silindi.` });
+        toast({ title: t("catalogPage.orphanRefsCleared"), description: t("catalogPage.orphanRefsClearedDesc", { dt: documentType, n: res?.removed ?? 0 }) });
       } else {
-        toast({ title: "Kataloğa eklendi", description: `${documentType} geri yüklendi.` });
+        toast({ title: t("catalogPage.orphanRestored"), description: t("catalogPage.orphanRestoredDesc", { dt: documentType }) });
       }
     } catch (err: any) {
-      toast({ title: "İşlem başarısız", description: err?.message || "Tekrar deneyin.", variant: "destructive" });
+      toast({ title: t("catalogPage.operationFailed"), description: err?.message || t("catalogPage.tryAgain"), variant: "destructive" });
     }
     setBusy(null);
   }
@@ -2563,10 +2573,10 @@ function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: bo
           <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm">
             <div className="flex items-center gap-2 text-amber-900">
               <AlertTriangle className="h-4 w-4" />
-              <span><strong>{orphans.length}</strong> yetim belge tipi var — katalogda yok ama programlarda/derecelerde hâlâ kullanılıyor.</span>
+              <span><strong>{orphans.length}</strong> {t("catalogPage.orphanBannerText")}</span>
             </div>
             <Button size="sm" variant="outline" className="border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => setOpen(true)}>
-              İncele
+              {t("catalogPage.review")}
             </Button>
           </div>
         </div>
@@ -2576,44 +2586,44 @@ function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: bo
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Yetim belge tipleri
+              {t("catalogPage.orphanTitle")}
             </DialogTitle>
             <p className="text-xs text-muted-foreground">
-              Bu belge tipleri katalogda yok ama program veya derece kayıtlarında referansları var. Ya katalog'a geri ekleyin (mevcut programlar çalışmaya devam etsin) ya da tüm referanslarını silin.
+              {t("catalogPage.orphanDesc")}
             </p>
           </DialogHeader>
           {isLoading ? (
             <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : orphans.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-8">Yetim belge yok.</p>
+            <p className="text-center text-sm text-muted-foreground py-8">{t("catalogPage.noOrphans")}</p>
           ) : (
             <div className="rounded-lg border divide-y max-h-[60vh] overflow-auto">
               {orphans.map(o => (
                 <div key={o.documentType} className="flex items-center gap-2 px-3 py-2 text-sm">
                   <code className="flex-1 font-mono text-xs truncate">{o.documentType}</code>
                   <Badge variant="outline" className="text-[10px]">
-                    {o.programCount} program / {o.degreeCount} derece
+                    {t("catalogPage.orphanUsage", { p: o.programCount, d: o.degreeCount })}
                   </Badge>
                   <Button
                     size="sm" variant="outline" className="h-7 text-xs"
                     disabled={busy === o.documentType}
                     onClick={() => act(o.documentType, "restore_to_catalog")}
                   >
-                    Kataloğa ekle
+                    {t("catalogPage.addToCatalog")}
                   </Button>
                   <Button
                     size="sm" variant="destructive" className="h-7 text-xs"
                     disabled={busy === o.documentType}
                     onClick={() => act(o.documentType, "delete_refs")}
                   >
-                    {busy === o.documentType ? <Loader2 className="h-3 w-3 animate-spin" /> : "Referansları sil"}
+                    {busy === o.documentType ? <Loader2 className="h-3 w-3 animate-spin" /> : t("catalogPage.deleteRefs")}
                   </Button>
                 </div>
               ))}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Kapat</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2622,6 +2632,7 @@ function OrphanDocumentsCard({ open, setOpen }: { open: boolean; setOpen: (o: bo
 }
 
 function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClose: () => void }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const md = option.metadata || {};
@@ -2639,10 +2650,10 @@ function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClos
       });
       qc.invalidateQueries({ queryKey: ["catalog-options"] });
       qc.invalidateQueries({ queryKey: ["document-type-catalog"] });
-      toast({ title: "Kaydedildi", description: "Belge tipi meta verisi güncellendi." });
+      toast({ title: t("catalogPage.metaSaved"), description: t("catalogPage.metaSavedDesc") });
       onClose();
     } catch (err: any) {
-      toast({ title: "Kayıt başarısız", description: err?.message || "Tekrar deneyin.", variant: "destructive" });
+      toast({ title: t("catalogPage.metaSaveFailed"), description: err?.message || t("catalogPage.tryAgain"), variant: "destructive" });
     }
     setSaving(false);
   }
@@ -2650,27 +2661,27 @@ function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClos
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Belge Meta — {option.value}</DialogTitle>
-          <p className="text-xs text-muted-foreground">Bu belge tipinin görünen adı, ikonu ve kabul edilen dosya uzantıları.</p>
+          <DialogTitle>{t("catalogPage.docMetaTitle", { value: option.value })}</DialogTitle>
+          <p className="text-xs text-muted-foreground">{t("catalogPage.docMetaDesc")}</p>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
-            <Label className="text-xs">Görünen ad (Label)</Label>
-            <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="ör. Passport" className="h-9 text-sm" />
+            <Label className="text-xs">{t("catalogPage.displayNameLabel")}</Label>
+            <Input value={label} onChange={e => setLabel(e.target.value)} placeholder={t("catalogPage.egPassport")} className="h-9 text-sm" />
           </div>
           <div>
-            <Label className="text-xs">İkon (emoji)</Label>
+            <Label className="text-xs">{t("catalogPage.iconEmojiLabel")}</Label>
             <Input value={icon} onChange={e => setIcon(e.target.value)} maxLength={4} placeholder="📄" className="h-9 text-sm w-20" />
           </div>
           <div>
-            <Label className="text-xs">Kabul edilen uzantılar</Label>
+            <Label className="text-xs">{t("catalogPage.acceptedExtensionsLabel")}</Label>
             <Input value={accept} onChange={e => setAccept(e.target.value)} placeholder=".pdf,.jpg,.jpeg,.png" className="h-9 text-sm font-mono" />
-            <p className="text-[10px] text-muted-foreground mt-1">Virgülle ayır, noktayla başlat: .pdf,.jpg,.png</p>
+            <p className="text-[10px] text-muted-foreground mt-1">{t("catalogPage.extensionsHint")}</p>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>İptal</Button>
-          <Button onClick={save} disabled={saving}>{saving ? "Kaydediliyor…" : "Kaydet"}</Button>
+          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button onClick={save} disabled={saving}>{saving ? t("common.saving") : t("common.save")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2678,18 +2689,19 @@ function DocumentMetaDialog({ option, onClose }: { option: CatalogOption; onClos
 }
 
 function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose: () => void }) {
+  const { t } = useI18n();
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Required Documents — {option.value}</DialogTitle>
+          <DialogTitle>{t("catalogPage.requiredDocsTitle", { value: option.value })}</DialogTitle>
           <p className="text-xs text-muted-foreground">
-            Set documents to <strong>Optional</strong> or <strong>Mandatory</strong> to add them. Drag the handle or use the arrows to reorder — that order is exactly how the documents appear in the Add Student form.
+            {t("catalogPage.degreeDocsHelp")}
           </p>
         </DialogHeader>
         <DegreeDocsEditor option={option} onSaved={onClose} variant="dialog" />
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={onClose}>{t("common.close")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -2697,6 +2709,7 @@ function DegreeDocsDialog({ option, onClose }: { option: CatalogOption; onClose:
 }
 
 function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: CatalogOption; onSaved?: () => void; variant?: "inline" | "dialog" }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [docReqs, setDocReqs] = useState<Record<string, "none" | "optional" | "mandatory">>({});
@@ -2761,10 +2774,10 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
       });
       qc.invalidateQueries({ queryKey: ["catalog-option-doc-reqs", option.id] });
       qc.invalidateQueries({ queryKey: ["degree-doc-reqs", option.value] });
-      toast({ title: "Saved", description: `Document requirements for ${option.value} saved.` });
+      toast({ title: t("catalogPage.docReqsSaved"), description: t("catalogPage.docReqsSavedDesc", { value: option.value }) });
       onSaved?.();
     } catch (err: any) {
-      toast({ title: "Save failed", description: err?.message || "Try again.", variant: "destructive" });
+      toast({ title: t("catalogPage.docReqsSaveFailed"), description: err?.message || t("catalogPage.tryAgain"), variant: "destructive" });
     }
     setSaving(false);
   }
@@ -2798,14 +2811,14 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
       {variant === "inline" && (
         <div className="flex items-center justify-between gap-3 pb-2 border-b">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold truncate">Belgeler — {option.value}</h3>
+            <h3 className="text-sm font-semibold truncate">{t("catalogPage.docsForDegreeTitle", { value: option.value })}</h3>
             <p className="text-[11px] text-muted-foreground">
-              Bu derece için istenecek belgeleri seçin. Sürükleyerek veya oklarla sıralayın.
+              {t("catalogPage.docsForDegreeDesc")}
             </p>
           </div>
           <Button size="sm" onClick={handleSave} disabled={saving || isLoading}>
             {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("common.saving") : t("common.save")}
           </Button>
         </div>
       )}
@@ -2815,13 +2828,13 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
         <div className="flex-1 overflow-hidden flex flex-col gap-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">
-                <strong className="text-foreground">{selectedSet.size}</strong> seçili belge
+                <strong className="text-foreground">{selectedSet.size}</strong> {t("catalogPage.selectedDocsLabel")}
               </span>
             </div>
             <Input
               value={docSearch}
               onChange={e => setDocSearch(e.target.value)}
-              placeholder="Belge ara…"
+              placeholder={t("catalogPage.searchDocs")}
               className="h-8 text-xs"
             />
 
@@ -2830,14 +2843,14 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-                    Seçili Belgeler — Sıra ({selectedKeys.length})
+                    {t("catalogPage.selectedDocsOrder", { n: selectedKeys.length })}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">Sürükle <GripVertical className="inline h-3 w-3" /> veya okları kullan</p>
+                  <p className="text-[10px] text-muted-foreground">{t("catalogPage.dragHint1")} <GripVertical className="inline h-3 w-3" /> {t("catalogPage.dragHint2")}</p>
                 </div>
                 <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 min-h-[60px] divide-y divide-border">
                   {selectedKeys.length === 0 ? (
                     <div className="text-[11px] text-muted-foreground text-center py-4 px-3">
-                      Henüz belge eklenmedi. Aşağıdaki listeden <span className="text-primary font-semibold">+ Ekle</span> diyerek seçin.
+                      {t("catalogPage.noDocsAddedYet")}
                     </div>
                   ) : selectedKeys.map((dt, i) => (
                     <div
@@ -2865,21 +2878,21 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
                           onClick={() => move(dt, -1)}
                           disabled={i === 0}
                           className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
-                          title="Yukarı taşı"
+                          title={t("catalogPage.moveUp")}
                         ><ArrowUp className="h-3 w-3" /></button>
                         <button
                           type="button"
                           onClick={() => move(dt, 1)}
                           disabled={i === selectedKeys.length - 1}
                           className="h-4 w-6 rounded hover:bg-primary/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center"
-                          title="Aşağı taşı"
+                          title={t("catalogPage.moveDown")}
                         ><ArrowDown className="h-3 w-3" /></button>
                       </div>
                       <button
                         type="button"
                         onClick={() => setLevel(dt, "none")}
                         className="shrink-0 px-2 py-0.5 text-[11px] rounded border bg-background hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 text-muted-foreground transition-colors"
-                      >Kaldır</button>
+                      >{t("catalogPage.removeAction")}</button>
                     </div>
                   ))}
                 </div>
@@ -2889,7 +2902,7 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
               {availableKeys.length > 0 && (
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Eklenebilir ({availableKeys.length})
+                    {t("catalogPage.availableCount", { n: availableKeys.length })}
                   </p>
                   <div className="rounded-lg border bg-background divide-y divide-border">
                     {availableKeys.map(dt => (
@@ -2899,7 +2912,7 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
                           type="button"
                           onClick={() => setLevel(dt, "optional")}
                           className="shrink-0 px-2 py-0.5 text-[11px] rounded border bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/40 text-muted-foreground transition-colors"
-                        >+ Ekle</button>
+                        >{t("catalogPage.addShort")}</button>
                       </div>
                     ))}
                   </div>
@@ -2907,14 +2920,14 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
               )}
 
               {selectedKeys.length === 0 && availableKeys.length === 0 && (
-                <div className="text-center text-muted-foreground py-6 text-xs">"{docSearch}" ile eşleşen belge yok</div>
+                <div className="text-center text-muted-foreground py-6 text-xs">{t("catalogPage.noDocsMatch", { q: docSearch })}</div>
               )}
             </div>
           </div>
       )}
       {variant === "dialog" && !isLoading && (
         <div className="flex justify-end pt-2 border-t">
-          <Button onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? t("common.saving") : t("common.save")}</Button>
         </div>
       )}
     </div>
@@ -2928,11 +2941,11 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
 export default function AdminCatalog() {
   const { t } = useI18n();
   const tabs = [
-    { value: "countries", label: "Countries", icon: Globe },
-    { value: "cities", label: "Cities", icon: Building2 },
-    { value: "universities", label: "Universities", icon: GraduationCap },
-    { value: "programs", label: "Programs", icon: BookOpen },
-    { value: "options", label: "Options", icon: Settings2 },
+    { value: "countries", label: t("adminCatalog.tabCountries"), icon: Globe },
+    { value: "cities", label: t("adminCatalog.tabCities"), icon: Building2 },
+    { value: "universities", label: t("adminCatalog.tabUniversities"), icon: GraduationCap },
+    { value: "programs", label: t("adminCatalog.tabPrograms"), icon: BookOpen },
+    { value: "options", label: t("adminCatalog.tabOptions"), icon: Settings2 },
   ];
 
   return (
@@ -2943,10 +2956,10 @@ export default function AdminCatalog() {
       </div>
       <Tabs defaultValue="countries" className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
-          {tabs.map(t => (
-            <TabsTrigger key={t.value} value={t.value} className="flex items-center gap-1.5">
-              <t.icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{t.label}</span>
+          {tabs.map(tab => (
+            <TabsTrigger key={tab.value} value={tab.value} className="flex items-center gap-1.5">
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
             </TabsTrigger>
           ))}
         </TabsList>
@@ -2954,8 +2967,8 @@ export default function AdminCatalog() {
         <TabsContent value="countries">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><Globe className="h-4 w-4 text-primary" />Countries</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Manage all countries in the system</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><Globe className="h-4 w-4 text-primary" />{t("adminCatalog.countriesTitle")}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("adminCatalog.countriesDesc")}</p>
             </div>
             <CountriesTab />
           </Card>
@@ -2964,8 +2977,8 @@ export default function AdminCatalog() {
         <TabsContent value="cities">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" />Cities</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Manage cities linked to countries</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" />{t("adminCatalog.citiesTitle")}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("adminCatalog.citiesDesc")}</p>
             </div>
             <CitiesTab />
           </Card>
@@ -2974,8 +2987,8 @@ export default function AdminCatalog() {
         <TabsContent value="universities">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><GraduationCap className="h-4 w-4 text-primary" />Universities</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Manage partner universities and institutions</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><GraduationCap className="h-4 w-4 text-primary" />{t("adminCatalog.universitiesTitle")}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("adminCatalog.universitiesDesc")}</p>
             </div>
             <UniversitiesTab />
           </Card>
@@ -2984,8 +2997,8 @@ export default function AdminCatalog() {
         <TabsContent value="programs">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Programs</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Manage university programs, fees and commission rates</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />{t("adminCatalog.programsTitle")}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("adminCatalog.programsDesc")}</p>
             </div>
             <ProgramsTab />
           </Card>
@@ -2994,8 +3007,8 @@ export default function AdminCatalog() {
         <TabsContent value="options">
           <Card className="p-4">
             <div className="mb-4">
-              <h2 className="text-base font-semibold flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" />Catalog Options</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Manage dropdown values used across programs (Degree, Language, Duration, Fee Type, Intakes, Field)</p>
+              <h2 className="text-base font-semibold flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" />{t("adminCatalog.optionsTitle")}</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("adminCatalog.optionsDesc")}</p>
             </div>
             <OptionsTab />
           </Card>

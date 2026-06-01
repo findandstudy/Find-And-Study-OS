@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   Sparkles, Loader2, Wand2, Type, FileText, MessageSquare,
   Maximize2, Minimize2, ArrowRight, HelpCircle,
@@ -13,24 +14,24 @@ import {
 
 interface AiAction {
   key: string;
-  label: string;
+  labelKey: string;
   icon: typeof Type;
   needsContext?: boolean;
 }
 
 const AI_ACTIONS: AiAction[] = [
-  { key: "generateMetaTitle", label: "Meta Title", icon: Type },
-  { key: "generateMetaDescription", label: "Meta Description", icon: FileText },
-  { key: "generateExcerpt", label: "Excerpt", icon: MessageSquare },
-  { key: "generateHeroTitle", label: "Hero Title", icon: Wand2, needsContext: true },
-  { key: "generateCTAText", label: "CTA Text", icon: ArrowRight, needsContext: true },
-  { key: "generateOGText", label: "OG Text", icon: FileText, needsContext: true },
-  { key: "generateBlogOutline", label: "Blog Outline", icon: FileText, needsContext: true },
-  { key: "generateAltText", label: "Alt Text", icon: Type, needsContext: true },
-  { key: "improveTone", label: "Improve Tone", icon: Sparkles, needsContext: true },
-  { key: "shortenText", label: "Shorten", icon: Minimize2, needsContext: true },
-  { key: "expandText", label: "Expand", icon: Maximize2, needsContext: true },
-  { key: "generateFAQItems", label: "Generate FAQ", icon: HelpCircle, needsContext: true },
+  { key: "generateMetaTitle", labelKey: "aiAssistant.actionMetaTitle", icon: Type },
+  { key: "generateMetaDescription", labelKey: "aiAssistant.actionMetaDescription", icon: FileText },
+  { key: "generateExcerpt", labelKey: "aiAssistant.actionExcerpt", icon: MessageSquare },
+  { key: "generateHeroTitle", labelKey: "aiAssistant.actionHeroTitle", icon: Wand2, needsContext: true },
+  { key: "generateCTAText", labelKey: "aiAssistant.actionCtaText", icon: ArrowRight, needsContext: true },
+  { key: "generateOGText", labelKey: "aiAssistant.actionOgText", icon: FileText, needsContext: true },
+  { key: "generateBlogOutline", labelKey: "aiAssistant.actionBlogOutline", icon: FileText, needsContext: true },
+  { key: "generateAltText", labelKey: "aiAssistant.actionAltText", icon: Type, needsContext: true },
+  { key: "improveTone", labelKey: "aiAssistant.actionImproveTone", icon: Sparkles, needsContext: true },
+  { key: "shortenText", labelKey: "aiAssistant.actionShorten", icon: Minimize2, needsContext: true },
+  { key: "expandText", labelKey: "aiAssistant.actionExpand", icon: Maximize2, needsContext: true },
+  { key: "generateFAQItems", labelKey: "aiAssistant.actionGenerateFaq", icon: HelpCircle, needsContext: true },
 ];
 
 interface AiAssistantPanelProps {
@@ -42,6 +43,7 @@ interface AiAssistantPanelProps {
 
 export function AiAssistantPanel({ context: defaultContext, locale, onResult, compact }: AiAssistantPanelProps) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [contextInput, setContextInput] = useState(defaultContext || "");
   const [result, setResult] = useState("");
   const [lastAction, setLastAction] = useState("");
@@ -64,7 +66,7 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
       setResult(d.result);
       setLastAction(d.action);
     },
-    onError: (e: Error) => toast({ title: "AI Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("aiAssistant.aiError"), description: e.message, variant: "destructive" }),
   });
 
   const configured = aiStatus?.configured ?? false;
@@ -72,7 +74,7 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
   function handleAction(action: AiAction) {
     const ctx = action.needsContext ? contextInput : (contextInput || defaultContext || "website content");
     if (action.needsContext && !ctx.trim()) {
-      toast({ title: "Please provide context", description: "Enter text or context for the AI to work with.", variant: "destructive" });
+      toast({ title: t("aiAssistant.provideContextTitle"), description: t("aiAssistant.provideContextDesc"), variant: "destructive" });
       return;
     }
     generateMutation.mutate({ action: action.key, context: ctx, locale });
@@ -81,7 +83,7 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
   function handleApply() {
     if (result && onResult && lastAction) {
       onResult(lastAction, result);
-      toast({ title: "Applied" });
+      toast({ title: t("aiAssistant.applied") });
     }
   }
 
@@ -89,10 +91,10 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
     return (
       <div className="flex items-center gap-2">
         <Badge variant={configured ? "default" : "secondary"} className="text-[10px] gap-1">
-          <Sparkles className="w-3 h-3" /> AI {configured ? "Ready" : "Not Configured"}
+          <Sparkles className="w-3 h-3" /> {configured ? t("aiAssistant.aiReady") : t("aiAssistant.aiNotConfigured")}
         </Badge>
         {!configured && (
-          <span className="text-[10px] text-muted-foreground">Configure AI in Settings &gt; Integrations</span>
+          <span className="text-[10px] text-muted-foreground">{t("aiAssistant.configureAiHint")}</span>
         )}
       </div>
     );
@@ -102,17 +104,17 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
     <div className="border rounded-xl p-4 space-y-3 bg-gradient-to-b from-violet-50/50 to-background">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4 text-violet-600" /> AI Content Assistant
+          <Sparkles className="w-4 h-4 text-violet-600" /> {t("aiAssistant.title")}
         </h4>
         <Badge variant={configured ? "default" : "secondary"} className="text-[10px]">
-          {configured ? `${aiStatus?.provider || "AI"} Connected` : "Not Configured"}
+          {configured ? t("aiAssistant.connected", { provider: aiStatus?.provider || "AI" }) : t("aiAssistant.notConfigured")}
         </Badge>
       </div>
 
       {!configured && (
         <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-          <p className="font-medium">AI assistant is not configured.</p>
-          <p className="text-xs mt-1">Go to Settings &gt; Integrations and enable the AI Content integration with your API key.</p>
+          <p className="font-medium">{t("aiAssistant.notConfiguredTitle")}</p>
+          <p className="text-xs mt-1">{t("aiAssistant.notConfiguredHint")}</p>
         </div>
       )}
 
@@ -120,7 +122,7 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
             <Textarea
               value={contextInput}
               onChange={e => setContextInput(e.target.value)}
-              placeholder="Enter context or text for AI to work with..."
+              placeholder={t("aiAssistant.contextPlaceholder")}
               rows={2}
               className="text-xs"
               disabled={!configured}
@@ -137,26 +139,26 @@ export function AiAssistantPanel({ context: defaultContext, locale, onResult, co
                 disabled={!configured || generateMutation.isPending}
                 onClick={() => handleAction(action)}
               >
-                <action.icon className="w-3 h-3" /> {action.label}
+                <action.icon className="w-3 h-3" /> {t(action.labelKey)}
               </Button>
             ))}
           </div>
 
           {generateMutation.isPending && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="w-3 h-3 animate-spin" /> Generating...
+              <Loader2 className="w-3 h-3 animate-spin" /> {t("aiAssistant.generating")}
             </div>
           )}
 
           {result && (
             <div className="space-y-2">
               <div className="bg-white border rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Result:</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("aiAssistant.result")}</p>
                 <p className="text-sm whitespace-pre-wrap">{result}</p>
               </div>
               {onResult && (
                 <Button size="sm" className="text-xs gap-1" onClick={handleApply}>
-                  <Wand2 className="w-3 h-3" /> Apply to Field
+                  <Wand2 className="w-3 h-3" /> {t("aiAssistant.applyToField")}
                 </Button>
               )}
             </div>
@@ -175,6 +177,7 @@ interface AiFieldButtonProps {
 
 export function AiFieldButton({ action, context, locale, onResult, label }: AiFieldButtonProps) {
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const { data: aiStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/website/ai/status"],
@@ -193,7 +196,7 @@ export function AiFieldButton({ action, context, locale, onResult, label }: AiFi
       const d = data as { result: string };
       onResult(d.result);
     },
-    onError: (e: Error) => toast({ title: "AI Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("aiAssistant.aiError"), description: e.message, variant: "destructive" }),
   });
 
   const configured = aiStatus?.configured ?? false;
@@ -205,10 +208,10 @@ export function AiFieldButton({ action, context, locale, onResult, label }: AiFi
       className="text-[10px] h-6 gap-1 text-violet-600 hover:text-violet-700"
       disabled={!configured || generateMutation.isPending}
       onClick={() => generateMutation.mutate()}
-      title={configured ? `AI: ${label || action}` : "Configure AI in Settings > Integrations"}
+      title={configured ? t("aiAssistant.aiLabelTooltip", { label: label || action }) : t("aiAssistant.configureAiHint")}
     >
       {generateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-      {label || "AI"}
+      {label || t("aiAssistant.ai")}
     </Button>
   );
 }

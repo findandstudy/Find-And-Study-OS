@@ -211,7 +211,7 @@ export default function AgentSubAgents() {
 
   async function handleCreate() {
     if (!form.firstName || !form.lastName) {
-      toast({ title: "Error", description: "First name and last name are required", variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: t("subAgentsPage.nameRequired"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -234,9 +234,9 @@ export default function AgentSubAgents() {
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
       setShowCreate(false);
-      toast({ title: "Sub-agent created", description: `${form.firstName} ${form.lastName} has been added.` });
+      toast({ title: t("subAgentsPage.toastCreated"), description: t("subAgentsPage.toastCreatedDesc", { name: `${form.firstName} ${form.lastName}` }) });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: err.message, variant: "destructive" });
     } finally { setSaving(false); }
   }
 
@@ -261,9 +261,9 @@ export default function AgentSubAgents() {
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
       setShowEdit(false);
-      toast({ title: "Sub-agent updated" });
+      toast({ title: t("subAgentsPage.toastUpdated") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: err.message, variant: "destructive" });
     } finally { setSaving(false); }
   }
 
@@ -274,16 +274,16 @@ export default function AgentSubAgents() {
       await customFetch(`/api/agents/me/sub-agents/${selected.id}`, { method: "DELETE" });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
       setShowDelete(false);
-      toast({ title: "Sub-agent deleted" });
+      toast({ title: t("subAgentsPage.toastDeleted") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: err.message, variant: "destructive" });
     } finally { setSaving(false); }
   }
 
   async function handleSetPassword() {
     if (!selected) return;
     if (!pwForm.password || pwForm.password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: t("subAgentsPage.passwordTooShort"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -294,15 +294,15 @@ export default function AgentSubAgents() {
         body: JSON.stringify({ password: pwForm.password }),
       });
       setShowPassword(false);
-      toast({ title: "Password updated", description: `Password set for ${selected.firstName} ${selected.lastName}` });
+      toast({ title: t("subAgentsPage.toastPasswordUpdated"), description: t("subAgentsPage.toastPasswordUpdatedDesc", { name: `${selected.firstName} ${selected.lastName}` }) });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: err.message, variant: "destructive" });
     } finally { setSaving(false); }
   }
 
   async function handleLoginAs(sa: SubAgent) {
     if (!sa.email) {
-      toast({ title: "Error", description: "Sub-agent has no login account", variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: t("subAgentsPage.noLoginAccount"), variant: "destructive" });
       return;
     }
     try {
@@ -312,7 +312,7 @@ export default function AgentSubAgents() {
       });
       window.location.href = `${BASE_URL}/agent`;
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -325,9 +325,9 @@ export default function AgentSubAgents() {
         body: JSON.stringify({ status: newStatus }),
       });
       await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
-      toast({ title: `Sub-agent ${newStatus === "active" ? "activated" : "deactivated"}` });
+      toast({ title: newStatus === "active" ? t("subAgentsPage.toastActivated") : t("subAgentsPage.toastDeactivated") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.error"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -352,9 +352,9 @@ export default function AgentSubAgents() {
       if (!putRes.ok) throw new Error("Upload failed");
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       setForm(f => ({ ...f, logoUrl: `${BASE_URL}/api/storage/objects${strippedPath}` }));
-      toast({ title: "Logo uploaded" });
+      toast({ title: t("subAgentsPage.toastLogoUploaded") });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast({ title: t("subAgentsPage.uploadFailed"), description: err.message, variant: "destructive" });
     } finally { setUploading(false); }
   }
 
@@ -367,7 +367,7 @@ export default function AgentSubAgents() {
             <p className="text-muted-foreground text-sm mt-1">{t("agentSubAgents.subtitle")}</p>
           </div>
           <Button onClick={openCreate} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Sub Agent
+            <Plus className="w-4 h-4" /> {t("subAgentsPage.addSubAgent")}
           </Button>
         </div>
 
@@ -379,14 +379,14 @@ export default function AgentSubAgents() {
                 <Input
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  placeholder="Search by name, email, phone..."
+                  placeholder={t("subAgentsPage.searchPlaceholder")}
                   className="pl-9 h-9"
                 />
               </div>
-              <Button type="submit" variant="outline" size="sm" className="h-9">Search</Button>
+              <Button type="submit" variant="outline" size="sm" className="h-9">{t("common.search")}</Button>
               {search && (
                 <Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => { setSearch(""); setSearchInput(""); setPage(1); }}>
-                  Clear
+                  {t("subAgentsPage.clear")}
                 </Button>
               )}
             </form>
@@ -399,10 +399,10 @@ export default function AgentSubAgents() {
           ) : subAgents.length === 0 ? (
             <div className="text-center py-20">
               <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-              <p className="font-medium text-foreground">No sub-agents yet</p>
-              <p className="text-sm text-muted-foreground mt-1">Add your first sub-agent to get started</p>
+              <p className="font-medium text-foreground">{t("subAgentsPage.emptyTitle")}</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("subAgentsPage.emptyDesc")}</p>
               <Button onClick={openCreate} variant="outline" className="mt-4 gap-2">
-                <Plus className="w-4 h-4" /> Add Sub Agent
+                <Plus className="w-4 h-4" /> {t("subAgentsPage.addSubAgent")}
               </Button>
             </div>
           ) : (
@@ -411,13 +411,13 @@ export default function AgentSubAgents() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/50 bg-secondary/30">
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Phone</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Commission</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Created</th>
-                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("common.name")}</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("common.email")}</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("common.phone")}</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("subAgentsPage.commission")}</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("common.status")}</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("subAgentsPage.createdCol")}</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">{t("common.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -457,7 +457,7 @@ export default function AgentSubAgents() {
                             ? "bg-green-500/10 text-green-600 border-green-200 text-xs"
                             : "bg-red-500/10 text-red-500 border-red-200 text-xs"
                           }>
-                            {sa.status}
+                            {sa.status === "active" ? t("common.active") : t("common.inactive")}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">
@@ -476,25 +476,25 @@ export default function AgentSubAgents() {
                             <DropdownMenuContent align="end" className="w-48">
                               {sa.email && (
                                 <DropdownMenuItem onClick={() => handleLoginAs(sa)}>
-                                  <LogIn className="w-4 h-4 mr-2" /> Login As
+                                  <LogIn className="w-4 h-4 mr-2" /> {t("subAgentsPage.loginAs")}
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuItem onClick={() => openEdit(sa)}>
-                                <Edit className="w-4 h-4 mr-2" /> Edit Details
+                                <Edit className="w-4 h-4 mr-2" /> {t("subAgentsPage.editDetails")}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openPassword(sa)}>
-                                <KeyRound className="w-4 h-4 mr-2" /> Set Password
+                                <KeyRound className="w-4 h-4 mr-2" /> {t("subAgentsPage.setPassword")}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleToggleStatus(sa)}>
                                 {sa.status === "active" ? (
-                                  <><UserX className="w-4 h-4 mr-2" /> Deactivate</>
+                                  <><UserX className="w-4 h-4 mr-2" /> {t("subAgentsPage.deactivate")}</>
                                 ) : (
-                                  <><UserCheck className="w-4 h-4 mr-2" /> Activate</>
+                                  <><UserCheck className="w-4 h-4 mr-2" /> {t("subAgentsPage.activate")}</>
                                 )}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => openDelete(sa)} className="text-destructive focus:text-destructive">
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                <Trash2 className="w-4 h-4 mr-2" /> {t("common.delete")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -521,7 +521,7 @@ export default function AgentSubAgents() {
 
         {meta && (
           <p className="text-xs text-muted-foreground mt-3 text-center">
-            {meta.total} sub-agent{meta.total !== 1 ? "s" : ""} total
+            {t("subAgentsPage.totalCount", { n: meta.total })}
           </p>
         )}
       </div>
@@ -530,39 +530,39 @@ export default function AgentSubAgents() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Sub Agent</DialogTitle>
-            <DialogDescription>Create a new sub-agent under your agency. They can log in with their email and password.</DialogDescription>
+            <DialogTitle>{t("subAgentsPage.addSubAgent")}</DialogTitle>
+            <DialogDescription>{t("subAgentsPage.createDesc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">First Name *</Label>
+                <Label className="text-xs font-medium">{t("subAgentsPage.firstNameRequired")}</Label>
                 <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-9" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Last Name *</Label>
+                <Label className="text-xs font-medium">{t("subAgentsPage.lastNameRequired")}</Label>
                 <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-9" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Company Name</Label>
+              <Label className="text-xs font-medium">{t("subAgentsPage.companyName")}</Label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="Sub-agent company name" className="h-9 pl-9" />
+                <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder={t("subAgentsPage.companyNamePlaceholder")} className="h-9 pl-9" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Email</Label>
-              <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="sub.agent@example.com" className="h-9" />
-              <p className="text-[11px] text-muted-foreground">Required for login access</p>
+              <Label className="text-xs font-medium">{t("common.email")}</Label>
+              <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder={t("subAgentsPage.emailPlaceholder")} className="h-9" />
+              <p className="text-[11px] text-muted-foreground">{t("subAgentsPage.emailHelper")}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Password</Label>
-              <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 6 characters" className="h-9" />
-              <p className="text-[11px] text-muted-foreground">Set an initial password for login (can be changed later)</p>
+              <Label className="text-xs font-medium">{t("subAgentsPage.password")}</Label>
+              <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={t("subAgentsPage.passwordPlaceholder")} className="h-9" />
+              <p className="text-[11px] text-muted-foreground">{t("subAgentsPage.passwordHelper")}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Phone</Label>
+              <Label className="text-xs font-medium">{t("common.phone")}</Label>
               <div className="flex gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -580,16 +580,16 @@ export default function AgentSubAgents() {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="h-9 flex-1" />
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("subAgentsPage.phonePlaceholder")} className="h-9 flex-1" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Commission Share (%)</Label>
-              <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="e.g. 50" className="h-9" />
-              <p className="text-[11px] text-muted-foreground">Percentage of your commission to share with this sub-agent. E.g. if you receive 70% from the company and enter 50 here, the sub-agent gets 50% of your 70%.</p>
+              <Label className="text-xs font-medium">{t("subAgentsPage.commissionShare")}</Label>
+              <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder={t("subAgentsPage.commissionPlaceholder")} className="h-9" />
+              <p className="text-[11px] text-muted-foreground">{t("subAgentsPage.commissionHelper")}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Sub Agent Logo</Label>
+              <Label className="text-xs font-medium">{t("subAgentsPage.logo")}</Label>
               <div className="relative w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                 {form.logoUrl ? (
                   <>
@@ -601,7 +601,7 @@ export default function AgentSubAgents() {
                 ) : (
                   <button onClick={() => logoInputRef.current?.click()} disabled={uploading} className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
                     {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                    <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload Logo"}</span>
+                    <span className="text-[10px] font-medium">{uploading ? t("subAgentsPage.uploading") : t("subAgentsPage.uploadLogo")}</span>
                   </button>
                 )}
               </div>
@@ -611,19 +611,19 @@ export default function AgentSubAgents() {
               <div className="flex-1">
                 <Label className="text-xs font-medium flex items-center gap-1.5">
                   {form.hideServiceFees ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Eye className="w-3.5 h-3.5 text-green-500" />}
-                  Service Fee Visibility
+                  {t("subAgentsPage.serviceFeeVisibility")}
                 </Label>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {form.hideServiceFees ? "Sub-agent cannot see service fees" : "Sub-agent can see service fees"}
+                  {form.hideServiceFees ? t("subAgentsPage.feeHidden") : t("subAgentsPage.feeVisible")}
                 </p>
               </div>
               <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
-              <Button variant="outline" onClick={() => setShowCreate(false)} size="sm">Cancel</Button>
+              <Button variant="outline" onClick={() => setShowCreate(false)} size="sm">{t("common.cancel")}</Button>
               <Button onClick={handleCreate} disabled={saving || !form.firstName || !form.lastName} size="sm" className="gap-2 px-5">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                Create
+                {t("common.create")}
               </Button>
             </div>
           </div>
@@ -634,33 +634,33 @@ export default function AgentSubAgents() {
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Sub Agent</DialogTitle>
-            <DialogDescription>Update the details for {selected?.firstName} {selected?.lastName}</DialogDescription>
+            <DialogTitle>{t("subAgentsPage.editSubAgent")}</DialogTitle>
+            <DialogDescription>{t("subAgentsPage.editDesc", { name: `${selected?.firstName ?? ""} ${selected?.lastName ?? ""}` })}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">First Name *</Label>
+                <Label className="text-xs font-medium">{t("subAgentsPage.firstNameRequired")}</Label>
                 <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-9" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Last Name *</Label>
+                <Label className="text-xs font-medium">{t("subAgentsPage.lastNameRequired")}</Label>
                 <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-9" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Company Name</Label>
+              <Label className="text-xs font-medium">{t("subAgentsPage.companyName")}</Label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="Sub-agent company name" className="h-9 pl-9" />
+                <Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder={t("subAgentsPage.companyNamePlaceholder")} className="h-9 pl-9" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Email</Label>
+              <Label className="text-xs font-medium">{t("common.email")}</Label>
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-9" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Phone</Label>
+              <Label className="text-xs font-medium">{t("common.phone")}</Label>
               <div className="flex gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -678,16 +678,16 @@ export default function AgentSubAgents() {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="h-9 flex-1" />
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("subAgentsPage.phonePlaceholder")} className="h-9 flex-1" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Commission Share (%)</Label>
-              <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="e.g. 50" className="h-9" />
-              <p className="text-[11px] text-muted-foreground">Percentage of your commission to share with this sub-agent. E.g. if you receive 70% from the company and enter 50 here, the sub-agent gets 50% of your 70%.</p>
+              <Label className="text-xs font-medium">{t("subAgentsPage.commissionShare")}</Label>
+              <Input type="number" step="0.1" min="0" max="100" value={form.commissionRate} onChange={e => setForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder={t("subAgentsPage.commissionPlaceholder")} className="h-9" />
+              <p className="text-[11px] text-muted-foreground">{t("subAgentsPage.commissionHelper")}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Sub Agent Logo</Label>
+              <Label className="text-xs font-medium">{t("subAgentsPage.logo")}</Label>
               <div className="relative w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden bg-secondary/20">
                 {form.logoUrl ? (
                   <>
@@ -699,7 +699,7 @@ export default function AgentSubAgents() {
                 ) : (
                   <button onClick={() => logoInputRef.current?.click()} disabled={uploading} className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
                     {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                    <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload Logo"}</span>
+                    <span className="text-[10px] font-medium">{uploading ? t("subAgentsPage.uploading") : t("subAgentsPage.uploadLogo")}</span>
                   </button>
                 )}
               </div>
@@ -709,19 +709,19 @@ export default function AgentSubAgents() {
               <div className="flex-1">
                 <Label className="text-xs font-medium flex items-center gap-1.5">
                   {form.hideServiceFees ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Eye className="w-3.5 h-3.5 text-green-500" />}
-                  Service Fee Visibility
+                  {t("subAgentsPage.serviceFeeVisibility")}
                 </Label>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {form.hideServiceFees ? "Sub-agent cannot see service fees" : "Sub-agent can see service fees"}
+                  {form.hideServiceFees ? t("subAgentsPage.feeHidden") : t("subAgentsPage.feeVisible")}
                 </p>
               </div>
               <Switch checked={!form.hideServiceFees} onCheckedChange={(checked) => setForm(f => ({ ...f, hideServiceFees: !checked }))} />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
-              <Button variant="outline" onClick={() => setShowEdit(false)} size="sm">Cancel</Button>
+              <Button variant="outline" onClick={() => setShowEdit(false)} size="sm">{t("common.cancel")}</Button>
               <Button onClick={handleEdit} disabled={saving || !form.firstName || !form.lastName} size="sm" className="gap-2 px-5">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Edit className="w-3.5 h-3.5" />}
-                Save Changes
+                {t("subAgentsPage.saveChanges")}
               </Button>
             </div>
           </div>
@@ -732,19 +732,19 @@ export default function AgentSubAgents() {
       <Dialog open={showPassword} onOpenChange={setShowPassword}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Set Password</DialogTitle>
-            <DialogDescription>Set a new password for {selected?.firstName} {selected?.lastName}</DialogDescription>
+            <DialogTitle>{t("subAgentsPage.setPassword")}</DialogTitle>
+            <DialogDescription>{t("subAgentsPage.setPasswordDesc", { name: `${selected?.firstName ?? ""} ${selected?.lastName ?? ""}` })}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">New Password</Label>
-              <Input type="password" value={pwForm.password} onChange={e => setPwForm({ password: e.target.value })} placeholder="Min 6 characters" className="h-9" />
+              <Label className="text-xs font-medium">{t("subAgentsPage.newPassword")}</Label>
+              <Input type="password" value={pwForm.password} onChange={e => setPwForm({ password: e.target.value })} placeholder={t("subAgentsPage.passwordPlaceholder")} className="h-9" />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
-              <Button variant="outline" onClick={() => setShowPassword(false)} size="sm">Cancel</Button>
+              <Button variant="outline" onClick={() => setShowPassword(false)} size="sm">{t("common.cancel")}</Button>
               <Button onClick={handleSetPassword} disabled={saving || pwForm.password.length < 6} size="sm" className="gap-2 px-5">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
-                Set Password
+                {t("subAgentsPage.setPassword")}
               </Button>
             </div>
           </div>
@@ -755,16 +755,16 @@ export default function AgentSubAgents() {
       <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Sub Agent</AlertDialogTitle>
+            <AlertDialogTitle>{t("subAgentsPage.deleteSubAgent")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{selected?.firstName} {selected?.lastName}</strong>? This will also remove their login account. This action cannot be undone.
+              {t("subAgentsPage.deleteConfirm", { name: `${selected?.firstName ?? ""} ${selected?.lastName ?? ""}` })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} disabled={saving} className="bg-destructive hover:bg-destructive/90 gap-2">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

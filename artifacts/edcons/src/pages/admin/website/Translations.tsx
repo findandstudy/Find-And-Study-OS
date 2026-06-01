@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   Languages, Globe, Check, Loader2, Copy, FileText, BookOpen,
   CheckCircle2, Circle, AlertCircle,
@@ -81,6 +82,7 @@ function LocaleIndicator({ item, locales, fields }: { item: TranslationItem; loc
 
 export default function WebsiteTranslations() {
   const { toast } = useToast();
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [editItem, setEditItem] = useState<{ item: TranslationItem; type: "page" | "post" } | null>(null);
   const [editLocale, setEditLocale] = useState("tr");
@@ -104,9 +106,9 @@ export default function WebsiteTranslations() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/website/translations/status"] });
-      toast({ title: "Translation saved" });
+      toast({ title: t("websiteTranslations.saved") });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("websiteTranslations.error"), description: e.message, variant: "destructive" }),
   });
 
   const locales = status?.locales || ["en"];
@@ -147,7 +149,7 @@ export default function WebsiteTranslations() {
       defaults[f] = (itemAny[f] as string) || "";
     }
     setEditValues(defaults);
-    toast({ title: "Copied from default locale" });
+    toast({ title: t("websiteTranslations.copiedFromDefault") });
   }
 
   const translatableFields = editItem?.type === "page" ? TRANSLATABLE_PAGE_FIELDS : TRANSLATABLE_POST_FIELDS;
@@ -156,16 +158,16 @@ export default function WebsiteTranslations() {
     <>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> Translations</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage multilingual content for pages and blog posts.</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Languages className="w-6 h-6 text-primary" /> {t("websiteTranslations.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("websiteTranslations.subtitle")}</p>
         </div>
 
         <Card className="p-4 bg-blue-50 border-blue-200">
           <div className="flex items-start gap-3">
             <Globe className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
             <div className="text-sm text-blue-800">
-              <p className="font-medium">Supported Locales: {locales.map(l => l.toUpperCase()).join(", ")}</p>
-              <p className="mt-1">Default locale is <strong>EN</strong>. Click any page or post to translate its content into other languages. Configure supported languages in Settings &gt; Language &amp; Region.</p>
+              <p className="font-medium">{t("websiteTranslations.supportedLocales", { locales: locales.map(l => l.toUpperCase()).join(", ") })}</p>
+              <p className="mt-1">{t("websiteTranslations.defaultLocaleNoteBefore")}<strong>EN</strong>{t("websiteTranslations.defaultLocaleNoteAfter")}</p>
             </div>
           </div>
         </Card>
@@ -175,13 +177,13 @@ export default function WebsiteTranslations() {
         ) : (
           <Tabs defaultValue="pages">
             <TabsList>
-              <TabsTrigger value="pages" className="gap-1"><FileText className="w-3 h-3" /> Pages ({pages.length})</TabsTrigger>
-              <TabsTrigger value="posts" className="gap-1"><BookOpen className="w-3 h-3" /> Blog Posts ({posts.length})</TabsTrigger>
+              <TabsTrigger value="pages" className="gap-1"><FileText className="w-3 h-3" /> {t("websiteTranslations.pagesTab", { n: pages.length })}</TabsTrigger>
+              <TabsTrigger value="posts" className="gap-1"><BookOpen className="w-3 h-3" /> {t("websiteTranslations.postsTab", { n: posts.length })}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="pages" className="mt-4 space-y-3">
               {pages.length === 0 ? (
-                <Card className="p-8 text-center"><p className="text-muted-foreground text-sm">No pages found.</p></Card>
+                <Card className="p-8 text-center"><p className="text-muted-foreground text-sm">{t("websiteTranslations.noPages")}</p></Card>
               ) : pages.map(page => (
                 <Card key={page.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditor(page, "page")}>
                   <div className="flex items-center justify-between">
@@ -197,7 +199,7 @@ export default function WebsiteTranslations() {
 
             <TabsContent value="posts" className="mt-4 space-y-3">
               {posts.length === 0 ? (
-                <Card className="p-8 text-center"><p className="text-muted-foreground text-sm">No blog posts found.</p></Card>
+                <Card className="p-8 text-center"><p className="text-muted-foreground text-sm">{t("websiteTranslations.noPosts")}</p></Card>
               ) : posts.map(post => (
                 <Card key={post.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditor(post, "post")}>
                   <div className="flex items-center justify-between">
@@ -218,13 +220,13 @@ export default function WebsiteTranslations() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Languages className="w-5 h-5" /> Translate: {editItem?.item.title}
+              <Languages className="w-5 h-5" /> {t("websiteTranslations.translateTitle", { title: editItem?.item.title || "" })}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <Label className="text-xs shrink-0">Locale:</Label>
+              <Label className="text-xs shrink-0">{t("websiteTranslations.localeLabel")}</Label>
               <Select value={editLocale} onValueChange={switchLocale}>
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -234,7 +236,7 @@ export default function WebsiteTranslations() {
                 </SelectContent>
               </Select>
               <Button variant="outline" size="sm" onClick={copyFromDefault} className="gap-1 ml-auto">
-                <Copy className="w-3 h-3" /> Copy from EN
+                <Copy className="w-3 h-3" /> {t("websiteTranslations.copyFromEn")}
               </Button>
             </div>
 
@@ -244,14 +246,14 @@ export default function WebsiteTranslations() {
                   const defaultVal = (editItem.item as unknown as Record<string, unknown>)[field] as string || "";
                   return (
                     <div key={field} className="space-y-1.5">
-                      <Label className="text-xs font-semibold capitalize">{field.replace(/([A-Z])/g, " $1").trim()}</Label>
-                      {defaultVal && <p className="text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">EN: {defaultVal}</p>}
+                      <Label className="text-xs font-semibold capitalize">{t(`websiteTranslations.fieldLabels.${field}`)}</Label>
+                      {defaultVal && <p className="text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">{t("websiteTranslations.enValue", { val: defaultVal })}</p>}
                       {field === "metaDescription" || field === "ogDescription" || field === "excerpt" ? (
                         <Textarea value={editValues[field] || ""} onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))}
-                          placeholder={defaultVal ? `Translate: "${defaultVal}"` : "Not translated"} rows={2} />
+                          placeholder={defaultVal ? t("websiteTranslations.translatePlaceholder", { val: defaultVal }) : t("websiteTranslations.notTranslated")} rows={2} />
                       ) : (
                         <Input value={editValues[field] || ""} onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))}
-                          placeholder={defaultVal ? `Translate: "${defaultVal}"` : "Not translated"} />
+                          placeholder={defaultVal ? t("websiteTranslations.translatePlaceholder", { val: defaultVal }) : t("websiteTranslations.notTranslated")} />
                       )}
                     </div>
                   );
@@ -261,10 +263,10 @@ export default function WebsiteTranslations() {
           </div>
 
           <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
-            <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditItem(null)}>{t("common.cancel")}</Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-              Save Translation
+              {t("websiteTranslations.saveTranslation")}
             </Button>
           </div>
         </DialogContent>

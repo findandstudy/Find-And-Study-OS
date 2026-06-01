@@ -197,10 +197,10 @@ function CategorySection({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
-      toast({ title: "Document uploaded" });
+      toast({ title: t("appDocsPanel.documentUploaded") });
     },
     onError: (err: any) => {
-      toast({ title: "Upload failed", description: err?.message || "An error occurred", variant: "destructive" });
+      toast({ title: t("appDocsPanel.uploadFailed"), description: err?.message || t("appDocsPanel.errorOccurred"), variant: "destructive" });
     },
   });
 
@@ -209,7 +209,7 @@ function CategorySection({
       customFetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents/${docId}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
-      toast({ title: "Document deleted" });
+      toast({ title: t("appDocsPanel.documentDeleted") });
     },
   });
 
@@ -218,7 +218,7 @@ function CategorySection({
     if (!file) return;
     const validation = validateFile(file);
     if (!validation.valid) {
-      toast({ title: "File error", description: validation.message, variant: "destructive" });
+      toast({ title: t("appDocsPanel.fileError"), description: validation.message, variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -268,7 +268,7 @@ function CategorySection({
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium text-foreground">{doc.fileName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.uploadedByName || "Unknown"} · {new Date(doc.createdAt).toLocaleDateString()}
+                      {doc.uploadedByName || t("appDocsPanel.unknown")} · {new Date(doc.createdAt).toLocaleDateString()}
                       {doc.sizeBytes && ` · ${(doc.sizeBytes / 1024).toFixed(0)}KB`}
                     </p>
                   </div>
@@ -278,7 +278,7 @@ function CategorySection({
                       size="icon"
                       className="h-7 w-7"
                       onClick={() => handleDownload(doc)}
-                      title="Download"
+                      title={t("appDocsPanel.download")}
                     >
                       <Download className="w-3.5 h-3.5" />
                     </Button>
@@ -289,7 +289,7 @@ function CategorySection({
                         className="h-7 w-7 text-destructive hover:text-destructive"
                         onClick={() => deleteMutation.mutate(doc.id)}
                         disabled={deleteMutation.isPending}
-                        title="Delete"
+                        title={t("common.delete")}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -299,7 +299,7 @@ function CategorySection({
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground py-1">No documents uploaded yet.</p>
+            <p className="text-xs text-muted-foreground py-1">{t("appDocsPanel.noDocuments")}</p>
           )}
 
           {canUpload && (
@@ -319,7 +319,7 @@ function CategorySection({
                 disabled={uploading}
               >
                 <Upload className="w-3.5 h-3.5" />
-                {uploading ? "Uploading..." : "Upload Document"}
+                {uploading ? t("appDocsPanel.uploading") : t("appDocsPanel.uploadDocument")}
               </Button>
               <p className="text-[10px] text-muted-foreground text-center">{FILE_UPLOAD_HELP_TEXT}</p>
             </div>

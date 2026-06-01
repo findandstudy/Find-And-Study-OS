@@ -66,13 +66,13 @@ type StaffMember = {
 };
 
 const PERMISSION_OPTIONS = [
-  { key: "leads", label: "Leads", description: "View and manage leads" },
-  { key: "students", label: "Students", description: "View and manage students" },
-  { key: "applications", label: "Applications", description: "View and manage applications" },
-  { key: "documents", label: "Documents", description: "View and manage documents" },
-  { key: "course_finder", label: "Course Finder", description: "Access course finder" },
-  { key: "messages", label: "Messages", description: "Send and receive messages" },
-  { key: "commissions", label: "Commissions", description: "View commission reports" },
+  { key: "leads", labelKey: "teamPage.permLeads", descKey: "teamPage.permLeadsDesc" },
+  { key: "students", labelKey: "teamPage.permStudents", descKey: "teamPage.permStudentsDesc" },
+  { key: "applications", labelKey: "teamPage.permApplications", descKey: "teamPage.permApplicationsDesc" },
+  { key: "documents", labelKey: "teamPage.permDocuments", descKey: "teamPage.permDocumentsDesc" },
+  { key: "course_finder", labelKey: "teamPage.permCourseFinder", descKey: "teamPage.permCourseFinderDesc" },
+  { key: "messages", labelKey: "teamPage.permMessages", descKey: "teamPage.permMessagesDesc" },
+  { key: "commissions", labelKey: "teamPage.permCommissions", descKey: "teamPage.permCommissionsDesc" },
 ];
 
 export default function AgentTeam() {
@@ -120,7 +120,7 @@ export default function AgentTeam() {
           </div>
           <Button onClick={() => setShowCreate(true)} className="gap-2">
             <Plus className="w-4 h-4" />
-            Add Staff
+            {t("teamPage.addStaff")}
           </Button>
         </div>
 
@@ -132,11 +132,11 @@ export default function AgentTeam() {
                 <Input
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  placeholder="Search staff..."
+                  placeholder={t("teamPage.searchPlaceholder")}
                   className="pl-9 h-9"
                 />
               </div>
-              <Button type="submit" variant="outline" size="sm" className="h-9">Search</Button>
+              <Button type="submit" variant="outline" size="sm" className="h-9">{t("common.search")}</Button>
             </form>
           </div>
 
@@ -147,10 +147,10 @@ export default function AgentTeam() {
           ) : staff.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Users className="w-12 h-12 text-muted-foreground/40 mb-4" />
-              <h3 className="font-semibold text-foreground mb-1">No staff members yet</h3>
-              <p className="text-muted-foreground text-sm mb-4">Add team members to help manage your agency</p>
+              <h3 className="font-semibold text-foreground mb-1">{t("teamPage.noStaffYet")}</h3>
+              <p className="text-muted-foreground text-sm mb-4">{t("teamPage.noStaffDesc")}</p>
               <Button onClick={() => setShowCreate(true)} size="sm" className="gap-2">
-                <Plus className="w-4 h-4" /> Add Staff
+                <Plus className="w-4 h-4" /> {t("teamPage.addStaff")}
               </Button>
             </div>
           ) : (
@@ -158,11 +158,11 @@ export default function AgentTeam() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border/50 bg-muted/30">
-                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Name</th>
-                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Contact</th>
-                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Permissions</th>
-                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-                    <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">Actions</th>
+                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">{t("common.name")}</th>
+                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">{t("teamPage.contact")}</th>
+                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">{t("teamPage.permissions")}</th>
+                    <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">{t("common.status")}</th>
+                    <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3">{t("common.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -198,7 +198,7 @@ export default function AgentTeam() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
                             {perms.length === 0 ? (
-                              <Badge variant="outline" className="text-[10px]">None</Badge>
+                              <Badge variant="outline" className="text-[10px]">{t("teamPage.none")}</Badge>
                             ) : perms.slice(0, 4).map(p => (
                               <Badge key={p} variant="outline" className="text-[10px] capitalize">
                                 {p.replace("_", " ")}
@@ -211,9 +211,9 @@ export default function AgentTeam() {
                         </td>
                         <td className="px-4 py-3">
                           {s.isActive ? (
-                            <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[10px]">Active</Badge>
+                            <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[10px]">{t("common.active")}</Badge>
                           ) : (
-                            <Badge className="bg-red-500/10 text-red-600 border-red-200 text-[10px]">Inactive</Badge>
+                            <Badge className="bg-red-500/10 text-red-600 border-red-200 text-[10px]">{t("common.inactive")}</Badge>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -225,18 +225,18 @@ export default function AgentTeam() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => { setSelectedStaff(s); setShowEdit(true); }}>
-                                <Edit className="w-4 h-4 mr-2" /> Edit
+                                <Edit className="w-4 h-4 mr-2" /> {t("common.edit")}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => { setSelectedStaff(s); setShowPassword(true); }}>
-                                <KeyRound className="w-4 h-4 mr-2" /> Set Password
+                                <KeyRound className="w-4 h-4 mr-2" /> {t("teamPage.setPassword")}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleToggleStatus(s)}>
                                 {s.isActive ? <UserX className="w-4 h-4 mr-2" /> : <UserCheck className="w-4 h-4 mr-2" />}
-                                {s.isActive ? "Deactivate" : "Activate"}
+                                {s.isActive ? t("teamPage.deactivate") : t("teamPage.activate")}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => { setSelectedStaff(s); setShowDelete(true); }} className="text-destructive">
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                <Trash2 className="w-4 h-4 mr-2" /> {t("common.delete")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -285,15 +285,15 @@ export default function AgentTeam() {
           <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete Staff Member</AlertDialogTitle>
+                <AlertDialogTitle>{t("teamPage.deleteTitle")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to delete {selectedStaff.firstName} {selectedStaff.lastName}? This action cannot be undone.
+                  {t("teamPage.deleteDescription", { name: `${selectedStaff.firstName ?? ""} ${selectedStaff.lastName ?? ""}`.trim() })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                 <AlertDialogAction onClick={() => handleDelete(selectedStaff)} className="bg-destructive text-white hover:bg-destructive/90">
-                  Delete
+                  {t("common.delete")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -311,9 +311,9 @@ export default function AgentTeam() {
         body: JSON.stringify({ isActive: !s.isActive }),
       });
       qc.invalidateQueries({ queryKey: ["/api/agents/me/staff"] });
-      toast({ title: s.isActive ? "Staff deactivated" : "Staff activated" });
+      toast({ title: s.isActive ? t("teamPage.staffDeactivated") : t("teamPage.staffActivated") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: err.message, variant: "destructive" });
     }
   }
 
@@ -323,14 +323,15 @@ export default function AgentTeam() {
       qc.invalidateQueries({ queryKey: ["/api/agents/me/staff"] });
       setShowDelete(false);
       setSelectedStaff(null);
-      toast({ title: "Staff member deleted" });
+      toast({ title: t("teamPage.staffDeleted") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: err.message, variant: "destructive" });
     }
   }
 }
 
 function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: (perms: string[]) => void }) {
+  const { t } = useI18n();
   function toggle(key: string) {
     if (value.includes(key)) {
       onChange(value.filter(p => p !== key));
@@ -347,7 +348,7 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium flex items-center gap-2">
           <Shield className="w-4 h-4 text-muted-foreground" />
-          Permissions
+          {t("teamPage.permissions")}
         </Label>
         <Button
           type="button"
@@ -362,7 +363,7 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
             }
           }}
         >
-          {allSelected ? "Deselect All" : "Select All"}
+          {allSelected ? t("teamPage.deselectAll") : t("teamPage.selectAll")}
         </Button>
       </div>
       <div className="grid sm:grid-cols-2 gap-2">
@@ -379,8 +380,8 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm font-medium text-foreground">{p.label}</p>
-              <p className="text-xs text-muted-foreground">{p.description}</p>
+              <p className="text-sm font-medium text-foreground">{t(p.labelKey)}</p>
+              <p className="text-xs text-muted-foreground">{t(p.descKey)}</p>
             </div>
           </label>
         ))}
@@ -391,6 +392,7 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
 }
 
 function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; onSuccess: () => void }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", password: "" });
   const [permissions, setPermissions] = useState<string[]>(["leads", "students", "applications", "documents", "course_finder"]);
@@ -400,11 +402,11 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.firstName || !form.lastName || !form.email || !form.password) {
-      toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: t("teamPage.fillRequired"), variant: "destructive" });
       return;
     }
     if (form.password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: t("teamPage.passwordMinLength"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -414,12 +416,12 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, permissions }),
       });
-      toast({ title: "Staff member created", description: `${form.firstName} ${form.lastName} has been added to your team.` });
+      toast({ title: t("teamPage.staffCreated"), description: t("teamPage.staffCreatedDesc", { name: `${form.firstName} ${form.lastName}` }) });
       setForm({ firstName: "", lastName: "", email: "", phone: "", password: "" });
       setPermissions(["leads", "students", "applications", "documents", "course_finder"]);
       onSuccess();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -430,35 +432,35 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Staff Member</DialogTitle>
-          <DialogDescription>Create a new team member with specific permissions</DialogDescription>
+          <DialogTitle>{t("teamPage.addStaffTitle")}</DialogTitle>
+          <DialogDescription>{t("teamPage.addStaffDescription")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4 pt-2">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">First Name *</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{t("teamPage.firstNameRequired")}</Label>
               <Input autoComplete="off" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-9" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Last Name *</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{t("teamPage.lastNameRequired")}</Label>
               <Input autoComplete="off" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-9" />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Mail className="w-3 h-3" /> Email *
+              <Mail className="w-3 h-3" /> {t("teamPage.emailRequired")}
             </Label>
             <Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-9" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Phone className="w-3 h-3" /> Phone
+              <Phone className="w-3 h-3" /> {t("common.phone")}
             </Label>
             <PhoneInput value={form.phone} onChange={phone => setForm(f => ({ ...f, phone }))} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <KeyRound className="w-3 h-3" /> Password *
+              <KeyRound className="w-3 h-3" /> {t("teamPage.passwordRequired")}
             </Label>
             <div className="relative">
               <Input
@@ -466,7 +468,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
                 autoComplete="new-password"
                 value={form.password}
                 onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                placeholder="Min 6 characters"
+                placeholder={t("teamPage.passwordPlaceholder")}
                 className="h-9 pr-10"
               />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -480,10 +482,10 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
             <Button type="submit" disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Create Staff
+              {t("teamPage.createStaff")}
             </Button>
           </div>
         </form>
@@ -494,6 +496,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
 }
 
 function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; staff: StaffMember; onSuccess: () => void }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [form, setForm] = useState({ firstName: staff.firstName || "", lastName: staff.lastName || "", phone: staff.phone || "" });
   const [permissions, setPermissions] = useState<string[]>(Array.isArray(staff.agentStaffPermissions) ? staff.agentStaffPermissions : []);
@@ -508,10 +511,10 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, permissions }),
       });
-      toast({ title: "Staff member updated" });
+      toast({ title: t("teamPage.staffUpdated") });
       onSuccess();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -522,28 +525,28 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Staff Member</DialogTitle>
-          <DialogDescription>Update {staff.firstName} {staff.lastName}'s details and permissions</DialogDescription>
+          <DialogTitle>{t("teamPage.editStaffTitle")}</DialogTitle>
+          <DialogDescription>{t("teamPage.editStaffDescription", { name: `${staff.firstName ?? ""} ${staff.lastName ?? ""}`.trim() })}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">First Name</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{t("teamPage.firstName")}</Label>
               <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} className="h-9" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Last Name</Label>
+              <Label className="text-xs font-medium text-muted-foreground">{t("teamPage.lastName")}</Label>
               <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} className="h-9" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Email</Label>
+            <Label className="text-xs font-medium text-muted-foreground">{t("common.email")}</Label>
             <Input value={staff.email || ""} disabled className="h-9 bg-muted/50" />
-            <p className="text-[11px] text-muted-foreground">Email cannot be changed after creation</p>
+            <p className="text-[11px] text-muted-foreground">{t("teamPage.emailCannotChange")}</p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Phone className="w-3 h-3" /> Phone
+              <Phone className="w-3 h-3" /> {t("common.phone")}
             </Label>
             <PhoneInput value={form.phone} onChange={phone => setForm(f => ({ ...f, phone }))} />
           </div>
@@ -553,10 +556,10 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
             <Button type="submit" disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Save Changes
+              {t("teamPage.saveChanges")}
             </Button>
           </div>
         </form>
@@ -567,6 +570,7 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
 }
 
 function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boolean; onOpenChange: (v: boolean) => void; staff: StaffMember; onSuccess: () => void }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -575,7 +579,7 @@ function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boo
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: t("teamPage.passwordMinLength"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -585,11 +589,11 @@ function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
-      toast({ title: "Password updated", description: `Password for ${staff.firstName} ${staff.lastName} has been changed.` });
+      toast({ title: t("teamPage.passwordUpdated"), description: t("teamPage.passwordUpdatedDesc", { name: `${staff.firstName ?? ""} ${staff.lastName ?? ""}`.trim() }) });
       setPassword("");
       onSuccess();
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("teamPage.errorTitle"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -600,18 +604,18 @@ function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Set Password</DialogTitle>
-          <DialogDescription>Set a new password for {staff.firstName} {staff.lastName}</DialogDescription>
+          <DialogTitle>{t("teamPage.setPassword")}</DialogTitle>
+          <DialogDescription>{t("teamPage.setPasswordDescription", { name: `${staff.firstName ?? ""} ${staff.lastName ?? ""}`.trim() })}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">New Password</Label>
+            <Label className="text-xs font-medium text-muted-foreground">{t("teamPage.newPassword")}</Label>
             <div className="relative">
               <Input
                 type={showPw ? "text" : "password"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Min 6 characters"
+                placeholder={t("teamPage.passwordPlaceholder")}
                 className="h-9 pr-10"
               />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -620,10 +624,10 @@ function SetPasswordDialog({ open, onOpenChange, staff, onSuccess }: { open: boo
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
             <Button type="submit" disabled={saving || password.length < 6} className="gap-2">
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Update Password
+              {t("teamPage.updatePassword")}
             </Button>
           </div>
         </form>
