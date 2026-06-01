@@ -27,6 +27,8 @@ export type ColumnFilterConfig =
       options: ColumnFilterOption[];
       allLabel?: string;
       allValue?: string;
+      /** Hide the auto-injected "All" option (e.g. gated by permissions). */
+      hideAll?: boolean;
       label?: string;
     };
 
@@ -97,7 +99,7 @@ function FilterControl({ filter, onClose }: { filter: ColumnFilterConfig; onClos
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="max-h-72">
-            <SelectItem value={allValue}>{filter.allLabel || "All"}</SelectItem>
+            {!filter.hideAll && <SelectItem value={allValue}>{filter.allLabel || "All"}</SelectItem>}
             {filter.options.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}

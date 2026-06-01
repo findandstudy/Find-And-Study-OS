@@ -1935,7 +1935,7 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
 }
 
 type StuFilters = { status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string; originType: string };
-const DEFAULT_STU_FILTERS: StuFilters = { status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", originType: "all" };
+const DEFAULT_STU_FILTERS: StuFilters = { status: "all", appSource: "all", assignment: "mine_unassigned", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", originType: "all" };
 
 function stuIsDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -1953,17 +1953,19 @@ function stuIsDateInRange(dateStr: string, range: string): boolean {
   return true;
 }
 
-function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId, students }: {
+function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId, students, canViewOthers, canViewUnassigned }: {
   stages: PipelineStage[];
   filters: StuFilters;
   onChange: (f: StuFilters) => void;
   staffUsers: any[];
   currentUserId?: number;
   students: any[];
+  canViewOthers: boolean;
+  canViewUnassigned: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
+  const hasActive = Object.entries(filters).some(([k, v]) => v !== (DEFAULT_STU_FILTERS as any)[k]);
 
   const uniqueNationalities = useMemo(() => {
     const set = new Set<string>();
@@ -2039,14 +2041,9 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
-              <SelectItem value="mine">{t("studentsPage.me")}</SelectItem>
-              <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>
-              {staffUsers.filter(u => u.id !== currentUserId).map((u: any) => (
-                <SelectItem key={u.id} value={String(u.id)}>
-                  {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
-                </SelectItem>
-              ))}
+              {canViewOthers && <SelectItem value="all">{t("studentsPage.all")}</SelectItem>}
+              <SelectItem value="mine_unassigned">{t("studentsPage.meUnassigned")}</SelectItem>
+              {canViewUnassigned && <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -2118,6 +2115,8 @@ export default function StudentsPage() {
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const canMoveCards = isAdmin || hasPermission("records.move_cards");
   const canAssign = isAdmin || hasPermission("records.assign_button");
+  const canViewOthers = hasPermission("n_others");
+  const canViewUnassigned = hasPermission("n_unassigned");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -2196,9 +2195,8 @@ export default function StudentsPage() {
     if (filters.status !== "all" && s.status !== filters.status) return false;
     if (filters.appSource === "agent" && !s.agentId) return false;
     if (filters.appSource === "staff" && s.agentId) return false;
-    if (filters.assignment === "mine" && s.assignedToId !== user?.id) return false;
+    if (filters.assignment === "mine_unassigned" && !(s.assignedToId === user?.id || s.assignedToId == null)) return false;
     if (filters.assignment === "unassigned" && s.assignedToId != null) return false;
-    if (filters.assignment !== "all" && filters.assignment !== "mine" && filters.assignment !== "unassigned" && s.assignedToId !== Number(filters.assignment)) return false;
     if (filters.nationality !== "all" && (s.nationality || "") !== filters.nationality) return false;
     if (filters.agent !== "all") {
       if (filters.agent === "none") { if (s.agentId) return false; }
@@ -2357,7 +2355,7 @@ export default function StudentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("studentsPage.searchStudents")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} staffUsers={staffUsers} currentUserId={user?.id} students={allStudents} />
+            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} staffUsers={staffUsers} currentUserId={user?.id} students={allStudents} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
@@ -2455,10 +2453,11 @@ export default function StudentsPage() {
                         value: filters.assignment,
                         onChange: v => setFilters(f => ({ ...f, assignment: v })),
                         options: [
-                          { value: "mine", label: t("studentsPage.me") },
-                          { value: "unassigned", label: t("studentsPage.unassigned") },
-                          ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
+                          { value: "mine_unassigned", label: t("studentsPage.meUnassigned") },
+                          ...(canViewUnassigned ? [{ value: "unassigned", label: t("studentsPage.unassigned") }] : []),
                         ],
+                        allLabel: t("studentsPage.all"),
+                        hideAll: !canViewOthers,
                         label: t("studentsPage.assignedToLabel"),
                       }}
                     />

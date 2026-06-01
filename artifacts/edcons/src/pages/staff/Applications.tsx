@@ -952,7 +952,7 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 
 /* ── FilterPopover ────────────────────────────────────────── */
 type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string };
-const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "all", dateRange: "all", originType: "all" };
+const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "mine_unassigned", dateRange: "all", originType: "all" };
 
 function isDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -967,16 +967,18 @@ function isDateInRange(dateStr: string, range: string): boolean {
   return true;
 }
 
-function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
+function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canViewOthers, canViewUnassigned }: {
   stages: PipelineStage[];
   filters: AppFilters;
   onChange: (f: AppFilters) => void;
   apps: any[];
   staffUsersList: { id: number; name: string }[];
+  canViewOthers: boolean;
+  canViewUnassigned: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
+  const hasActive = Object.entries(filters).some(([k, v]) => v !== (DEFAULT_FILTERS as any)[k]);
   const { data: allCountries = [] } = useCountries();
 
   const countriesInApps = useMemo(() => {
@@ -1080,9 +1082,9 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList }: {
           <Select value={filters.assignedTo} onValueChange={v => onChange({ ...filters, assignedTo: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
-              <SelectItem value="unassigned">{t("applicationsPage.unassigned")}</SelectItem>
-              {staffUsersList.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+              {canViewOthers && <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>}
+              <SelectItem value="mine_unassigned">{t("applicationsPage.meUnassigned")}</SelectItem>
+              {canViewUnassigned && <SelectItem value="unassigned">{t("applicationsPage.unassigned")}</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -1302,6 +1304,8 @@ export default function ApplicationsPage() {
   const { season } = useSeason();
   const { user, hasPermission } = useAuth(true, ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"]);
   const canSeeCommission = hasPermission("applications.view_commission");
+  const canViewOthers = hasPermission("n_others");
+  const canViewUnassigned = hasPermission("n_unassigned");
 
   const {
     prefs: colPrefs,
@@ -1455,10 +1459,8 @@ export default function ApplicationsPage() {
       if (filters.agent === "none") { if (a.agentId) return false; }
       else if (String(a.agentId) !== filters.agent) return false;
     }
-    if (filters.assignedTo !== "all") {
-      if (filters.assignedTo === "unassigned") { if (a.assignedToId) return false; }
-      else if (String(a.assignedToId) !== filters.assignedTo) return false;
-    }
+    if (filters.assignedTo === "mine_unassigned" && !(a.assignedToId === user?.id || a.assignedToId == null)) return false;
+    if (filters.assignedTo === "unassigned" && a.assignedToId != null) return false;
     if (filters.originType !== "all" && (a.originType || "direct") !== filters.originType) return false;
     if (filters.dateRange !== "all" && a.createdAt && !isDateInRange(a.createdAt, filters.dateRange)) return false;
     if (search) {
@@ -1752,7 +1754,7 @@ export default function ApplicationsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} />
+            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
@@ -1922,9 +1924,11 @@ export default function ApplicationsPage() {
                             value: filters.assignedTo,
                             onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
                             options: [
-                              { value: "unassigned", label: t("applicationsPage.unassigned") },
-                              ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
+                              { value: "mine_unassigned", label: t("applicationsPage.meUnassigned") },
+                              ...(canViewUnassigned ? [{ value: "unassigned", label: t("applicationsPage.unassigned") }] : []),
                             ],
+                            allLabel: t("applicationsPage.all"),
+                            hideAll: !canViewOthers,
                             label: t("applicationsPage.assignedTo"),
                           }}
                         />
