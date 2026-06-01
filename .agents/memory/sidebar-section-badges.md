@@ -14,8 +14,15 @@ They are derived entirely from **unread in-app notifications**:
 - Backend (`artifacts/api-server/src/routes/notifications.ts` `section-counts` handler) buckets
   each unread notification into a section by inspecting the notification `type` prefix
   (e.g. `task.`, `lead.`), `data.resourceType`, or the `actionUrl` substring.
-- Badges clear through the normal notification read flow (notification panel / mark-all-read);
-  there is no per-section "mark read on visit" endpoint.
+- Badges also clear when the user visits the section's page: `DashboardLayout` watches the
+  route and POSTs `/notifications/section/:section/read`, which marks all unread notifications
+  bucketed to that section (leads/students/applications/tasks) as read, then invalidates the
+  section-counts query. The bell panel (NotificationCenter) is plain local state + SSE, NOT
+  react-query, so invalidating react-query keys does not refresh it — it updates on its own
+  SSE/focus cycle.
+- Both the badge count query and the mark-section-read endpoint share one `bucketSection()`
+  helper so their section-matching rules can never drift apart. Edit both behaviors by editing
+  that single function.
 
 ## Gotcha: a notification is only created if an ACTIVE notification rule exists for the event
 `dispatchNotification` (`artifacts/api-server/src/lib/notificationDispatcher.ts`) returns early

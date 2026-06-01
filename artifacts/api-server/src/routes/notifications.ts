@@ -4,7 +4,7 @@ import {
   notificationsTable,
   notificationRulesTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, isNull, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import {
@@ -55,6 +55,19 @@ const liveResourceFilter = sql`(
     ELSE TRUE
   END
 )`;
+
+/**
+ * Map a notification to the sidebar section whose badge it should feed
+ * (or null if it belongs to none). Shared by the section-count badge query
+ * and the "mark section read on visit" endpoint so they never drift apart.
+ */
+function bucketSection(type: string, url: string, resourceType: string): "leads" | "students" | "applications" | "tasks" | null {
+  if (type.startsWith("lead.") || resourceType === "lead" || url.includes("/leads/")) return "leads";
+  if (type.startsWith("student.") || type.startsWith("document.") || resourceType === "student" || url.includes("/students/")) return "students";
+  if (type.startsWith("application.") || resourceType === "application" || url.includes("/applications/")) return "applications";
+  if (type.startsWith("task.") || resourceType === "task" || url.includes("/tasks")) return "tasks";
+  return null;
+}
 
 /**
  * Live notification stream (SSE). Replaces the previous 15 s polling loop in
@@ -169,21 +182,55 @@ router.get("/notifications/section-counts", requireAuth, async (req, res): Promi
 
   const sections: Record<string, number> = { leads: 0, students: 0, applications: 0, tasks: 0 };
   for (const row of rows) {
-    const t = row.type || "";
-    const url = row.actionUrl || "";
-    const resourceType = (row.data as any)?.resourceType || "";
-
-    if (t.startsWith("lead.") || resourceType === "lead" || url.includes("/leads/")) {
-      sections.leads++;
-    } else if (t.startsWith("student.") || t.startsWith("document.") || resourceType === "student" || url.includes("/students/")) {
-      sections.students++;
-    } else if (t.startsWith("application.") || resourceType === "application" || url.includes("/applications/")) {
-      sections.applications++;
-    } else if (t.startsWith("task.") || resourceType === "task" || url.includes("/tasks")) {
-      sections.tasks++;
-    }
+    const section = bucketSection(
+      row.type || "",
+      row.actionUrl || "",
+      (row.data as any)?.resourceType || "",
+    );
+    if (section) sections[section]++;
   }
   res.json(sections);
+});
+
+/**
+ * Mark every unread notification belonging to a sidebar section as read.
+ * Driven by the same bucketing rules used for the section badge counts, so
+ * visiting a section page (Leads/Students/Applications/Tasks) clears its badge.
+ */
+router.post("/notifications/section/:section/read", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const section = req.params.section;
+  if (!["leads", "students", "applications", "tasks"].includes(section)) {
+    res.status(400).json({ error: "Unknown section" });
+    return;
+  }
+
+  const rows = await db
+    .select({
+      id: notificationsTable.id,
+      type: notificationsTable.type,
+      actionUrl: notificationsTable.actionUrl,
+      data: notificationsTable.data,
+    })
+    .from(notificationsTable)
+    .where(and(
+      eq(notificationsTable.userId, userId),
+      eq(notificationsTable.isRead, false),
+      liveResourceFilter,
+    ));
+
+  const ids = rows
+    .filter(r => bucketSection(r.type || "", r.actionUrl || "", (r.data as any)?.resourceType || "") === section)
+    .map(r => r.id);
+
+  if (ids.length > 0) {
+    await db
+      .update(notificationsTable)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notificationsTable.userId, userId), inArray(notificationsTable.id, ids)));
+  }
+
+  res.json({ success: true, marked: ids.length });
 });
 
 router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<void> => {

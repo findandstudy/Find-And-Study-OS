@@ -396,6 +396,31 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     staleTime: 10000,
   });
 
+  // Clear a section's sidebar badge when the user visits that section (its list
+  // page or any detail page under it). The badges are driven by unread
+  // notifications, so marking them read on visit is what removes the red count
+  // next to Leads/Students/Applications/Tasks. A ref guards against duplicate
+  // POSTs while the section count is still showing a stale positive value.
+  const clearedSectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!(isStaff || isAgentRole)) return;
+    const path = location.split(/[?#]/)[0];
+    const match = path.match(/\/(leads|students|applications|tasks)(?:\/|$)/);
+    const section = match ? match[1] : null;
+    if (!section) {
+      clearedSectionRef.current = null;
+      return;
+    }
+    if (!sectionCounts || (sectionCounts[section] || 0) <= 0) return;
+    if (clearedSectionRef.current === section) return;
+    clearedSectionRef.current = section;
+    customFetch(`/api/notifications/section/${section}/read`, { method: "POST" })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["notification-section-counts"] });
+      })
+      .catch(() => { clearedSectionRef.current = null; /* allow retry */ });
+  }, [location, isStaff, isAgentRole, sectionCounts, queryClient]);
+
   if (!user && isLoading) {
     // Still resolving auth — show a blank bg so there's no white flash
     return <div className="min-h-screen bg-secondary/20" />;
