@@ -14,8 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Archive, ArchiveRestore, GripVertical, ArrowRight, MessageSquarePlus,
   Pencil, Trash2, RotateCcw, X, ClipboardList, CheckCircle2, Circle, Clock, AtSign,
-  AlertTriangle, CalendarClock,
+  AlertTriangle, CalendarClock, LayoutGrid, List,
 } from "lucide-react";
+import {
+  Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from "@/components/ui/table";
+import { ColumnHeader } from "@/components/ui/column-header";
 
 import { ADMIN_ROLES as _ADMIN_ROLES } from "@workspace/roles";
 const ADMIN_ROLES = _ADMIN_ROLES;
@@ -97,6 +101,14 @@ function toLocalIsoDate(d: Date): string {
 }
 
 type DueFilter = "all" | "dueWeek" | "overdue" | "noDue";
+
+type TaskSortKey = "title" | "status" | "priority" | "assignee" | "due";
+
+const TASKS_VIEW_KEY = "tasks-view-mode";
+
+// Ordering weights for sortable enum-like fields.
+const STATUS_SORT_ORDER: Record<Task["status"], number> = { todo: 0, in_progress: 1, done: 2 };
+const PRIORITY_SORT_ORDER: Record<Task["priority"], number> = { high: 0, medium: 1, low: 2 };
 
 type DueState = "none" | "overdue" | "soon" | "future";
 
@@ -202,6 +214,11 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [dueFilter, setDueFilter] = useState<DueFilter>("all");
+  const [viewMode, setViewMode] = useState<"canvas" | "list">(() => {
+    if (typeof window === "undefined") return "canvas";
+    return (localStorage.getItem(TASKS_VIEW_KEY) as "canvas" | "list") || "canvas";
+  });
+  const [sort, setSort] = useState<{ key: TaskSortKey; dir: "asc" | "desc" }>({ key: "due", dir: "asc" });
   const [editOpen, setEditOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [form, setForm] = useState<TaskFormState>(EMPTY_FORM);
@@ -319,6 +336,15 @@ export default function TasksPage() {
       scrollPendingRef.current = null;
     }
   }, [notesTask]);
+
+  function toggleView(mode: "canvas" | "list") {
+    setViewMode(mode);
+    try { localStorage.setItem(TASKS_VIEW_KEY, mode); } catch { /* ignore */ }
+  }
+
+  function handleSort(key: TaskSortKey) {
+    setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  }
 
   function openCreate() {
     setEditingTask(null);
@@ -570,6 +596,38 @@ export default function TasksPage() {
     return out;
   }, [visibleTasks]);
 
+  // Flat, sorted list for the list/table view. Sorts the same filtered tasks
+  // the canvas shows so switching views preserves filters.
+  const sortedTasks = useMemo(() => {
+    const arr = [...visibleTasks];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sort.key) {
+        case "title":
+          cmp = a.title.localeCompare(b.title);
+          break;
+        case "status":
+          cmp = STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status];
+          break;
+        case "priority":
+          cmp = PRIORITY_SORT_ORDER[a.priority] - PRIORITY_SORT_ORDER[b.priority];
+          break;
+        case "assignee":
+          cmp = (a.assignedToName ?? "").localeCompare(b.assignedToName ?? "");
+          break;
+        case "due":
+          // Tasks without a due date sort last regardless of direction.
+          if (!a.dueDate && !b.dueDate) cmp = 0;
+          else if (!a.dueDate) return 1;
+          else if (!b.dueDate) return -1;
+          else cmp = a.dueDate.localeCompare(b.dueDate);
+          break;
+      }
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [visibleTasks, sort]);
+
   const totalCount = tasks.length;
   const visibleCount = visibleTasks.length;
 
@@ -669,6 +727,28 @@ export default function TasksPage() {
             <p className="text-sm text-muted-foreground mt-0.5">{t("tasks.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center border rounded-full overflow-hidden" data-testid="view-toggle">
+              <button
+                type="button"
+                onClick={() => toggleView("canvas")}
+                className={`p-2 transition-colors ${viewMode === "canvas" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                title={t("tasks.view.canvas")}
+                aria-pressed={viewMode === "canvas"}
+                data-testid="button-view-canvas"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleView("list")}
+                className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                title={t("tasks.view.list")}
+                aria-pressed={viewMode === "list"}
+                data-testid="button-view-list"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
             <Button
               variant={showArchived ? "default" : "outline"}
               size="sm"
@@ -763,7 +843,7 @@ export default function TasksPage() {
               {t("tasks.filters.all")}
             </Button>
           </div>
-        ) : (
+        ) : viewMode === "canvas" ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(["todo", "in_progress", "done"] as const).map(status => {
               const items = grouped[status];
@@ -952,6 +1032,174 @@ export default function TasksPage() {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border bg-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <ColumnHeader
+                      label={t("tasks.fields.title")}
+                      sort={{ sortKey: "title", current: sort, onSort: handleSort }}
+                    />
+                    <ColumnHeader
+                      label={t("tasks.fields.status")}
+                      sort={{ sortKey: "status", current: sort, onSort: handleSort }}
+                    />
+                    <ColumnHeader
+                      label={t("tasks.fields.priority")}
+                      sort={{ sortKey: "priority", current: sort, onSort: handleSort }}
+                    />
+                    <ColumnHeader
+                      label={t("tasks.fields.assignTo")}
+                      sort={{ sortKey: "assignee", current: sort, onSort: handleSort }}
+                    />
+                    <ColumnHeader
+                      label={t("tasks.fields.dueDate")}
+                      sort={{ sortKey: "due", current: sort, onSort: handleSort }}
+                    />
+                    <TableHead className="w-24 text-right">{t("tasks.fields.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedTasks.map(task => {
+                    const noteCount = (task.taskNotes?.length) || 0;
+                    const next = STATUS_FLOW[task.status];
+                    const canEditThis = isAdmin || (canManage && task.assignedTo === user?.id);
+                    const dueState = classifyDue(task.dueDate, task.status, todayIso, threeDaysIso);
+                    return (
+                      <TableRow
+                        key={task.id}
+                        className="cursor-pointer hover:bg-muted/30 transition-colors"
+                        onClick={() => setNotesTask(task)}
+                        data-testid={`task-row-${task.id}`}
+                      >
+                        <TableCell className="max-w-[360px]">
+                          <div className={`font-medium leading-snug break-words ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
+                            {task.title}
+                          </div>
+                          {task.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
+                          )}
+                          {noteCount > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                              <MessageSquarePlus className="w-3 h-3" />
+                              {noteCount}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <span className={`w-2 h-2 rounded-full ${COLUMN_DOT_COLORS[task.status]}`} />
+                            {t(`tasks.col.${task.status}`)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={`text-[10px] h-5 px-1.5 ${PRIORITY_COLORS[task.priority]}`}>
+                            {t(`tasks.priority.${task.priority}`)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {task.assignedToName || <span className="text-muted-foreground">{t("tasks.unassigned")}</span>}
+                        </TableCell>
+                        <TableCell>
+                          {task.dueDate ? (
+                            <span
+                              className={`inline-flex items-center gap-1 text-xs ${
+                                dueState === "overdue"
+                                  ? "text-red-700 dark:text-red-400 font-medium"
+                                  : dueState === "soon"
+                                    ? "text-amber-700 dark:text-amber-400 font-medium"
+                                    : "text-muted-foreground"
+                              }`}
+                              data-testid={`task-row-due-${task.id}`}
+                            >
+                              <Clock className="w-3 h-3" />
+                              {task.dueDate}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {!showArchived ? (
+                              <>
+                                {next && canManage && (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    title={t(`tasks.advanceTo.${next}`)}
+                                    onClick={() => advanceStatus(task)}
+                                    data-testid={`button-row-advance-${task.id}`}
+                                  >
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  title={t("tasks.viewNotes")}
+                                  onClick={() => setNotesTask(task)}
+                                  data-testid={`button-row-notes-${task.id}`}
+                                >
+                                  <MessageSquarePlus className="w-3.5 h-3.5" />
+                                </Button>
+                                {canEditThis && (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    title={t("tasks.edit")}
+                                    onClick={() => openEdit(task)}
+                                    data-testid={`button-row-edit-${task.id}`}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                                {isAdmin && (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    title={t("tasks.archive")}
+                                    onClick={() => archiveTask(task)}
+                                    data-testid={`button-row-archive-${task.id}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              isAdmin && (
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  title={t("tasks.restore")}
+                                  onClick={() => restoreTask(task)}
+                                  data-testid={`button-row-restore-${task.id}`}
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </Button>
+                              )
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
       </div>

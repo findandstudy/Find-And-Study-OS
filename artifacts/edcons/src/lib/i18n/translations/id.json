@@ -696,7 +696,8 @@
       "status": "Status",
       "priority": "Prioritas",
       "dueDate": "Tenggat",
-      "assignTo": "Tugaskan ke"
+      "assignTo": "Tugaskan ke",
+      "actions": "Tindakan"
     },
     "col": {
       "todo": "Akan Dikerjakan",
@@ -724,6 +725,10 @@
       "dueWeek": "Pekan ini",
       "overdue": "Terlambat",
       "noDue": "Tanpa tanggal"
+    },
+    "view": {
+      "canvas": "Tampilan kanvas",
+      "list": "Tampilan daftar"
     }
   },
   "campaigns": {

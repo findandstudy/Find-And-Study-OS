@@ -696,7 +696,8 @@
       "status": "Estado",
       "priority": "Prioridad",
       "dueDate": "Fecha límite",
-      "assignTo": "Asignar a"
+      "assignTo": "Asignar a",
+      "actions": "Acciones"
     },
     "col": {
       "todo": "Por hacer",
@@ -724,6 +725,10 @@
       "dueWeek": "Esta semana",
       "overdue": "Vencidas",
       "noDue": "Sin fecha"
+    },
+    "view": {
+      "canvas": "Vista de tablero",
+      "list": "Vista de lista"
     }
   },
   "campaigns": {

@@ -696,7 +696,8 @@
       "status": "状态",
       "priority": "优先级",
       "dueDate": "截止日期",
-      "assignTo": "分配给"
+      "assignTo": "分配给",
+      "actions": "操作"
     },
     "col": {
       "todo": "待办",
@@ -724,6 +725,10 @@
       "dueWeek": "本周到期",
       "overdue": "已逾期",
       "noDue": "无截止日期"
+    },
+    "view": {
+      "canvas": "看板视图",
+      "list": "列表视图"
     }
   },
   "campaigns": {
