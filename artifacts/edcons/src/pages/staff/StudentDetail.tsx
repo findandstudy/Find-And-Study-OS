@@ -100,8 +100,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   }, [documents]);
 
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
+  const canChangeStage = !!isAdmin || hasPermission("students.change_stage");
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isStudent = user?.role === "student";
 
@@ -600,7 +601,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 {student.status}
               </Badge>
               {/* T8: Admin can toggle student active/inactive */}
-              {isAdmin && (
+              {canChangeStage && (
                 <Button
                   variant="outline"
                   size="sm"

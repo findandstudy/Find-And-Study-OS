@@ -567,6 +567,9 @@ async function seedClaudeIntegration() {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS agent_branches_branch_id_idx ON agent_branches(branch_id)`);
 
+    // Per-user permission overrides (tri-state map on top of role perms).
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_overrides jsonb`);
+
     // Add branch_id to other major tables.
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL`);
     await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL`);
@@ -655,6 +658,44 @@ async function seedClaudeIntegration() {
       }
     } catch (err) {
       console.error("[migrate] role commission permissions backfill:", err);
+    }
+
+    // One-shot backfill: grant the new stage/card-move/assignment permission
+    // keys to the roles that should have them by default, for environments
+    // seeded before these keys existed. Gated by a system_flags marker so it
+    // runs exactly once — an admin who later turns a toggle OFF in the Roles &
+    // Permissions editor won't have it silently re-added on the next boot.
+    // super_admin/admin/manager get the full action set; staff/consultant get
+    // the operational subset (stage changes + view_unassigned + move_cards).
+    try {
+      const stagePermBackfill = await pool.query(
+        `INSERT INTO system_flags (key) VALUES ('role_stage_perms_backfilled') ON CONFLICT DO NOTHING RETURNING key`
+      );
+      if (stagePermBackfill.rows.length > 0) {
+        await pool.query(`
+          UPDATE roles
+          SET permissions = (
+            SELECT jsonb_agg(DISTINCT elem)
+            FROM jsonb_array_elements_text(
+              permissions || '["leads.change_stage","applications.change_stage","students.change_stage","records.change_assigned","records.view_others","records.view_unassigned","records.assign_button","records.move_cards"]'::jsonb
+            ) AS elem
+          )
+          WHERE name IN ('super_admin', 'admin', 'manager')
+        `);
+        await pool.query(`
+          UPDATE roles
+          SET permissions = (
+            SELECT jsonb_agg(DISTINCT elem)
+            FROM jsonb_array_elements_text(
+              permissions || '["leads.change_stage","applications.change_stage","students.change_stage","records.view_unassigned","records.move_cards"]'::jsonb
+            ) AS elem
+          )
+          WHERE name IN ('staff', 'consultant')
+        `);
+        console.log("[migrate] Backfilled stage/card-move/assignment permissions for default roles");
+      }
+    } catch (err) {
+      console.error("[migrate] role stage permissions backfill:", err);
     }
 
     // One-shot data cleanup (idempotent via system_flags). Runs on every

@@ -446,8 +446,8 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
 }
 
 /* ── DraggableAppCard ─────────────────────────────────────── */
-function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canSeeCommission }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
+function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canMoveCards }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canMoveCards?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
@@ -476,7 +476,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       style={style}
       className={`rounded-xl border ${isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg} mb-3 transition-shadow duration-200`}
     >
-      <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
+      <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex justify-between items-start mb-1.5">
           <h4
             className="font-bold text-sm text-foreground line-clamp-1 hover:text-primary hover:underline cursor-pointer transition-colors"
@@ -521,7 +521,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && staffUsersList ? (
+          {onAssign && canAssign && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -584,10 +584,10 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
 }
 
 /* ── DroppableAppColumn ──────────────────────────────────── */
-function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission }: {
+function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canMoveCards }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canMoveCards?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const v = variant as ColVariant;
@@ -644,7 +644,7 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={apps.map(a => a.id)} strategy={verticalListSortingStrategy}>
           {apps.map((app: any) => (
-            <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} assignedUserName={app.assignedToId && staffUsersMap ? staffUsersMap[app.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canSeeCommission={canSeeCommission} />
+            <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} assignedUserName={app.assignedToId && staffUsersMap ? staffUsersMap[app.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canSeeCommission={canSeeCommission} canAssign={canAssign} canMoveCards={canMoveCards} />
           ))}
           {apps.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
@@ -1398,6 +1398,8 @@ export default function ApplicationsPage() {
   }, [allApps]);
 
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
+  const canMoveCards = isAdmin || hasPermission("records.move_cards");
+  const canAssign = isAdmin || hasPermission("records.assign_button");
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
@@ -1517,8 +1519,8 @@ export default function ApplicationsPage() {
     setActiveId(null);
     if (!over) return;
 
-    if (!isSuperAdmin) {
-      toast({ title: "Only Super Admin can move cards", variant: "destructive" });
+    if (!canMoveCards) {
+      toast({ title: "You don't have permission to move cards", variant: "destructive" });
       return;
     }
 
@@ -1798,7 +1800,7 @@ export default function ApplicationsPage() {
               >
                 {pipelineStages.map(s => {
                   const stageApps = filteredApps.filter((a: any) => a.stage === s.key).sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canSeeCommission={canSeeCommission} />;
+                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canSeeCommission={canSeeCommission} canAssign={canAssign} canMoveCards={canMoveCards} />;
                 })}
 
                 <DragOverlay>
@@ -2018,13 +2020,26 @@ export default function ApplicationsPage() {
                     case "assigned":
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
-                          <AssignPopover
-                            assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
-                            staffUsers={staffUsersList}
-                            currentUserId={user?.id}
-                            onAssign={(userId) => handleAssign(app.id, userId)}
-                            size="list"
-                          />
+                          {canAssign ? (
+                            <AssignPopover
+                              assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
+                              staffUsers={staffUsersList}
+                              currentUserId={user?.id}
+                              onAssign={(userId) => handleAssign(app.id, userId)}
+                              size="list"
+                            />
+                          ) : !app.assignedToId && user?.id ? (
+                            <button
+                              onClick={() => handleAssign(app.id, user.id)}
+                              className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                            >
+                              <UserPlus className="w-3 h-3" />Assign to me
+                            </button>
+                          ) : app.assignedToId ? (
+                            <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                              <UserCheck2 className="w-3 h-3" />{staffUsersMap[app.assignedToId] || "Assigned"}
+                            </span>
+                          ) : null}
                         </TableCell>
                       );
                     case "created":

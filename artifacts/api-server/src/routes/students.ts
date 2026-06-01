@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, softDelete } from "@workspace/db";
-import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull } from "drizzle-orm";
+import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getEffectivePermissionSet, canAccessAssignedRecord } from "../lib/permissions";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
@@ -213,13 +214,19 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   } else if (user.role === "student") {
     conditions.push(eq(studentsTable.userId, user.id));
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    // Non-admin staff: assigned to me OR unassigned, OR (Task #128) the
-    // student belongs to an agency where I am listed as assigned staff.
+    // Non-admin staff: visibility driven by records.* keys. Always see own
+    // records; view_unassigned adds the unassigned pool; view_others adds
+    // teammates' records. Plus (Task #128) students of an agency where the
+    // user is listed as assigned staff are always visible.
+    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
     const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
-    const orParts = [
-      eq(studentsTable.assignedToId, user.id),
-      isNull(studentsTable.assignedToId),
-    ];
+    const orParts: any[] = [eq(studentsTable.assignedToId, user.id)];
+    if (perms.has("records.view_unassigned")) {
+      orParts.push(isNull(studentsTable.assignedToId));
+    }
+    if (perms.has("records.view_others")) {
+      orParts.push(and(isNotNull(studentsTable.assignedToId), ne(studentsTable.assignedToId, user.id))!);
+    }
     if (agencyAgentIds.length > 0) {
       orParts.push(inArray(studentsTable.agentId, agencyAgentIds));
     }
@@ -500,8 +507,15 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     if (!existing.agentId || !visibleAgentIds.includes(existing.agentId)) {
       res.status(403).json({ error: "You can only edit your own students" }); return;
     }
-  } else if (!(ADMIN_ROLES as readonly string[]).includes(role)) {
-    if (existing.assignedToId !== null && existing.assignedToId !== req.user!.id) {
+  }
+
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(role);
+  const perms = isAgent || isStudent || isAdmin
+    ? new Set<string>()
+    : await getEffectivePermissionSet({ id: req.user!.id, role });
+
+  if (!isStudent && !isAgent && !isAdmin) {
+    if (!canAccessAssignedRecord(perms, existing.assignedToId, req.user!.id)) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -514,17 +528,16 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     "highSchool", "universityBachelor", "universityMaster",
     "graduationYear", "gpa", "languageScore", "photoUrl",
   ];
-  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(role);
   let allowedFields = isStudent
     ? STUDENT_SELF_FIELDS
     : isAgent
     ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId" && f !== "status")
     : STUDENT_PATCH_FIELDS;
-  if (!isAdmin && !isAgent && !isStudent) {
+  if (!isAdmin && !isAgent && !isStudent && !perms.has("students.change_stage")) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }
-  if (!isAdmin && !isAgent) {
-    if (req.body.assignedToId !== undefined) {
+  if (!isAdmin && !isAgent && !isStudent) {
+    if (req.body.assignedToId !== undefined && !perms.has("records.change_assigned")) {
       if (existing.assignedToId !== null) {
         allowedFields = allowedFields.filter(f => f !== "assignedToId");
       } else if (Number(req.body.assignedToId) !== req.user!.id) {

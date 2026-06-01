@@ -121,12 +121,12 @@ function getLeadStageColor(stage: PipelineStage, index: number): string {
 }
 
 /* ── LeadCard ──────────────────────────────────────────────── */
-function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId, isAdmin }: {
+function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canAssign, canMoveCards }: {
   lead: any; onView: (id: number) => void; showRevenue: boolean; variant?: ColVariant;
   assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
@@ -153,7 +153,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
         isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg
       } mb-3 transition-shadow duration-200`}
     >
-      <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
+      <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex justify-between items-start mb-2">
           <h4 className="font-bold text-sm text-foreground line-clamp-1">
             {lead.firstName} {lead.lastName}
@@ -193,14 +193,14 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && isAdmin && staffUsersList ? (
+          {onAssign && canAssign && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
               currentUserId={currentUserId}
               onAssign={(userId) => onAssign(lead.id, userId)}
             />
-          ) : onAssign && !isAdmin && currentUserId && !lead.assignedToId ? (
+          ) : onAssign && !canAssign && currentUserId && !lead.assignedToId ? (
             <button
               onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }}
               className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
@@ -258,10 +258,10 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
 }
 
 /* ── DroppableColumn ──────────────────────────────────────── */
-function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, isAdmin }: {
+function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canMoveCards }: {
   col: ColDef; leads: any[]; showRevenue: boolean; onView: (id: number) => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   const totalRevenue = showRevenue ? leads.reduce((sum, l) => sum + (parseFloat(l.estimatedValue) || 0), 0) : 0;
@@ -322,7 +322,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} isAdmin={isAdmin} />
+            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canAssign={canAssign} canMoveCards={canMoveCards} />
           ))}
           {leads.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
@@ -982,6 +982,9 @@ export default function LeadsPage() {
   ]);
   const canSeeRevenue = hasPermission("leads.view_commission");
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
+  const canMoveCards = hasPermission("records.move_cards");
+  const canChangeStage = hasPermission("leads.change_stage");
+  const canAssign = hasPermission("records.assign_button");
 
   const { season } = useSeason();
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
@@ -1186,8 +1189,8 @@ export default function LeadsPage() {
     setActiveId(null);
     if (!over) return;
 
-    if (!isSuperAdmin) {
-      toast({ title: "Only Super Admin can move cards", variant: "destructive" });
+    if (!canMoveCards) {
+      toast({ title: "You don't have permission to move cards", variant: "destructive" });
       return;
     }
 
@@ -1367,7 +1370,8 @@ export default function LeadsPage() {
                       onAssign={handleAssign}
                       staffUsersList={staffUsersList}
                       currentUserId={user?.id}
-                      isAdmin={isAdmin}
+                      canAssign={canAssign}
+                      canMoveCards={canMoveCards}
                     />
                   );
                 })}
@@ -1555,7 +1559,7 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {isAdmin ? (
+                        {canAssign ? (
                           <AssignPopover
                             assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
                             staffUsers={staffUsersList}

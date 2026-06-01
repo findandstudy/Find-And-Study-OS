@@ -25,7 +25,7 @@ const createUserBodySchema = z.object({
 const router: IRouter = Router();
 
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
-const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive"];
+const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides"];
 
 router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const { role, search } = req.query as Record<string, string>;
@@ -152,6 +152,22 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     if (!valid.includes(updates.role as string)) {
       res.status(400).json({ error: "Invalid role" });
       return;
+    }
+  }
+
+  if (updates.permissionOverrides !== undefined) {
+    const po = updates.permissionOverrides;
+    if (po === null) {
+      updates.permissionOverrides = null;
+    } else if (typeof po !== "object" || Array.isArray(po)) {
+      res.status(400).json({ error: "permissionOverrides must be an object" });
+      return;
+    } else {
+      const cleaned: Record<string, boolean> = {};
+      for (const [k, v] of Object.entries(po as Record<string, unknown>)) {
+        if (typeof v === "boolean") cleaned[k] = v;
+      }
+      updates.permissionOverrides = cleaned;
     }
   }
 

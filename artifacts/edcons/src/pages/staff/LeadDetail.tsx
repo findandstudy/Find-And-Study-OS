@@ -93,7 +93,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user } = useAuth(true);
+  const { user, hasPermission } = useAuth(true);
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
@@ -106,6 +106,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
+  const canChangeStage = !!isAdmin || hasPermission("leads.change_stage");
+  const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isAgent = basePath === "/agent";
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
@@ -455,7 +457,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                {isAdmin ? (
+                {canChangeStage ? (
                   <Select
                     value={lead?.status}
                     onValueChange={handleStatusChange}
@@ -768,7 +770,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 </Badge>
               )}
               {/* T8: Admin can change lead status (incl. lost = inactive) */}
-              {isAdmin && lead && (
+              {canChangeStage && lead && (
                 <Select
                   value={lead.status || "new"}
                   onValueChange={(val) => {
@@ -812,7 +814,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               </h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
-              ) : isAdmin ? (
+              ) : canChangeAssigned ? (
                 <Select
                   value={lead?.assignedToId ? String(lead.assignedToId) : "unassigned"}
                   onValueChange={(val) => handleAssign(val === "unassigned" ? null : Number(val))}

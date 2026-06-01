@@ -73,6 +73,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const { user: authUser, hasPermission } = useAuth();
   const canSeeCommission = hasPermission("applications.view_commission");
   const isAdmin = authUser && ["super_admin", "admin", "manager"].includes(authUser.role);
+  const canChangeStage = !!isAdmin || hasPermission("applications.change_stage");
   const isStaffUser = authUser && ["super_admin", "admin", "manager", "staff"].includes(authUser.role);
 
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -192,6 +193,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-foreground">{t("applicationDetailPage.applicationDetails")}</h2>
+                {canChangeStage ? (
                 <Select
                   value={app?.stage}
                   onValueChange={handleStageChange}
@@ -213,6 +215,13 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
+                ) : (
+                  app?.stage && (
+                    <span className="capitalize px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                      {pipelineStages.find(s => s.key === app.stage)?.label ?? app.stage.replace(/_/g, " ")}
+                    </span>
+                  )
+                )}
               </div>
 
               {isLoading ? (

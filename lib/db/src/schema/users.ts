@@ -32,6 +32,7 @@ export const usersTable = pgTable("users", {
   createdFromSource: text("created_from_source"),
   managingAgentId: integer("managing_agent_id"),
   agentStaffPermissions: jsonb("agent_staff_permissions"),
+  permissionOverrides: jsonb("permission_overrides"),
   branchId: integer("branch_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   deletedBy: integer("deleted_by"),

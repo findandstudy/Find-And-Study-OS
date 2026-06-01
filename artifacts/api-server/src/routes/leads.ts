@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, softDelete } from "@workspace/db";
-import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull } from "drizzle-orm";
+import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getEffectivePermissionSet, canAccessAssignedRecord } from "../lib/permissions";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -231,16 +232,19 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     }
   }
   if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    // Non-admin staff (manager/staff/consultant/editor/accountant): see only
-    // leads explicitly assigned to them or still unassigned. Origin (direct
-    // vs agent vs sub_agent) is intentionally NOT a filter here — once a
-    // lead has been routed to a staff member, they need to handle it.
-    conditions.push(
-      or(
-        eq(leadsTable.assignedToId, user.id),
-        isNull(leadsTable.assignedToId)
-      )
-    );
+    // Non-admin staff: visibility is driven by the records.* permission keys.
+    // They always see their own records; records.view_unassigned adds the
+    // unassigned pool; records.view_others adds records assigned to teammates.
+    // Origin (direct vs agent vs sub_agent) is intentionally NOT a filter here.
+    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const orParts: any[] = [eq(leadsTable.assignedToId, user.id)];
+    if (perms.has("records.view_unassigned")) {
+      orParts.push(isNull(leadsTable.assignedToId));
+    }
+    if (perms.has("records.view_others")) {
+      orParts.push(and(isNotNull(leadsTable.assignedToId), ne(leadsTable.assignedToId, user.id))!);
+    }
+    conditions.push(or(...orParts)!);
   }
 
   if (search) {
@@ -455,26 +459,32 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
 
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
+  const perms = isAgent || isAdmin
+    ? new Set<string>()
+    : await getEffectivePermissionSet({ id: user.id, role: user.role });
+
   if (isAgent) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (!existing.agentId || !visibleIds.includes(existing.agentId)) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
-  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    if (existing.assignedToId !== null && existing.assignedToId !== user.id) {
+  } else if (!isAdmin) {
+    if (!canAccessAssignedRecord(perms, existing.assignedToId, user.id)) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
   }
 
-  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   let allowedFields = isAgent ? AGENT_LEAD_PATCH_FIELDS : LEAD_PATCH_FIELDS;
-  if (!isAdmin) {
+  if (!isAdmin && !perms.has("leads.change_stage")) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }
   if (!isAdmin && !isAgent) {
-    if (req.body.assignedTo !== undefined) {
+    if (req.body.assignedTo !== undefined && !perms.has("records.change_assigned")) {
+      // Without explicit reassignment rights, the only allowed assignment is
+      // claiming a currently-unassigned record for oneself.
       if (existing.assignedToId !== null) {
         allowedFields = allowedFields.filter(f => f !== "assignedTo");
       } else if (Number(req.body.assignedTo) !== user.id) {

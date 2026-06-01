@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
 import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
-import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable, rolesTable, DEFAULT_ROLE_PERMISSIONS } from "@workspace/db";
+import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable } from "@workspace/db";
+import { getEffectivePermissionSet } from "../lib/permissions";
 import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
 import { directOrigin } from "../lib/originHelper";
@@ -79,24 +80,6 @@ function buildSessionUser(user: Record<string, unknown>): SessionUser {
   return result;
 }
 
-async function getEffectivePermissions(role: string): Promise<string[]> {
-  try {
-    const [roleRow] = await db
-      .select({ permissions: rolesTable.permissions })
-      .from(rolesTable)
-      .where(eq(rolesTable.name, role));
-    // The stored role row is authoritative: it reflects exactly what an admin
-    // toggled in the Roles & Permissions editor. We only fall back to the code
-    // defaults when no row exists for this role (e.g. a brand-new install that
-    // hasn't seeded yet), so that turning a permission OFF actually sticks.
-    if (roleRow) return (roleRow.permissions as string[] | null) ?? [];
-    return (DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[role] || [];
-  } catch (err) {
-    console.error("[getEffectivePermissions] error:", err);
-    return [];
-  }
-}
-
 function generateVerificationCode(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
@@ -154,7 +137,9 @@ router.get("/auth/me", async (req: Request, res: Response) => {
     }
   }
 
-  const permissions = await getEffectivePermissions(userData.role);
+  const permissions = Array.from(
+    await getEffectivePermissionSet({ id: userData.id, role: userData.role })
+  );
 
   res.json({ ...userData, permissions, isImpersonating, originalUserId });
 });

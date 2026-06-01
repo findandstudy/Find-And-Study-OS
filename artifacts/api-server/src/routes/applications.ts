@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable, softDelete } from "@workspace/db";
-import { eq, sql, and, inArray, desc, isNull, isNotNull } from "drizzle-orm";
+import { eq, sql, and, inArray, desc, isNull, isNotNull, ne } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getEffectivePermissionSet, canAccessAssignedRecord } from "../lib/permissions";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { or as orFn } from "drizzle-orm";
@@ -95,13 +96,19 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     // Non-admin staff: only see applications assigned to them or unassigned
     // (mirrors the leads / students lists). Admins see everything in scope.
     if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-      // Task #128: also include applications for agencies where this
-      // staff is listed as agency-assigned staff (read-only visibility).
+      // Visibility driven by records.* keys. Always see own records;
+      // view_unassigned adds the unassigned pool; view_others adds
+      // teammates' records. Task #128: also include applications for
+      // agencies where this staff is listed as agency-assigned staff.
+      const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
       const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
-      const orParts = [
-        eq(applicationsTable.assignedToId, user.id),
-        isNull(applicationsTable.assignedToId),
-      ];
+      const orParts: any[] = [eq(applicationsTable.assignedToId, user.id)];
+      if (perms.has("records.view_unassigned")) {
+        orParts.push(isNull(applicationsTable.assignedToId));
+      }
+      if (perms.has("records.view_others")) {
+        orParts.push(and(isNotNull(applicationsTable.assignedToId), ne(applicationsTable.assignedToId, user.id))!);
+      }
       if (agencyAgentIds.length > 0) {
         orParts.push(inArray(applicationsTable.agentId, agencyAgentIds));
       }
@@ -723,6 +730,9 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
+  const perms = isAdmin || !isStaff
+    ? new Set<string>()
+    : await getEffectivePermissionSet({ id: user.id, role: user.role });
   const AGENT_PATCH_FIELDS: string[] = [];
   let allowedFields = isStaff ? [...APP_PATCH_FIELDS] : [...AGENT_PATCH_FIELDS];
   // Task #167 — admin-tier (super_admin/admin/manager) can always move stage.
@@ -767,8 +777,9 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
   // Admin-tier (super_admin/admin/manager) can move stage freely as before.
-  // Lower-tier staff regain stage write only via governed action transitions.
-  if (!isAdmin && isStaff && !stageGovernedAllowed) {
+  // Lower-tier staff regain stage write via the applications.change_stage
+  // permission OR a governed action transition.
+  if (!isAdmin && isStaff && !perms.has("applications.change_stage") && !stageGovernedAllowed) {
     allowedFields = allowedFields.filter(f => f !== "stage");
   }
   // Agents normally have no patch fields, but governed action transitions
@@ -777,7 +788,9 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     allowedFields = ["stage"];
   }
 
-  if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
+  if (isStaff && !isAdmin && req.body.assignedToId !== undefined && !perms.has("records.change_assigned")) {
+    // Without explicit reassignment rights, the only allowed assignment is
+    // claiming a currently-unassigned application for oneself.
     const [existing] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
     if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
     if (existing.assignedToId !== null) {

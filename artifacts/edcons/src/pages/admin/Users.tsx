@@ -115,6 +115,17 @@ interface PermCategory {
 
 type PermSchema = Record<string, PermCategory>;
 
+const OVERRIDE_PERMISSION_KEYS: { key: string; label: string }[] = [
+  { key: "leads.change_stage", label: "Change lead stage/status" },
+  { key: "students.change_stage", label: "Change student stage/status" },
+  { key: "applications.change_stage", label: "Change application stage" },
+  { key: "records.move_cards", label: "Move kanban cards" },
+  { key: "records.assign_button", label: "Assign records (Assign button)" },
+  { key: "records.change_assigned", label: "Reassign records to others" },
+  { key: "records.view_others", label: "View others' records" },
+  { key: "records.view_unassigned", label: "View unassigned records" },
+];
+
 type UserSortKey = "user" | "email" | "role" | "status";
 type SortDir = "asc" | "desc";
 
@@ -149,6 +160,7 @@ function UsersTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", isActive: true, avatarUrl: "" });
+  const [editOverrides, setEditOverrides] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [editAvatarUploading, setEditAvatarUploading] = useState(false);
   const editAvatarInputRef = useRef<HTMLInputElement>(null);
@@ -327,6 +339,10 @@ function UsersTab() {
       isActive: user.isActive ?? true,
       avatarUrl: user.avatarUrl || "",
     });
+    const po = user.permissionOverrides && typeof user.permissionOverrides === "object" && !Array.isArray(user.permissionOverrides)
+      ? (user.permissionOverrides as Record<string, boolean>)
+      : {};
+    setEditOverrides({ ...po });
     setEditOpen(true);
   }
 
@@ -363,7 +379,7 @@ function UsersTab() {
       await customFetch(`/api/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "", avatarUrl: avatarUrl || null }),
+        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "", avatarUrl: avatarUrl || null, permissionOverrides: editOverrides }),
       });
       toast({ title: "User updated successfully" });
       setEditOpen(false);
@@ -786,6 +802,44 @@ function UsersTab() {
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editForm.isActive ? "translate-x-6" : "translate-x-1"}`} />
                 </button>
+              </div>
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <Label>Permission Overrides</Label>
+              <p className="text-xs text-muted-foreground">Override this user's role permissions. "Inherit" uses the role default.</p>
+              <div className="space-y-1.5">
+                {OVERRIDE_PERMISSION_KEYS.map(({ key, label }) => {
+                  const state = editOverrides[key] === undefined ? "inherit" : editOverrides[key] ? "allow" : "deny";
+                  const setState = (s: "inherit" | "allow" | "deny") => {
+                    setEditOverrides(prev => {
+                      const next = { ...prev };
+                      if (s === "inherit") delete next[key];
+                      else next[key] = s === "allow";
+                      return next;
+                    });
+                  };
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-foreground">{label}</span>
+                      <div className="flex rounded-lg border overflow-hidden shrink-0">
+                        {(["inherit", "allow", "deny"] as const).map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setState(opt)}
+                            className={`px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                              state === opt
+                                ? opt === "allow" ? "bg-green-500 text-white" : opt === "deny" ? "bg-destructive text-white" : "bg-muted text-foreground"
+                                : "bg-background text-muted-foreground hover:bg-muted"
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

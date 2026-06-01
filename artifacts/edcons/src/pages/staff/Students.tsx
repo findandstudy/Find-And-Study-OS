@@ -1502,8 +1502,8 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
   );
 }
 
-function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, isAdmin }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id });
+function DraggableStudentCard({ student, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canAssign, canMoveCards }: { student: any; onView: (id: number) => void; variant?: StuColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
@@ -1528,7 +1528,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       style={style}
       className={`rounded-xl border ${isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg} mb-3 transition-shadow duration-200`}
     >
-      <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
+      <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex items-center gap-2.5 mb-1.5">
           <StudentAvatar student={student} />
           <div className="min-w-0">
@@ -1554,14 +1554,14 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && isAdmin && staffUsersList ? (
+          {onAssign && canAssign && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
               currentUserId={currentUserId}
               onAssign={(userId) => onAssign(student.id, userId)}
             />
-          ) : onAssign && !isAdmin && currentUserId && !student.assignedToId ? (
+          ) : onAssign && !canAssign && currentUserId && !student.assignedToId ? (
             <button
               onClick={(e) => { e.stopPropagation(); onAssign(student.id, currentUserId); }}
               className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
@@ -1616,7 +1616,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
   );
 }
 
-function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, isAdmin }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; isAdmin?: boolean }) {
+function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canMoveCards }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -1654,7 +1654,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={students.map(s => s.id)} strategy={verticalListSortingStrategy}>
           {students.map((s: any) => (
-            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} isAdmin={isAdmin} />
+            <DraggableStudentCard key={s.id} student={s} onView={onView} variant={v} assignedUserName={s.assignedToId && staffUsersMap ? staffUsersMap[s.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canAssign={canAssign} canMoveCards={canMoveCards} />
           ))}
           {students.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>Drop here</div>
@@ -2112,10 +2112,12 @@ export default function StudentsPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { user } = useAuth(true, [
+  const { user, hasPermission } = useAuth(true, [
     "super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant",
   ]);
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
+  const canMoveCards = isAdmin || hasPermission("records.move_cards");
+  const canAssign = isAdmin || hasPermission("records.assign_button");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -2293,8 +2295,8 @@ export default function StudentsPage() {
     setActiveId(null);
     if (!over) return;
 
-    if (!isSuperAdmin) {
-      toast({ title: "Only Super Admin can move cards", variant: "destructive" });
+    if (!canMoveCards) {
+      toast({ title: "You don't have permission to move cards", variant: "destructive" });
       return;
     }
 
@@ -2395,7 +2397,7 @@ export default function StudentsPage() {
               >
                 {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key).sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} isAdmin={isAdmin} />;
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canAssign={canAssign} canMoveCards={canMoveCards} />;
                 })}
 
                 <DragOverlay>
@@ -2507,7 +2509,7 @@ export default function StudentsPage() {
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {isAdmin ? (
+                        {canAssign ? (
                           <AssignPopover
                             assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
                             staffUsers={staffUsersList}
