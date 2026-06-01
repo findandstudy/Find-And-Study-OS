@@ -201,7 +201,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
     const currentYear = await getCurrentSeason();
     const stage = "inquiry";
 
-    const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, studentId));
+    const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, studentId));
     const studentFullName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
 
     const [app] = await db.insert(applicationsTable).values({
@@ -211,6 +211,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
       universityId: snapshotUniversityId,
       programId: programId || null,
       agentId: null,
+      assignedToId: studentRec?.assignedToId || null,
       universityName: snapshotUniversityName,
       country: snapshotCountry,
       programName: snapshotProgramName,

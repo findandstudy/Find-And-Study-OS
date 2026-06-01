@@ -5,14 +5,14 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
-import { getEffectivePermissionSet, canAccessAssignedRecord } from "../lib/permissions";
+import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
-import { applyLeadAssignmentRules } from "../lib/leadAssignment";
+import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 
@@ -552,6 +552,26 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       } catch (err) {
         console.warn("[lead->student sync] failed:", err);
       }
+    }
+  }
+
+  // Cascade reassignment down to the converted student and its applications,
+  // gated by the `records.cascade_assignment` permission. When the acting user
+  // holds it, a lead reassignment overwrites the downstream owners so ownership
+  // follows the lead; without it, downstream records are left untouched.
+  const assignmentChanged =
+    Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
+    existing.assignedToId !== lead.assignedToId;
+  if (assignmentChanged && lead.convertedStudentId) {
+    const canCascade = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
+    if (canCascade) {
+      await cascadeLeadAssignment({
+        leadId: lead.id,
+        convertedStudentId: lead.convertedStudentId,
+        newAssignedToId: lead.assignedToId,
+        actorUserId: user.id,
+        ipAddress: req.ip,
+      });
     }
   }
 

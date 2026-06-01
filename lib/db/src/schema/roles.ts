@@ -66,6 +66,7 @@ export const PERMISSION_CATEGORIES = {
       "records.view_unassigned": "See Unassigned Records",
       "records.assign_button": "See/Use Assign Button",
       "records.move_cards": "Move Cards on Canvas",
+      "records.cascade_assignment": "Cascade Assignment to Linked Records",
     },
   },
   documents: {

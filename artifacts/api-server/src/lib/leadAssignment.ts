@@ -1,5 +1,5 @@
-import { db, leadAssignmentRulesTable, leadsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { db, leadAssignmentRulesTable, leadsTable, studentsTable, applicationsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { logAudit } from "./auth";
 
 interface LeadLike {
@@ -131,5 +131,68 @@ export async function applyLeadAssignmentRules(lead: LeadLike & { assignedToId?:
   } catch (err: any) {
     console.error("[applyLeadAssignmentRules] failed:", err?.message || err);
     return null;
+  }
+}
+
+/**
+ * Cascade a lead's assigned-staff change down to its converted student and that
+ * student's applications. Used when a Lead's `assignedToId` is reassigned AND
+ * the acting user holds the `records.cascade_assignment` permission.
+ *
+ * Unlike the create/convert carry-over (which only fills empty assignments),
+ * the gated cascade intentionally OVERWRITES already-assigned downstream
+ * records — that is the whole point of turning the cascade on. Each downstream
+ * change is written to the audit log so it appears in activity history. The
+ * helper is best-effort: it swallows errors so it never breaks the calling
+ * lead-update flow, and it skips records that already point at the new staff.
+ */
+export async function cascadeLeadAssignment(opts: {
+  leadId: number;
+  convertedStudentId: number | null;
+  newAssignedToId: number | null;
+  actorUserId: number | null;
+  ipAddress?: string;
+}): Promise<void> {
+  const { leadId, convertedStudentId, newAssignedToId, actorUserId, ipAddress } = opts;
+  try {
+    if (!convertedStudentId) return;
+
+    const [student] = await db
+      .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.id, convertedStudentId), isNull(studentsTable.deletedAt)));
+    if (!student) return;
+
+    if (student.assignedToId !== newAssignedToId) {
+      await db.update(studentsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(studentsTable.id, student.id));
+      logAudit(actorUserId, "assignment.cascade", "student", student.id, {
+        from: student.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "lead",
+        sourceId: leadId,
+      }, ipAddress);
+    }
+
+    const apps = await db
+      .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.studentId, student.id), isNull(applicationsTable.deletedAt)));
+
+    for (const app of apps) {
+      if (app.assignedToId === newAssignedToId) continue;
+      await db.update(applicationsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(applicationsTable.id, app.id));
+      logAudit(actorUserId, "assignment.cascade", "application", app.id, {
+        from: app.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "lead",
+        sourceId: leadId,
+      }, ipAddress);
+    }
+  } catch (err: any) {
+    console.error("[cascadeLeadAssignment] failed:", err?.message || err);
   }
 }
