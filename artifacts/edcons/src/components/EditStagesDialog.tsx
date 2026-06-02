@@ -11,9 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 type ActionTypeOrNone = StageActionType | "none";
 const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; label: string; defaultLabel: string; defaultColor: string }[] = [
   { value: "none", label: "Yok", defaultLabel: "", defaultColor: "#3b82f6" },
-  { value: "upload", label: "Belge Yükle", defaultLabel: "Yükle", defaultColor: "#3b82f6" },
   { value: "download", label: "Belge İndir", defaultLabel: "İndir", defaultColor: "#10b981" },
-  { value: "missing_docs", label: "Eksik Belgeler", defaultLabel: "Eksik Belgeler", defaultColor: "#f59e0b" },
+  { value: "missing_docs", label: "Belge Yükle", defaultLabel: "Belge Yükle", defaultColor: "#f59e0b" },
 ];
 
 function StageActionEditor({
