@@ -1301,20 +1301,20 @@ export default function AgentsPage() {
               {/* Assigned Staff (multi + primary) */}
               {!isSubAgent && (
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Atanmış Staff</Label>
+                  <Label className="flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" /> Atanmış Personel</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button type="button" variant="outline" className="w-full justify-between rounded-xl">
                         <span className="text-xs truncate">
                           {form.assignedStaff.length === 0
-                            ? "Staff seçin..."
-                            : `${form.assignedStaff.length} staff seçili`}
+                            ? "Personel seçin..."
+                            : `${form.assignedStaff.length} personel seçili`}
                         </span>
                         <ChevronRight className="h-4 w-4 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[320px] p-2 max-h-72 overflow-auto">
-                      {staffMembers.length === 0 && <p className="text-xs text-muted-foreground p-2">Staff bulunamadı</p>}
+                      {staffMembers.length === 0 && <p className="text-xs text-muted-foreground p-2">Personel bulunamadı</p>}
                       {staffMembers.map(s => {
                         const entry = form.assignedStaff.find(e => e.userId === s.id);
                         const checked = !!entry;
@@ -1367,7 +1367,7 @@ export default function AgentsPage() {
                     </PopoverContent>
                   </Popover>
                   <p className="text-xs text-muted-foreground">
-                    Yıldız ile işaretli staff "Ana iletişim sorumlusu" olarak görünür. En az bir staff seçildiğinde tam olarak bir tanesi primary olmalıdır.
+                    Yıldız ile işaretli personel "Ana iletişim sorumlusu" olarak görünür. En az bir personel seçildiğinde tam olarak bir tanesi birincil olmalıdır.
                   </p>
                   {form.assignedStaff.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
