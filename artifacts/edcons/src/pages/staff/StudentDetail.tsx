@@ -133,7 +133,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedToId: targetUserId }),
       });
-      qc.invalidateQueries({ queryKey: ["getStudent"] });
+      qc.invalidateQueries({ queryKey: [`/api/students/${id}`] });
+      qc.invalidateQueries({ queryKey: ["/api/students"] });
       toast({ title: targetUserId ? t("studentDetailPage.studentAssigned") : t("studentDetailPage.studentUnassigned") });
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "destructive" });
@@ -812,7 +813,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                                 originDisplayName: val === "direct" ? "Find And Study" : null,
                               }),
                             }).then(() => {
-                              qc.invalidateQueries({ queryKey: ["getStudent"] });
+                              qc.invalidateQueries({ queryKey: [`/api/students/${id}`] });
                               toast({ title: "Origin updated" });
                             });
                           }}
