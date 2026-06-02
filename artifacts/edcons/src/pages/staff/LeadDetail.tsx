@@ -19,7 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power, Trash2, FileText, Download, Eye } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power, Trash2, FileText, Download, Eye, Upload, Loader2 } from "lucide-react";
+import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -142,6 +143,27 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     enabled: !!isAdmin,
     staleTime: 5 * 60_000,
   });
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const { data: catalogResp } = useQuery<any>({
+    queryKey: ["catalog-options"],
+    queryFn: () => customFetch("/api/catalog-options"),
+    enabled: !!isStaffUser,
+    staleTime: 5 * 60_000,
+  });
+  const docCatalogOptions = useMemo(() => {
+    const grouped = (catalogResp as any)?.grouped || {};
+    const rows: any[] = grouped["documents"] || [];
+    return rows
+      .filter((r: any) => r.isActive !== false)
+      .map((r: any) => {
+        const md = r.metadata || {};
+        const label = (typeof md.label === "string" && md.label.trim())
+          ? md.label.trim()
+          : String(r.value).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+        return { value: r.value as string, label };
+      });
+  }, [catalogResp]);
 
   // T1: Look up the lead's interested program to derive Estimated Budget from tuition
   const interestedProgramName = (lead as any)?.interestedProgram?.trim();
@@ -440,12 +462,21 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         </div>
 
         {mainTab === "documents" ? (
-          <LeadDocumentsTab
-            docs={leadDocs}
-            onPreview={(d) => setPreviewDoc(d)}
-            firstName={lead?.firstName || ""}
-            lastName={lead?.lastName || ""}
-          />
+          <div className="space-y-3">
+            {isStaffUser && (
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => setUploadOpen(true)} data-testid="lead-doc-add">
+                  <Plus className="w-4 h-4 mr-1.5" /> {t("leadDetailPage.addDocument")}
+                </Button>
+              </div>
+            )}
+            <LeadDocumentsTab
+              docs={leadDocs}
+              onPreview={(d) => setPreviewDoc(d)}
+              firstName={lead?.firstName || ""}
+              lastName={lead?.lastName || ""}
+            />
+          </div>
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-4">
@@ -952,6 +983,15 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         />
       )}
       <DocumentPreviewDialog doc={previewDoc} onClose={() => setPreviewDoc(null)} />
+      {isStaffUser && (
+        <LeadDocUploadDialog
+          open={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+          leadId={id}
+          docOptions={docCatalogOptions}
+          onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/documents`] })}
+        />
+      )}
     </>
   );
 }
@@ -1384,6 +1424,120 @@ function DocumentPreviewDialog({ doc, onClose }: { doc: any | null; onClose: () 
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LeadDocUploadDialog({ open, onClose, leadId, docOptions, onUploaded }: {
+  open: boolean;
+  onClose: () => void;
+  leadId: number;
+  docOptions: { value: string; label: string }[];
+  onUploaded: () => void;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [docType, setDocType] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function reset() {
+    setDocType("");
+    setFile(null);
+  }
+
+  function handleClose() {
+    if (!uploading) {
+      reset();
+      onClose();
+    }
+  }
+
+  async function handleUpload() {
+    if (!docType) {
+      toast({ title: t("leadDetailPage.selectDocTypeFirst"), variant: "destructive" });
+      return;
+    }
+    if (!file) {
+      toast({ title: t("leadDetailPage.selectFileFirst"), variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(file);
+      await customFetch(`/api/leads/${leadId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: docType, fileKey, mimeType, sizeBytes, originalFileName: file.name }),
+      });
+      toast({ title: t("leadDetailPage.documentUploaded") });
+      reset();
+      onUploaded();
+      onClose();
+    } catch (err: any) {
+      toast({ title: t("common.error"), description: err?.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="w-5 h-5 text-primary" />
+            {t("leadDetailPage.addDocument")}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">{t("leadDetailPage.documentType")}</Label>
+            {docOptions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t("leadDetailPage.noDocTypes")}</p>
+            ) : (
+              <Select value={docType} onValueChange={setDocType} disabled={uploading}>
+                <SelectTrigger data-testid="lead-doc-type-select">
+                  <SelectValue placeholder={t("leadDetailPage.selectDocType")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {docOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">{t("leadDetailPage.file")}</Label>
+            <div
+              onClick={() => { if (!uploading) fileInputRef.current?.click(); }}
+              className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+            >
+              <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground truncate">
+                {file ? file.name : t("leadDetailPage.clickToSelectFile")}
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="hidden"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={uploading}>{t("common.cancel")}</Button>
+          <Button onClick={handleUpload} disabled={uploading || !docType || !file} data-testid="lead-doc-upload-submit">
+            {uploading
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t("leadDetailPage.uploading")}</>
+              : t("leadDetailPage.upload")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

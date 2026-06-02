@@ -2138,6 +2138,17 @@
     "stage": "Stage"
   },
   "leadDetailPage": {
+    "addDocument": "Add Document",
+    "documentType": "Document Type",
+    "selectDocType": "Select document type",
+    "selectDocTypeFirst": "Please select a document type first",
+    "file": "File",
+    "clickToSelectFile": "Click to select a file",
+    "selectFileFirst": "Please select a file",
+    "uploading": "Uploading...",
+    "upload": "Upload",
+    "documentUploaded": "Document uploaded",
+    "noDocTypes": "No document types defined. You can add them under Settings > Documents.",
     "failed": "Failed",
     "failedToDeleteNote": "Failed to delete note",
     "followUpTitlePlaceholder": "Follow-up title (e.g. Call about admission)",

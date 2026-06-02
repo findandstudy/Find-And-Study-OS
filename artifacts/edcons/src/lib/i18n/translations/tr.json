@@ -2078,6 +2078,17 @@
     "stage": "Aşama"
   },
   "leadDetailPage": {
+    "addDocument": "Belge Ekle",
+    "documentType": "Belge Türü",
+    "selectDocType": "Belge türü seçin",
+    "selectDocTypeFirst": "Lütfen önce bir belge türü seçin",
+    "file": "Dosya",
+    "clickToSelectFile": "Dosya seçmek için tıklayın",
+    "selectFileFirst": "Lütfen bir dosya seçin",
+    "uploading": "Yükleniyor...",
+    "upload": "Yükle",
+    "documentUploaded": "Belge yüklendi",
+    "noDocTypes": "Belge türü tanımlı değil. Ayarlar > Belgeler bölümünden ekleyebilirsiniz.",
     "failed": "Başarısız",
     "failedToDeleteNote": "Not silinemedi",
     "followUpTitlePlaceholder": "Takip başlığı (örn. Kabul hakkında ara)",

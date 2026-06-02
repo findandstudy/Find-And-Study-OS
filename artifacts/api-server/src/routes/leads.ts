@@ -15,8 +15,13 @@ import { getCurrentSeason } from "../lib/season";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
+import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
+import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { buildDocNameFromParts } from "../lib/docNaming";
 
 const router: IRouter = Router();
+
+const leadDocsObjectStorage = new ObjectStorageService();
 
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
@@ -441,6 +446,98 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
     .where(and(isNull(documentsTable.deletedAt), or(...orConds)!))
     .orderBy(desc(documentsTable.createdAt));
   res.json(docs);
+});
+
+// POST /api/leads/:id/documents — staff/agents manually attach a document to a
+// lead, choosing a type from the admin-managed document catalog
+// (catalog_options category='documents'). The document is linked to the lead
+// (documents.leadId) so that, when the lead is converted to a student, it
+// carries over (see /leads/:id/convert) and counts toward the program's
+// document-requirements checklist. Uses the same fileKey object-storage flow
+// and validation as POST /documents.
+router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  }
+
+  if (req.body.fileData) {
+    res.status(400).json({ error: "fileData uploads are no longer accepted. Upload via /storage/uploads/request-url and pass fileKey." });
+    return;
+  }
+
+  const { type, fileKey, mimeType, sizeBytes, originalFileName } = req.body;
+  if (!type || typeof type !== "string") { res.status(400).json({ error: "type is required" }); return; }
+  if (!fileKey || typeof fileKey !== "string") { res.status(400).json({ error: "fileKey is required" }); return; }
+  if (!mimeType) { res.status(400).json({ error: "mimeType is required for file uploads" }); return; }
+
+  const validationFileName = originalFileName
+    ? sanitizeFileName(originalFileName)
+    : (() => {
+        const syntheticExt = isPdf(mimeType) ? ".pdf" : mimeType === "image/png" ? ".png" : ".jpg";
+        return `document${syntheticExt}`;
+      })();
+  const declaredSize = sizeBytes ? Number(sizeBytes) : 0;
+  const validationError = validateUploadedFile(validationFileName, mimeType, declaredSize || 1);
+  if (validationError) {
+    const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
+    res.status(httpStatus).json({ error: validationError.message });
+    return;
+  }
+
+  let head: Buffer;
+  try {
+    const file = await leadDocsObjectStorage.getObjectEntityFile(fileKey);
+    const [buf] = await file.download({ start: 0, end: 4099 });
+    head = buf;
+  } catch (err) {
+    if (err instanceof ObjectNotFoundError) {
+      res.status(400).json({ error: "Uploaded file could not be located in object storage." });
+      return;
+    }
+    console.error("[LEADS] head-byte fetch failed:", err);
+    res.status(502).json({ error: "Failed to verify uploaded file." });
+    return;
+  }
+  const bufferError = await validateUploadedFileBuffer(validationFileName, mimeType, head);
+  if (bufferError) {
+    try {
+      const file = await leadDocsObjectStorage.getObjectEntityFile(fileKey);
+      await file.delete({ ignoreNotFound: true });
+    } catch (delErr) {
+      console.error("[LEADS] failed to clean up rejected upload:", delErr);
+    }
+    const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
+    res.status(httpStatus).json({ error: bufferError.message });
+    return;
+  }
+
+  const safeName = buildDocNameFromParts(lead.firstName, lead.lastName, type, mimeType);
+
+  const [doc] = await db.insert(documentsTable).values({
+    name: safeName,
+    type,
+    status: "pending",
+    leadId: id,
+    fileKey,
+    mimeType: mimeType || null,
+    sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+  }).returning();
+  await logAudit(user.id, "create_document", "document", doc.id, { name: safeName, type, leadId: id }, req.ip);
+  res.status(201).json(doc);
 });
 
 const AGENT_LEAD_PATCH_FIELDS = [
