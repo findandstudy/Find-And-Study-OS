@@ -1685,10 +1685,17 @@ export default function ApplicationsPage() {
       return;
     }
     if (action.type === "missing_docs") {
-      // Task #269 — the missing_docs action now requests documents for the
-      // application's CURRENT stage (no move). Opens the shared modern modal
-      // seeded with the action's configured requiredDocTypes; on save the
-      // requests persist and we just refresh (retryTarget = null).
+      // The missing_docs action requests documents via the shared modern modal.
+      // Two shapes are supported:
+      //   - Legacy (action has targetStageKey): behaves like a move to that
+      //     stage. We route through performStageMove so the centralized backend
+      //     interceptor prompts for documents and then advances the app.
+      //   - New (no targetStageKey): request documents for the application's
+      //     CURRENT stage in place, with no move (retryTarget = null).
+      if (targetKey) {
+        await performStageMove(app.id, targetKey);
+        return;
+      }
       const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];
       setDocRequestDialog({
         appId: app.id,

@@ -1,1 +1,1 @@
-- [Stage-change entry points (edcons)](edcons-stage-change-entry-points.md) — application stage changes happen from 6 places, not just the dedicated stage-move paths; gate at the server.
+- [Stage-change entry points (edcons)](edcons-stage-change-entry-points.md) — application stage changes fire from many UI paths incl. general edit forms; enforce stage gating server-side, not per-path.

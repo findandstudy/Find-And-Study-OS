@@ -908,9 +908,11 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         .where(eq(pipelineStagesTable.entityType, "application"));
       const orderOf = new Map<string, number>();
       let targetActions: unknown[] = [];
+      let currentActions: unknown[] = [];
       for (const s of stageRowsAll) {
         orderOf.set(s.key, s.sortOrder ?? 0);
         if (s.key === targetStage) targetActions = Array.isArray(s.actions) ? s.actions : [];
+        if (s.key === currentStage) currentActions = Array.isArray(s.actions) ? s.actions : [];
       }
       const curOrder = orderOf.get(currentStage);
       const tgtOrder = orderOf.get(targetStage);
@@ -950,9 +952,17 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         }
       }
 
-      // (2) Entry interceptor.
-      const mdAction = (targetActions as Array<{ type?: string; requiredDocTypes?: unknown; label?: unknown }>)
-        .find(a => a && a.type === "missing_docs");
+      // (2) Entry interceptor. The primary (new) model triggers off the
+      //     TARGET stage's own `missing_docs` action. For backward
+      //     compatibility with pipelines configured under the older
+      //     source-stage model, also trigger when the CURRENT stage has a
+      //     `missing_docs` action whose `targetStageKey` points at the stage
+      //     being entered. In both cases requests are recorded against the
+      //     target stage, keeping storage/checks consistent.
+      type MdAction = { type?: string; requiredDocTypes?: unknown; label?: unknown; targetStageKey?: unknown };
+      const mdAction =
+        (targetActions as MdAction[]).find(a => a && a.type === "missing_docs")
+        ?? (currentActions as MdAction[]).find(a => a && a.type === "missing_docs" && a.targetStageKey === targetStage);
       if (mdAction) {
         const [existingReq] = await db.select({ id: applicationStageDocumentsTable.id })
           .from(applicationStageDocumentsTable)
