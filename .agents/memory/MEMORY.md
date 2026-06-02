@@ -1,1 +1,2 @@
 - [edcons i18n conventions](edcons-i18n.md) — adding/using translation keys in the EduConsult web app; en+tr dual-write, en fallback, t() shadowing gotcha.
+- [edcons record assignment](edcons-record-assignment.md) — assigning staff to leads vs students; PATCH body field-name differs (leads: assignedTo, students: assignedToId).

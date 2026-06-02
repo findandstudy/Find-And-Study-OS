@@ -103,8 +103,44 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const { user, hasPermission } = useAuth();
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
   const canChangeStage = !!isAdmin || hasPermission("students.change_stage");
+  const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isStudent = user?.role === "student";
+  const [assigning, setAssigning] = useState(false);
+
+  const { data: staffUsersData } = useQuery<any>({
+    queryKey: ["/api/users"],
+    queryFn: () => customFetch("/api/users"),
+    enabled: !!isAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  function getAssignedUserName(assignedToId: number | null | undefined): string | null {
+    if (!assignedToId) return null;
+    if (staffUsersData) {
+      const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
+      const found = list.find((u: any) => u.id === assignedToId);
+      if (found) return `${found.firstName || ''} ${found.lastName || ''}`.trim() || found.email;
+    }
+    return null;
+  }
+
+  async function handleAssign(targetUserId: number | null) {
+    setAssigning(true);
+    try {
+      await customFetch(`/api/students/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedToId: targetUserId }),
+      });
+      qc.invalidateQueries({ queryKey: ["getStudent"] });
+      toast({ title: targetUserId ? t("studentDetailPage.studentAssigned") : t("studentDetailPage.studentUnassigned") });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "destructive" });
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
   const [noteText, setNoteText] = useState("");
@@ -709,6 +745,49 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     </div>
                   )}
                 </div>
+
+                {!isAgent && (
+                <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    {t("studentDetailPage.assignedTo")}
+                  </h2>
+                  {isLoading ? (
+                    <Skeleton className="h-8 w-32" />
+                  ) : canChangeAssigned ? (
+                    <Select
+                      value={student?.assignedToId ? String(student.assignedToId) : "unassigned"}
+                      onValueChange={(val) => handleAssign(val === "unassigned" ? null : Number(val))}
+                      disabled={assigning}
+                    >
+                      <SelectTrigger className="w-full h-8 text-sm">
+                        <SelectValue placeholder={t("studentDetailPage.selectAssignee")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">{t("studentDetailPage.unassigned")}</SelectItem>
+                        {(() => {
+                          const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
+                          const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
+                          return list
+                            .filter((u: any) => staffRoles.includes(u.role))
+                            .map((u: any) => (
+                              <SelectItem key={u.id} value={String(u.id)}>
+                                {u.id === user?.id ? `${u.firstName || ''} ${u.lastName || ''} (You)`.trim() : `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
+                              </SelectItem>
+                            ));
+                        })()}
+                      </SelectContent>
+                    </Select>
+                  ) : student?.assignedToId ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm font-medium">{getAssignedUserName(student.assignedToId) || "—"}</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("studentDetailPage.unassigned")}</p>
+                  )}
+                </div>
+                )}
 
                 {!isAgent && (
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">

@@ -2178,7 +2178,13 @@
     "view": "Görüntüle",
     "deleteConfirm": "Bu belgeyi silmek istediğinize emin misiniz?",
     "deleteTooltip": "Belgeyi sil",
-    "mergePdfs": "PDF Birleştir"
+    "mergePdfs": "PDF Birleştir",
+    "assignedTo": "Atanan Kişi",
+    "selectAssignee": "Atanacak kişi seçin",
+    "unassigned": "Atanmamış",
+    "assignToMe": "Bana ata",
+    "studentAssigned": "Öğrenci atandı",
+    "studentUnassigned": "Öğrenci ataması kaldırıldı"
   },
   "agentsPage": {
     "assignContactPerson": "İletişim Kişisi Ata",

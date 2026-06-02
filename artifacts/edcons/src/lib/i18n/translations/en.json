@@ -2238,7 +2238,13 @@
     "view": "View",
     "deleteConfirm": "Are you sure you want to delete this document?",
     "deleteTooltip": "Delete document",
-    "mergePdfs": "Merge PDFs"
+    "mergePdfs": "Merge PDFs",
+    "assignedTo": "Assigned To",
+    "selectAssignee": "Select assignee",
+    "unassigned": "Unassigned",
+    "assignToMe": "Assign to me",
+    "studentAssigned": "Student assigned",
+    "studentUnassigned": "Student unassigned"
   },
   "agentsPage": {
     "assignContactPerson": "Assign Contact Person",
