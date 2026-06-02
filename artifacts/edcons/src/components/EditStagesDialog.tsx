@@ -90,6 +90,12 @@ function StageActionEditor({
         </div>
       </div>
 
+      {action.type === "missing_docs" && (
+        <p className="text-[11px] text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 rounded-md px-2.5 py-2 leading-relaxed">
+          Başvuru <span className="font-medium text-foreground">bu aşamaya geçtiğinde</span> talep edilecek belgeleri seçmek için bir pencere açılır. Seçilen belgeler bu aşama için kaydedilir; talepler tamamlanmadan başvuru ileri aşamaya taşınamaz.
+        </p>
+      )}
+
       {showDocName && (
         <div className="space-y-1.5">
           <Label className="text-xs">Belge adı</Label>

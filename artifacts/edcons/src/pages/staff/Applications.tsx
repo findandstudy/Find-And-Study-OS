@@ -4,10 +4,12 @@ import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
 import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
+import { StageDocRequestDialog } from "@/components/StageDocRequestDialog";
+import { StageDocsIncompleteDialog } from "@/components/StageDocsIncompleteDialog";
+import { requestStageChange, type MissingDocEntry } from "@/lib/stageTransition";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { isStaffRole, isAgentRole } from "@workspace/roles";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -681,14 +683,17 @@ function SortHeader({ label, sortKey, currentSort, onSort }: {
 /* ── EditApplicationDialog ───────────────────────────────── */
 function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; onClose: () => void; app: any; stages: PipelineStage[] }) {
   const { t } = useI18n();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const canSeeCommission = hasPermission("applications.view_commission");
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const [form, setForm] = useState({
     stage: "", level: "", country: "", universityId: "", universityName: "",
     programId: "", programName: "", intake: "", instructionLanguage: "",
     tuitionFee: "", notes: "",
   });
   const [docUploadDialog, setDocUploadDialog] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
+  const [docRequestDialog, setDocRequestDialog] = useState<{ stage: string; stageLabel: string; suggestedDocTypes: string[]; title: string | null } | null>(null);
+  const [docsIncompleteDialog, setDocsIncompleteDialog] = useState<{ currentStageLabel: string; missing: MissingDocEntry[] } | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { levels: studyLevels } = useStudyLevels();
@@ -797,9 +802,22 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         return;
       }
       const body = await res.json().catch(() => ({}));
-      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
-        const stageLabel = stages.find(s => s.key === form.stage)?.label ?? form.stage;
-        setDocUploadDialog({ targetStage: form.stage, targetStageLabel: stageLabel });
+      const stageLabelOf = (key: string) => stages.find(s => s.key === key)?.label ?? key;
+      if (res.status === 422 && body.code === "DOC_SELECTION_REQUIRED") {
+        const stage = body.requiredStage || form.stage;
+        setDocRequestDialog({
+          stage,
+          stageLabel: stageLabelOf(stage),
+          suggestedDocTypes: Array.isArray(body.suggestedDocTypes) ? body.suggestedDocTypes : [],
+          title: typeof body.actionLabel === "string" ? body.actionLabel : null,
+        });
+      } else if (res.status === 422 && body.code === "DOCS_INCOMPLETE") {
+        setDocsIncompleteDialog({
+          currentStageLabel: stageLabelOf(body.currentStage || app?.stage || ""),
+          missing: Array.isArray(body.missing) ? body.missing : [],
+        });
+      } else if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        setDocUploadDialog({ targetStage: form.stage, targetStageLabel: stageLabelOf(form.stage) });
       } else {
         toast({ title: "Error", description: body.error || "Failed to update", variant: "destructive" });
       }
@@ -921,6 +939,36 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
         onUploaded={() => {
           queryClient.invalidateQueries({ queryKey: ["applications"] });
           onClose();
+        }}
+      />
+    )}
+    {docRequestDialog && app && (
+      <StageDocRequestDialog
+        open={!!docRequestDialog}
+        onOpenChange={(o) => { if (!o) setDocRequestDialog(null); }}
+        applicationId={app.id}
+        stage={docRequestDialog.stage}
+        stageLabel={docRequestDialog.stageLabel}
+        suggestedDocTypes={docRequestDialog.suggestedDocTypes}
+        title={docRequestDialog.title}
+        onSaved={() => {
+          setDocRequestDialog(null);
+          queryClient.invalidateQueries({ queryKey: ["applications"] });
+          void handleSave();
+        }}
+      />
+    )}
+    {docsIncompleteDialog && app && (
+      <StageDocsIncompleteDialog
+        open={!!docsIncompleteDialog}
+        onOpenChange={(o) => { if (!o) setDocsIncompleteDialog(null); }}
+        applicationId={app.id}
+        currentStageLabel={docsIncompleteDialog.currentStageLabel}
+        missing={docsIncompleteDialog.missing}
+        isAdmin={isAdmin}
+        onRetry={() => {
+          setDocsIncompleteDialog(null);
+          void handleSave();
         }}
       />
     )}
@@ -1344,35 +1392,14 @@ export default function ApplicationsPage() {
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean; quickMode?: boolean } | null>(null);
-  // Task #167 — admin-only Missing Documents action dialog state.
-  const [missingDocsDialog, setMissingDocsDialog] = useState<{ appId: number; sourceStage: string; targetStage: string | null; targetStageLabel: string; actionLabel: string; requiredDocTypes: string[] } | null>(null);
-  // Task #187 — `items` is the new dialog state: each row is either a
-  // catalog document type (documentType) or a free-text custom request
-  // (customTitle), plus an optional per-item note.
-  type MissingDocItem = { id: string; documentType: string; customTitle: string; note: string; isCustom: boolean };
-  const [missingDocsItems, setMissingDocsItems] = useState<MissingDocItem[]>([]);
-  const [missingDocsSaving, setMissingDocsSaving] = useState(false);
-
-  // Task #187 — live admin-managed document catalog
-  // (catalog_options category=documents) for the dialog dropdown.
-  const { data: catalogResp } = useQuery<any>({
-    queryKey: ["catalog-options"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/catalog-options`),
-    staleTime: 5 * 60_000,
-  });
-  const docCatalogOptions = useMemo(() => {
-    const grouped = (catalogResp as any)?.grouped || {};
-    const rows: any[] = grouped["documents"] || [];
-    return rows
-      .filter((r: any) => r.isActive !== false)
-      .map((r: any) => {
-        const md = r.metadata || {};
-        const label = (typeof md.label === "string" && md.label.trim())
-          ? md.label.trim()
-          : String(r.value).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-        return { value: r.value, label };
-      });
-  }, [catalogResp]);
+  // Task #269 — modern per-application document-request modal, opened when an
+  // application is moved INTO a stage with the "Belge Yükle" (missing_docs)
+  // action, or manually via the stage action button. `retryTarget` is the
+  // stage to move to after the requests are saved (null = manual edit only).
+  const [docRequestDialog, setDocRequestDialog] = useState<{ appId: number; stage: string; stageLabel: string; suggestedDocTypes: string[]; title: string | null; retryTarget: string | null } | null>(null);
+  // Task #269 — shown when a forward move is blocked because the current stage
+  // still has unfulfilled document requests.
+  const [docsIncompleteDialog, setDocsIncompleteDialog] = useState<{ appId: number; currentStageLabel: string; missing: MissingDocEntry[]; retryTarget: string } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1541,64 +1568,61 @@ export default function ApplicationsPage() {
     const app = allApps.find((a: any) => a.id === appId);
     if (!app || app.stage === targetStage) return;
 
-    const colLabel = pipelineStages.find(s => s.key === targetStage)?.label ?? targetStage;
+    void performStageMove(appId, targetStage);
+  };
 
-    fetch(`${BASE_URL}/api/applications/${appId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", "x-csrf-token": document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "" },
-      credentials: "include",
-      body: JSON.stringify({ stage: targetStage }),
-    }).then(async (res) => {
-      if (res.ok) {
+  const stageLabelOf = (key: string) => pipelineStages.find((s) => s.key === key)?.label ?? key;
+
+  // Task #269 — single source of truth for every stage transition (kanban drag,
+  // list/detail action buttons). Calls the centralized PATCH and routes the
+  // document-gating 422 responses to the right modal: DOC_SELECTION_REQUIRED →
+  // doc-request modal (then retry move), DOCS_INCOMPLETE → incomplete-docs
+  // modal, DOCS_REQUIRED → file upload dialog. Returns true on a completed move.
+  async function performStageMove(appId: number, targetStage: string): Promise<boolean> {
+    const colLabel = stageLabelOf(targetStage);
+    const result = await requestStageChange(appId, targetStage);
+    switch (result.kind) {
+      case "ok":
         queryClient.invalidateQueries({ queryKey: ["applications"] });
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
-        toast({ title: `Application moved → ${colLabel}` });
-        return;
-      }
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
+        toast({ title: t("staffApplications.movedTo", { stage: colLabel }) });
+        return true;
+      case "doc_selection_required":
+        setDocRequestDialog({
+          appId,
+          stage: result.requiredStage,
+          stageLabel: stageLabelOf(result.requiredStage),
+          suggestedDocTypes: result.suggestedDocTypes,
+          title: result.actionLabel,
+          retryTarget: targetStage,
+        });
+        return false;
+      case "docs_incomplete":
+        setDocsIncompleteDialog({
+          appId,
+          currentStageLabel: stageLabelOf(result.currentStage),
+          missing: result.missing,
+          retryTarget: targetStage,
+        });
+        return false;
+      case "docs_required":
         setDocUploadDialog({ appId, uploadStage: targetStage, targetStage, targetStageLabel: colLabel });
-      } else {
-        toast({ title: "Error", description: body.error || "Could not move application", variant: "destructive" });
-      }
-    }).catch(() => {
-      toast({ title: "Error", description: "Could not move application", variant: "destructive" });
-    });
-  };
+        return false;
+      case "student_docs_required":
+        toast({ title: t("staffApplications.studentDocsRequired"), description: result.missingDocTypes.join(", "), variant: "destructive" });
+        return false;
+      default:
+        toast({ title: t("common.error"), description: result.message, variant: "destructive" });
+        return false;
+    }
+  }
 
   // Task #167 — generic stage transition used by stage action buttons. Returns
   // true on success so callers can chain follow-up UI (close dialogs, reset
-  // state). Surfaces the same DOCS_REQUIRED upload flow as drag-drop.
+  // state). "Don't change" semantics: empty/null target = no transition.
   async function moveAppToStage(appId: number, targetStage: string | null | undefined): Promise<boolean> {
-    // Task #167 — "Don't change" semantics: empty/null target means the
-    // action completed without a stage transition. Treat as success.
     if (!targetStage) return true;
-    const colLabel = pipelineStages.find((s) => s.key === targetStage)?.label ?? targetStage;
-    const csrfRaw = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1];
-    const csrf = csrfRaw ? decodeURIComponent(csrfRaw) : "";
-    try {
-      const res = await fetch(`${BASE_URL}/api/applications/${appId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-csrf-token": csrf },
-        credentials: "include",
-        body: JSON.stringify({ stage: targetStage }),
-      });
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ["applications"] });
-        queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
-        toast({ title: `Application moved → ${colLabel}` });
-        return true;
-      }
-      const body: { code?: string; error?: string } = await res.json().catch(() => ({}));
-      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
-        setDocUploadDialog({ appId, uploadStage: targetStage, targetStage, targetStageLabel: colLabel });
-      } else {
-        toast({ title: "Error", description: body.error || "Could not move application", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Could not move application", variant: "destructive" });
-    }
-    return false;
+    return performStageMove(appId, targetStage);
   }
 
   async function handleStageAction(app: ApplicationRow, action: StageAction) {
@@ -1661,50 +1685,20 @@ export default function ApplicationsPage() {
       return;
     }
     if (action.type === "missing_docs") {
+      // Task #269 — the missing_docs action now requests documents for the
+      // application's CURRENT stage (no move). Opens the shared modern modal
+      // seeded with the action's configured requiredDocTypes; on save the
+      // requests persist and we just refresh (retryTarget = null).
       const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];
-      // Seed with admin-preconfigured required types (catalog) so staff
-      // can immediately tweak / add notes, or start blank when none.
-      const seeded: MissingDocItem[] = required.length > 0
-        ? required.map((dt, i) => ({ id: `s${i}`, documentType: dt, customTitle: "", note: "", isCustom: false }))
-        : [{ id: "s0", documentType: "", customTitle: "", note: "", isCustom: false }];
-      setMissingDocsItems(seeded);
-      setMissingDocsDialog({ appId: app.id, sourceStage: app.stage, targetStage: targetKey, targetStageLabel: targetLabel, actionLabel: buttonLabel, requiredDocTypes: required });
-      return;
-    }
-  }
-
-  async function submitMissingDocs() {
-    if (!missingDocsDialog) return;
-    const items = missingDocsItems
-      .map((it) => {
-        if (it.isCustom) {
-          const title = it.customTitle.trim();
-          return title ? { customTitle: title, note: it.note.trim() || undefined } : null;
-        }
-        const dt = it.documentType.trim();
-        return dt ? { documentType: dt, note: it.note.trim() || undefined } : null;
-      })
-      .filter(Boolean);
-    if (items.length === 0) {
-      toast({ title: "En az bir belge eklemelisiniz", variant: "destructive" });
-      return;
-    }
-    setMissingDocsSaving(true);
-    try {
-      await apiFetch(`${BASE_URL}/api/applications/${missingDocsDialog.appId}/missing-doc-notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, stage: missingDocsDialog.sourceStage }),
+      setDocRequestDialog({
+        appId: app.id,
+        stage: app.stage,
+        stageLabel: pipelineStages.find((s) => s.key === app.stage)?.label ?? app.stage,
+        suggestedDocTypes: required,
+        title: buttonLabel,
+        retryTarget: null,
       });
-      const moved = await moveAppToStage(missingDocsDialog.appId, missingDocsDialog.targetStage);
-      if (moved) {
-        setMissingDocsDialog(null);
-        setMissingDocsItems([]);
-      }
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message || "Could not save notes", variant: "destructive" });
-    } finally {
-      setMissingDocsSaving(false);
+      return;
     }
   }
 
@@ -1735,7 +1729,17 @@ export default function ApplicationsPage() {
     try {
       const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "move", stage }) });
       const d = res as any;
+      const skipped: any[] = Array.isArray(d.skipped) ? d.skipped : [];
       toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} moved` });
+      if (skipped.length > 0) {
+        // Task #269 — bulk moves can't open a per-application document modal, so
+        // affected applications are skipped server-side and reported here.
+        toast({
+          title: t("staffApplications.bulkSkippedTitle", { count: skipped.length }),
+          description: t("staffApplications.bulkSkippedDesc"),
+          variant: "destructive",
+        });
+      }
     } catch { toast({ title: "Could not move applications", variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -2193,91 +2197,46 @@ export default function ApplicationsPage() {
       {tableProgInfoId && (
         <ProgramInfoPopup programId={tableProgInfoId} onClose={() => setTableProgInfoId(null)} canSeeCommission={canSeeCommission} />
       )}
-      {/* Task #167 — admin-only Missing Documents action dialog.
-          When admin pre-configured requiredDocTypes for the action, render a
-          checklist seeded from those types; otherwise fall back to a free
-          textarea (one missing item per line). */}
-      {/* Task #187 — staff missing-doc request dialog. Each row is either
-          a catalog dropdown entry (auto-fulfilled when student uploads an
-          equivalent doc) or a free-text custom entry (must be closed
-          manually). Per-item notes are optional. */}
-      <Dialog open={!!missingDocsDialog} onOpenChange={(o) => { if (!o) { setMissingDocsDialog(null); setMissingDocsItems([]); } }}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{missingDocsDialog?.actionLabel || "Eksik Belgeler"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-xs text-muted-foreground">
-              Kaydedildiğinde başvuru otomatik olarak <span className="font-medium text-foreground">{missingDocsDialog?.targetStageLabel || missingDocsDialog?.sourceStage}</span> aşamasına geçecek. Öğrenci katalog belgesini yüklediğinde talep otomatik kapanır; özel belge taleplerini elle kapatmanız gerekir.
-            </p>
-            <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
-              {missingDocsItems.map((it, idx) => (
-                <div key={it.id} className="border rounded-md p-2.5 space-y-2 bg-muted/20">
-                  <div className="flex items-start gap-2">
-                    {it.isCustom ? (
-                      <Input
-                        value={it.customTitle}
-                        onChange={(e) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, customTitle: e.target.value } : p))}
-                        placeholder="Özel belge adı"
-                        className="h-9"
-                        disabled={missingDocsSaving}
-                      />
-                    ) : (
-                      <div className="flex-1">
-                        <SearchableSelect
-                          value={it.documentType}
-                          onChange={(v) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, documentType: v } : p))}
-                          options={docCatalogOptions}
-                          placeholder="— Belge seçin —"
-                          searchPlaceholder="Belge ara…"
-                          disabled={missingDocsSaving}
-                        />
-                      </div>
-                    )}
-                    <Badge variant={it.isCustom ? "secondary" : "outline"} className="text-[10px] mt-1">
-                      {it.isCustom ? "Özel" : "Katalog"}
-                    </Badge>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setMissingDocsItems(prev => prev.filter((_, i) => i !== idx))} disabled={missingDocsSaving}>
-                      <X className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                  <Input
-                    value={it.note}
-                    onChange={(e) => setMissingDocsItems(prev => prev.map((p, i) => i === idx ? { ...p, note: e.target.value } : p))}
-                    placeholder="Not (opsiyonel) — örn. son 6 ay içinde alınmış olmalı"
-                    className="h-8 text-xs"
-                    disabled={missingDocsSaving}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button" variant="outline" size="sm" className="gap-1.5"
-                onClick={() => setMissingDocsItems(prev => [...prev, { id: `n${Date.now()}`, documentType: "", customTitle: "", note: "", isCustom: false }])}
-                disabled={missingDocsSaving}
-              >
-                <Plus className="w-3.5 h-3.5" /> Katalog Belgesi Ekle
-              </Button>
-              <Button
-                type="button" variant="outline" size="sm" className="gap-1.5"
-                onClick={() => setMissingDocsItems(prev => [...prev, { id: `c${Date.now()}`, documentType: "", customTitle: "", note: "", isCustom: true }])}
-                disabled={missingDocsSaving}
-              >
-                <Plus className="w-3.5 h-3.5" /> Özel Belge Ekle
-              </Button>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setMissingDocsDialog(null); setMissingDocsItems([]); }} disabled={missingDocsSaving}>
-              İptal
-            </Button>
-            <Button onClick={submitMissingDocs} disabled={missingDocsSaving}>
-              {missingDocsSaving ? "Kaydediliyor…" : "Kaydet ve Aşamaya Geç"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Task #269 — modern per-application document-request modal. */}
+      {docRequestDialog && (
+        <StageDocRequestDialog
+          open={!!docRequestDialog}
+          onOpenChange={(o) => { if (!o) setDocRequestDialog(null); }}
+          applicationId={docRequestDialog.appId}
+          stage={docRequestDialog.stage}
+          stageLabel={docRequestDialog.stageLabel}
+          suggestedDocTypes={docRequestDialog.suggestedDocTypes}
+          title={docRequestDialog.title}
+          onSaved={() => {
+            const dlg = docRequestDialog;
+            setDocRequestDialog(null);
+            queryClient.invalidateQueries({ queryKey: ["applications"] });
+            queryClient.invalidateQueries({ queryKey: [`/api/applications/${dlg.appId}`] });
+            if (dlg.retryTarget) {
+              void performStageMove(dlg.appId, dlg.retryTarget);
+            } else {
+              toast({ title: t("stageDocRequest.saved") });
+            }
+          }}
+        />
+      )}
+
+      {/* Task #269 — incomplete-docs blocker shown on forward moves. */}
+      {docsIncompleteDialog && (
+        <StageDocsIncompleteDialog
+          open={!!docsIncompleteDialog}
+          onOpenChange={(o) => { if (!o) setDocsIncompleteDialog(null); }}
+          applicationId={docsIncompleteDialog.appId}
+          currentStageLabel={docsIncompleteDialog.currentStageLabel}
+          missing={docsIncompleteDialog.missing}
+          isAdmin={isAdmin}
+          onRetry={() => {
+            const dlg = docsIncompleteDialog;
+            setDocsIncompleteDialog(null);
+            void performStageMove(dlg.appId, dlg.retryTarget);
+          }}
+        />
+      )}
     </>
   );
 }

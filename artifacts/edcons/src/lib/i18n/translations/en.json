@@ -1360,7 +1360,39 @@
   },
   "staffApplications": {
     "title": "Applications",
-    "subtitle": "Track all university applications"
+    "subtitle": "Track all university applications",
+    "movedTo": "Application moved → {stage}",
+    "studentDocsRequired": "Mandatory student documents missing",
+    "bulkSkippedTitle": "{count} application(s) skipped",
+    "bulkSkippedDesc": "Some applications could not be moved because they require document selection or have incomplete documents. Please move them individually."
+  },
+  "stageDocRequest": {
+    "title": "Request Documents",
+    "subtitle": "Select the documents to request for the {stage} stage.",
+    "searchPlaceholder": "Search documents…",
+    "noCatalog": "No documents found in the catalog.",
+    "selectedNotes": "Selected documents and notes",
+    "notePlaceholder": "Note (optional)",
+    "customDocs": "Custom documents",
+    "customBadge": "Custom",
+    "catalogBadge": "Catalog",
+    "customNamePlaceholder": "Custom document name",
+    "addCustom": "Add Custom Document",
+    "atLeastOne": "Select at least one document",
+    "saveFailed": "Could not save document requests",
+    "saving": "Saving…",
+    "saveAndMove": "Save & Move ({count})",
+    "saved": "Document requests saved"
+  },
+  "stageDocsIncomplete": {
+    "title": "Incomplete Documents",
+    "subtitle": "The {stage} stage still has unfulfilled document requests. They must be completed before moving forward.",
+    "allResolved": "All documents are complete.",
+    "awaitingReview": "Uploaded, awaiting review",
+    "markReceived": "Mark received",
+    "marked": "Document marked as received",
+    "markFailed": "Could not update request",
+    "retry": "Retry"
   },
   "staffFinance": {
     "title": "Finance",

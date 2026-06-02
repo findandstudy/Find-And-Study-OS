@@ -1301,7 +1301,39 @@
   },
   "staffApplications": {
     "title": "Başvurular",
-    "subtitle": "Tüm üniversite başvurularını takip et"
+    "subtitle": "Tüm üniversite başvurularını takip et",
+    "movedTo": "Başvuru taşındı → {stage}",
+    "studentDocsRequired": "Zorunlu öğrenci belgeleri eksik",
+    "bulkSkippedTitle": "{count} başvuru atlandı",
+    "bulkSkippedDesc": "Bazı başvurular belge seçimi gerektirdiği veya eksik belgeleri olduğu için taşınamadı. Lütfen tek tek taşıyın."
+  },
+  "stageDocRequest": {
+    "title": "Belge Talebi",
+    "subtitle": "{stage} aşaması için istenecek belgeleri seçin.",
+    "searchPlaceholder": "Belge ara…",
+    "noCatalog": "Katalogda belge bulunamadı.",
+    "selectedNotes": "Seçilen belgeler ve notlar",
+    "notePlaceholder": "Not (opsiyonel)",
+    "customDocs": "Özel belgeler",
+    "customBadge": "Özel",
+    "catalogBadge": "Katalog",
+    "customNamePlaceholder": "Özel belge adı",
+    "addCustom": "Özel Belge Ekle",
+    "atLeastOne": "En az bir belge seçmelisiniz",
+    "saveFailed": "Belge talepleri kaydedilemedi",
+    "saving": "Kaydediliyor…",
+    "saveAndMove": "Kaydet ve Taşı ({count})",
+    "saved": "Belge talepleri kaydedildi"
+  },
+  "stageDocsIncomplete": {
+    "title": "Eksik Belgeler",
+    "subtitle": "{stage} aşamasında tamamlanmamış belge talepleri var. İleri taşımadan önce tamamlanmalı.",
+    "allResolved": "Tüm belgeler tamamlandı.",
+    "awaitingReview": "Yüklendi, onay bekliyor",
+    "markReceived": "Alındı işaretle",
+    "marked": "Belge alındı olarak işaretlendi",
+    "markFailed": "Talep güncellenemedi",
+    "retry": "Tekrar Dene"
   },
   "staffFinance": {
     "title": "Finans",

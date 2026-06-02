@@ -9,6 +9,9 @@ import { useI18n } from "@/hooks/use-i18n";
 import { apiFetch } from "@/lib/apiFetch";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
+import { StageDocRequestDialog } from "@/components/StageDocRequestDialog";
+import { StageDocsIncompleteDialog } from "@/components/StageDocsIncompleteDialog";
+import { requestStageChange, type MissingDocEntry } from "@/lib/stageTransition";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -70,6 +73,9 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [stageDocUpload, setStageDocUpload] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
   const [studentDocsMissing, setStudentDocsMissing] = useState<string[] | null>(null);
+  // Task #269 — shared document-request / incomplete-docs flow.
+  const [docRequestDialog, setDocRequestDialog] = useState<{ stage: string; stageLabel: string; suggestedDocTypes: string[]; title: string | null; retryTarget: string } | null>(null);
+  const [docsIncompleteDialog, setDocsIncompleteDialog] = useState<{ currentStageLabel: string; missing: MissingDocEntry[]; retryTarget: string } | null>(null);
   const { user: authUser, hasPermission } = useAuth();
   const canSeeCommission = hasPermission("applications.view_commission");
   const isAdmin = authUser && ["super_admin", "admin", "manager"].includes(authUser.role);
@@ -103,31 +109,42 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
     : [];
   const { stages: pipelineStages } = usePipelineStages("application");
   const updateApp = useUpdateApplication();
-  async function handleStageChange(stage: string) {
-    try {
-      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ? decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)![1]) : "";
-      const res = await fetch(`${BASE_URL}/api/applications/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
-        credentials: "include",
-        body: JSON.stringify({ stage }),
-      });
-      if (res.ok) {
+  // Task #269 — routes the centralized PATCH's document-gating 422 responses to
+  // the matching modal (doc-request on entry, incomplete-docs on forward move,
+  // file upload, student docs). Returns true once the move completes.
+  async function handleStageChange(stage: string): Promise<boolean> {
+    const stageLabelOf = (key: string) => pipelineStages.find(s => s.key === key)?.label ?? key;
+    const result = await requestStageChange(Number(id), stage);
+    switch (result.kind) {
+      case "ok":
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
         toast({ title: t("applicationDetailPage.stageUpdated") });
-        return;
-      }
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 422 && body.code === "DOCS_REQUIRED") {
-        const stageLabel = pipelineStages.find(s => s.key === stage)?.label ?? stage;
-        setStageDocUpload({ targetStage: stage, targetStageLabel: stageLabel });
-      } else if (res.status === 422 && body.code === "STUDENT_DOCS_REQUIRED") {
-        setStudentDocsMissing(body.missingDocTypes || []);
-      } else {
-        toast({ title: t("applicationDetailPage.errorTitle"), description: body.error || t("applicationDetailPage.couldNotUpdateStage"), variant: "destructive" });
-      }
-    } catch {
-      toast({ title: t("applicationDetailPage.errorTitle"), description: t("applicationDetailPage.couldNotUpdateStage"), variant: "destructive" });
+        return true;
+      case "doc_selection_required":
+        setDocRequestDialog({
+          stage: result.requiredStage,
+          stageLabel: stageLabelOf(result.requiredStage),
+          suggestedDocTypes: result.suggestedDocTypes,
+          title: result.actionLabel,
+          retryTarget: stage,
+        });
+        return false;
+      case "docs_incomplete":
+        setDocsIncompleteDialog({
+          currentStageLabel: stageLabelOf(result.currentStage),
+          missing: result.missing,
+          retryTarget: stage,
+        });
+        return false;
+      case "docs_required":
+        setStageDocUpload({ targetStage: stage, targetStageLabel: stageLabelOf(stage) });
+        return false;
+      case "student_docs_required":
+        setStudentDocsMissing(result.missingDocTypes);
+        return false;
+      default:
+        toast({ title: t("applicationDetailPage.errorTitle"), description: result.message || t("applicationDetailPage.couldNotUpdateStage"), variant: "destructive" });
+        return false;
     }
   }
 
@@ -481,6 +498,43 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
         />
       )}
 
+      {/* Task #269 — document-request modal shown when moving INTO a stage with
+          the "Belge Yükle" action. On save, retry the move. */}
+      {docRequestDialog && (
+        <StageDocRequestDialog
+          open={!!docRequestDialog}
+          onOpenChange={(o) => { if (!o) setDocRequestDialog(null); }}
+          applicationId={Number(id)}
+          stage={docRequestDialog.stage}
+          stageLabel={docRequestDialog.stageLabel}
+          suggestedDocTypes={docRequestDialog.suggestedDocTypes}
+          title={docRequestDialog.title}
+          onSaved={() => {
+            const target = docRequestDialog.retryTarget;
+            setDocRequestDialog(null);
+            queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
+            void handleStageChange(target);
+          }}
+        />
+      )}
+
+      {/* Task #269 — incomplete-docs blocker on forward moves. */}
+      {docsIncompleteDialog && (
+        <StageDocsIncompleteDialog
+          open={!!docsIncompleteDialog}
+          onOpenChange={(o) => { if (!o) setDocsIncompleteDialog(null); }}
+          applicationId={Number(id)}
+          currentStageLabel={docsIncompleteDialog.currentStageLabel}
+          missing={docsIncompleteDialog.missing}
+          isAdmin={!!isAdmin}
+          onRetry={() => {
+            const target = docsIncompleteDialog.retryTarget;
+            setDocsIncompleteDialog(null);
+            void handleStageChange(target);
+          }}
+        />
+      )}
+
       <Dialog open={!!studentDocsMissing} onOpenChange={() => setStudentDocsMissing(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -574,6 +628,10 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
     notes: app?.notes || "",
   });
   const [docUploadDialog, setDocUploadDialog] = useState<{ targetStage: string; targetStageLabel: string } | null>(null);
+  const [docRequestDialog, setDocRequestDialog] = useState<{ stage: string; stageLabel: string; suggestedDocTypes: string[]; title: string | null } | null>(null);
+  const [docsIncompleteDialog, setDocsIncompleteDialog] = useState<{ currentStageLabel: string; missing: MissingDocEntry[] } | null>(null);
+  const { user: inlineAuthUser } = useAuth();
+  const inlineIsAdmin = !!inlineAuthUser && ["super_admin", "admin", "manager"].includes(inlineAuthUser.role);
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
   async function handleSave() {
@@ -603,9 +661,26 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
       }
       const body: { code?: string; error?: string; message?: string } =
         await res.json().catch(() => ({}));
+      const stageLabelOf = (key: string) => stages.find((s: any) => s.key === key)?.label ?? key;
+      if (res.status === 422 && (body as any).code === "DOC_SELECTION_REQUIRED") {
+        const stage = (body as any).requiredStage || data.stage;
+        setDocRequestDialog({
+          stage,
+          stageLabel: stageLabelOf(stage),
+          suggestedDocTypes: Array.isArray((body as any).suggestedDocTypes) ? (body as any).suggestedDocTypes : [],
+          title: typeof (body as any).actionLabel === "string" ? (body as any).actionLabel : null,
+        });
+        return;
+      }
+      if (res.status === 422 && (body as any).code === "DOCS_INCOMPLETE") {
+        setDocsIncompleteDialog({
+          currentStageLabel: stageLabelOf((body as any).currentStage || app?.stage || ""),
+          missing: Array.isArray((body as any).missing) ? (body as any).missing : [],
+        });
+        return;
+      }
       if (res.status === 422 && body.code === "DOCS_REQUIRED") {
-        const stageLabel = stages.find((s: any) => s.key === data.stage)?.label ?? data.stage;
-        setDocUploadDialog({ targetStage: data.stage, targetStageLabel: stageLabel });
+        setDocUploadDialog({ targetStage: data.stage, targetStageLabel: stageLabelOf(data.stage) });
         return;
       }
       toast({
@@ -705,6 +780,35 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
         targetStage={docUploadDialog.targetStage}
         targetStageLabel={docUploadDialog.targetStageLabel}
         onUploaded={() => { onSaved(); onClose(); }}
+      />
+    )}
+    {docRequestDialog && (
+      <StageDocRequestDialog
+        open={!!docRequestDialog}
+        onOpenChange={(o) => { if (!o) setDocRequestDialog(null); }}
+        applicationId={app.id}
+        stage={docRequestDialog.stage}
+        stageLabel={docRequestDialog.stageLabel}
+        suggestedDocTypes={docRequestDialog.suggestedDocTypes}
+        title={docRequestDialog.title}
+        onSaved={() => {
+          setDocRequestDialog(null);
+          void handleSave();
+        }}
+      />
+    )}
+    {docsIncompleteDialog && (
+      <StageDocsIncompleteDialog
+        open={!!docsIncompleteDialog}
+        onOpenChange={(o) => { if (!o) setDocsIncompleteDialog(null); }}
+        applicationId={app.id}
+        currentStageLabel={docsIncompleteDialog.currentStageLabel}
+        missing={docsIncompleteDialog.missing}
+        isAdmin={inlineIsAdmin}
+        onRetry={() => {
+          setDocsIncompleteDialog(null);
+          void handleSave();
+        }}
       />
     )}
     </>

@@ -878,6 +878,104 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
+  // Task #269 — Stage document-request gating. Centralizes the document
+  // request flow on the TARGET stage so it fires from EVERY stage-change
+  // entry point (kanban drag, list, ApplicationDetail dropdown), not just a
+  // source-stage action button. Two independent checks, only when the stage
+  // actually changes:
+  //   (1) Exit guard (DOCS_INCOMPLETE) — moving FORWARD out of a stage that
+  //       still has unfulfilled document requests is blocked; the missing
+  //       list is returned so the UI can clearly show what is outstanding.
+  //   (2) Entry interceptor (DOC_SELECTION_REQUIRED) — entering a stage whose
+  //       configured actions include a `missing_docs` action, when no requests
+  //       have been recorded yet for this application+stage, is blocked so the
+  //       UI can prompt staff to select which catalog/custom documents to
+  //       request. Once selections are saved (POST .../missing-doc-notes), the
+  //       retried PATCH passes this check and the move completes.
+  if (updates.stage) {
+    const targetStage = updates.stage as string;
+    const [curRow] = await db.select({ stage: applicationsTable.stage })
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+    const currentStage = curRow?.stage;
+    if (currentStage && currentStage !== targetStage) {
+      const stageRowsAll = await db.select({
+        key: pipelineStagesTable.key,
+        sortOrder: pipelineStagesTable.sortOrder,
+        actions: pipelineStagesTable.actions,
+      })
+        .from(pipelineStagesTable)
+        .where(eq(pipelineStagesTable.entityType, "application"));
+      const orderOf = new Map<string, number>();
+      let targetActions: unknown[] = [];
+      for (const s of stageRowsAll) {
+        orderOf.set(s.key, s.sortOrder ?? 0);
+        if (s.key === targetStage) targetActions = Array.isArray(s.actions) ? s.actions : [];
+      }
+      const curOrder = orderOf.get(currentStage);
+      const tgtOrder = orderOf.get(targetStage);
+      const isForward = curOrder !== undefined && tgtOrder !== undefined && tgtOrder > curOrder;
+
+      // (1) Exit guard.
+      if (isForward) {
+        const openReqs = await db.select({
+          id: applicationStageDocumentsTable.id,
+          fileName: applicationStageDocumentsTable.fileName,
+          isCustom: applicationStageDocumentsTable.isCustom,
+          note: applicationStageDocumentsTable.note,
+          respondedAt: applicationStageDocumentsTable.respondedAt,
+        })
+          .from(applicationStageDocumentsTable)
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, id),
+            eq(applicationStageDocumentsTable.stage, currentStage),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+            isNull(applicationStageDocumentsTable.fulfilledAt),
+          ));
+        if (openReqs.length > 0) {
+          res.status(422).json({
+            error: "Bu aşamadaki belge talepleri tamamlanmadan ileri aşamaya geçilemez",
+            code: "DOCS_INCOMPLETE",
+            currentStage,
+            missing: openReqs.map(r => ({
+              id: r.id,
+              documentType: r.isCustom ? null : r.fileName,
+              customTitle: r.isCustom ? r.fileName : null,
+              isCustom: r.isCustom,
+              note: r.note,
+              respondedAt: r.respondedAt,
+            })),
+          });
+          return;
+        }
+      }
+
+      // (2) Entry interceptor.
+      const mdAction = (targetActions as Array<{ type?: string; requiredDocTypes?: unknown; label?: unknown }>)
+        .find(a => a && a.type === "missing_docs");
+      if (mdAction) {
+        const [existingReq] = await db.select({ id: applicationStageDocumentsTable.id })
+          .from(applicationStageDocumentsTable)
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, id),
+            eq(applicationStageDocumentsTable.stage, targetStage),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+          ))
+          .limit(1);
+        if (!existingReq) {
+          res.status(422).json({
+            error: "Bu aşamaya geçmeden önce talep edilecek belgeleri seçin",
+            code: "DOC_SELECTION_REQUIRED",
+            requiredStage: targetStage,
+            suggestedDocTypes: Array.isArray(mdAction.requiredDocTypes) ? mdAction.requiredDocTypes : [],
+            actionLabel: typeof mdAction.label === "string" ? mdAction.label : null,
+          });
+          return;
+        }
+      }
+    }
+  }
+
   const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   const conditions = [eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)];
@@ -1094,7 +1192,59 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_applications", "application", null, { ids: numericIds, assignedToId }, req.ip);
   } else if (action === "move" && stage) {
-    const apps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    // Task #269 — bulk move cannot prompt a per-application document
+    // selection modal, so it instead SKIPS any application that would need
+    // one (target stage has a missing_docs action with no requests yet) or
+    // that has incomplete document requests on its current stage (forward
+    // move). Skipped applications are reported back so the UI can surface
+    // them; the rest move normally.
+    const stageRowsAll = await db.select({
+      key: pipelineStagesTable.key,
+      sortOrder: pipelineStagesTable.sortOrder,
+      actions: pipelineStagesTable.actions,
+    })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.entityType, "application"));
+    const orderOf = new Map<string, number>();
+    let targetActions: unknown[] = [];
+    for (const s of stageRowsAll) {
+      orderOf.set(s.key, s.sortOrder ?? 0);
+      if (s.key === String(stage)) targetActions = Array.isArray(s.actions) ? s.actions : [];
+    }
+    const targetHasMissingDocs = (targetActions as Array<{ type?: string }>).some(a => a && a.type === "missing_docs");
+    const tgtOrder = orderOf.get(String(stage));
+    const bulkSkipped: Array<{ id: number; reason: string }> = [];
+    const apps: typeof allApps = [];
+    for (const app of allApps) {
+      if (app.stage === stage) { apps.push(app); continue; }
+      const curOrder = orderOf.get(app.stage);
+      const isForward = curOrder !== undefined && tgtOrder !== undefined && tgtOrder > curOrder;
+      if (isForward) {
+        const [openReq] = await db.select({ id: applicationStageDocumentsTable.id })
+          .from(applicationStageDocumentsTable)
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, app.id),
+            eq(applicationStageDocumentsTable.stage, app.stage),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+            isNull(applicationStageDocumentsTable.fulfilledAt),
+          ))
+          .limit(1);
+        if (openReq) { bulkSkipped.push({ id: app.id, reason: "DOCS_INCOMPLETE" }); continue; }
+      }
+      if (targetHasMissingDocs) {
+        const [existingReq] = await db.select({ id: applicationStageDocumentsTable.id })
+          .from(applicationStageDocumentsTable)
+          .where(and(
+            eq(applicationStageDocumentsTable.applicationId, app.id),
+            eq(applicationStageDocumentsTable.stage, String(stage)),
+            eq(applicationStageDocumentsTable.isMissingDocNote, true),
+          ))
+          .limit(1);
+        if (!existingReq) { bulkSkipped.push({ id: app.id, reason: "DOC_SELECTION_REQUIRED" }); continue; }
+      }
+      apps.push(app);
+    }
     // Hoisted out of the per-app loop: one DB roundtrip vs N when bulk-moving.
     const fallbackSeason = await getCurrentSeason();
     for (const app of apps) {
@@ -1202,6 +1352,10 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
 
       await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);
       updated++;
+    }
+    if (bulkSkipped.length > 0) {
+      res.json({ success: true, updated, skipped: bulkSkipped });
+      return;
     }
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
