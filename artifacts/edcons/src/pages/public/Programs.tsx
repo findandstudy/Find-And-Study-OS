@@ -770,6 +770,35 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
   if (!program) return null;
 
+  const hasPassportDoc =
+    Object.values(docs).some(d => d.key === "passport") ||
+    Object.values(reusableForProgram).some(r => r.type === "passport") ||
+    existingDocs.some(d => d.type === "passport" && !replacedTypes.has("passport"));
+  const hasDiplomaDoc =
+    Object.values(docs).some(d => d.key === "hs_diploma" || d.key === "hs_transcript") ||
+    Object.values(reusableForProgram).some(r => r.type === "hs_diploma" || r.type === "hs_transcript") ||
+    existingDocs.some(d => (d.type === "hs_diploma" || d.type === "hs_transcript") && !replacedTypes.has(d.type));
+
+  const needsReview = (key: string): boolean => {
+    const val = (form as any)[key];
+    if (val) return false;
+    if (PASSPORT_EXTRACTED_FIELDS.has(key) && hasPassportDoc) return true;
+    if (DIPLOMA_EXTRACTED_FIELDS.has(key) && hasDiplomaDoc) return true;
+    return false;
+  };
+
+  const fieldClass = (key: string) =>
+    `rounded-xl ${extracted.has(key) ? "border-emerald-300 bg-emerald-50/40" : needsReview(key) ? "border-amber-300 bg-amber-50/40" : ""}`;
+
+  const labelExtras = (key: string) => (
+    <>
+      {extracted.has(key) && <AiBadge />}
+      {!extracted.has(key) && needsReview(key) && (
+        <MissingHint label={t("apply.aiCouldNotExtract")} />
+      )}
+    </>
+  );
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1019,35 +1048,6 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             )}
 
             {(() => {
-              const hasPassportDoc =
-                Object.values(docs).some(d => d.key === "passport") ||
-                Object.values(reusableForProgram).some(r => r.type === "passport") ||
-                existingDocs.some(d => d.type === "passport" && !replacedTypes.has("passport"));
-              const hasDiplomaDoc =
-                Object.values(docs).some(d => d.key === "hs_diploma" || d.key === "hs_transcript") ||
-                Object.values(reusableForProgram).some(r => r.type === "hs_diploma" || r.type === "hs_transcript") ||
-                existingDocs.some(d => (d.type === "hs_diploma" || d.type === "hs_transcript") && !replacedTypes.has(d.type));
-
-              const needsReview = (key: string): boolean => {
-                const val = (form as any)[key];
-                if (val) return false;
-                if (PASSPORT_EXTRACTED_FIELDS.has(key) && hasPassportDoc) return true;
-                if (DIPLOMA_EXTRACTED_FIELDS.has(key) && hasDiplomaDoc) return true;
-                return false;
-              };
-
-              const fieldClass = (key: string) =>
-                `rounded-xl ${extracted.has(key) ? "border-emerald-300 bg-emerald-50/40" : needsReview(key) ? "border-amber-300 bg-amber-50/40" : ""}`;
-
-              const labelExtras = (key: string) => (
-                <>
-                  {extracted.has(key) && <AiBadge />}
-                  {!extracted.has(key) && needsReview(key) && (
-                    <MissingHint label={t("apply.aiCouldNotExtract")} />
-                  )}
-                </>
-              );
-
               const anyExtracted = ["motherName", "fatherName", "nationality", "dateOfBirth", "passportNumber",
                 "passportIssueDate", "passportExpiry", "address", "highSchool", "graduationYear", "gpa"]
                 .some(k => extracted.has(k));

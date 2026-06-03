@@ -1,1 +1,1 @@
-- [Prod→Dev data copy](prod-dev-data-copy.md) — how to mirror production DB into dev via the executeSql sandbox: read-size limits, blob chunking, trigger/sequence handling, email lockdown.
+- [Vite ships render-time ReferenceErrors](vite-runtime-referenceerror.md) — esbuild strips types without scope-checking; out-of-scope refs only fail at runtime → ErrorBoundary reload loop. Run tsc.
