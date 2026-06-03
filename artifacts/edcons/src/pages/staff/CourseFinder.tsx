@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useProgramDocRequirements, useResolveDocMeta } from "@/lib/programDocTypes";
+import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1739,8 +1740,8 @@ async function prepareDocFile(file: File): Promise<{ file: File; mediaType: stri
   return { file, mediaType: file.type || "application/pdf", isImage: false };
 }
 
-function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
-  docType: LevelDoc; uploaded?: UploadedDoc;
+function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
+  docType: LevelDoc; uploaded?: UploadedDoc; onFile?: boolean;
   onUpload: (doc: UploadedDoc) => void; onRemove: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1766,7 +1767,9 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
     );
   }
 
-  const requiredBadge = docType.required
+  const requiredBadge = onFile
+    ? <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold border border-green-200">On file</span>
+    : docType.required
     ? <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Required</span>
     : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Optional</span>;
 
@@ -1776,6 +1779,7 @@ function ApplyDropZone({ docType, uploaded, onUpload, onRemove }: {
       className={cn(
         "flex flex-col items-center gap-1 p-2.5 border-2 border-dashed rounded-xl text-center cursor-pointer min-h-[100px] justify-center transition-all",
         dragging ? "border-primary bg-primary/10"
+          : onFile ? "border-green-300 bg-green-50/40 hover:border-green-400"
           : docType.required ? "border-rose-200 hover:border-rose-400 hover:bg-rose-50/50" : "border-border hover:border-primary/50 hover:bg-secondary/50"
       )}
       onClick={() => inputRef.current?.click()}
@@ -1850,7 +1854,28 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
   }, [programReqs, programReqsFetched, level, resolveDocMeta]);
   const uploadedCount = Object.keys(docs).length;
   const requiredDocKeys = currentDocs.filter(d => d.required).map(d => d.key);
-  const missingRequiredCount = requiredDocKeys.filter(k => !docs[k]).length;
+
+  // Documents the selected student already has on file satisfy required
+  // doc slots via type-equivalence, so staff aren't forced to re-upload
+  // documents already stored on the student's profile.
+  const { data: existingStudentDocs = [] } = useQuery<any[]>({
+    queryKey: ["apply-existing-docs", selectedStudent?.id],
+    queryFn: () => apiFetch(`${BASE_URL}/api/documents?studentId=${selectedStudent!.id}`),
+    enabled: !!p && !!selectedStudent?.id,
+    staleTime: 30_000,
+  });
+  const existingDocTypes = useMemo(
+    () => new Set<string>(existingStudentDocs.map((d) => (d.type || "").toLowerCase())),
+    [existingStudentDocs],
+  );
+  const onFileSatisfiedKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const k of requiredDocKeys) {
+      if (findMissingMandatoryTypes([k], existingDocTypes).length === 0) set.add(k);
+    }
+    return set;
+  }, [requiredDocKeys, existingDocTypes]);
+  const missingRequiredCount = requiredDocKeys.filter(k => !docs[k] && !onFileSatisfiedKeys.has(k)).length;
   const allRequiredUploaded = missingRequiredCount === 0;
 
   const debouncedSearch = useMemo(() => searchTerm.trim(), [searchTerm]);
@@ -2265,6 +2290,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                         key={dt.key}
                         docType={dt}
                         uploaded={docs[dt.key]}
+                        onFile={onFileSatisfiedKeys.has(dt.key)}
                         onUpload={(doc) => setDocs((d) => ({ ...d, [dt.key]: doc }))}
                         onRemove={() => setDocs((d) => { const n = { ...d }; delete n[dt.key]; return n; })}
                       />

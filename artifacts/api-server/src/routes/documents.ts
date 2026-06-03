@@ -524,8 +524,16 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
     }
   }
 
+  // When profileOnly is requested, exclude application-scoped documents so the
+  // ZIP matches the student's profile-documents list shown in the UI.
+  const profileOnly = req.query.profileOnly === "true" || req.query.profileOnly === "1";
+
   const docs = await db.select().from(documentsTable).where(
-    and(eq(documentsTable.studentId, studentId), isNull(documentsTable.deletedAt))
+    and(
+      eq(documentsTable.studentId, studentId),
+      isNull(documentsTable.deletedAt),
+      ...(profileOnly ? [isNull(documentsTable.applicationId)] : []),
+    )
   );
 
   if (docs.length === 0) {

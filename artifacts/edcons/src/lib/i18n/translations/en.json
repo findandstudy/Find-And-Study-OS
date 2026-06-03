@@ -331,6 +331,8 @@
     "docSub_ifRequired": "If required",
     "docSub_recognition": "Recognition",
     "applicationDocuments": "Application Documents",
+    "applicationSpecificDocuments": "Application-Specific Documents",
+    "applicationSpecificDocumentsHint": "Uploaded for a specific application, kept separate from the student's profile documents.",
     "appDocLabel_app_fee_paid": "Application Fee Receipt",
     "appDocLabel_deposit_paid": "Deposit Paid Receipt",
     "appDocLabel_offer_received": "Offer Letter",

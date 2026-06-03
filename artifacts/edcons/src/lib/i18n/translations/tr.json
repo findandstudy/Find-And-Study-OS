@@ -331,6 +331,8 @@
     "docSub_ifRequired": "Gerekirse",
     "docSub_recognition": "Tanınma",
     "applicationDocuments": "Başvuru Belgeleri",
+    "applicationSpecificDocuments": "Başvuruya Özel Belgeler",
+    "applicationSpecificDocumentsHint": "Belirli bir başvuru için yüklendi, öğrencinin profil belgelerinden ayrı tutulur.",
     "appDocLabel_app_fee_paid": "Başvuru Ücreti Makbuzu",
     "appDocLabel_deposit_paid": "Depozito Ödeme Makbuzu",
     "appDocLabel_offer_received": "Kabul Mektubu",

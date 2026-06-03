@@ -934,15 +934,16 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     <Label className="text-xs font-medium mb-1 block">Country</Label>
                     <SearchableSelect
                       value={appCountry}
-                      onValueChange={setAppCountry}
+                      onChange={setAppCountry}
                       options={(countriesList || []).map((c: string) => ({ value: c, label: c }))}
+                      placeholder="Select Country"
                     />
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">University</Label>
                     <SearchableSelect
                       value={appUniversityId}
-                      onValueChange={setAppUniversityId}
+                      onChange={setAppUniversityId}
                       options={filteredUniversities.map((u: any) => ({ value: String(u.id), label: u.name }))}
                       placeholder={!appCountry ? "Select country first" : "Select University"}
                       disabled={!appCountry}
@@ -952,7 +953,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     <Label className="text-xs font-medium mb-1 block">Course</Label>
                     <SearchableSelect
                       value={appProgramId}
-                      onValueChange={setAppProgramId}
+                      onChange={setAppProgramId}
                       options={filteredPrograms.map((p: any) => ({ value: String(p.id), label: p.name }))}
                       placeholder={!appUniversityId ? "Select university first" : "Select Course"}
                       disabled={!appUniversityId}
@@ -962,7 +963,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     <Label className="text-xs font-medium mb-1 block">Intake</Label>
                     <SearchableSelect
                       value={appIntake}
-                      onValueChange={setAppIntake}
+                      onChange={setAppIntake}
                       options={availableIntakes.map((i: string) => ({ value: i, label: i }))}
                       placeholder={availableIntakes.length === 0 ? "Select course first" : "Select Intake"}
                       disabled={availableIntakes.length === 0}
@@ -1953,7 +1954,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
   const handleZipDownload = async () => {
     setDownloadingZip(true);
     try {
-      const resp = await fetch(`${BASE_URL}/api/documents/download-zip/${studentId}`, { credentials: "include" });
+      const resp = await fetch(`${BASE_URL}/api/documents/download-zip/${studentId}?profileOnly=true`, { credentials: "include" });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Download failed" }));
         toast({ title: "Error", description: err.error || "Download failed", variant: "destructive" });
@@ -2013,15 +2014,29 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
     );
   };
 
-  const pdfDocs = documents.filter((d: any) => d.mimeType === "application/pdf" && (d.fileKey || d.fileData || d.fileUrl));
+  // Bug fix: keep the student's own (profile-level) documents separate from
+  // documents uploaded against a specific application. Profile docs have no
+  // applicationId; application-scoped docs are grouped in their own section
+  // below so the two no longer mix in this list.
+  const profileDocs = documents.filter((d: any) => !d.applicationId);
+  const appDocs = documents.filter((d: any) => d.applicationId);
+  const appDocGroups = Array.from(
+    appDocs.reduce((map: Map<number, any[]>, d: any) => {
+      const arr = map.get(d.applicationId) ?? [];
+      arr.push(d);
+      map.set(d.applicationId, arr);
+      return map;
+    }, new Map<number, any[]>()).entries()
+  ) as [number, any[]][];
+  const pdfDocs = profileDocs.filter((d: any) => d.mimeType === "application/pdf" && (d.fileKey || d.fileData || d.fileUrl));
 
   return (
     <>
     <>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <p className="text-sm text-muted-foreground">{t("common.documentsCount", { n: documents.length })}</p>
+        <p className="text-sm text-muted-foreground">{t("common.documentsCount", { n: profileDocs.length })}</p>
         <div className="flex items-center gap-2 flex-wrap">
-          {documents.length > 0 && (
+          {profileDocs.length > 0 && (
             <Button size="sm" variant="outline" onClick={handleZipDownload} disabled={downloadingZip}>
               {downloadingZip ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
               {t("common.downloadZip")}
@@ -2041,7 +2056,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
       </div>
 
       <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
-        {documents.length === 0 ? (
+        {profileDocs.length === 0 ? (
           <div
             className="p-16 text-center text-muted-foreground cursor-pointer hover:bg-secondary/30 transition-colors"
             onClick={openUpload}
@@ -2068,7 +2083,7 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
               </tr>
             </thead>
             <tbody>
-              {documents.map((doc: any) => (
+              {profileDocs.map((doc: any) => (
                 <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors">
                   {pdfDocs.length >= 2 && (
                     <td className="px-2 py-3 text-center">
@@ -2144,10 +2159,57 @@ function StudentDocumentsSection({ studentId, student, documents, openUpload, qc
         )}
       </div>
 
+      {appDocGroups.length > 0 && (
+        <div className="mt-4 bg-card rounded-2xl border shadow-sm p-4 space-y-3">
+          <div>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              {t("common.applicationSpecificDocuments")}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("common.applicationSpecificDocumentsHint")}</p>
+          </div>
+          <div className="space-y-3">
+            {appDocGroups.map(([appId, groupDocs]) => (
+              <div key={appId} className="border rounded-xl overflow-hidden">
+                <div className="p-3 bg-secondary/40">
+                  <p className="text-xs text-muted-foreground">{t("common.applicationNumber", { id: appId })}</p>
+                </div>
+                <div className="divide-y">
+                  {groupDocs.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center gap-3 p-3 hover:bg-secondary/20 transition-colors">
+                      <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="inline-block px-1.5 py-0 rounded-full bg-secondary text-foreground/80 mr-1.5 capitalize">
+                            {DETAIL_DOC_TYPE_LABELS[doc.type] || doc.type}
+                          </span>
+                          {new Date(doc.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {(doc.fileKey || doc.fileData || doc.fileUrl) && getPreviewKind(doc.mimeType) !== "other" && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPreviewDoc(doc)} title={t("studentDetailPage.preview")}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {(doc.fileKey || doc.fileData || doc.fileUrl) && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => downloadDoc(doc)} title={t("studentDetailPage.download")}>
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {previewDoc && (
         <DocumentPreviewModal
           doc={previewDoc}
-          documents={documents}
+          documents={previewDoc.applicationId ? appDocs : profileDocs}
           onClose={() => setPreviewDoc(null)}
           onNavigate={(next) => setPreviewDoc(next)}
           onDownload={downloadDoc}
