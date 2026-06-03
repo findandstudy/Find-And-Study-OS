@@ -1,2 +1,3 @@
 - [Vite ships render-time ReferenceErrors](vite-runtime-referenceerror.md) — esbuild strips types without scope-checking; out-of-scope refs only fail at runtime → ErrorBoundary reload loop. Run tsc.
 - [Schema/OpenAPI changes need lib dist rebuild + safe DB migration](monorepo-schema-codegen-build.md) — rebuild lib dist (tsc -b) after schema/codegen; use ALTER TABLE not drizzle push (push drops unrelated tables).
+- [List endpoints need ORDER BY with LIMIT](list-pagination-stability.md) — row vanishing from a paginated list after edit = LIMIT without stable ORDER BY; edit-dialog preload fields must be in the list select.

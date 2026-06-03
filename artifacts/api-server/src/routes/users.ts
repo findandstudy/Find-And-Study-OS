@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, usersTable, rolesTable, studentsTable, softDelete } from "@workspace/db";
-import { eq, ilike, or, sql, and, isNull } from "drizzle-orm";
+import { eq, ilike, or, sql, and, isNull, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -57,10 +57,12 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
       language: usersTable.language,
       isActive: usersTable.isActive,
       avatarUrl: usersTable.avatarUrl,
+      permissionOverrides: usersTable.permissionOverrides,
       createdAt: usersTable.createdAt,
     })
     .from(usersTable)
     .where(whereClause)
+    .orderBy(desc(usersTable.createdAt), desc(usersTable.id))
     .limit(pageParams.limit)
     .offset(pageParams.offset);
 
