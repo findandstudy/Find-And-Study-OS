@@ -4,8 +4,11 @@ import { ChevronDown, X, Check } from "lucide-react";
 
 interface SearchableSelectProps {
   value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string; node?: ReactNode; group?: string }[];
+  /** Preferred callback. `onValueChange` is accepted as an alias. */
+  onChange?: (value: string) => void;
+  /** Alias for `onChange` (Radix-style naming). */
+  onValueChange?: (value: string) => void;
+  options: { value: string; label: string; node?: ReactNode; icon?: ReactNode; group?: string }[];
   placeholder: string;
   searchPlaceholder?: string;
   className?: string;
@@ -17,6 +20,7 @@ interface SearchableSelectProps {
 export function SearchableSelect({
   value,
   onChange,
+  onValueChange,
   options,
   placeholder,
   searchPlaceholder = "Search...",
@@ -25,6 +29,7 @@ export function SearchableSelect({
   clearable = false,
   disabled = false,
 }: SearchableSelectProps) {
+  const emitChange = onChange ?? onValueChange ?? (() => {});
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [openUp, setOpenUp] = useState(false);
@@ -89,13 +94,20 @@ export function SearchableSelect({
         }`}
       >
         <span className={`truncate text-left ${selected ? "text-foreground" : "text-muted-foreground"}`}>
-          {selected ? (selected.node || selected.label) : placeholder}
+          {selected
+            ? (selected.node ?? (
+                <span className="inline-flex items-center gap-1.5">
+                  {selected.icon}
+                  {selected.label}
+                </span>
+              ))
+            : placeholder}
         </span>
         <div className="flex items-center gap-1 shrink-0 ml-1">
           {clearable && value && !disabled && (
             <span
               role="button"
-              onClick={e => { e.stopPropagation(); onChange(""); }}
+              onClick={e => { e.stopPropagation(); emitChange(""); }}
               className="hover:text-destructive transition-colors"
             >
               <X className="w-3.5 h-3.5" />
@@ -151,12 +163,19 @@ export function SearchableSelect({
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => { onChange(opt.value); setOpen(false); }}
+                          onClick={() => { emitChange(opt.value); setOpen(false); }}
                           className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
                             isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent text-foreground"
                           }`}
                         >
-                          <span className="truncate flex-1">{opt.node || opt.label}</span>
+                          <span className="truncate flex-1">
+                            {opt.node ?? (
+                              <span className="inline-flex items-center gap-1.5">
+                                {opt.icon}
+                                {opt.label}
+                              </span>
+                            )}
+                          </span>
                           {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                         </button>
                       );
