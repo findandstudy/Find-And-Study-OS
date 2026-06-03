@@ -448,7 +448,7 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
 }
 
 /* ── DraggableAppCard ─────────────────────────────────────── */
-function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canMoveCards }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canMoveCards?: boolean }) {
+function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: { app: any; onView: (id: number) => void; variant?: ColVariant; assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
@@ -523,7 +523,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && canAssign && staffUsersList ? (
+          {onAssign && (app.assignedToId ? canReassign : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -586,10 +586,10 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
 }
 
 /* ── DroppableAppColumn ──────────────────────────────────── */
-function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canMoveCards }: {
+function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canMoveCards?: boolean;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const v = variant as ColVariant;
@@ -646,7 +646,7 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={apps.map(a => a.id)} strategy={verticalListSortingStrategy}>
           {apps.map((app: any) => (
-            <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} assignedUserName={app.assignedToId && staffUsersMap ? staffUsersMap[app.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canSeeCommission={canSeeCommission} canAssign={canAssign} canMoveCards={canMoveCards} />
+            <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} assignedUserName={app.assignedToId && staffUsersMap ? staffUsersMap[app.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canSeeCommission={canSeeCommission} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />
           ))}
           {apps.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
@@ -1431,6 +1431,7 @@ export default function ApplicationsPage() {
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const canMoveCards = isAdmin || hasPermission("records.move_cards");
   const canAssign = isAdmin || hasPermission("records.assign_button");
+  const canReassign = isAdmin || hasPermission("records.change_assigned");
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
@@ -1776,7 +1777,7 @@ export default function ApplicationsPage() {
               onAssign={handleBulkAssign}
               onMove={handleBulkMoveStage}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
-              staffUsers={staffUsersList}
+              staffUsers={canReassign ? staffUsersList : []}
               entityLabel="applications"
               moveLabel="Move Stage"
             />
@@ -1813,7 +1814,7 @@ export default function ApplicationsPage() {
               >
                 {pipelineStages.map(s => {
                   const stageApps = filteredApps.filter((a: any) => a.stage === s.key).sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canSeeCommission={canSeeCommission} canAssign={canAssign} canMoveCards={canMoveCards} />;
+                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canSeeCommission={canSeeCommission} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />;
                 })}
 
                 <DragOverlay>
@@ -2035,7 +2036,7 @@ export default function ApplicationsPage() {
                     case "assigned":
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
-                          {canAssign ? (
+                          {(app.assignedToId ? canReassign : canAssign) ? (
                             <AssignPopover
                               assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
                               staffUsers={staffUsersList}
@@ -2153,6 +2154,8 @@ export default function ApplicationsPage() {
                                 staffUsersList={staffUsersList}
                                 currentUserId={user?.id}
                                 isAdmin={isAdmin}
+                                canAssign={canAssign}
+                                canReassign={canReassign}
                                 onEdit={() => setEditApp(app)}
                                 onDelete={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }}
                                 onAssign={(uid) => handleAssign(app.id, uid)}

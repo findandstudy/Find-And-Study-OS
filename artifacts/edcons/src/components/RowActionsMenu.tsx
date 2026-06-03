@@ -29,6 +29,8 @@ interface RowActionsMenuProps {
   staffUsersList?: { id: number; name: string }[];
   currentUserId?: number;
   isAdmin?: boolean;
+  canAssign?: boolean;
+  canReassign?: boolean;
   userId?: number | null;
   onEdit: () => void;
   onDelete: () => void;
@@ -41,6 +43,7 @@ export function RowActionsMenu({
   currentAgentId, currentAgentName,
   currentAssignedToId, staffUsersMap, staffUsersList,
   currentUserId, isAdmin,
+  canAssign, canReassign,
   userId,
   onEdit, onDelete, onAssign, onRefresh,
 }: RowActionsMenuProps) {
@@ -106,7 +109,7 @@ export function RowActionsMenu({
             <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
           </DropdownMenuItem>
 
-          {onAssign && staffUsersList && (
+          {onAssign && staffUsersList && (currentAssignedToId ? canReassign : canAssign) && (
             <DropdownMenuItem onClick={() => setAssignOpen(true)}>
               <UserPlus className="w-3.5 h-3.5 mr-2" />
               {assignedName ? `Reassign (${assignedName})` : "Assign Staff"}

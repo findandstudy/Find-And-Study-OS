@@ -121,10 +121,10 @@ function getLeadStageColor(stage: PipelineStage, index: number): string {
 }
 
 /* ── LeadCard ──────────────────────────────────────────────── */
-function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canAssign, canMoveCards }: {
+function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: {
   lead: any; onView: (id: number) => void; showRevenue: boolean; variant?: ColVariant;
   assignedUserName?: string; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
   const { t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id, disabled: !canMoveCards });
@@ -199,14 +199,14 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && canAssign && staffUsersList ? (
+          {onAssign && (lead.assignedToId ? canReassign : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
               currentUserId={currentUserId}
               onAssign={(userId) => onAssign(lead.id, userId)}
             />
-          ) : onAssign && !canAssign && currentUserId && !lead.assignedToId ? (
+          ) : onAssign && currentUserId && !lead.assignedToId ? (
             <button
               onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }}
               className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
@@ -264,10 +264,10 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
 }
 
 /* ── DroppableColumn ──────────────────────────────────────── */
-function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canMoveCards }: {
+function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: {
   col: ColDef; leads: any[]; showRevenue: boolean; onView: (id: number) => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
-  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canMoveCards?: boolean;
+  staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
   const { t } = useI18n();
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
@@ -329,7 +329,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
         <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canAssign={canAssign} canMoveCards={canMoveCards} />
+            <LeadCard key={lead.id} lead={lead} onView={onView} showRevenue={showRevenue} variant={v} assignedUserName={lead.assignedToId && staffUsersMap ? staffUsersMap[lead.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />
           ))}
           {leads.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
@@ -1000,6 +1000,7 @@ export default function LeadsPage() {
   const canMoveCards = hasPermission("records.move_cards");
   const canChangeStage = hasPermission("leads.change_stage");
   const canAssign = hasPermission("records.assign_button");
+  const canReassign = isAdmin || hasPermission("records.change_assigned");
 
   const { season } = useSeason();
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
@@ -1346,7 +1347,7 @@ export default function LeadsPage() {
               onAssign={handleBulkAssign}
               onMove={handleBulkMove}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
-              staffUsers={staffUsersList}
+              staffUsers={canReassign ? staffUsersList : []}
               entityLabel={t("leadsPage.entityLeads")}
               moveLabel={t("leadsPage.moveStatus")}
             />
@@ -1386,6 +1387,7 @@ export default function LeadsPage() {
                       staffUsersList={staffUsersList}
                       currentUserId={user?.id}
                       canAssign={canAssign}
+                      canReassign={canReassign}
                       canMoveCards={canMoveCards}
                     />
                   );
@@ -1582,7 +1584,7 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {canAssign ? (
+                        {(lead.assignedToId ? canReassign : canAssign) ? (
                           <AssignPopover
                             assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
                             staffUsers={staffUsersList}
@@ -1621,6 +1623,8 @@ export default function LeadsPage() {
                           staffUsersList={staffUsersList}
                           currentUserId={user?.id}
                           isAdmin={isAdmin}
+                          canAssign={canAssign}
+                          canReassign={canReassign}
                           onEdit={() => setEditLead(lead)}
                           onDelete={() => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); }}
                           onAssign={(uid) => handleAssign(lead.id, uid)}
