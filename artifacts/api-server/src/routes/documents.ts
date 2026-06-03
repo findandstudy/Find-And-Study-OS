@@ -229,11 +229,25 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
 
   const effectiveStatus = isStaff ? status : "pending";
 
-  if (studentId && type) {
+  // Application-scoped uploads are only honoured for staff; everyone else
+  // uploads at the student profile level (applicationId null).
+  const targetApplicationId = isStaff && applicationId ? Number(applicationId) : null;
+
+  // Replace the prior version of this document type within the SAME scope only.
+  // A profile-level upload (no application) replaces earlier profile-level docs;
+  // an application-scoped upload replaces only the prior doc for that same
+  // application. This keeps the student's own documents and each application's
+  // documents independent — uploading a passport for one application no longer
+  // wipes the student's profile passport or another application's copy.
+  if (resolvedStudentId && type) {
+    const scopeCondition = targetApplicationId
+      ? eq(documentsTable.applicationId, targetApplicationId)
+      : isNull(documentsTable.applicationId);
     const oldDocs = await db.select({ id: documentsTable.id }).from(documentsTable).where(
       and(
-        eq(documentsTable.studentId, studentId),
+        eq(documentsTable.studentId, resolvedStudentId),
         eq(documentsTable.type, type),
+        scopeCondition,
         isNull(documentsTable.deletedAt)
       )
     );
@@ -246,8 +260,8 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
 
   const [doc] = await db.insert(documentsTable).values({
     name: safeName, type, status: effectiveStatus,
-    studentId: studentId || null,
-    applicationId: isStaff ? (applicationId || null) : null,
+    studentId: resolvedStudentId,
+    applicationId: targetApplicationId,
     fileUrl: fileUrl || null,
     fileKey: fileKey || null,
     mimeType: mimeType || null,
@@ -255,6 +269,35 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     notes: notes || null,
   }).returning();
   await logAudit(user.id, "create_document", "document", doc.id, { name, type }, req.ip);
+
+  // When a document is uploaded for a specific application and the student does
+  // not yet have this document type among their own (profile-level) documents,
+  // also record a profile-level copy so it appears in the student's documents.
+  // The copy reuses the same stored file (fileKey), so no bytes are duplicated.
+  // If the student already has a profile-level document of this type, leave it
+  // untouched — the new upload stays only in the application's documents.
+  if (targetApplicationId && doc.studentId && type) {
+    const existingProfile = await db.select({ id: documentsTable.id }).from(documentsTable).where(
+      and(
+        eq(documentsTable.studentId, doc.studentId),
+        eq(documentsTable.type, type),
+        isNull(documentsTable.applicationId),
+        isNull(documentsTable.deletedAt)
+      )
+    );
+    if (existingProfile.length === 0) {
+      await db.insert(documentsTable).values({
+        name: safeName, type, status: effectiveStatus,
+        studentId: doc.studentId,
+        applicationId: null,
+        fileUrl: fileUrl || null,
+        fileKey: fileKey || null,
+        mimeType: mimeType || null,
+        sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+        notes: notes || null,
+      });
+    }
+  }
 
   if (doc.studentId && (type === "photo" || type === "photograph") && fileKey) {
     try {
