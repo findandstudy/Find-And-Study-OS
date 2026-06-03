@@ -19,3 +19,7 @@ Both leads and students support a single staff assignee (`assigned_to_id` column
 - `isAdmin` (super_admin/admin/manager) is always flexible (both true).
 **Why:** an already-assigned lead/student/application must NOT be reassignable by a user lacking `records.change_assigned`.
 **How to apply:** every assign affordance across Leads/Students/Applications (kanban card AssignPopover, list-table AssignPopover, and RowActionsMenu assign item) must gate with `record.assignedToId ? canReassign : canAssign`. BulkActionBar's Assign button shows only when its `staffUsers` prop is non-empty, so pass `staffUsers={canReassign ? staffUsersList : []}` (bulk endpoints are admin-only anyway). The "assign to me" self-claim fallback stays open for unassigned records (backend permits self-claim of unassigned without `change_assigned`). Backend per-record PATCH already strips `assignedTo` when the record is assigned and the user lacks `change_assigned` — UI gating is the cosmetic mirror of that rule.
+
+## Documents uploaded to an already-converted lead must cross-link to the student
+- `POST /api/leads/:id/documents` inserts with `studentId: lead.convertedStudentId ?? null` (not just `leadId`). Otherwise a doc added via Lead Detail AFTER conversion never appears in the student's documents tab (`GET /api/documents?studentId=` filters on `documents.studentId`).
+**Why:** the convert handler only backfills docs that existed at conversion time; post-conversion uploads need the studentId link set at insert time. `leads.convertedStudentId` ↔ `students.originLeadId`.

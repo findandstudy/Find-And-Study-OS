@@ -534,11 +534,12 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
     type,
     status: "pending",
     leadId: id,
+    studentId: lead.convertedStudentId ?? null,
     fileKey,
     mimeType: mimeType || null,
     sizeBytes: sizeBytes ? Number(sizeBytes) : null,
   }).returning();
-  await logAudit(user.id, "create_document", "document", doc.id, { name: safeName, type, leadId: id }, req.ip);
+  await logAudit(user.id, "create_document", "document", doc.id, { name: safeName, type, leadId: id, studentId: lead.convertedStudentId ?? null }, req.ip);
   res.status(201).json(doc);
 });
 
