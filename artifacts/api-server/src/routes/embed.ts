@@ -1065,6 +1065,37 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           mimeType: doc.mediaType || null,
           sizeBytes: doc.sizeBytes || null,
         });
+        // Mirror to the student's own (profile-level) documents when the doc was
+        // attached to an application AND the student has no active profile-level
+        // doc of that type yet. Mirrors the staff upload rule (documents.ts): an
+        // application upload fills the student's reusable document library only
+        // when it is empty for that type, and never overwrites a doc already on
+        // file. When resultAppId is null the doc above is already profile-level,
+        // so no mirror is needed.
+        if (resultAppId) {
+          const [existingProfileDoc] = await db
+            .select({ id: documentsTable.id })
+            .from(documentsTable)
+            .where(and(
+              eq(documentsTable.studentId, resultStudentId),
+              eq(documentsTable.type, docType),
+              isNull(documentsTable.applicationId),
+              isNull(documentsTable.deletedAt),
+            ));
+          if (!existingProfileDoc) {
+            await db.insert(documentsTable).values({
+              studentId: resultStudentId,
+              applicationId: null,
+              leadId: null,
+              name: docName,
+              type: docType,
+              status: "pending",
+              fileData: doc.data,
+              mimeType: doc.mediaType || null,
+              sizeBytes: doc.sizeBytes || null,
+            });
+          }
+        }
       }
     } else if (docArray.length > 0) {
       // Fallback: attach to the lead only (legacy behavior) so files are

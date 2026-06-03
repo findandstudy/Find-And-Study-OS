@@ -28,3 +28,19 @@ library, but must never overwrite a document the student already has on file.
 two-scope independence. Sharing `fileKey` across the two rows is safe only
 because DELETE /documents/:id soft-deletes (sets `deletedAt`) and never removes
 the stored object.
+
+## Two separate intake paths — keep them in sync
+Documents enter through TWO unrelated code paths; a rule added to one does NOT
+apply to the other automatically:
+- Staff/student/agent uploads → `POST /documents` (documents.ts), store via
+  object-storage `fileKey`.
+- Public widget/embed submissions → `POST /api/public/embed/:slug/apply`
+  (embed.ts), store base64 inline in the `fileData` column, with the doc
+  attached to the freshly created application (`applicationId` set).
+The same auto-promotion rule is implemented in BOTH. In embed.ts the profile
+mirror duplicates the base64 `fileData` (no shared key possible for inline
+storage), so the two rows are independent copies — acceptable, but unlike the
+staff path it is NOT byte-shared. Repeat/different embed applications for the
+same student are matched by lower(email) → same studentId, so the "fill profile
+only if empty for that type" check correctly leaves an existing profile doc
+untouched on later submissions.
