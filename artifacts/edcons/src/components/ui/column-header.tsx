@@ -162,6 +162,23 @@ export function ColumnHeader<TKey extends string = string>(props: ColumnHeaderPr
         align={align === "right" ? "end" : align === "center" ? "center" : "start"}
         className="w-64 p-3"
         onClick={(e) => e.stopPropagation()}
+        onInteractOutside={(e) => {
+          // The select dropdown is portalled OUTSIDE this popover's DOM tree,
+          // so clicking an option counts as an "outside" interaction and would
+          // close the popover before the selection commits. Keep the popover
+          // open when the interaction happens inside the Radix Select dropdown
+          // (its listbox/options/viewport); genuine outside clicks still close.
+          const target = (e.detail as { originalEvent?: Event } | undefined)
+            ?.originalEvent?.target;
+          if (
+            target instanceof Element &&
+            target.closest(
+              "[role='listbox'],[role='option'],[data-radix-select-viewport]",
+            )
+          ) {
+            e.preventDefault();
+          }
+        }}
       >
         <FilterControl filter={filter} onClose={() => setOpen(false)} />
       </PopoverContent>
