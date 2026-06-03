@@ -554,6 +554,35 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
             mimeType: mime,
             sizeBytes: rawSize || null,
           });
+          // Mirror to the student's own (profile-level) documents when this fresh
+          // upload was attached to an application AND the student has no active
+          // profile-level doc of that type yet. Mirrors the staff (documents.ts)
+          // and embed (embed.ts) rule: an application upload fills the student's
+          // reusable document library only when it is empty for that type, and
+          // never overwrites a doc already on file. resultAppId is guaranteed
+          // non-null here by the enclosing condition.
+          const [existingProfileDoc] = await db
+            .select({ id: documentsTable.id })
+            .from(documentsTable)
+            .where(and(
+              eq(documentsTable.studentId, resultStudentId),
+              eq(documentsTable.type, docType),
+              isNull(documentsTable.applicationId),
+              isNull(documentsTable.deletedAt),
+            ));
+          if (!existingProfileDoc) {
+            await db.insert(documentsTable).values({
+              studentId: resultStudentId,
+              applicationId: null,
+              leadId: null,
+              name: descriptiveName,
+              type: docType,
+              status: "pending",
+              fileData: doc.base64,
+              mimeType: mime,
+              sizeBytes: rawSize || null,
+            });
+          }
           if (!photoSet && (docType === "photo" || docType === "photograph") && resultStudentId) {
             try {
               const photoUrl = `data:${mime};base64,${doc.base64}`;
@@ -596,13 +625,24 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           : [];
 
         // Compute the equivalence groups already covered by docs the
-        // client uploaded fresh in this submission.
+        // client uploaded fresh in this submission. Also track the raw
+        // (lowercased) types so that types NOT in the equivalence map are
+        // skipped during reuse too — otherwise the profile-level mirror copies
+        // created above for fresh uploads would be re-linked onto this same
+        // application as duplicates.
         const alreadyHaveGroups = new Set<DocEquivalenceGroupId>();
+        const freshRawTypes = new Set<string>();
         if (Array.isArray(documents)) {
           for (const d of documents) {
             const t = String(d?.key || d?.label || "").trim();
             const g = getDocEquivalenceGroup(t);
             if (g) alreadyHaveGroups.add(g);
+            // Use the EXACT same normalization as docType in the fresh-upload
+            // loop above (incl. the "other" fallback and 100-char truncation),
+            // lowercased to match the reuse block's seenRawTypes comparison, so
+            // every freshly-created profile mirror is recognized and never
+            // re-copied onto this application as a duplicate.
+            freshRawTypes.add(String(d?.key || d?.label || "other").slice(0, 100).toLowerCase());
           }
         }
 
@@ -679,7 +719,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         let copied = 0;
         let photoSet = false;
         const seenGroups = new Set<DocEquivalenceGroupId>();
-        const seenRawTypes = new Set<string>();
+        const seenRawTypes = new Set<string>(freshRawTypes);
         for (const src of sourceDocs) {
           const srcType = String(src.type || "").trim();
           if (!srcType) continue;
