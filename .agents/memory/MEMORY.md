@@ -1,1 +1,1 @@
-- [Stage-change entry points (edcons)](edcons-stage-change-entry-points.md) — application stage changes fire from many UI paths incl. general edit forms; enforce stage gating server-side, not per-path.
+- [Prod→Dev data copy](prod-dev-data-copy.md) — how to mirror production DB into dev via the executeSql sandbox: read-size limits, blob chunking, trigger/sequence handling, email lockdown.
