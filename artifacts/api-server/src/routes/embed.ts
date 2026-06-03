@@ -769,7 +769,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
         email: s(email, 255)!,
         phone: pn(phone, countryCode, 50),
         interestedProgram: s(programName, 255),
-        interestedCountry: s(universityName, 255),
+        interestedUniversity: s(universityName, 255),
         sourcePageUrl: s(sourcePageUrl, 500),
         utmSource: s(utmSource, 100),
         utmMedium: s(utmMedium, 100),
@@ -885,6 +885,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         phone: pn(phone, countryCode, 50),
         nationality: s(nationality, 100),
         interestedProgram: s(programName || desiredProgram, 255),
+        interestedUniversity: s(universityName || preferredUniversity, 255),
         notes: s(message, 2000),
       }).where(eq(leadsTable.id, leadRow.id)).returning();
       lead = updated;
@@ -904,6 +905,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           phone: pn(phone, countryCode, 50),
           nationality: s(nationality, 100),
           interestedProgram: s(programName || desiredProgram, 255),
+          interestedUniversity: s(universityName || preferredUniversity, 255),
           notes: s(message, 2000),
         },
       });

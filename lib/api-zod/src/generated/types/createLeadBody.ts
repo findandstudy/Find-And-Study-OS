@@ -25,6 +25,8 @@ export interface CreateLeadBody {
   /** @nullable */
   interestedProgram?: string | null;
   /** @nullable */
+  interestedUniversity?: string | null;
+  /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;

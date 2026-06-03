@@ -172,6 +172,11 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
             {lead.interestedProgram}
           </p>
         )}
+        {lead.interestedUniversity && (
+          <p className="text-xs text-muted-foreground mt-1 truncate" title={lead.interestedUniversity}>
+            {lead.interestedUniversity}
+          </p>
+        )}
         {showRevenue && lead.estimatedValue && parseFloat(lead.estimatedValue) > 0 && (
           <div className="mt-2 flex items-center gap-1">
             <TrendingUp className="w-3 h-3 text-emerald-500" />
@@ -705,6 +710,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
         phone: parsed.phone,
         source: lead.source || "website",
         interestedProgram: lead.interestedProgram || "",
+        interestedUniversity: lead.interestedUniversity || "",
         interestedCountry: lead.interestedCountry || "",
         nationality: lead.nationality || "",
         estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
@@ -799,6 +805,10 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
           <div className="space-y-1.5">
             <Label>{t("leadsPage.interestedProgram")}</Label>
             <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t("leadsPage.interestedUniversity")}</Label>
+            <Input value={form.interestedUniversity} onChange={e => setForm({ ...form, interestedUniversity: e.target.value })} />
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label>{t("leadsPage.interestedCountry")}</Label>
@@ -951,6 +961,7 @@ const EMPTY_FORM = {
   phone: "",
   source: "website",
   interestedProgram: "",
+  interestedUniversity: "",
   interestedCountry: "",
   nationality: "",
   estimatedValue: "",
@@ -1396,6 +1407,11 @@ export default function LeadsPage() {
                           {activeCard.interestedProgram}
                         </p>
                       )}
+                      {activeCard.interestedUniversity && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate" title={activeCard.interestedUniversity}>
+                          {activeCard.interestedUniversity}
+                        </p>
+                      )}
                       {canSeeRevenue && activeCard.estimatedValue && parseFloat(String(activeCard.estimatedValue)) > 0 && (
                         <div className="mt-2 flex items-center gap-1">
                           <TrendingUp className="w-3 h-3 text-emerald-500" />
@@ -1551,6 +1567,9 @@ export default function LeadsPage() {
                         onClick={() => setLocation(`/staff/leads/${lead.id}`)}
                       >
                         <span className="line-clamp-2" title={lead.interestedProgram || ""}>{lead.interestedProgram || "-"}</span>
+                        {lead.interestedUniversity && (
+                          <span className="block text-xs text-muted-foreground line-clamp-1" title={lead.interestedUniversity}>{lead.interestedUniversity}</span>
+                        )}
                       </TableCell>
                       <TableCell onClick={() => setLocation(`/staff/leads/${lead.id}`)}>
                         {lead.interestedCountry || "-"}
@@ -1695,6 +1714,10 @@ export default function LeadsPage() {
             <div className="space-y-1.5 col-span-2">
               <Label>{t("leadsPage.interestedProgram")}</Label>
               <Input value={form.interestedProgram} onChange={(e) => setForm({ ...form, interestedProgram: e.target.value })} placeholder={t("leadsPage.interestedProgramPlaceholder")} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>{t("leadsPage.interestedUniversity")}</Label>
+              <Input value={form.interestedUniversity} onChange={(e) => setForm({ ...form, interestedUniversity: e.target.value })} />
             </div>
             <div className="space-y-1.5 col-span-2">
               <Label>{t("leadsPage.interestedCountry")}</Label>

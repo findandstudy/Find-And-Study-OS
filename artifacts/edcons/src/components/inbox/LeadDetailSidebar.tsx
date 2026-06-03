@@ -127,6 +127,7 @@ export function LeadDetailSidebar({
       {linkedType === "lead" && lead && (
         <div className="space-y-3 border-t pt-3">
           {lead.interestedProgram && <Field label={t("inbox.sidebar.interestedProgram")} value={lead.interestedProgram} />}
+          {lead.interestedUniversity && <Field label={t("inbox.sidebar.interestedUniversity")} value={lead.interestedUniversity} />}
           {lead.interestedCountry && <Field label={t("inbox.sidebar.interestedCountry")} value={lead.interestedCountry} />}
           {estimatedValueText && <Field label={t("inbox.sidebar.estimatedValue")} value={estimatedValueText} />}
           {lead.source && <Field label={t("inbox.sidebar.source")} value={lead.source} />}

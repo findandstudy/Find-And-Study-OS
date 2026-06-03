@@ -18,6 +18,8 @@ export interface InboxLeadSummary {
   /** @nullable */
   interestedProgram?: string | null;
   /** @nullable */
+  interestedUniversity?: string | null;
+  /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
   estimatedValue?: string | null;

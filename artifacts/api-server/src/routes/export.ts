@@ -78,6 +78,7 @@ router.get("/export/leads", requireAuth, requireRole(...ADMIN_ROLES), async (req
     "Status": r.lead.status || "",
     "Source": r.lead.source || "",
     "Interested Program": r.lead.interestedProgram || "",
+    "Interested University": r.lead.interestedUniversity || "",
     "Interested Country": r.lead.interestedCountry || "",
     "Estimated Value": r.lead.estimatedValue ?? "",
     "Agent": r.agentName || "",

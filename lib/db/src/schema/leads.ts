@@ -21,6 +21,7 @@ export const leadsTable = pgTable("leads", {
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   interestedProgram: text("interested_program"),
+  interestedUniversity: text("interested_university"),
   interestedCountry: text("interested_country"),
   notes: text("notes"),
   estimatedValue: numeric("estimated_value", { precision: 12, scale: 2 }),

@@ -97,6 +97,8 @@ export interface Lead {
   /** @nullable */
   interestedProgram?: string | null;
   /** @nullable */
+  interestedUniversity?: string | null;
+  /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
@@ -127,6 +129,8 @@ export interface CreateLeadBody {
   /** @nullable */
   interestedProgram?: string | null;
   /** @nullable */
+  interestedUniversity?: string | null;
+  /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
@@ -156,6 +160,8 @@ export interface UpdateLeadBody {
   /** @nullable */
   interestedProgram?: string | null;
   /** @nullable */
+  interestedUniversity?: string | null;
+  /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
   notes?: string | null;
@@ -173,6 +179,8 @@ export interface PublicLeadBody {
   nationality?: string | null;
   /** @nullable */
   interestedProgram?: string | null;
+  /** @nullable */
+  interestedUniversity?: string | null;
   /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
@@ -1377,6 +1385,8 @@ export interface InboxLeadSummary {
   status: string;
   /** @nullable */
   interestedProgram?: string | null;
+  /** @nullable */
+  interestedUniversity?: string | null;
   /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */

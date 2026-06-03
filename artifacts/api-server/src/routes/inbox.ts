@@ -372,6 +372,7 @@ router.get(
             phone: leadsTable.phone,
             status: leadsTable.status,
             interestedProgram: leadsTable.interestedProgram,
+            interestedUniversity: leadsTable.interestedUniversity,
             interestedCountry: leadsTable.interestedCountry,
             estimatedValue: leadsTable.estimatedValue,
             source: leadsTable.source,

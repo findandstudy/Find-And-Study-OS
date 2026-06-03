@@ -17,6 +17,8 @@ export interface PublicLeadBody {
   /** @nullable */
   interestedProgram?: string | null;
   /** @nullable */
+  interestedUniversity?: string | null;
+  /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
   message?: string | null;

@@ -83,7 +83,7 @@ const COUNTRY_CODES = [
   { code: "KG", dial: "+996", name: "Kyrgyzstan" },
   { code: "IL", dial: "+972", name: "Israel" },
   { code: "CY", dial: "+357", name: "Cyprus" },
-];
+].sort((a, b) => a.name.localeCompare(b.name));
 
 function parsePhone(fullPhone: string): { dialCode: string; number: string } {
   if (!fullPhone) return { dialCode: "+90", number: "" };

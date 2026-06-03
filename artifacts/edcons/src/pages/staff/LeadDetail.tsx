@@ -527,6 +527,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <InfoRow icon={<Mail className="w-4 h-4" />} label={t("leadDetailPage.email")} value={lead?.email} />
                   <InfoRow icon={<Phone className="w-4 h-4" />} label={t("leadDetailPage.phone")} value={lead?.phone} />
                   <InfoRow icon={<BookOpen className="w-4 h-4" />} label={t("leadDetailPage.interestedProgramLabel")} value={lead?.interestedProgram} />
+                  <InfoRow icon={<GraduationCap className="w-4 h-4" />} label={t("leadDetailPage.interestedUniversityLabel")} value={lead?.interestedUniversity} />
                   <InfoRow icon={<User className="w-4 h-4" />} label={t("leadDetailPage.sourceLabel")} value={lead?.source} />
                   <InfoRow icon={<DollarSign className="w-4 h-4" />} label={t("leadDetailPage.estimatedBudget")} value={estimatedBudgetDisplay} />
                 </div>
@@ -1141,7 +1142,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   const canSeeRevenue = hasPermission("leads.view_commission");
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "",
-    source: "website", interestedProgram: "", interestedCountry: "", nationality: "", estimatedValue: "",
+    source: "website", interestedProgram: "", interestedUniversity: "", interestedCountry: "", nationality: "", estimatedValue: "",
   });
   const updateLead = useUpdateLead();
   const queryClient = useQueryClient();
@@ -1154,6 +1155,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
         firstName: lead.firstName || "", lastName: lead.lastName || "",
         email: lead.email || "", phoneCode: parsed.phoneCode, phone: parsed.phone,
         source: lead.source || "website", interestedProgram: lead.interestedProgram || "",
+        interestedUniversity: lead.interestedUniversity || "",
         interestedCountry: lead.interestedCountry || "", nationality: lead.nationality || "",
         estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
       });
@@ -1236,6 +1238,10 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           <div className="space-y-1.5">
             <Label>{t("leadDetailPage.interestedProgram")}</Label>
             <Input value={form.interestedProgram} onChange={e => setForm({ ...form, interestedProgram: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t("leadDetailPage.interestedUniversity")}</Label>
+            <Input value={form.interestedUniversity} onChange={e => setForm({ ...form, interestedUniversity: e.target.value })} />
           </div>
           <div className="space-y-1.5">
             <Label>{t("leadDetailPage.interestedCountry")}</Label>

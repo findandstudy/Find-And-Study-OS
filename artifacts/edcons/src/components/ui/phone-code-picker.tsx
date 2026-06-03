@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PHONE_CODES } from "@/lib/nationalities";
 
-const PINNED_ISO = ["TR", "US", "GB", "DE", "FR", "RU", "AE", "SA", "IN", "PK", "AZ", "KZ", "UZ"];
-
 const regionNames = typeof Intl !== "undefined" && (Intl as any).DisplayNames
   ? new (Intl as any).DisplayNames(["en"], { type: "region" })
   : null;
@@ -23,10 +21,6 @@ type Item = { code: string; iso: string; name: string };
 const ALL_ITEMS: Item[] = PHONE_CODES
   .map(p => ({ code: p.code, iso: p.country, name: countryName(p.country) }))
   .sort((a, b) => a.name.localeCompare(b.name));
-
-const PINNED_ITEMS: Item[] = PINNED_ISO
-  .map(iso => ALL_ITEMS.find(i => i.iso === iso))
-  .filter((x): x is Item => !!x);
 
 interface Props {
   value: string;
@@ -147,13 +141,7 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
                 ? <div className="py-6 text-center text-sm text-muted-foreground">No results</div>
                 : filtered.map(renderItem)
             ) : (
-              <>
-                <div className="px-2 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Popular</div>
-                {PINNED_ITEMS.map(renderItem)}
-                <div className="my-1 border-t" />
-                <div className="px-2 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">All countries</div>
-                {ALL_ITEMS.map(renderItem)}
-              </>
+              ALL_ITEMS.map(renderItem)
             )}
           </div>
         </div>

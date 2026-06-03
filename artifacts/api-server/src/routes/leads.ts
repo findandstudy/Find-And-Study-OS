@@ -25,7 +25,7 @@ const leadDocsObjectStorage = new ObjectStorageService();
 
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
-  "interestedProgram", "interestedCountry", "source",
+  "interestedProgram", "interestedUniversity", "interestedCountry", "source",
   "status", "assignedTo", "notes", "estimatedValue", "season", "agentId",
 ];
 
@@ -89,7 +89,7 @@ router.get("/nationalities", requireAuth, requireRole(...STAFF_ROLES), async (_r
 });
 
 router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> => {
-  const { firstName, lastName, email, phone, nationality, interestedProgram, interestedCountry, message, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, source: bodySource } = req.body;
+  const { firstName, lastName, email, phone, nationality, interestedProgram, interestedUniversity, interestedCountry, message, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, source: bodySource } = req.body;
   if (!firstName || !lastName || !email || !phone) {
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
@@ -125,6 +125,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
       phoneE164: toE164(phoneStr),
       nationality: nationality ? String(nationality).slice(0, 100) : null,
       interestedProgram: interestedProgram ? String(interestedProgram).slice(0, 255) : null,
+      interestedUniversity: interestedUniversity ? String(interestedUniversity).slice(0, 255) : null,
       interestedCountry: interestedCountry ? String(interestedCountry).slice(0, 100) : null,
       notes: message ? String(message).replace(/<[^>]*>/g, "").slice(0, 400) : null,
       sourcePageUrl: sourcePageUrl ? String(sourcePageUrl).slice(0, 500) : null,
@@ -326,7 +327,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
 
 router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedCountry, source, notes, assignedTo, season, agentId } = req.body;
+  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedUniversity, interestedCountry, source, notes, assignedTo, season, agentId } = req.body;
   if (!firstName || !lastName || !email || !phone) {
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
@@ -355,6 +356,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     phone: phone ? normalizePhoneField(phone) : phone, phoneE164: toE164(phone ? normalizePhoneField(phone) : phone),
     nationality: nationality || null,
     interestedProgram: interestedProgram || null,
+    interestedUniversity: interestedUniversity || null,
     interestedCountry: interestedCountry || null,
     source: source || null, notes: notes || null,
     assignedToId: assignedTo || null,
@@ -542,7 +544,7 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
 
 const AGENT_LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
-  "interestedProgram", "interestedCountry", "source",
+  "interestedProgram", "interestedUniversity", "interestedCountry", "source",
   "notes", "estimatedValue",
 ];
 

@@ -1,1 +1,2 @@
 - [Vite ships render-time ReferenceErrors](vite-runtime-referenceerror.md) — esbuild strips types without scope-checking; out-of-scope refs only fail at runtime → ErrorBoundary reload loop. Run tsc.
+- [Schema/OpenAPI changes need lib dist rebuild + safe DB migration](monorepo-schema-codegen-build.md) — rebuild lib dist (tsc -b) after schema/codegen; use ALTER TABLE not drizzle push (push drops unrelated tables).

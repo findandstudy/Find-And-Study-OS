@@ -2187,6 +2187,8 @@ components:
           type: ["integer", "null"]
         interestedProgram:
           type: ["string", "null"]
+        interestedUniversity:
+          type: ["string", "null"]
         interestedCountry:
           type: ["string", "null"]
         notes:
@@ -2232,6 +2234,8 @@ components:
           type: ["integer", "null"]
         interestedProgram:
           type: ["string", "null"]
+        interestedUniversity:
+          type: ["string", "null"]
         interestedCountry:
           type: ["string", "null"]
         notes:
@@ -2266,6 +2270,8 @@ components:
           type: ["integer", "null"]
         interestedProgram:
           type: ["string", "null"]
+        interestedUniversity:
+          type: ["string", "null"]
         interestedCountry:
           type: ["string", "null"]
         notes:
@@ -2287,6 +2293,8 @@ components:
         nationality:
           type: ["string", "null"]
         interestedProgram:
+          type: ["string", "null"]
+        interestedUniversity:
           type: ["string", "null"]
         interestedCountry:
           type: ["string", "null"]
@@ -3973,6 +3981,8 @@ components:
         status:
           type: string
         interestedProgram:
+          type: ["string", "null"]
+        interestedUniversity:
           type: ["string", "null"]
         interestedCountry:
           type: ["string", "null"]

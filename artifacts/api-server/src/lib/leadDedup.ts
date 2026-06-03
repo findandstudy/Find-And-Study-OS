@@ -45,6 +45,7 @@ export interface LeadDedupFields {
   nationality?: string | null;
   country?: string | null;
   interestedProgram?: string | null;
+  interestedUniversity?: string | null;
   interestedCountry?: string | null;
   notes?: string | null;
   sourcePageUrl?: string | null;
@@ -88,6 +89,7 @@ function buildUpdatePatch(fields: LeadDedupFields): Partial<typeof leadsTable.$i
   if (nonEmpty(fields.nationality)) patch.nationality = fields.nationality as string;
   if (nonEmpty(fields.country)) patch.country = fields.country as string;
   if (nonEmpty(fields.interestedProgram)) patch.interestedProgram = fields.interestedProgram as string;
+  if (nonEmpty(fields.interestedUniversity)) patch.interestedUniversity = fields.interestedUniversity as string;
   if (nonEmpty(fields.interestedCountry)) patch.interestedCountry = fields.interestedCountry as string;
   if (nonEmpty(fields.notes)) patch.notes = fields.notes as string;
   if (nonEmpty(fields.sourcePageUrl)) patch.sourcePageUrl = fields.sourcePageUrl as string;
@@ -156,6 +158,7 @@ export async function findOrUpsertPublicLead(opts: {
       source,
       status: extras.initialStatus ?? "new",
       interestedProgram: opts.fields.interestedProgram ?? null,
+      interestedUniversity: opts.fields.interestedUniversity ?? null,
       interestedCountry: opts.fields.interestedCountry ?? null,
       notes: opts.fields.notes ?? null,
       sourcePageUrl: opts.fields.sourcePageUrl ?? null,
