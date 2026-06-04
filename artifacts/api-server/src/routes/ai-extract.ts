@@ -276,7 +276,7 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
 
 router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   try {
-    const { csvData } = req.body as { csvData: string };
+    const { csvData, entity } = req.body as { csvData: string; entity?: "student" | "lead" };
     if (!csvData) {
       res.status(400).json({ error: "No CSV data provided" });
       return;
@@ -292,12 +292,17 @@ router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000),
       return;
     }
 
+    const isLead = entity === "lead";
+    const promptIntro = isLead
+      ? `Parse this CSV data and extract sales lead records. Return a JSON array of lead objects with keys: firstName, lastName, email, phone, nationality, interestedProgram, interestedUniversity, interestedCountry, source, estimatedValue, notes.`
+      : `Parse this CSV data and extract student records. Return a JSON array of student objects with keys: firstName, lastName, email, phone, nationality, dateOfBirth, passportNumber, highSchool, graduationYear, gpa, languageScore, motherName, fatherName, passportExpiry, passportIssueDate, address, notes.`;
+
     const message = await anthropic.messages.create({
       model: claudeConfig.model || DEFAULT_CSV_MODEL,
       max_tokens: 8192,
       messages: [{
         role: "user",
-        content: `Parse this CSV data and extract student records. Return a JSON array of student objects with keys: firstName, lastName, email, phone, nationality, dateOfBirth, passportNumber, highSchool, graduationYear, gpa, languageScore, motherName, fatherName, passportExpiry, passportIssueDate, address, notes.
+        content: `${promptIntro}
         
 Map any reasonable column name variations (e.g. "first name", "First Name", "firstname" all map to firstName).
 Return ONLY the JSON array, no explanation.
@@ -314,18 +319,18 @@ ${csvData.slice(0, 10000)}`,
       return;
     }
 
-    let students: any[] = [];
+    let records: any[] = [];
     try {
       const jsonMatch = textBlock.text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        students = JSON.parse(jsonMatch[0]);
+        records = JSON.parse(jsonMatch[0]);
       }
     } catch {
       res.status(500).json({ error: "Failed to parse AI response" });
       return;
     }
 
-    res.json({ students });
+    res.json({ students: records, records });
   } catch (err: any) {
     console.error("CSV parse error:", err);
     res.status(500).json({ error: "CSV parsing failed" });

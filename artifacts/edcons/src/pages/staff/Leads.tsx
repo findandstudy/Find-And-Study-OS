@@ -14,6 +14,7 @@ import {
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   MessageSquare, Mail, UserPlus, Download, Building2,
+  FileUp, Sparkles, FileText, CheckCircle2, Loader2, Users,
 } from "lucide-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Input } from "@/components/ui/input";
@@ -969,12 +970,239 @@ const EMPTY_FORM = {
 };
 
 /* ── LeadsPage ────────────────────────────────────────────── */
+const SAMPLE_CSV_LEADS = `firstName,lastName,email,phone,nationality,interestedProgram,interestedUniversity,interestedCountry,source,estimatedValue
+John,Doe,john@example.com,+1-555-0001,American,Computer Science,MIT,USA,website,5000
+Jane,Smith,jane@example.com,+44-20-0002,British,Business Administration,Oxford,UK,referral,7500`;
+
+function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void; }) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [preview, setPreview] = useState<any[] | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ success: number; errors: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleClose() {
+    setCsvFile(null);
+    setParsing(false);
+    setPreview(null);
+    setImporting(false);
+    setResult(null);
+    onClose();
+  }
+
+  async function parseCSV(file: File) {
+    setParsing(true);
+    setPreview(null);
+    try {
+      const text = await file.text();
+      const res = await fetch(`${BASE_URL}/api/ai/extract-bulk-csv`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ csvData: text, entity: "lead" }),
+      });
+      if (!res.ok) throw new Error(t("leadsPage.csvParsingFailed"));
+      const data = await res.json();
+      setPreview(data.records || data.students || []);
+    } catch (err: any) {
+      toast({ title: t("leadsPage.csvParsingFailed"), description: err.message, variant: "destructive" });
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  async function importAll() {
+    if (!preview) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/leads/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ leads: preview }),
+      });
+      if (!res.ok) throw new Error(t("leadsPage.importFailed"));
+      const data = await res.json();
+      setResult({ success: data.success, errors: data.errors?.length || 0 });
+      onSuccess();
+    } catch (err: any) {
+      toast({ title: t("leadsPage.importFailed"), description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border/50 shrink-0">
+          <DialogTitle className="text-xl font-display flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary" />
+            {t("leadsPage.bulkTitle")}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+          {!result && (
+            <>
+              <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{t("leadsPage.bulkAiTitle")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t("leadsPage.bulkAiDesc")}</p>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold">{t("leadsPage.bulkCsvFile")}</p>
+                  <button
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                    onClick={() => {
+                      const blob = new Blob([SAMPLE_CSV_LEADS], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "sample_leads.csv";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download className="w-3 h-3" /> {t("leadsPage.bulkDownloadSample")}
+                  </button>
+                </div>
+
+                {!csvFile ? (
+                  <div
+                    className="border-2 border-dashed border-border hover:border-primary/50 rounded-2xl p-8 text-center cursor-pointer transition-colors hover:bg-secondary/30"
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    <FileUp className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground">{t("leadsPage.bulkDropCsv")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("leadsPage.bulkAcceptsCsv")}</p>
+                    <input
+                      ref={inputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) { setCsvFile(f); parseCSV(f); }
+                        e.target.value = "";
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-xl border border-border">
+                    <FileText className="w-5 h-5 text-primary" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{csvFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{Math.round(csvFile.size / 1024)}KB</p>
+                    </div>
+                    <button
+                      onClick={() => { setCsvFile(null); setPreview(null); }}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {parsing && (
+                <div className="flex items-center gap-3 p-4 bg-violet-50 border border-violet-100 rounded-xl">
+                  <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
+                  <div>
+                    <p className="text-sm font-semibold text-violet-700">{t("leadsPage.bulkParsing")}</p>
+                    <p className="text-xs text-violet-600">{t("leadsPage.bulkParsingDesc")}</p>
+                  </div>
+                </div>
+              )}
+
+              {preview && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">
+                      {t("leadsPage.bulkPreview")} — <span className="text-primary">{t("leadsPage.bulkLeadsCount", { count: preview.length })}</span>
+                    </p>
+                    <span className="text-xs text-muted-foreground">{t("leadsPage.bulkScrollReview")}</span>
+                  </div>
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto max-h-60">
+                      <table className="w-full text-xs">
+                        <thead className="bg-secondary/50 border-b border-border sticky top-0">
+                          <tr>
+                            {["#", t("leadsPage.bulkColFirst"), t("leadsPage.bulkColLast"), t("leadsPage.bulkColEmail"), t("leadsPage.bulkColPhone"), t("leadsPage.program"), t("leadsPage.country"), t("leadsPage.value")].map((h) => (
+                              <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                          {preview.map((s: any, i: number) => (
+                            <tr key={i} className="hover:bg-secondary/20">
+                              <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                              <td className="px-3 py-2 font-medium">{s.firstName || "—"}</td>
+                              <td className="px-3 py-2">{s.lastName || "—"}</td>
+                              <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">{s.email || "—"}</td>
+                              <td className="px-3 py-2">{s.phone || "—"}</td>
+                              <td className="px-3 py-2">{s.interestedProgram || "—"}</td>
+                              <td className="px-3 py-2">{s.interestedCountry || "—"}</td>
+                              <td className="px-3 py-2">{s.estimatedValue || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {result && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+              <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-display font-bold">{t("leadsPage.bulkImported", { count: result.success })}</p>
+                {result.errors > 0 && (
+                  <p className="text-sm text-destructive mt-1">{t("leadsPage.bulkRowsSkipped", { count: result.errors })}</p>
+                )}
+              </div>
+              <Button onClick={handleClose} className="rounded-xl mt-2">{t("leadsPage.bulkDone")}</Button>
+            </div>
+          )}
+        </div>
+
+        {!result && (
+          <div className="px-6 pb-5 pt-3 border-t border-border/50 flex items-center justify-between shrink-0">
+            <Button variant="outline" onClick={handleClose} className="rounded-xl">{t("leadsPage.cancel")}</Button>
+            <Button
+              onClick={importAll}
+              disabled={!preview || importing || preview.length === 0}
+              className="rounded-xl gap-2"
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+              {preview ? t("leadsPage.bulkImportBtn", { count: preview.length }) : t("leadsPage.bulkImportBtnEmpty")}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function LeadsPage() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [filters, setFilters] = useState<LeadFilters>({ ...DEFAULT_LEAD_FILTERS });
@@ -1357,6 +1585,9 @@ export default function LeadsPage() {
                 <Download className="w-3.5 h-3.5" /> {t("leadsPage.excel")}
               </Button>
             )}
+            <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
+              <FileUp className="w-4 h-4" /> {t("leadsPage.bulkImport")}
+            </Button>
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> {t("leadsPage.addLead")}
             </Button>
@@ -1745,6 +1976,12 @@ export default function LeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LeadBulkImportModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}
+      />
     </>
   );
 }

@@ -1761,8 +1761,8 @@ export default function ApplicationsPage() {
             <h1 className="text-3xl font-display font-bold text-foreground">{t("staffApplications.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{t("staffApplications.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-64">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="relative w-full sm:w-56 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>

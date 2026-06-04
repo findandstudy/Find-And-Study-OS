@@ -380,6 +380,82 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   res.status(201).json(lead);
 });
 
+router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const { leads } = req.body as { leads: any[] };
+  if (!Array.isArray(leads) || leads.length === 0) {
+    res.status(400).json({ error: "leads array is required" });
+    return;
+  }
+
+  const currentYear = await getCurrentSeason();
+  let resolvedAgentId: number | null = null;
+  if (isAgentRole(user.role)) {
+    const agentRec = await getAgentRecord(user.id, user.role);
+    resolvedAgentId = agentRec?.id || null;
+  }
+  const origin = resolvedAgentId
+    ? await inferOriginFromAgentId(resolvedAgentId)
+    : await inferOriginFromUser(user);
+  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, null);
+  if (inheritedBranchId == null && user.role !== "super_admin" && !isAgentRole(user.role)) {
+    res.status(403).json({ error: "No accessible branch — cannot create leads" });
+    return;
+  }
+
+  const inserted: any[] = [];
+  const errors: any[] = [];
+
+  for (let i = 0; i < leads.length; i++) {
+    const l = leads[i];
+    if (!l.firstName || !l.lastName) {
+      errors.push({ index: i, error: "firstName and lastName are required", row: l });
+      continue;
+    }
+    const { error: nameErr, normalized: ns } = normalizeAndValidateNames(
+      { firstName: l.firstName, lastName: l.lastName }, ["firstName", "lastName"]
+    );
+    if (nameErr) {
+      errors.push({ index: i, error: nameErr, row: l });
+      continue;
+    }
+    const normPhone = l.phone ? normalizePhoneField(l.phone) : null;
+    let estimatedValue: string | null = null;
+    if (l.estimatedValue != null && String(l.estimatedValue).trim() !== "") {
+      const parsed = parseFloat(String(l.estimatedValue).replace(/[^0-9.\-]/g, ""));
+      estimatedValue = Number.isFinite(parsed) ? String(parsed) : null;
+    }
+    try {
+      const [lead] = await db.insert(leadsTable).values({
+        branchId: inheritedBranchId,
+        firstName: ns.firstName as string,
+        lastName: ns.lastName as string,
+        status: l.status || "new",
+        email: l.email || null,
+        phone: normPhone,
+        phoneE164: toE164(normPhone),
+        nationality: l.nationality || null,
+        interestedProgram: l.interestedProgram || null,
+        interestedUniversity: l.interestedUniversity || null,
+        interestedCountry: l.interestedCountry || null,
+        source: l.source || null,
+        notes: l.notes || null,
+        estimatedValue,
+        agentId: resolvedAgentId,
+        season: l.season || currentYear,
+        ...origin,
+      }).returning();
+      await applyLeadAssignmentRules(lead, req.ip);
+      inserted.push(lead);
+    } catch (err: any) {
+      errors.push({ index: i, error: err.message, row: l });
+    }
+  }
+
+  await logAudit(user.id, "bulk_create_leads", "lead", null, { count: inserted.length }, req.ip);
+  res.status(201).json({ inserted, errors, total: leads.length, success: inserted.length });
+});
+
 router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
