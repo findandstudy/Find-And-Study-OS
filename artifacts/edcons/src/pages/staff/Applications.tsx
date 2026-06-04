@@ -255,17 +255,17 @@ type AppColId =
 const APP_COLUMN_DEFS: { id: AppColId; label: string }[] = [
   { id: "student", label: "Student" },
   { id: "stage", label: "Stage" },
-  { id: "country", label: "Country" },
+  { id: "level", label: "Level" },
   { id: "university", label: "University" },
   { id: "program", label: "Program" },
-  { id: "level", label: "Level" },
+  { id: "country", label: "Country" },
+  // Task #167 — admin-configurable per-stage action buttons (always visible).
+  { id: "button1", label: "Quick Button 1" },
+  { id: "button2", label: "Quick Button 2" },
   { id: "intake", label: "Intake" },
   { id: "commission", label: "Commission" },
   { id: "assigned", label: "Assigned" },
   { id: "created", label: "Created" },
-  // Task #167 — admin-configurable per-stage action buttons (always visible).
-  { id: "button1", label: "Quick Button 1" },
-  { id: "button2", label: "Quick Button 2" },
 ];
 
 const APP_ALWAYS_VISIBLE_COLS: AppColId[] = ["button1", "button2"];
