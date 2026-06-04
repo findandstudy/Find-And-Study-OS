@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { UserCheck, UserPlus, Search, X } from "lucide-react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
+import { UserCheck, UserPlus, Search } from "lucide-react";
 
 interface AssignPopoverProps {
   assignedUserName?: string;
@@ -9,18 +10,56 @@ interface AssignPopoverProps {
   size?: "card" | "list";
 }
 
-export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onAssign, size = "card" }: AssignPopoverProps) {
+const MENU_WIDTH = 224; // w-56
+const MENU_MAX_HEIGHT = 290; // search box + scrollable list, used for flip decision
+
+export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onAssign }: AssignPopoverProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ left: number; triggerTop: number; triggerBottom: number; openUp: boolean } | null>(null);
+
+  // The menu renders in a portal with fixed positioning so it is never clipped
+  // by an ancestor table/card with overflow:hidden|auto. It flips above the
+  // trigger when there isn't enough room below.
+  function updatePosition() {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const spaceAbove = r.top;
+    const openUp = spaceBelow < MENU_MAX_HEIGHT && spaceAbove > spaceBelow;
+    let left = r.left;
+    if (left + MENU_WIDTH > window.innerWidth - 8) left = window.innerWidth - MENU_WIDTH - 8;
+    if (left < 8) left = 8;
+    setCoords({ left, triggerTop: r.top, triggerBottom: r.bottom, openUp });
+  }
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+    function onScrollResize() { updatePosition(); }
+    window.addEventListener("scroll", onScrollResize, true);
+    window.addEventListener("resize", onScrollResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollResize, true);
+      window.removeEventListener("resize", onScrollResize);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
+    // Use "click" (not "mousedown") so dragging the menu's inner scrollbar does
+    // not dismiss it. Both the trigger and the portaled menu are excluded.
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
   }, [open]);
 
   const filtered = staffUsers.filter(u =>
@@ -32,7 +71,7 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
     : filtered;
 
   return (
-    <div ref={ref} className="relative inline-flex">
+    <div ref={triggerRef} className="relative inline-flex">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(!open); setSearch(""); }}
         className={`flex items-center gap-0.5 truncate ${
@@ -48,9 +87,17 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
           <><UserPlus className="w-3 h-3 shrink-0" />Assign</>
         )}
       </button>
-      {open && (
+      {open && coords && createPortal(
         <div
-          className="absolute left-0 top-full mt-1 w-56 bg-popover border rounded-xl shadow-xl z-[100] overflow-hidden"
+          ref={menuRef}
+          style={{
+            position: "fixed",
+            left: coords.left,
+            top: coords.openUp ? undefined : coords.triggerBottom + 4,
+            bottom: coords.openUp ? window.innerHeight - coords.triggerTop + 4 : undefined,
+            width: MENU_WIDTH,
+          }}
+          className="bg-popover border rounded-xl shadow-xl z-[9999] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-2 border-b">
@@ -86,7 +133,8 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
