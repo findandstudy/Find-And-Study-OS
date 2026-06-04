@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, settingsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { hashToken } from "../lib/signingTokens";
-import { renderTemplate, buildAgentContext, cleanupSignatureImages } from "../lib/contractRenderer";
+import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl } from "../lib/contractRenderer";
 
 function contractNumber(sessionId: number, signedAt?: Date): string {
   const d = signedAt || new Date();
@@ -40,13 +40,6 @@ async function buildContractFilename(params: { agent: any | null; signedAt: Date
   return `${agentName} - ${brand} - ${ts}.pdf`;
 }
 
-const SIG_PLACEHOLDER: Record<string, string> = {
-  en: "Signature will appear here",
-  tr: "İmza buraya yerleşecek",
-  ar: "سيظهر التوقيع هنا",
-  fr: "La signature apparaîtra ici",
-  ru: "Подпись появится здесь",
-};
 import { buildSignedPdf } from "../lib/contractPdf";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { writeAudit } from "../lib/auditLog";
@@ -215,7 +208,6 @@ router.get("/public/sign/:token/preview-pdf", signLimiter, async (req, res): Pro
       signerIp: req.ip,
       signerUserAgent: req.headers["user-agent"] || null,
       signedAt: new Date(),
-      signatureImagePngBase64: null,
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="contract-preview.pdf"`);
@@ -291,6 +283,10 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       date: signedAt.toISOString().slice(0, 10),
       number: contractNumber(r.session.id, signedAt),
     });
+    // Inject the signer's drawn signature into the {{signature}} placeholder so
+    // it renders inside the designed signature box; remaining unfilled signature
+    // images (e.g. {{main_agency_signature}}) become styled placeholders.
+    ctx.signature = toSignatureDataUrl(signatureImagePngBase64);
     const rendered = renderTemplate(r.template.bodyHtml, ctx);
     const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
     const renderedHtml = cleanupSignatureImages(rendered, placeholder);
@@ -303,7 +299,6 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       signerIp,
       signerUserAgent,
       signedAt,
-      signatureImagePngBase64,
     });
 
     let pdfObjectKey = "";

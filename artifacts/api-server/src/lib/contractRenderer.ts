@@ -1,5 +1,29 @@
 type Ctx = Record<string, any>;
 
+/**
+ * Per-language label shown in place of an unfilled signature box (used by
+ * `cleanupSignatureImages`). Shared by the public signing routes and the
+ * server-side finalizer so the unfilled-signature appearance is identical
+ * across every render path.
+ */
+export const SIG_PLACEHOLDER: Record<string, string> = {
+  en: "Signature will appear here",
+  tr: "İmza buraya yerleşecek",
+  ar: "سيظهر التوقيع هنا",
+  fr: "La signature apparaîtra ici",
+  ru: "Подпись появится здесь",
+};
+
+/**
+ * Normalize a signature image (raw base64 or an existing data URL) into a
+ * `data:image/png;base64,...` data URL suitable for injecting into a template's
+ * `{{signature}}` placeholder so it renders inside the designed signature box.
+ */
+export function toSignatureDataUrl(sig: string | null | undefined): string {
+  if (!sig) return "";
+  return sig.startsWith("data:") ? sig : `data:image/png;base64,${sig}`;
+}
+
 function lookup(ctx: Ctx, path: string): string {
   const parts = path.split(".");
   // For unqualified keys (e.g. {{agency_name}}) fall through into the standard

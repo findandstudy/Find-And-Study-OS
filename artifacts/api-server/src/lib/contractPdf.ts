@@ -1,8 +1,6 @@
-import { PDFDocument, rgb } from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument } from "pdf-lib";
 import crypto from "crypto";
-import { readFileSync, existsSync } from "fs";
-import path from "path";
+import { execSync } from "child_process";
 
 interface BuildPdfParams {
   templateName: string;
@@ -12,7 +10,6 @@ interface BuildPdfParams {
   signerIp?: string | null;
   signerUserAgent?: string | null;
   signedAt: Date;
-  signatureImagePngBase64?: string | null;
 }
 
 interface BuildPdfResult {
@@ -20,243 +17,221 @@ interface BuildPdfResult {
   evidenceHash: string;
 }
 
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /**
- * Locate a bundled font file. We deliberately avoid `import.meta.url` /
- * `__dirname` because the production bundle is emitted by esbuild as a
- * single CJS file (`dist/index.cjs`) where `import.meta` is empty and
- * `__dirname` collapses to the dist root — both unreliable across
- * dev (tsx + ESM) and prod (CJS bundle).
+ * Resolve the Chromium executable for headless PDF rendering.
  *
- * Strategy: probe a fixed set of well-known paths anchored to either
- * `process.cwd()` (varies by how the workflow is launched) or the system
- * font install. The cwd candidates cover both running from the repo root
- * (pnpm dev) and from `artifacts/api-server` (production process manager).
+ * On Replit the browser binary is provided by Nix (`pkgs.chromium` in
+ * replit.nix) rather than downloaded by Playwright, so we point
+ * `playwright-core` at it explicitly. `.replit` exports
+ * `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` (a nix-store path); if that is missing
+ * we fall back to whatever `chromium` resolves to on PATH. Returning
+ * `undefined` lets playwright-core try its own bundled lookup as a last resort.
  */
-function resolveFontPath(filename: string): string {
-  const cwd = process.cwd();
-  const candidates = [
-    // Dev (tsx) — workflow runs from artifacts/api-server, src tree present
-    path.join(cwd, "src/assets/fonts", filename),
-    path.join(cwd, "dist/assets/fonts", filename),
-    // Repo-root launches
-    path.join(cwd, "artifacts/api-server/src/assets/fonts", filename),
-    path.join(cwd, "artifacts/api-server/dist/assets/fonts", filename),
-    // System DejaVu install — last-resort fallback so PDF generation
-    // never silently breaks on Replit/Linux even if the bundle copy is
-    // missing. DejaVu Sans covers the same Unicode ranges we ship.
-    `/usr/share/fonts/truetype/dejavu/${filename}`,
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
+function resolveChromiumPath(): string | undefined {
+  const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (fromEnv) return fromEnv;
+  try {
+    const found = execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+    if (found) return found;
+  } catch {
+    /* fall through */
   }
-  throw new Error(`Font not found: ${filename}. Tried: ${candidates.join(", ")}`);
-}
-
-let cachedRegular: Buffer | null = null;
-let cachedBold: Buffer | null = null;
-function loadFontBytes(): { regular: Buffer; bold: Buffer } {
-  if (!cachedRegular) cachedRegular = readFileSync(resolveFontPath("DejaVuSans.ttf"));
-  if (!cachedBold) cachedBold = readFileSync(resolveFontPath("DejaVuSans-Bold.ttf"));
-  return { regular: cachedRegular, bold: cachedBold };
+  return undefined;
 }
 
 /**
- * Convert simplified HTML (h1/h2/h3, p, ul/li, br) to plain text blocks.
- * We don't run a full HTML parser — templates are author-controlled markup
- * meant for a contract document, not arbitrary user input.
+ * Wrap author-designed contract markup in a complete, print-ready HTML
+ * document. We keep the template's own `<style>` blocks, inline CSS, tables,
+ * colors and signature `<img>` placement intact — the templates are explicitly
+ * authored for browser-to-PDF rendering (CSS variables, flexbox,
+ * `print-color-adjust:exact`). The shell only supplies an A4 page box and a
+ * font fallback chain so Turkish/Cyrillic/Arabic glyphs resolve.
  */
-function htmlToBlocks(html: string): { kind: "h1" | "h2" | "h3" | "p" | "li" | "blank"; text: string }[] {
-  const blocks: { kind: "h1" | "h2" | "h3" | "p" | "li" | "blank"; text: string }[] = [];
-  const normalized = html
-    .replace(/\r\n/g, "\n")
-    // Strip non-textual blocks entirely (their inner content is CSS/JS, not
-    // contract prose, and would otherwise leak into the PDF as visible text).
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    // Drop <img> entirely — signature artwork is rendered separately on the
-    // signature page, and template-side signature placeholders should not
-    // print as anything in the body text.
-    .replace(/<img\b[^>]*>/gi, "")
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/(p|h1|h2|h3|li|ul|ol|div|section|article|header|footer)>/gi, "\n")
-    .replace(/<(?!\/?(?:h1|h2|h3|p|li|ul|ol|div|section|article|header|footer|br)\b)[^>]+>/gi, "");
-
-  let mode: "h1" | "h2" | "h3" | "p" | "li" = "p";
-  const tagRe = /<(h1|h2|h3|p|li|ul|ol|div|section|article|header|footer)[^>]*>/gi;
-  const segments: { tag: string; text: string }[] = [];
-  let lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(normalized)) !== null) {
-    if (m.index > lastIndex) {
-      segments.push({ tag: mode, text: normalized.slice(lastIndex, m.index) });
-    }
-    const t = m[1].toLowerCase();
-    if (t === "h1" || t === "h2" || t === "h3" || t === "li" || t === "p") mode = t as any;
-    else mode = "p"; // div/section/article/header/footer treated as paragraph blocks
-    lastIndex = m.index + m[0].length;
+function documentShell(innerHtml: string): string {
+  return `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  @page { size: A4; margin: 14mm 10mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', 'DejaVu Sans', 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    color: #0f172a;
+    font-size: 12px;
+    line-height: 1.6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  if (lastIndex < normalized.length) segments.push({ tag: mode, text: normalized.slice(lastIndex) });
-
-  for (const seg of segments) {
-    const lines = seg.text.split("\n").map(l => decodeEntities(l).trim()).filter(l => l.length > 0);
-    for (const line of lines) {
-      blocks.push({ kind: seg.tag as any, text: line });
-    }
-    if (lines.length > 0) blocks.push({ kind: "blank", text: "" });
-  }
-  return blocks;
+  img { max-width: 100%; }
+  table { border-collapse: collapse; }
+</style>
+</head>
+<body>${innerHtml}</body>
+</html>`;
 }
 
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ");
+function evidencePageHtml(params: BuildPdfParams, evidenceHash: string): string {
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:6px 12px 6px 0;color:#64748b;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:6px 0;color:#0f172a;word-break:break-word;">${escapeHtml(value)}</td></tr>`;
+  return `<section style="max-width:920px;margin:0 auto;padding:18px;font-size:12px;color:#0f172a;">
+  <h1 style="font-size:20px;margin:0 0 6px;color:#143591;">Delil Sayfası / Evidence Page</h1>
+  <p style="margin:0 0 18px;color:#475569;">Bu sayfa imzalanan sözleşmenin kriptografik delilini kaydeder. / This page records the cryptographic evidence for the signed contract.</p>
+  <table style="width:100%;border-collapse:collapse;">
+    ${row("İmzalayan / Signer", params.signerName || "-")}
+    ${row("E-posta / Email", params.signerEmail)}
+    ${row("IP adresi / IP address", params.signerIp || "-")}
+    ${row("Tarayıcı / User agent", params.signerUserAgent || "-")}
+    ${row("İmza zamanı (UTC) / Signed at", params.signedAt.toISOString())}
+    ${row("Şablon / Template", params.templateName)}
+  </table>
+  <div style="margin-top:18px;">
+    <div style="font-weight:600;margin-bottom:6px;">Delil özeti (SHA-256) / Evidence hash:</div>
+    <div style="font-family:'DejaVu Sans Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">${escapeHtml(evidenceHash)}</div>
+  </div>
+</section>`;
 }
 
-function wrapLine(font: any, fontSize: number, maxWidth: number, line: string): string[] {
-  const words = line.split(/\s+/);
-  const wrapped: string[] = [];
-  let cur = "";
-  for (const w of words) {
-    const candidate = cur ? cur + " " + w : w;
-    const width = font.widthOfTextAtSize(candidate, fontSize);
-    if (width <= maxWidth) {
-      cur = candidate;
-    } else {
-      if (cur) wrapped.push(cur);
-      cur = w;
-    }
+/**
+ * SSRF guard: decide whether Chromium may fetch a subresource URL referenced by
+ * the contract HTML (logo image, fonts, etc.). The document itself is supplied
+ * via `setContent` (not fetched), so this only governs subresources.
+ *
+ * We allow inline `data:`/`blob:` payloads and public http(s) origins (the
+ * templates legitimately load a remote brand logo), but block private,
+ * loopback, link-local and cloud-metadata targets plus any non-web scheme so a
+ * crafted URL can't turn PDF rendering into a server-side request primitive.
+ */
+function isBlockedSubresourceHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h) return true;
+  if (h === "localhost" || h === "metadata.google.internal") return true;
+  if (h.endsWith(".internal") || h.endsWith(".local")) return true;
+  if (h === "::1" || h === "0:0:0:0:0:0:0:1") return true;
+  // IPv6 unique-local (fc00::/7) and link-local (fe80::/10)
+  if (/^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a === 0 || a === 127 || a === 10) return true;
+    if (a === 169 && b === 254) return true; // link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
   }
-  if (cur) wrapped.push(cur);
-  return wrapped.length === 0 ? [""] : wrapped;
+  return false;
 }
 
-export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {
-  const pdf = await PDFDocument.create();
-  // Register fontkit so pdf-lib can embed custom Unicode TTFs. Without it,
-  // embedFont is restricted to the WinAnsi-only StandardFonts and Turkish,
-  // Cyrillic, Greek etc. would render as `?` glyphs.
-  pdf.registerFontkit(fontkit);
-  const { regular, bold } = loadFontBytes();
-  // subset:true would shrink the embed, but pdf-lib 1.17 trips a fontkit
-  // edge-case ("Cannot read properties of undefined (reading 'advanceWidth')")
-  // for some glyphs in DejaVu Sans. The full embed is ~1.5MB but stable.
-  const font = await pdf.embedFont(regular);
-  const fontBold = await pdf.embedFont(bold);
-
-  const pageWidth = 595.28; // A4
-  const pageHeight = 841.89;
-  const margin = 56;
-  const usableWidth = pageWidth - margin * 2;
-
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let cursorY = pageHeight - margin;
-
-  const drawText = (text: string, opts: { size: number; bold?: boolean; spaceAfter?: number }) => {
-    const f = opts.bold ? fontBold : font;
-    const wrapped = wrapLine(f, opts.size, usableWidth, text);
-    for (const line of wrapped) {
-      if (cursorY - opts.size - 4 < margin) {
-        page = pdf.addPage([pageWidth, pageHeight]);
-        cursorY = pageHeight - margin;
+async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> {
+  const page = await browser.newPage();
+  try {
+    await page.route("**/*", (route: any) => {
+      const url = route.request().url();
+      if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) {
+        return route.continue();
       }
-      page.drawText(line, {
-        x: margin,
-        y: cursorY - opts.size,
-        size: opts.size,
-        font: f,
-        color: rgb(0.1, 0.1, 0.15),
-      });
-      cursorY -= opts.size + 4;
-    }
-    cursorY -= opts.spaceAfter ?? 4;
-  };
-
-  drawText(params.templateName, { size: 18, bold: true, spaceAfter: 18 });
-
-  const blocks = htmlToBlocks(params.bodyHtml);
-  for (const block of blocks) {
-    if (block.kind === "blank") {
-      cursorY -= 6;
-      continue;
-    }
-    if (block.kind === "h1") drawText(block.text, { size: 16, bold: true, spaceAfter: 8 });
-    else if (block.kind === "h2") drawText(block.text, { size: 14, bold: true, spaceAfter: 6 });
-    else if (block.kind === "h3") drawText(block.text, { size: 12, bold: true, spaceAfter: 4 });
-    else if (block.kind === "li") drawText("• " + block.text, { size: 11, spaceAfter: 2 });
-    else drawText(block.text, { size: 11, spaceAfter: 4 });
-  }
-
-  // Signature block
-  if (cursorY < margin + 180) {
-    page = pdf.addPage([pageWidth, pageHeight]);
-    cursorY = pageHeight - margin;
-  }
-  cursorY -= 24;
-  drawText("Signature / İmza", { size: 12, bold: true, spaceAfter: 6 });
-  if (params.signatureImagePngBase64) {
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return route.abort();
+      }
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return route.abort();
+      }
+      if (isBlockedSubresourceHost(parsed.hostname)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
     try {
-      const sigBase64 = params.signatureImagePngBase64.replace(/^data:image\/[a-z]+;base64,/, "");
-      const sigBytes = Buffer.from(sigBase64, "base64");
-      const sigImg = await pdf.embedPng(sigBytes);
-      const targetWidth = 220;
-      const ratio = sigImg.height / sigImg.width;
-      const targetHeight = Math.min(120, targetWidth * ratio);
-      if (cursorY - targetHeight < margin) {
-        page = pdf.addPage([pageWidth, pageHeight]);
-        cursorY = pageHeight - margin;
-      }
-      page.drawImage(sigImg, {
-        x: margin,
-        y: cursorY - targetHeight,
-        width: targetWidth,
-        height: targetHeight,
-      });
-      cursorY -= targetHeight + 8;
-    } catch (err) {
-      drawText("[signature image could not be embedded]", { size: 10, spaceAfter: 4 });
+      await page.setContent(html, { waitUntil: "networkidle", timeout: 15000 });
+    } catch {
+      // A slow or blocked external asset can prevent networkidle from settling.
+      // The DOM content is already in place, so render what loaded rather than
+      // failing the whole signing flow.
+      console.warn("[contractPdf] networkidle wait timed out; rendering current state");
     }
+    const buf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+    return new Uint8Array(buf);
+  } finally {
+    await page.close();
   }
-  drawText(`Signer: ${params.signerName || params.signerEmail}`, { size: 10, spaceAfter: 2 });
-  drawText(`Email: ${params.signerEmail}`, { size: 10, spaceAfter: 2 });
-  drawText(`Date: ${params.signedAt.toISOString()}`, { size: 10, spaceAfter: 4 });
+}
 
-  // Two-pass evidence hash:
-  //   pass 1 — render the contract pages (without an evidence page), serialize
-  //   to bytes, and compute sha256(contentBytes || signerEmail || signerName
-  //   || signedAtIso). This makes the hash bind tamper-evidently to the actual
-  //   signed PDF content plus the signer identity + timestamp.
-  //   pass 2 — append a human-readable evidence page that prints the hash.
-  const contentBytes = await pdf.save();
-  const hasher = crypto.createHash("sha256");
-  hasher.update(Buffer.from(contentBytes));
-  hasher.update("|");
-  hasher.update(params.signerEmail);
-  hasher.update("|");
-  hasher.update(params.signerName || "");
-  hasher.update("|");
-  hasher.update(params.signedAt.toISOString());
-  const evidenceHash = hasher.digest("hex");
+/**
+ * Render the signer-facing HTML contract to a PDF that faithfully reproduces
+ * the designed document (CSS, tables, colors, signature placement), then append
+ * a tamper-evident evidence page.
+ *
+ * Rendering uses headless Chromium via `playwright-core`. The signer's drawn
+ * signature is expected to already be embedded in `bodyHtml` (the caller injects
+ * it into the template's `{{signature}}` placeholder), so this function does NOT
+ * draw signatures separately — that is what kept the old pdf-lib text renderer
+ * from matching the on-screen design.
+ *
+ * Two-pass evidence hash: pass 1 renders the contract content and computes
+ * sha256(contentBytes || signerEmail || signerName || signedAtIso); pass 2
+ * renders a human-readable evidence page printing that hash. The hash binds to
+ * the content PDF (excluding the evidence page) exactly as before.
+ */
+export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {
+  const { chromium } = await import("playwright-core");
+  const executablePath = resolveChromiumPath();
+  const browser = await chromium.launch({
+    executablePath,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--font-render-hinting=none",
+    ],
+  });
 
-  page = pdf.addPage([pageWidth, pageHeight]);
-  cursorY = pageHeight - margin;
-  drawText("Evidence / Delil Sayfası", { size: 16, bold: true, spaceAfter: 14 });
-  drawText("This page records the cryptographic evidence for the signed contract.", { size: 10, spaceAfter: 10 });
+  try {
+    const contentBytes = await renderHtmlToPdf(browser, documentShell(params.bodyHtml));
 
-  drawText(`Signer name: ${params.signerName || "-"}`, { size: 10, spaceAfter: 2 });
-  drawText(`Signer email: ${params.signerEmail}`, { size: 10, spaceAfter: 2 });
-  drawText(`IP address: ${params.signerIp || "-"}`, { size: 10, spaceAfter: 2 });
-  drawText(`User agent: ${params.signerUserAgent || "-"}`, { size: 10, spaceAfter: 2 });
-  drawText(`Signed at (UTC): ${params.signedAt.toISOString()}`, { size: 10, spaceAfter: 2 });
-  drawText(`Template: ${params.templateName}`, { size: 10, spaceAfter: 8 });
-  drawText("Evidence hash (SHA-256 of signed PDF content + signer + timestamp):", { size: 10, bold: true, spaceAfter: 2 });
-  drawText(evidenceHash, { size: 9, spaceAfter: 2 });
+    const hasher = crypto.createHash("sha256");
+    hasher.update(Buffer.from(contentBytes));
+    hasher.update("|");
+    hasher.update(params.signerEmail);
+    hasher.update("|");
+    hasher.update(params.signerName || "");
+    hasher.update("|");
+    hasher.update(params.signedAt.toISOString());
+    const evidenceHash = hasher.digest("hex");
 
-  const pdfBytes = await pdf.save();
-  return { pdfBytes, evidenceHash };
+    const evidenceBytes = await renderHtmlToPdf(
+      browser,
+      documentShell(evidencePageHtml(params, evidenceHash)),
+    );
+
+    // Merge content + evidence into a single document. pdf-lib copies page
+    // content faithfully, preserving the Chromium-rendered vector/text output.
+    const merged = await PDFDocument.create();
+    const contentDoc = await PDFDocument.load(contentBytes);
+    const evidenceDoc = await PDFDocument.load(evidenceBytes);
+    const contentPages = await merged.copyPages(contentDoc, contentDoc.getPageIndices());
+    contentPages.forEach((p) => merged.addPage(p));
+    const evidencePages = await merged.copyPages(evidenceDoc, evidenceDoc.getPageIndices());
+    evidencePages.forEach((p) => merged.addPage(p));
+    const pdfBytes = await merged.save();
+
+    return { pdfBytes, evidenceHash };
+  } finally {
+    await browser.close();
+  }
 }

@@ -1,6 +1,6 @@
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
-import { renderTemplate, buildAgentContext } from "./contractRenderer";
+import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl } from "./contractRenderer";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
@@ -57,7 +57,13 @@ export async function finalizeSign(opts: {
     signerName: finalSignerName || undefined,
     date: signedAt.toISOString().slice(0, 10),
   });
-  const renderedHtml = renderTemplate(template.bodyHtml, ctx);
+  // Inject the signer's drawn signature into the template's {{signature}}
+  // placeholder so it renders inside the designed signature box (instead of
+  // being appended as a separate block). Any still-unfilled signature image
+  // (e.g. {{main_agency_signature}}) is swapped for a styled placeholder.
+  ctx.signature = toSignatureDataUrl(opts.signatureImagePngBase64);
+  const placeholder = SIG_PLACEHOLDER[template.language] || SIG_PLACEHOLDER.en;
+  const renderedHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), placeholder);
 
   const { pdfBytes, evidenceHash } = await buildSignedPdf({
     templateName: template.name,
@@ -67,7 +73,6 @@ export async function finalizeSign(opts: {
     signerIp: opts.signerIp,
     signerUserAgent: opts.signerUserAgent,
     signedAt,
-    signatureImagePngBase64: opts.signatureImagePngBase64,
   });
 
   let pdfObjectKey = "";
