@@ -2089,7 +2089,8 @@
     "unassigned": "Belum Ditugaskan",
     "assignToMe": "Tugaskan ke saya",
     "studentAssigned": "Siswa ditugaskan",
-    "studentUnassigned": "Penugasan siswa dibatalkan"
+    "studentUnassigned": "Penugasan siswa dibatalkan",
+    "downloadAllDocuments": "Unduh semua dokumen"
   },
   "agentsPage": {
     "assignContactPerson": "Tetapkan Kontak",

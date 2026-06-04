@@ -98,3 +98,54 @@ export function useTablePrefs(
 
   return { prefs, visibleOrdered, isHidden, toggleHidden, moveColumn, reset };
 }
+
+function filterStorageKey(key: string, field: string, userId: string | number | undefined): string {
+  return `tableFilter:${key}:${field}:${userId ?? "anon"}`;
+}
+
+/**
+ * Persist a single table filter value (e.g. the "Assigned to" choice) to
+ * localStorage, scoped per table + field + user — mirroring the column-pref
+ * persistence above. Re-reads when the storage key (user) changes so the
+ * saved value is restored once auth resolves.
+ */
+export function usePersistedFilterValue(
+  key: string,
+  field: string,
+  defaultValue: string,
+  userId?: string | number,
+): [string, (v: string) => void] {
+  const sk = filterStorageKey(key, field, userId);
+  const [value, setValueState] = useState<string>(() => {
+    if (typeof window === "undefined") return defaultValue;
+    try {
+      const raw = window.localStorage.getItem(sk);
+      return raw != null ? raw : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(sk);
+      setValueState(raw != null ? raw : defaultValue);
+    } catch {
+      setValueState(defaultValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sk]);
+
+  const setValue = useCallback((v: string) => {
+    setValueState(v);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(sk, v);
+    } catch {
+      /* quota or disabled — ignore */
+    }
+  }, [sk]);
+
+  return [value, setValue];
+}

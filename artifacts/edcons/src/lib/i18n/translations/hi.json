@@ -2089,7 +2089,8 @@
     "unassigned": "अनिर्दिष्ट",
     "assignToMe": "मुझे नियुक्त करें",
     "studentAssigned": "छात्र नियुक्त किया गया",
-    "studentUnassigned": "छात्र से नियुक्ति हटाई गई"
+    "studentUnassigned": "छात्र से नियुक्ति हटाई गई",
+    "downloadAllDocuments": "सभी दस्तावेज़ डाउनलोड करें"
   },
   "agentsPage": {
     "assignContactPerson": "संपर्क व्यक्ति असाइन करें",

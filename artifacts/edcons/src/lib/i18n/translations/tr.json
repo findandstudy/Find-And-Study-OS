@@ -2305,7 +2305,8 @@
     "unassigned": "Atanmamış",
     "assignToMe": "Bana ata",
     "studentAssigned": "Öğrenci atandı",
-    "studentUnassigned": "Öğrenci ataması kaldırıldı"
+    "studentUnassigned": "Öğrenci ataması kaldırıldı",
+    "downloadAllDocuments": "Tüm belgeleri indir"
   },
   "agentsPage": {
     "assignContactPerson": "İletişim Kişisi Ata",

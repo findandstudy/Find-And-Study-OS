@@ -2140,7 +2140,8 @@
     "unassigned": "Non attribué",
     "assignToMe": "M'attribuer",
     "studentAssigned": "Étudiant attribué",
-    "studentUnassigned": "Attribution de l'étudiant annulée"
+    "studentUnassigned": "Attribution de l'étudiant annulée",
+    "downloadAllDocuments": "Télécharger tous les documents"
   },
   "agentsPage": {
     "assignContactPerson": "Assigner la personne de contact",

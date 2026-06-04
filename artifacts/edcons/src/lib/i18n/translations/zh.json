@@ -2089,7 +2089,8 @@
     "unassigned": "未分配",
     "assignToMe": "分配给我",
     "studentAssigned": "学生已分配",
-    "studentUnassigned": "学生已取消分配"
+    "studentUnassigned": "学生已取消分配",
+    "downloadAllDocuments": "下载所有文档"
   },
   "agentsPage": {
     "assignContactPerson": "分配联系人",

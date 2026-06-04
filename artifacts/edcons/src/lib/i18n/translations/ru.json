@@ -2140,7 +2140,8 @@
     "unassigned": "Без назначения",
     "assignToMe": "Назначить мне",
     "studentAssigned": "Студент назначен",
-    "studentUnassigned": "Назначение студента снято"
+    "studentUnassigned": "Назначение студента снято",
+    "downloadAllDocuments": "Скачать все документы"
   },
   "agentsPage": {
     "assignContactPerson": "Назначить контактное лицо",

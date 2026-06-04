@@ -2140,7 +2140,8 @@
     "unassigned": "غير معيّن",
     "assignToMe": "تعيين لي",
     "studentAssigned": "تم تعيين الطالب",
-    "studentUnassigned": "تم إلغاء تعيين الطالب"
+    "studentUnassigned": "تم إلغاء تعيين الطالب",
+    "downloadAllDocuments": "تنزيل كل المستندات"
   },
   "agentsPage": {
     "assignContactPerson": "تعيين شخص الاتصال",

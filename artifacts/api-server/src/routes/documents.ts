@@ -571,11 +571,22 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
   // ZIP matches the student's profile-documents list shown in the UI.
   const profileOnly = req.query.profileOnly === "true" || req.query.profileOnly === "1";
 
+  // When applicationId is provided, scope the ZIP to a single application's
+  // documents so the "download all" button on each application group only
+  // bundles that application's files.
+  const applicationIdRaw = req.query.applicationId;
+  let applicationId: number | null = null;
+  if (applicationIdRaw !== undefined) {
+    applicationId = parseInt(String(applicationIdRaw), 10);
+    if (isNaN(applicationId)) { res.status(400).json({ error: "Invalid applicationId" }); return; }
+  }
+
   const docs = await db.select().from(documentsTable).where(
     and(
       eq(documentsTable.studentId, studentId),
       isNull(documentsTable.deletedAt),
       ...(profileOnly ? [isNull(documentsTable.applicationId)] : []),
+      ...(applicationId !== null ? [eq(documentsTable.applicationId, applicationId)] : []),
     )
   );
 

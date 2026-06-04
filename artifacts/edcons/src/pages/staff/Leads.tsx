@@ -51,6 +51,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
+import { usePersistedFilterValue } from "@/hooks/use-table-prefs";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { useI18n } from "@/hooks/use-i18n";
 
@@ -1229,6 +1230,17 @@ export default function LeadsPage() {
   const canChangeStage = hasPermission("leads.change_stage");
   const canAssign = hasPermission("records.assign_button");
   const canReassign = isAdmin || hasPermission("records.change_assigned");
+
+  // Persist the user's "Assigned to" choice locally (per user), like column prefs.
+  const [persistedAssignment, setPersistedAssignment] = usePersistedFilterValue(
+    "leads-table", "assignment", DEFAULT_LEAD_FILTERS.assignment, user?.id,
+  );
+  useEffect(() => {
+    setFilters(f => f.assignment === persistedAssignment ? f : { ...f, assignment: persistedAssignment });
+  }, [persistedAssignment]);
+  useEffect(() => {
+    setPersistedAssignment(filters.assignment);
+  }, [filters.assignment, setPersistedAssignment]);
 
   const { season } = useSeason();
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);

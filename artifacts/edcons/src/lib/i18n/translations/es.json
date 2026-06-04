@@ -2089,7 +2089,8 @@
     "unassigned": "Sin asignar",
     "assignToMe": "Asignármelo",
     "studentAssigned": "Estudiante asignado",
-    "studentUnassigned": "Estudiante sin asignar"
+    "studentUnassigned": "Estudiante sin asignar",
+    "downloadAllDocuments": "Descargar todos los documentos"
   },
   "agentsPage": {
     "assignContactPerson": "Asignar persona de contacto",

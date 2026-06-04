@@ -2364,7 +2364,8 @@
     "unassigned": "Unassigned",
     "assignToMe": "Assign to me",
     "studentAssigned": "Student assigned",
-    "studentUnassigned": "Student unassigned"
+    "studentUnassigned": "Student unassigned",
+    "downloadAllDocuments": "Download all documents"
   },
   "agentsPage": {
     "assignContactPerson": "Assign Contact Person",

@@ -2089,7 +2089,8 @@
     "unassigned": "تخصیص‌نیافته",
     "assignToMe": "تخصیص به من",
     "studentAssigned": "دانشجو تخصیص داده شد",
-    "studentUnassigned": "تخصیص دانشجو لغو شد"
+    "studentUnassigned": "تخصیص دانشجو لغو شد",
+    "downloadAllDocuments": "دانلود همه اسناد"
   },
   "agentsPage": {
     "assignContactPerson": "انتخاب شخص تماس",

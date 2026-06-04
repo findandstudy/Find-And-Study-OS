@@ -122,7 +122,6 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
       .then(d => Array.isArray(d) ? d : []),
     enabled: !!id,
   });
-  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
   const { data: generalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/leads/${id}/notes`, "general"],
     queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()),
@@ -472,7 +471,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             )}
             <LeadDocumentsTab
               docs={leadDocs}
-              onPreview={(d) => setPreviewDoc(d)}
+              onPreview={(d) => openLeadDocPreview(d)}
               firstName={lead?.firstName || ""}
               lastName={lead?.lastName || ""}
             />
@@ -983,7 +982,6 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           leadId={id}
         />
       )}
-      <DocumentPreviewDialog doc={previewDoc} onClose={() => setPreviewDoc(null)} />
       {isStaffUser && (
         <LeadDocUploadDialog
           open={uploadOpen}
@@ -1337,6 +1335,29 @@ function downloadLeadDoc(doc: any, firstName: string, lastName: string) {
   }
 }
 
+// Open a lead document inline in a new browser tab (replaces the in-app preview
+// dialog). Base64 file data is turned into a blob URL so the new tab can render
+// it directly without relying on the per-document download endpoint (which is
+// not accessible to all roles for lead-only documents).
+function openLeadDocPreview(doc: any) {
+  if (doc.fileData) {
+    try {
+      const mime = doc.mimeType || "application/octet-stream";
+      const byteChars = atob(doc.fileData);
+      const bytes = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mime });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      /* ignore malformed base64 */
+    }
+  } else if (doc.fileUrl) {
+    window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
+  }
+}
+
 function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
   docs: any[];
   onPreview: (d: any) => void;
@@ -1402,36 +1423,6 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
         </tbody>
       </table>
     </div>
-  );
-}
-
-function DocumentPreviewDialog({ doc, onClose }: { doc: any | null; onClose: () => void }) {
-  if (!doc) return null;
-  const mime = doc.mimeType || "";
-  const src = doc.fileData ? `data:${mime};base64,${doc.fileData}` : doc.fileUrl;
-  const isImage = mime.startsWith("image/");
-  const isPdf = mime === "application/pdf";
-  return (
-    <Dialog open={!!doc} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="truncate">{doc.name}</DialogTitle>
-        </DialogHeader>
-        <div className="bg-secondary/30 rounded-lg overflow-hidden" style={{ minHeight: "60vh" }}>
-          {!src ? (
-            <div className="p-12 text-center text-muted-foreground">Dosya kaynağı bulunamadı.</div>
-          ) : isImage ? (
-            <img src={src} alt={doc.name} className="w-full h-auto max-h-[75vh] object-contain mx-auto" />
-          ) : isPdf ? (
-            <iframe src={src} title={doc.name} className="w-full" style={{ height: "75vh" }} />
-          ) : (
-            <div className="p-12 text-center text-muted-foreground">
-              Bu dosya türü tarayıcıda önizlenemez. Lütfen indirip görüntüleyin.
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
