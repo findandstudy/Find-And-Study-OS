@@ -3469,7 +3469,10 @@
     "rcp_assigned": "Atanan Personel",
     "rcp_owner": "Kayıt Sahibi",
     "rcp_specific": "Belirli Kullanıcı",
-    "rcp_all": "Tüm Kullanıcılar"
+    "rcp_all": "Tüm Kullanıcılar",
+    "templateLanguage": "Şablon Dili",
+    "comingSoon": "Yakında",
+    "htmlSupportedHint": "Temel HTML desteklenir; düz metinde satır sonları korunur."
   },
   "subAgentsPage": {
     "addSubAgent": "Alt Acente Ekle",

@@ -24,7 +24,33 @@ interface NotificationRule {
   recipientType: string;
   recipientRoles: string[];
   isActive: boolean;
-  template?: { subject?: string; body?: string };
+  template?: NotifTemplate;
+}
+
+interface LangTemplate { subject?: string; body?: string; }
+interface NotifTemplate extends LangTemplate { translations?: Record<string, LangTemplate>; }
+
+const TEMPLATE_LANGS: { code: string; label: string }[] = [
+  { code: "tr", label: "TR" },
+  { code: "en", label: "EN" },
+  { code: "ar", label: "AR" },
+  { code: "fr", label: "FR" },
+  { code: "ru", label: "RU" },
+];
+
+const PASSIVE_CHANNELS = new Set(["telegram", "sms"]);
+
+function hasTemplateContent(tpl?: NotifTemplate): boolean {
+  if (!tpl) return false;
+  if (tpl.subject || tpl.body) return true;
+  const tr = tpl.translations || {};
+  return Object.values(tr).some(v => v && (v.subject || v.body));
+}
+
+function emptyTranslations(): Record<string, LangTemplate> {
+  const out: Record<string, LangTemplate> = {};
+  for (const l of TEMPLATE_LANGS) out[l.code] = { subject: "", body: "" };
+  return out;
 }
 
 const CHANNEL_META: Record<string, { label: string; icon: any; color: string }> = {
@@ -89,8 +115,8 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   const [saving, setSaving] = useState<number | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [editingTemplate, setEditingTemplate] = useState<NotificationRule | null>(null);
-  const [templateSubject, setTemplateSubject] = useState("");
-  const [templateBody, setTemplateBody] = useState("");
+  const [templateTranslations, setTemplateTranslations] = useState<Record<string, LangTemplate>>(emptyTranslations());
+  const [activeLang, setActiveLang] = useState<string>("tr");
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
@@ -162,26 +188,62 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
 
   function openTemplateEditor(rule: NotificationRule) {
     setEditingTemplate(rule);
-    setTemplateSubject(rule.template?.subject || "");
-    setTemplateBody(rule.template?.body || "");
+    const next = emptyTranslations();
+    const tpl = rule.template;
+    if (tpl?.translations && Object.keys(tpl.translations).length > 0) {
+      for (const [k, v] of Object.entries(tpl.translations)) {
+        next[k] = { subject: v?.subject || "", body: v?.body || "" };
+      }
+    } else if (tpl && (tpl.subject || tpl.body)) {
+      next["tr"] = { subject: tpl.subject || "", body: tpl.body || "" };
+    }
+    setTemplateTranslations(next);
+    setActiveLang("tr");
     setShowPreview(false);
+  }
+
+  function updateActiveField(field: "subject" | "body", value: string) {
+    setTemplateTranslations(prev => ({
+      ...prev,
+      [activeLang]: { ...prev[activeLang], [field]: value },
+    }));
+  }
+
+  function insertVariable(v: string) {
+    const tag = `{{${v}}}`;
+    setTemplateTranslations(prev => ({
+      ...prev,
+      [activeLang]: { ...prev[activeLang], body: (prev[activeLang]?.body || "") + tag },
+    }));
   }
 
   async function saveTemplate() {
     if (!editingTemplate) return;
     setSavingTemplate(true);
+    const translations: Record<string, LangTemplate> = {};
+    for (const [k, v] of Object.entries(templateTranslations)) {
+      const subject = (v.subject || "").trim();
+      const body = (v.body || "").trim();
+      if (subject || body) translations[k] = { subject, body };
+    }
+    // Top-level acts as the fallback for recipients whose language has no
+    // dedicated translation. Prefer English as the universal fallback, then
+    // Turkish (primary admin language), then any authored translation.
+    const defaultLang = translations["en"]
+      ? "en"
+      : translations["tr"]
+        ? "tr"
+        : Object.keys(translations)[0];
+    const top = defaultLang ? translations[defaultLang] : { subject: "", body: "" };
+    const template: NotifTemplate = { subject: top.subject || "", body: top.body || "", translations };
     try {
       await customFetch(`/api/notification-rules/${editingTemplate.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          template: { subject: templateSubject, body: templateBody },
-        }),
+        body: JSON.stringify({ template }),
       });
       setRules(prev => prev.map(r =>
-        r.id === editingTemplate.id
-          ? { ...r, template: { subject: templateSubject, body: templateBody } }
-          : r
+        r.id === editingTemplate.id ? { ...r, template } : r
       ));
       toast({ title: t("notificationRules.templateSaved") });
       setEditingTemplate(null);
@@ -300,7 +362,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                 <Badge variant="outline" className="text-[10px] font-mono px-1.5">
                                   {rule.event}
                                 </Badge>
-                                {rule.template?.subject && (
+                                {hasTemplateContent(rule.template) && (
                                   <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[10px] px-1.5">
                                     <FileText className="w-2.5 h-2.5 mr-0.5" />
                                     {t("notificationRules.templateBadge")}
@@ -319,6 +381,21 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                 {Object.entries(CHANNEL_META).map(([ch, meta]) => {
                                   const Icon = meta.icon;
                                   const active = rule.channels.includes(ch);
+                                  if (PASSIVE_CHANNELS.has(ch)) {
+                                    return (
+                                      <span
+                                        key={ch}
+                                        title={t("notificationRules.comingSoon")}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border border-dashed border-border/60 bg-secondary/20 text-muted-foreground/60 cursor-not-allowed"
+                                      >
+                                        <Icon className="w-3 h-3" />
+                                        {t(`notificationRules.ch_${ch}`)}
+                                        <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-0.5 font-normal">
+                                          {t("notificationRules.comingSoon")}
+                                        </Badge>
+                                      </span>
+                                    );
+                                  }
                                   return (
                                     <button
                                       key={ch}
@@ -394,6 +471,29 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
             </div>
 
             <div className="p-6 space-y-5">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">{t("notificationRules.templateLanguage")}</Label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {TEMPLATE_LANGS.map(l => {
+                    const hasContent = !!(templateTranslations[l.code]?.subject || templateTranslations[l.code]?.body);
+                    return (
+                      <button
+                        key={l.code}
+                        onClick={() => setActiveLang(l.code)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
+                          activeLang === l.code
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-secondary/30 text-muted-foreground border-border/50 hover:border-border"
+                        }`}
+                      >
+                        {l.label}
+                        {hasContent && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-500 align-middle" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
@@ -403,10 +503,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                       {(TEMPLATE_VARS[editingTemplate.event] || []).map(v => (
                         <code
                           key={v}
-                          onClick={() => {
-                            const tag = `{{${v}}}`;
-                            setTemplateBody(prev => prev + tag);
-                          }}
+                          onClick={() => insertVariable(v)}
                           className="text-[11px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
                         >
                           {`{{${v}}}`}
@@ -421,8 +518,8 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
               <div>
                 <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailSubject")}</Label>
                 <Input
-                  value={templateSubject}
-                  onChange={e => setTemplateSubject(e.target.value)}
+                  value={templateTranslations[activeLang]?.subject || ""}
+                  onChange={e => updateActiveField("subject", e.target.value)}
                   placeholder={t("notificationRules.emailSubjectPlaceholder", { name: editingTemplate.name })}
                   className="bg-secondary/30"
                 />
@@ -431,12 +528,13 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
               <div>
                 <Label className="text-sm font-medium mb-2 block">{t("notificationRules.emailBody")}</Label>
                 <Textarea
-                  value={templateBody}
-                  onChange={e => setTemplateBody(e.target.value)}
+                  value={templateTranslations[activeLang]?.body || ""}
+                  onChange={e => updateActiveField("body", e.target.value)}
                   placeholder={t("notificationRules.emailBodyPlaceholder")}
                   rows={6}
                   className="bg-secondary/30 font-mono text-sm"
                 />
+                <p className="text-[10px] text-muted-foreground mt-1">{t("notificationRules.htmlSupportedHint")}</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -451,8 +549,8 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                 </Button>
               </div>
 
-              {showPreview && (templateSubject || templateBody) && (() => {
-                const { previewSubject, previewBody } = renderPreview(templateSubject, templateBody);
+              {showPreview && (templateTranslations[activeLang]?.subject || templateTranslations[activeLang]?.body) && (() => {
+                const { previewSubject, previewBody } = renderPreview(templateTranslations[activeLang]?.subject || "", templateTranslations[activeLang]?.body || "");
                 return (
                   <div className="border border-border/50 rounded-xl overflow-hidden">
                     <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-center">

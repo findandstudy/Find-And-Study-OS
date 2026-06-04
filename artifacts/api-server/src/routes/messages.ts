@@ -16,6 +16,7 @@ import {
 import { eq, and, desc, asc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -451,19 +452,22 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     ? await db.select({ id: usersTable.id, role: usersTable.role }).from(usersTable).where(inArray(usersTable.id, otherParticipants.map(p => p.userId)))
     : [];
   const recipientRoleMap = new Map(recipientUsers.map(u => [u.id, u.role]));
-  for (const p of otherParticipants) {
-    const role = recipientRoleMap.get(p.userId);
-    const actionUrl = role === "student" ? `/student/messages` : `/staff/messages`;
-    await db.insert(notificationsTable).values({
-      userId: p.userId,
-      type: "message.new",
-      title: `New message from ${senderName}`,
-      body: messageContent.substring(0, 150),
-      icon: "message-circle",
-      actionUrl,
-      channel: "in_app",
-      data: { conversationId, messageId: message.id },
-    });
+  const studentRecipientIds = otherParticipants.filter(p => recipientRoleMap.get(p.userId) === "student").map(p => p.userId);
+  const staffRecipientIds = otherParticipants.filter(p => recipientRoleMap.get(p.userId) !== "student").map(p => p.userId);
+  const messageDispatchBase = {
+    event: "message.new",
+    title: `New message from ${senderName}`,
+    body: messageContent.substring(0, 150),
+    icon: "message-circle",
+    actorUserId: userId,
+    templateVars: { senderName },
+    data: { conversationId, messageId: message.id },
+  };
+  if (staffRecipientIds.length > 0) {
+    await dispatchNotification({ ...messageDispatchBase, actionUrl: "/staff/messages", recipientUserIds: staffRecipientIds });
+  }
+  if (studentRecipientIds.length > 0) {
+    await dispatchNotification({ ...messageDispatchBase, actionUrl: "/student/messages", recipientUserIds: studentRecipientIds });
   }
 
   res.status(201).json(message);
@@ -982,15 +986,17 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
 
   const senderUser = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, userId));
   const senderName = senderUser[0] ? `${senderUser[0].firstName} ${senderUser[0].lastName}` : "Student";
-  for (const p of otherParticipants) {
-    await db.insert(notificationsTable).values({
-      userId: p.odUserId,
-      type: "message.new",
+  const studentMsgRecipientIds = otherParticipants.map(p => p.odUserId);
+  if (studentMsgRecipientIds.length > 0) {
+    await dispatchNotification({
+      event: "message.new",
       title: `New message from ${senderName}`,
       body: messageContent.substring(0, 150),
       icon: "message-circle",
       actionUrl: `/staff/messages`,
-      channel: "in_app",
+      actorUserId: userId,
+      recipientUserIds: studentMsgRecipientIds,
+      templateVars: { senderName },
       data: { conversationId, messageId: message.id },
     });
   }
@@ -1202,15 +1208,17 @@ router.post("/agent/conversations/:id/messages", requireAuth, requireAgentStaffP
 
   const senderUser = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, userId));
   const senderName = senderUser[0] ? `${senderUser[0].firstName} ${senderUser[0].lastName}` : "Agent";
-  for (const p of otherParticipants) {
-    await db.insert(notificationsTable).values({
-      userId: p.odUserId,
-      type: "message.new",
+  const agentMsgRecipientIds = otherParticipants.map(p => p.odUserId);
+  if (agentMsgRecipientIds.length > 0) {
+    await dispatchNotification({
+      event: "message.new",
       title: `New message from ${senderName}`,
       body: messageContent.substring(0, 150),
       icon: "message-circle",
       actionUrl: `/staff/messages`,
-      channel: "in_app",
+      actorUserId: userId,
+      recipientUserIds: agentMsgRecipientIds,
+      templateVars: { senderName },
       data: { conversationId, messageId: message.id },
     });
   }

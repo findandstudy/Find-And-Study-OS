@@ -269,6 +269,44 @@ function emailButton(label: string, url: string, color: string): string {
       </div>`;
 }
 
+function escapeNotifText(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Build a branded notification email from a (possibly localized) subject +
+ * rich HTML body. Reuses the same shell/header/button/branding helpers as the
+ * transactional emails so notification mails match the rest of the system.
+ *
+ * `bodyHtml` is rendered as-is (admin-authored, trusted) inside the shell.
+ */
+export async function buildNotificationEmail(params: {
+  subject: string;
+  bodyHtml: string;
+  actionUrl?: string;
+  actionLabel?: string;
+  subtitle?: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const { subject, bodyHtml, actionUrl, actionLabel, subtitle } = params;
+  const button = actionUrl
+    ? emailButton(actionLabel || "View Details", actionUrl, brand.buttonColor)
+    : "";
+  const body = `
+      <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${escapeNotifText(subject)}</h2>
+      <div style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">${bodyHtml}</div>
+      ${button}
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">This is an automated notification from ${escapeNotifText(brand.companyName)}.</p>`;
+  const html = emailShell(brand, subtitle, body);
+  const text = bodyHtml.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { subject, html, text };
+}
+
 export async function buildWelcomeEmail(params: {
   firstName: string;
   email: string;

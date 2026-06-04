@@ -3536,7 +3536,10 @@
     "rcp_assigned": "Assigned Staff",
     "rcp_owner": "Record Owner",
     "rcp_specific": "Specific User",
-    "rcp_all": "All Users"
+    "rcp_all": "All Users",
+    "templateLanguage": "Template Language",
+    "comingSoon": "Coming soon",
+    "htmlSupportedHint": "Basic HTML is supported; line breaks are preserved for plain text."
   },
   "subAgentsPage": {
     "addSubAgent": "Add Sub Agent",
