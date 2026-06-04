@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Loader2, CheckCircle2, AlertCircle, FileSignature, Eraser,
   Mail, ShieldCheck, Pencil, Upload, FileText, PenLine, X,
@@ -165,7 +166,10 @@ export default function SignFlow({ token }: { token: string }) {
   }
 
   const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean; placeholder?: string }[];
-  const intakeNameField = fields.find(isNameLikeField);
+  const nameLikeFields = fields.filter(isNameLikeField);
+  const intakeNameField =
+    nameLikeFields.find(f => /contact|person|full|signer|ad\s*soyad|isim/i.test(`${f.key} ${f.label}`)) ||
+    nameLikeFields[0];
   const intakeEmailField = fields.find(isEmailLikeField);
 
   function setEmailValue(v: string) {
@@ -354,8 +358,23 @@ export default function SignFlow({ token }: { token: string }) {
                 <FieldLabel required={f.required}>{f.label}</FieldLabel>
                 {f.type === "textarea" ? (
                   <Textarea className="mt-1.5" placeholder={f.placeholder} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
+                ) : f.type === "select" ? (
+                  <div className="mt-1.5">
+                    <SearchableSelect
+                      value={intake[f.key] || ""}
+                      onValueChange={v => setIntake(s => ({ ...s, [f.key]: v }))}
+                      options={((f as any).options || []).map((o: string) => ({ value: o, label: o }))}
+                      placeholder={f.placeholder || t("selectPlaceholder")}
+                    />
+                  </div>
                 ) : (
-                  <Input className="mt-1.5" placeholder={f.placeholder} type={f.type === "date" ? "date" : "text"} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} />
+                  <Input
+                    className="mt-1.5"
+                    placeholder={f.placeholder}
+                    type={f.type === "date" ? "date" : f.type === "number" ? "number" : f.type === "tel" ? "tel" : "text"}
+                    value={intake[f.key] || ""}
+                    onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))}
+                  />
                 )}
               </div>
             )

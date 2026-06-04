@@ -1557,7 +1557,8 @@
     "sigRemove": "إزالة",
     "sigTooLarge": "الصورة كبيرة جدًا. استخدم ملفًا أصغر.",
     "fillDetailsFor": "يرجى إدخال بياناتك من أجل:",
-    "footerNote": "ستُستخدم معلوماتك لإنشاء العقد."
+    "footerNote": "ستُستخدم معلوماتك لإنشاء العقد.",
+    "selectPlaceholder": "اختر..."
   },
   "messagesPage": {
     "messages": "الرسائل",

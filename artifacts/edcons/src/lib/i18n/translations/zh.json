@@ -3214,7 +3214,8 @@
     "sigRemove": "Remove",
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
-    "footerNote": "Your information will be used to generate the contract."
+    "footerNote": "Your information will be used to generate the contract.",
+    "selectPlaceholder": "请选择..."
   },
   "languages": {
     "tr": "土耳其语",

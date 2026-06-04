@@ -1670,7 +1670,8 @@
     "sigRemove": "Kaldır",
     "sigTooLarge": "Görsel çok büyük. Lütfen daha küçük bir dosya kullanın.",
     "fillDetailsFor": "Lütfen şunun için bilgilerinizi girin:",
-    "footerNote": "Bilgileriniz sözleşmeyi oluşturmak için kullanılacaktır."
+    "footerNote": "Bilgileriniz sözleşmeyi oluşturmak için kullanılacaktır.",
+    "selectPlaceholder": "Seçin..."
   },
   "languages": {
     "tr": "Türkçe",

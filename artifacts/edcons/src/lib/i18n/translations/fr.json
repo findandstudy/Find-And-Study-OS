@@ -1557,7 +1557,8 @@
     "sigRemove": "Supprimer",
     "sigTooLarge": "L'image est trop volumineuse. Utilisez un fichier plus petit.",
     "fillDetailsFor": "Veuillez renseigner vos informations pour :",
-    "footerNote": "Vos informations serviront à générer le contrat."
+    "footerNote": "Vos informations serviront à générer le contrat.",
+    "selectPlaceholder": "Sélectionner..."
   },
   "messagesPage": {
     "messages": "Messages",
