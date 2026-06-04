@@ -1,18 +1,8 @@
 import { Component, type ReactNode } from "react";
 import { GraduationCap, RefreshCw, AlertTriangle, ChevronDown, LogOut } from "lucide-react";
+import { getTranslation, type Language } from "@/lib/i18n/index";
 
-const MESSAGES: Record<string, { title: string; desc: string; reload: string; home: string; logout: string; details: string }> = {
-  en: { title: "Page could not be loaded", desc: "This may be caused by a network issue or a recent update. Please reload.", reload: "Reload Page", home: "Go to Home", logout: "Sign Out", details: "Technical details" },
-  tr: { title: "Sayfa yüklenemedi", desc: "Bu, bir ağ sorunundan veya son bir güncellemeden kaynaklanıyor olabilir. Lütfen yenileyin.", reload: "Sayfayı Yenile", home: "Ana Sayfaya Git", logout: "Çıkış Yap", details: "Teknik ayrıntılar" },
-  ar: { title: "تعذّر تحميل الصفحة", desc: "قد يكون هذا بسبب مشكلة في الشبكة أو تحديث حديث. يرجى إعادة التحميل.", reload: "إعادة تحميل الصفحة", home: "الذهاب إلى الرئيسية", logout: "تسجيل الخروج", details: "تفاصيل تقنية" },
-  fr: { title: "La page n'a pas pu être chargée", desc: "Cela peut être dû à un problème réseau ou à une mise à jour récente. Veuillez recharger.", reload: "Recharger la page", home: "Aller à l'accueil", logout: "Se déconnecter", details: "Détails techniques" },
-  ru: { title: "Страница не загрузилась", desc: "Это может быть связано с проблемой сети или последним обновлением. Пожалуйста, перезагрузите.", reload: "Обновить страницу", home: "На главную", logout: "Выйти", details: "Технические детали" },
-  fa: { title: "صفحه بارگذاری نشد", desc: "این ممکن است به دلیل مشکل شبکه یا بروزرسانی اخیر باشد. لطفاً دوباره بارگذاری کنید.", reload: "بارگذاری مجدد صفحه", home: "رفتن به خانه", logout: "خروج", details: "جزئیات فنی" },
-  zh: { title: "页面无法加载", desc: "这可能是由于网络问题或最近的更新导致的。请重新加载。", reload: "重新加载页面", home: "返回主页", logout: "退出登录", details: "技术细节" },
-  hi: { title: "पेज लोड नहीं हो सका", desc: "यह नेटवर्क समस्या या हाल के अपडेट के कारण हो सकता है। कृपया पुनः लोड करें।", reload: "पेज रीलोड करें", home: "होम पर जाएं", logout: "लॉग आउट", details: "तकनीकी विवरण" },
-  es: { title: "No se pudo cargar la página", desc: "Esto puede deberse a un problema de red o a una actualización reciente. Por favor, recarga.", reload: "Recargar página", home: "Ir al inicio", logout: "Cerrar sesión", details: "Detalles técnicos" },
-  id: { title: "Halaman tidak dapat dimuat", desc: "Ini mungkin disebabkan oleh masalah jaringan atau pembaruan terbaru. Silakan muat ulang.", reload: "Muat Ulang Halaman", home: "Ke Beranda", logout: "Keluar", details: "Detail teknis" },
-};
+const SUPPORTED_LANGS = new Set(["en", "tr", "ar", "fr", "ru", "fa", "zh", "hi", "es", "id"]);
 
 const RTL_LANGS = new Set(["ar", "fa"]);
 
@@ -25,9 +15,9 @@ const RECOVER_KEY_PREFIX = "edcons_recover:";
 function getLang(): string {
   try {
     const saved = localStorage.getItem("edcons_lang");
-    if (saved && saved in MESSAGES) return saved;
+    if (saved && SUPPORTED_LANGS.has(saved)) return saved;
     const urlLang = window.location.pathname.split("/")[1];
-    if (urlLang && urlLang in MESSAGES) return urlLang;
+    if (urlLang && SUPPORTED_LANGS.has(urlLang)) return urlLang;
   } catch {}
   return "en";
 }
@@ -52,6 +42,99 @@ function cacheBustedReload(): void {
 
 interface Props { children: ReactNode; fallback?: ReactNode }
 interface State { hasError: boolean; lang: string; errorName: string; errorMessage: string; errorStack: string; showDetails: boolean }
+
+interface FallbackProps {
+  errorName: string;
+  errorMessage: string;
+  errorStack: string;
+  showDetails: boolean;
+  onReload: () => void;
+  onHome: () => void;
+  onLogout: () => void;
+  onToggleDetails: () => void;
+}
+
+function ErrorBoundaryFallback({
+  errorName,
+  errorMessage,
+  errorStack,
+  showDetails,
+  onReload,
+  onHome,
+  onLogout,
+  onToggleDetails,
+}: FallbackProps) {
+  // ErrorBoundary wraps the whole app — including I18nProvider — so the
+  // fallback can render OUTSIDE the provider. Resolve translations directly
+  // (provider-independent) instead of using the useI18n() context hook.
+  const lang = getLang();
+  const isRTL = RTL_LANGS.has(lang);
+  const t = (key: string, params?: Record<string, string | number>) =>
+    getTranslation(lang as Language, key, params);
+  const hasDetails = Boolean(errorMessage);
+
+  return (
+    <div
+      dir={isRTL ? "rtl" : "ltr"}
+      className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-6 text-center"
+    >
+      <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg mb-6">
+        <GraduationCap className="w-8 h-8 text-white" />
+      </div>
+
+      <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
+        <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+      </div>
+
+      <h1 className="text-xl font-bold text-foreground mb-2 max-w-sm">{t("errorBoundary.title")}</h1>
+      <p className="text-sm text-muted-foreground mb-6 max-w-xs leading-relaxed">{t("errorBoundary.desc")}</p>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={onReload}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:opacity-90 active:scale-95 transition-all"
+        >
+          <RefreshCw className="w-4 h-4" />
+          {t("errorBoundary.reload")}
+        </button>
+        <button
+          onClick={onHome}
+          className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+        >
+          {t("errorBoundary.home")}
+        </button>
+        <button
+          onClick={onLogout}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-6 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          {t("errorBoundary.logout")}
+        </button>
+      </div>
+
+      {hasDetails && (
+        <div className="mt-8 max-w-xl w-full">
+          <button
+            onClick={onToggleDetails}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+            {t("errorBoundary.details")}
+          </button>
+          {showDetails && (
+            <pre
+              dir="ltr"
+              className="mt-3 text-left text-[11px] leading-relaxed bg-muted/40 border border-border rounded-lg p-3 overflow-auto max-h-64 font-mono text-muted-foreground"
+            >
+              {errorName}: {errorMessage}
+              {errorStack ? `\n\n${errorStack}` : ""}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -133,71 +216,17 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
     if (this.props.fallback) return this.props.fallback;
 
-    const lang = this.state.lang;
-    const m = MESSAGES[lang] ?? MESSAGES["en"];
-    const isRTL = RTL_LANGS.has(lang);
-    const hasDetails = Boolean(this.state.errorMessage);
-
     return (
-      <div
-        dir={isRTL ? "rtl" : "ltr"}
-        className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-6 text-center"
-      >
-        <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg mb-6">
-          <GraduationCap className="w-8 h-8 text-white" />
-        </div>
-
-        <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
-          <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-        </div>
-
-        <h1 className="text-xl font-bold text-foreground mb-2 max-w-sm">{m.title}</h1>
-        <p className="text-sm text-muted-foreground mb-6 max-w-xs leading-relaxed">{m.desc}</p>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={this.handleReload}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:opacity-90 active:scale-95 transition-all"
-          >
-            <RefreshCw className="w-4 h-4" />
-            {m.reload}
-          </button>
-          <button
-            onClick={this.handleHome}
-            className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-          >
-            {m.home}
-          </button>
-          <button
-            onClick={this.handleLogout}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-6 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            {m.logout}
-          </button>
-        </div>
-
-        {hasDetails && (
-          <div className="mt-8 max-w-xl w-full">
-            <button
-              onClick={this.toggleDetails}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${this.state.showDetails ? "rotate-180" : ""}`} />
-              {m.details}
-            </button>
-            {this.state.showDetails && (
-              <pre
-                dir="ltr"
-                className="mt-3 text-left text-[11px] leading-relaxed bg-muted/40 border border-border rounded-lg p-3 overflow-auto max-h-64 font-mono text-muted-foreground"
-              >
-                {this.state.errorName}: {this.state.errorMessage}
-                {this.state.errorStack ? `\n\n${this.state.errorStack}` : ""}
-              </pre>
-            )}
-          </div>
-        )}
-      </div>
+      <ErrorBoundaryFallback
+        errorName={this.state.errorName}
+        errorMessage={this.state.errorMessage}
+        errorStack={this.state.errorStack}
+        showDetails={this.state.showDetails}
+        onReload={this.handleReload}
+        onHome={this.handleHome}
+        onLogout={this.handleLogout}
+        onToggleDetails={this.toggleDetails}
+      />
     );
   }
 }

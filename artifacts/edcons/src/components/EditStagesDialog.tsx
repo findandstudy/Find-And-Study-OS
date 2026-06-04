@@ -7,12 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Check, AlertCircle, Pencil, ArrowLeft } from "lucide-react";
 import type { PipelineStage, StageAction, StageActionType } from "@/hooks/use-pipeline-stages";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 
 type ActionTypeOrNone = StageActionType | "none";
-const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; label: string; defaultLabel: string; defaultColor: string }[] = [
-  { value: "none", label: "Yok", defaultLabel: "", defaultColor: "#3b82f6" },
-  { value: "download", label: "Belge İndir", defaultLabel: "İndir", defaultColor: "#10b981" },
-  { value: "missing_docs", label: "Belge Yükle", defaultLabel: "Belge Yükle", defaultColor: "#f59e0b" },
+const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; labelKey: string; defaultLabelKey: string; defaultColor: string }[] = [
+  { value: "none", labelKey: "editStages.actionTypeNone", defaultLabelKey: "", defaultColor: "#3b82f6" },
+  { value: "download", labelKey: "editStages.actionTypeDownload", defaultLabelKey: "editStages.actionDefaultLabelDownload", defaultColor: "#10b981" },
+  { value: "missing_docs", labelKey: "editStages.actionTypeMissingDocs", defaultLabelKey: "editStages.actionDefaultLabelMissingDocs", defaultColor: "#f59e0b" },
 ];
 
 function StageActionEditor({
@@ -30,7 +31,9 @@ function StageActionEditor({
   onRemove: () => void;
   index: number;
 }) {
+  const { t } = useI18n();
   const typeOpt = ACTION_TYPE_OPTIONS.find((o) => o.value === action.type);
+  const typeDefaultLabel = typeOpt?.defaultLabelKey ? t(typeOpt.defaultLabelKey) : "";
   const targetOptions = allStages.filter((s) => s.key && s.key !== currentStageKey);
   const showDocName = action.type === "upload" || action.type === "download";
   return (
@@ -40,23 +43,24 @@ function StageActionEditor({
           className="w-3 h-3 rounded-full border"
           style={{ backgroundColor: action.color || typeOpt?.defaultColor || "#3b82f6" }}
         />
-        <span className="text-sm font-medium flex-1">Buton {index + 1}</span>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove} title="Sil">
+        <span className="text-sm font-medium flex-1">{t("editStages.buttonNumber", { n: index + 1 })}</span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove} title={t("editStages.deleteTitle")}>
           <Trash2 className="w-4 h-4 text-destructive" />
         </Button>
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Aksiyon tipi</Label>
+        <Label className="text-xs">{t("editStages.actionType")}</Label>
         <Select
           value={action.type}
           onValueChange={(v) => {
             if (v === "none") { onRemove(); return; }
             const opt = ACTION_TYPE_OPTIONS.find((o) => o.value === v);
+            const optDefaultLabel = opt?.defaultLabelKey ? t(opt.defaultLabelKey) : "";
             onChange({
               ...action,
               type: v as StageActionType,
-              label: action.label || opt?.defaultLabel || null,
+              label: action.label || optDefaultLabel || null,
               color: action.color || opt?.defaultColor || null,
             });
           }}
@@ -64,19 +68,19 @@ function StageActionEditor({
           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             {ACTION_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>{t(o.labelKey)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Buton üzerinde görünecek yazı</Label>
+        <Label className="text-xs">{t("editStages.buttonText")}</Label>
         <div className="flex items-center gap-2">
           <Input
             value={action.label || ""}
             onChange={(e) => onChange({ ...action, label: e.target.value })}
-            placeholder={typeOpt?.defaultLabel || "Buton"}
+            placeholder={typeDefaultLabel || t("editStages.buttonPlaceholder")}
             className="h-9 flex-1"
             maxLength={32}
           />
@@ -85,44 +89,44 @@ function StageActionEditor({
             value={action.color || typeOpt?.defaultColor || "#3b82f6"}
             onChange={(e) => onChange({ ...action, color: e.target.value.toLowerCase() })}
             className="h-9 w-10 rounded border cursor-pointer p-0.5"
-            title="Buton rengi"
+            title={t("editStages.buttonColorTitle")}
           />
         </div>
       </div>
 
       {action.type === "missing_docs" && (
         <p className="text-[11px] text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 rounded-md px-2.5 py-2 leading-relaxed">
-          Başvuru <span className="font-medium text-foreground">bu aşamaya geçtiğinde</span> talep edilecek belgeleri seçmek için bir pencere açılır. Seçilen belgeler bu aşama için kaydedilir; talepler tamamlanmadan başvuru ileri aşamaya taşınamaz.
+          {t("editStages.missingDocsHintPart1")}<span className="font-medium text-foreground">{t("editStages.missingDocsHintEmphasis")}</span>{t("editStages.missingDocsHintPart2")}
         </p>
       )}
 
       {showDocName && (
         <div className="space-y-1.5">
-          <Label className="text-xs">Belge adı</Label>
+          <Label className="text-xs">{t("editStages.documentName")}</Label>
           <Input
             value={action.documentName || ""}
             onChange={(e) => onChange({ ...action, documentName: e.target.value })}
-            placeholder={action.type === "upload" ? "örn. Teklif Mektubu" : "indirilecek belgenin adı"}
+            placeholder={action.type === "upload" ? t("editStages.docNamePlaceholderUpload") : t("editStages.docNamePlaceholderDownload")}
             className="h-9"
             maxLength={64}
           />
           <p className="text-[11px] text-muted-foreground">
             {action.type === "upload"
-              ? "Yüklenen dosya bu adla kaydedilir."
-              : "Bu adla eşleşen belge indirilir."}
+              ? t("editStages.docNameHintUpload")
+              : t("editStages.docNameHintDownload")}
           </p>
         </div>
       )}
 
       <div className="space-y-1.5">
-        <Label className="text-xs">İşlem bittiğinde aşamayı değiştir</Label>
+        <Label className="text-xs">{t("editStages.changeStageOnComplete")}</Label>
         <Select
           value={action.targetStageKey || "__none__"}
           onValueChange={(v) => onChange({ ...action, targetStageKey: v === "__none__" ? null : v })}
         >
           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="__none__">Değiştirme</SelectItem>
+            <SelectItem value="__none__">{t("editStages.noChange")}</SelectItem>
             {targetOptions.map((s) => (
               <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
             ))}
@@ -153,11 +157,11 @@ interface EditStagesDialogProps {
 }
 
 const VARIANT_OPTIONS = [
-  { value: "none", label: "—", dotClass: "bg-muted-foreground/40" },
-  { value: "won", label: "Kazanıldı", dotClass: "bg-emerald-500" },
-  { value: "partial_won", label: "Kısmi Kazanım", dotClass: "bg-amber-500" },
-  { value: "lost", label: "Kaybedildi", dotClass: "bg-rose-500" },
-  { value: "none_finance", label: "Yok", dotClass: "bg-gray-300" },
+  { value: "none", labelKey: "editStages.variantNone", dotClass: "bg-muted-foreground/40" },
+  { value: "won", labelKey: "editStages.variantWon", dotClass: "bg-emerald-500" },
+  { value: "partial_won", labelKey: "editStages.variantPartialWon", dotClass: "bg-amber-500" },
+  { value: "lost", labelKey: "editStages.variantLost", dotClass: "bg-rose-500" },
+  { value: "none_finance", labelKey: "editStages.variantNoneFinance", dotClass: "bg-gray-300" },
 ];
 
 function FormSection({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -180,6 +184,7 @@ function getVariantDot(variant: string | null | undefined) {
 }
 
 function RadioGroup({ label, value, onChange, required }: { label: string; value: boolean; onChange: (v: boolean) => void; required?: boolean }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center justify-between gap-4">
       <Label className="text-sm font-medium flex-1">
@@ -194,7 +199,7 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
             onChange={() => onChange(false)}
             className="w-4 h-4 accent-primary"
           />
-          <span className="text-sm">Hayır</span>
+          <span className="text-sm">{t("editStages.no")}</span>
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
@@ -204,7 +209,7 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
             onChange={() => onChange(true)}
             className="w-4 h-4 accent-primary"
           />
-          <span className="text-sm">Evet</span>
+          <span className="text-sm">{t("editStages.yes")}</span>
         </label>
       </div>
     </div>
@@ -212,21 +217,22 @@ function RadioGroup({ label, value, onChange, required }: { label: string; value
 }
 
 const UPLOAD_PERMISSION_OPTIONS = [
-  { value: "none", label: "Yok — yükleme kapalı" },
-  { value: "admin_only", label: "Sadece yönetici" },
-  { value: "staff_only", label: "Tüm personel" },
-  { value: "staff_and_agent", label: "Personel + Acenteler" },
-  { value: "everyone", label: "Herkes (Personel + Acente + Öğrenci)" },
+  { value: "none", labelKey: "editStages.uploadPermNone" },
+  { value: "admin_only", labelKey: "editStages.uploadPermAdminOnly" },
+  { value: "staff_only", labelKey: "editStages.uploadPermStaffOnly" },
+  { value: "staff_and_agent", labelKey: "editStages.uploadPermStaffAndAgent" },
+  { value: "everyone", labelKey: "editStages.uploadPermEveryone" },
 ];
 
 const FINANCE_STATUS_OPTIONS = [
-  { value: "auto", label: "Otomatik (Finans Kategorisinden)" },
-  { value: "potential", label: "Potansiyel" },
-  { value: "confirmed", label: "Onaylı" },
-  { value: "excluded", label: "Hariç" },
+  { value: "auto", labelKey: "editStages.financeAuto" },
+  { value: "potential", labelKey: "editStages.financePotential" },
+  { value: "confirmed", labelKey: "editStages.financeConfirmed" },
+  { value: "excluded", labelKey: "editStages.financeExcluded" },
 ];
 
 function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; onChange: (s: PipelineStage) => void; allStages: PipelineStage[] }) {
+  const { t } = useI18n();
   const isApplicationStage = stage.entityType === "application";
   const actions: StageAction[] = Array.isArray(stage.actions) ? stage.actions : [];
   function updateActionAt(i: number, a: StageAction) {
@@ -243,7 +249,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
     const opt = ACTION_TYPE_OPTIONS.find((o) => o.value !== "none")!;
     const newAction: StageAction = {
       type: opt.value as StageActionType,
-      label: opt.defaultLabel,
+      label: opt.defaultLabelKey ? t(opt.defaultLabelKey) : "",
       documentName: null,
       color: opt.defaultColor,
       // "Don't change" by default — admin opts in to a transition.
@@ -254,22 +260,22 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
   }
   return (
     <div className="space-y-4">
-      <FormSection title="Temel Bilgiler">
+      <FormSection title={t("editStages.sectionBasicInfo")}>
         <div className="grid grid-cols-[1fr_auto] gap-3">
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">
-              Aşama Adı<span className="text-destructive ml-0.5">*</span>
+              {t("editStages.stageName")}<span className="text-destructive ml-0.5">*</span>
             </Label>
             <Input
               value={stage.label}
               onChange={e => onChange({ ...stage, label: e.target.value })}
-              placeholder="örn. Başvuru Alındı"
+              placeholder={t("editStages.stageNamePlaceholder")}
               className="h-9"
             />
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">
-              Renk<span className="text-destructive ml-0.5">*</span>
+              {t("editStages.color")}<span className="text-destructive ml-0.5">*</span>
             </Label>
             <div className="flex items-center gap-1.5">
               <input
@@ -289,7 +295,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium">Finans Kategorisi</Label>
+          <Label className="text-sm font-medium">{t("editStages.financeCategory")}</Label>
           <Select
             value={stage.variant || "none"}
             onValueChange={v => onChange({ ...stage, variant: v === "none" ? null : v })}
@@ -302,55 +308,55 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 <SelectItem key={opt.value} value={opt.value}>
                   <div className="flex items-center gap-2">
                     <div className={`w-2.5 h-2.5 rounded-full ${opt.dotClass}`} />
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <p className="text-[11px] text-muted-foreground">
-            Kazanıldı = kesin komisyon/servis ücreti. Kısmi Kazanım = potansiyel. Yok = finanstan hariç tutulur.
+            {t("editStages.financeCategoryHint")}
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium">Ülkeler</Label>
+          <Label className="text-sm font-medium">{t("editStages.countries")}</Label>
           <Input
             value={stage.countries || ""}
             onChange={e => onChange({ ...stage, countries: e.target.value || null })}
-            placeholder="örn. Türkiye, Almanya, ABD (virgülle ayırın)"
+            placeholder={t("editStages.countriesPlaceholder")}
             className="h-9"
           />
           <p className="text-[11px] text-muted-foreground">
-            Sadece belirli ülkeler için geçerliyse bu alanı doldurun.
+            {t("editStages.countriesHint")}
           </p>
         </div>
       </FormSection>
 
-      <FormSection title="Davranış Kuralları">
+      <FormSection title={t("editStages.sectionBehaviorRules")}>
         <RadioGroup
-          label="Notlar zorunlu mu?"
+          label={t("editStages.notesMandatory")}
           value={!!stage.isNotesMandatory}
           onChange={v => onChange({ ...stage, isNotesMandatory: v })}
           required
         />
         <RadioGroup
-          label="Önceki aşamaya dönülebilir mi?"
+          label={t("editStages.canGoBack")}
           value={stage.canGoBack !== false}
           onChange={v => onChange({ ...stage, canGoBack: v })}
           required
         />
         <RadioGroup
-          label="Dosya kapatma aşaması mı?"
+          label={t("editStages.isCaseClose")}
           value={!!stage.isCaseClose}
           onChange={v => onChange({ ...stage, isCaseClose: v })}
           required
         />
       </FormSection>
 
-      <FormSection title="Dosya Ekleri">
+      <FormSection title={t("editStages.sectionFileAttachments")}>
         <RadioGroup
-          label="Dosya eklenebilir mi?"
+          label={t("editStages.canAttachFile")}
           value={!!stage.canAttachFile}
           onChange={v => onChange({ ...stage, canAttachFile: v, ...(v ? {} : { isFileUploadMandatory: false }) })}
         />
@@ -359,7 +365,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
             <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">
-                  En fazla dosya sayısı<span className="text-destructive ml-0.5">*</span>
+                  {t("editStages.maxFiles")}<span className="text-destructive ml-0.5">*</span>
                 </Label>
                 <Select
                   value={String(stage.maxFiles || 1)}
@@ -377,7 +383,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
               </div>
             </div>
             <RadioGroup
-              label="Dosya yüklemek zorunlu mu?"
+              label={t("editStages.fileUploadMandatory")}
               value={!!stage.isFileUploadMandatory}
               onChange={v => onChange({ ...stage, isFileUploadMandatory: v })}
               required
@@ -388,9 +394,9 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
 
       {isApplicationStage && (
         <>
-          <FormSection title="Başvuru Ayarları">
+          <FormSection title={t("editStages.sectionApplicationSettings")}>
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Belge yükleme yetkisi</Label>
+              <Label className="text-sm font-medium">{t("editStages.uploadPermissionLabel")}</Label>
               <Select
                 value={stage.uploadPermissionLevel || "none"}
                 onValueChange={v => onChange({ ...stage, uploadPermissionLevel: v })}
@@ -398,24 +404,24 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {UPLOAD_PERMISSION_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>{t(opt.labelKey)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
-                Bu aşamada kim belge yükleyebilir. "Yok" seçilirse aşama belge panelinde görünmez.
+                {t("editStages.uploadPermissionHint")}
               </p>
             </div>
 
             <RadioGroup
-              label="Teklif son tarihi takip edilsin mi?"
+              label={t("editStages.tracksOfferExpiry")}
               value={!!stage.tracksOfferExpiry}
               onChange={v => onChange({ ...stage, tracksOfferExpiry: v, ...(v ? {} : { requiresValidUntil: false }) })}
             />
             {stage.tracksOfferExpiry && (
               <div className="ml-2 border-l-2 border-primary/30 pl-4">
                 <RadioGroup
-                  label="Geçerlilik tarihi zorunlu mu?"
+                  label={t("editStages.requiresValidUntil")}
                   value={!!stage.requiresValidUntil}
                   onChange={v => onChange({ ...stage, requiresValidUntil: v })}
                 />
@@ -423,7 +429,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
             )}
 
             <RadioGroup
-              label="Bu aşamaya gelince diğer başvurular otomatik iptal edilsin mi?"
+              label={t("editStages.autoCancelSiblings")}
               value={!!stage.autoCancelSiblingsOnWon}
               onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
             />
@@ -433,7 +439,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 the selected stage. */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
-                Eksik belgeler tamamlanınca geçilecek aşama
+                {t("editStages.missingDocsFulfilledTarget")}
               </Label>
               <Select
                 value={(() => {
@@ -453,7 +459,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
               >
                 <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— Değişme —</SelectItem>
+                  <SelectItem value="none">{t("editStages.noChangeStage")}</SelectItem>
                   {allStages
                     .filter((s) => s.entityType === "application" && s.key !== stage.key && !!s.key)
                     .map((s) => (
@@ -462,17 +468,17 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
-                Bu aşamadaki tüm katalog tabanlı eksik belge talepleri öğrenci tarafından karşılandığında başvuru otomatik olarak seçili aşamaya geçer. Özel (serbest metin) talepler bu hesaba dahil değildir.
+                {t("editStages.missingDocsFulfilledHint")}
               </p>
             </div>
           </FormSection>
 
           <FormSection
-            title="Finans Durumu Atama"
-            description="Bu aşamaya ulaşıldığında komisyon ve servis ücreti için finans durumu otomatik atanır."
+            title={t("editStages.sectionFinanceAssignment")}
+            description={t("editStages.financeAssignmentDesc")}
           >
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Komisyon finans durumu</Label>
+              <Label className="text-sm font-medium">{t("editStages.commissionFinanceStatus")}</Label>
               <Select
                 value={stage.commissionFinanceStatus || "auto"}
                 onValueChange={v => onChange({ ...stage, commissionFinanceStatus: v === "auto" ? null : v })}
@@ -480,13 +486,13 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {FINANCE_STATUS_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>{t(opt.labelKey)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Servis ücreti finans durumu</Label>
+              <Label className="text-sm font-medium">{t("editStages.serviceFeeFinanceStatus")}</Label>
               <Select
                 value={stage.serviceFeeFinanceStatus || "auto"}
                 onValueChange={v => onChange({ ...stage, serviceFeeFinanceStatus: v === "auto" ? null : v })}
@@ -494,7 +500,7 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {FINANCE_STATUS_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>{t(opt.labelKey)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -502,12 +508,12 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
           </FormSection>
 
           <FormSection
-            title="Aşama Aksiyonları"
-            description="Bu aşamadaki başvurular için Başvurular listesinde en fazla 2 buton görünür. Buton tamamlandığında başvuru seçili hedef aşamaya geçer."
+            title={t("editStages.sectionStageActions")}
+            description={t("editStages.stageActionsDesc")}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                {actions.length} / 2 buton tanımlı
+                {t("editStages.buttonsDefinedCount", { n: actions.length })}
               </span>
               <Button
                 type="button"
@@ -517,12 +523,12 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 onClick={addAction}
                 disabled={actions.length >= 2}
               >
-                <Plus className="w-3.5 h-3.5" /> Buton Ekle
+                <Plus className="w-3.5 h-3.5" /> {t("editStages.addButton")}
               </Button>
             </div>
             {actions.length === 0 && (
               <div className="text-center py-4 text-xs text-muted-foreground italic border border-dashed rounded-md">
-                Henüz aksiyon tanımlanmadı.
+                {t("editStages.noActionsYet")}
               </div>
             )}
             <div className="space-y-3">
@@ -551,6 +557,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
   const [error, setError] = useState("");
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (open) {
@@ -589,7 +596,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
 
   function removeStage(index: number) {
     if (localStages.length <= 1) {
-      setError("At least one stage is required");
+      setError(t("editStages.atLeastOneStage"));
       return;
     }
     setLocalStages(localStages.filter((_, i) => i !== index));
@@ -615,25 +622,25 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
   async function handleSave() {
     const emptyLabels = localStages.filter(s => !s.label.trim());
     if (emptyLabels.length > 0) {
-      setError("All stages need a label");
+      setError(t("editStages.allStagesNeedLabel"));
       return;
     }
     const emptyKeys = localStages.filter(s => !s.key.trim());
     if (emptyKeys.length > 0) {
-      setError("All stages need a key");
+      setError(t("editStages.allStagesNeedKey"));
       return;
     }
     const keys = localStages.map(s => s.key);
     if (new Set(keys).size !== keys.length) {
-      setError("Duplicate keys are not allowed");
+      setError(t("editStages.duplicateKeys"));
       return;
     }
     try {
       await onSave(localStages.map((s, i) => ({ ...s, sortOrder: i })));
-      toast({ title: "Pipeline stages saved" });
+      toast({ title: t("editStages.savedSuccess") });
       onClose();
     } catch {
-      toast({ title: "Error", description: "Failed to save stages", variant: "destructive" });
+      toast({ title: t("editStages.errorTitle"), description: t("editStages.saveFailedDesc"), variant: "destructive" });
     }
   }
 
@@ -654,17 +661,17 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                   type="button"
                   onClick={() => setEditIndex(null)}
                   className="p-1 rounded hover:bg-muted"
-                  title="Listeye dön"
+                  title={t("editStages.backToListTitle")}
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <span className="font-semibold">Aşamayı Düzenle:</span>
+                <span className="font-semibold">{t("editStages.editStageColon")}</span>
                 <span className="text-muted-foreground font-normal truncate">
-                  {editingStage.label || "Yeni Aşama"}
+                  {editingStage.label || t("editStages.newStage")}
                 </span>
               </div>
             ) : (
-              `${entityLabel} Pipeline Aşamaları`
+              t("editStages.pipelineStagesTitle", { entityLabel })
             )}
           </DialogTitle>
         </DialogHeader>
@@ -704,7 +711,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                   value={stage.label}
                   onChange={e => updateStageAtIndex(idx, { ...stage, label: e.target.value })}
                   className="h-8 text-sm flex-1"
-                  placeholder="Stage name"
+                  placeholder={t("editStages.stageNameListPlaceholder")}
                 />
                 <Input
                   value={stage.key}
@@ -713,9 +720,9 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                     updateStageAtIndex(idx, { ...stage, key: newKey });
                   }}
                   className="h-8 text-xs font-mono w-24 shrink-0"
-                  placeholder="key"
+                  placeholder={t("editStages.keyPlaceholder")}
                   readOnly={!!stage.id}
-                  title={stage.id ? "Key cannot be changed for existing stages" : ""}
+                  title={stage.id ? t("editStages.keyReadonlyTitle") : ""}
                 />
                 <Select value={stage.variant || "none"} onValueChange={v => updateStageAtIndex(idx, { ...stage, variant: v === "none" ? null : v })}>
                   <SelectTrigger className="h-8 w-24 text-xs shrink-0">
@@ -726,7 +733,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                       <SelectItem key={opt.value} value={opt.value}>
                         <div className="flex items-center gap-1.5">
                           <div className={`w-2 h-2 rounded-full ${opt.dotClass}`} />
-                          <span className="text-xs">{opt.label}</span>
+                          <span className="text-xs">{t(opt.labelKey)}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -739,13 +746,13 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                   >
                     <SelectTrigger
                       className="h-8 w-32 text-xs shrink-0"
-                      title="When the application reaches this stage, the linked student's status is set to this value"
+                      title={t("editStages.studentMappingTitle")}
                     >
-                      <SelectValue placeholder="→ Student" />
+                      <SelectValue placeholder={t("editStages.studentMappingPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">
-                        <span className="text-xs text-muted-foreground">— No mapping —</span>
+                        <span className="text-xs text-muted-foreground">{t("editStages.noMappingOption")}</span>
                       </SelectItem>
                       {(studentStages || []).map(ss => (
                         <SelectItem key={ss.key} value={ss.key}>
@@ -759,7 +766,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
                   type="button"
                   onClick={() => setEditIndex(idx)}
                   className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                  title="Edit stage details"
+                  title={t("editStages.editStageDetailsTitle")}
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -786,21 +793,21 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
             {editingStage ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => setEditIndex(null)} className="gap-1.5">
-                  <ArrowLeft className="w-3.5 h-3.5" /> Listeye Dön
+                  <ArrowLeft className="w-3.5 h-3.5" /> {t("editStages.backToList")}
                 </Button>
                 <Button onClick={() => setEditIndex(null)}>
-                  <Check className="h-3.5 w-3.5 mr-1.5" /> Tamam
+                  <Check className="h-3.5 w-3.5 mr-1.5" /> {t("editStages.ok")}
                 </Button>
               </>
             ) : (
               <>
                 <Button variant="outline" size="sm" onClick={addStage} className="gap-1.5">
-                  <Plus className="w-3.5 h-3.5" /> Aşama Ekle
+                  <Plus className="w-3.5 h-3.5" /> {t("editStages.addStage")}
                 </Button>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={onClose}>İptal</Button>
+                  <Button variant="outline" onClick={onClose}>{t("editStages.cancel")}</Button>
                   <Button onClick={handleSave} disabled={isSaving}>
-                    <Check className="h-3.5 w-3.5 mr-1.5" />{isSaving ? "Kaydediliyor..." : "Kaydet"}
+                    <Check className="h-3.5 w-3.5 mr-1.5" />{isSaving ? t("editStages.saving") : t("editStages.save")}
                   </Button>
                 </div>
               </>

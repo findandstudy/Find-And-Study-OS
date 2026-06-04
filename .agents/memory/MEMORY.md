@@ -7,3 +7,4 @@
 - [universities endpoint limit cap](edcons-universities-limit-cap.md) — GET /api/universities silently caps limit at 100; selectors needing the full list must paginate, not request one big limit.
 - [Prod→Dev data copy](prod-to-dev-data-copy.md) — prod read-only via executeSql, no prod creds in dev; base64-JSON + json_populate_recordset + replica role; always verify per-table count(*), bulk copy silently skips tables.
 - [Notification template dispatch](notification-template-dispatch.md) — multilingual templates: field-level fallback (lang→top-level→en→tr), escape vars in HTML email bodies, per-channel try/catch, await the error-safe dispatch.
+- [i18n key parity](i18n-key-parity.md) — locale JSONs must contain EVERY en string key (getTranslation falls back to en silently); don't letter-filter the parity/fill step, only the translate step.
