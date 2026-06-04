@@ -1496,6 +1496,10 @@
     "templateAutoHint": "The template is selected automatically based on the agent's type and language.",
     "languageOptional": "Language (optional — leave empty to use the agent's preference)",
     "languageAuto": "Auto",
+    "contractTemplate": "Contract template",
+    "selectTemplatePlaceholder": "Auto (match by agent type & language)",
+    "templatePickHint": "Leave on Auto to auto-match, or pick a specific template to send.",
+    "templatesLoadError": "Failed to load contract templates",
     "cancel": "Cancel",
     "send": "Send"
   },

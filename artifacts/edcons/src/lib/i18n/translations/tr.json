@@ -1437,6 +1437,10 @@
     "templateAutoHint": "Şablon otomatik olarak acentenin tipine ve diline göre seçilir.",
     "languageOptional": "Dil (opsiyonel — boş bırakılırsa acentenin tercihi)",
     "languageAuto": "Otomatik",
+    "contractTemplate": "Sözleşme şablonu",
+    "selectTemplatePlaceholder": "Otomatik (acente tipi ve diline göre)",
+    "templatePickHint": "Otomatik bırakılırsa eşleşir; göndermek için belirli bir şablon seçin.",
+    "templatesLoadError": "Sözleşme şablonları yüklenemedi",
     "cancel": "İptal",
     "send": "Gönder"
   },

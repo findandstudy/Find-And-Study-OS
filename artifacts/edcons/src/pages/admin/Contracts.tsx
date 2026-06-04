@@ -21,6 +21,12 @@ type Signed = {
   pdfObjectKey: string; evidenceHash: string; signerEmail: string; signerName: string | null; signedAt: string;
 };
 type Agent = { id: number; firstName: string | null; lastName: string | null; businessName: string | null; email: string | null; entityType?: string | null; preferredContractLanguage?: string | null };
+type Template = { id: number; name: string; language: string; entityType: string; version: number; isActive: boolean };
+
+const LANG_LABELS: Record<string, string> = {
+  en: "English", tr: "Türkçe", ar: "العربية", fr: "Français", ru: "Русский",
+  es: "Español", fa: "فارسی", hi: "हिन्दी", id: "Bahasa", zh: "中文",
+};
 
 export default function ContractsPage() {
   const { toast } = useToast();
@@ -28,12 +34,13 @@ export default function ContractsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [signed, setSigned] = useState<Signed[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"sessions" | "signed">("sessions");
 
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [agentId, setAgentId] = useState<string>("");
-  const [language, setLanguage] = useState<string>("");
+  const [templateId, setTemplateId] = useState<string>("auto");
   const [sending, setSending] = useState(false);
 
   const STATUS_LABELS: Record<string, { label: string; tone: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -55,6 +62,13 @@ export default function ContractsPage() {
       setSessions(s.data || []);
       setSigned(sc.data || []);
       setAgents(a.data || a.agents || []);
+      try {
+        const tpls: any = await customFetch(`/api/contract-templates?isActive=true`);
+        setTemplates(tpls.data || []);
+      } catch (tErr: any) {
+        setTemplates([]);
+        toast({ title: t("contracts.templatesLoadError"), description: tErr.message, variant: "destructive" });
+      }
     } catch (err: any) {
       toast({ title: t("contracts.error"), description: err.message, variant: "destructive" });
     }
@@ -70,11 +84,11 @@ export default function ContractsPage() {
     try {
       const res: any = await customFetch(`/api/contracts/admin-send`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ agentId: aid, language: language || undefined }),
+        body: JSON.stringify({ agentId: aid, templateId: templateId !== "auto" ? parseInt(templateId, 10) : undefined }),
       });
       toast({ title: t("contracts.sentTitle"), description: t("contracts.sentDesc", { url: res.data?.signUrl }) });
       setShowSendDialog(false);
-      setAgentId(""); setLanguage("");
+      setAgentId(""); setTemplateId("auto");
       await load();
     } catch (err: any) {
       toast({ title: t("contracts.error"), description: err.message, variant: "destructive" });
@@ -206,7 +220,7 @@ export default function ContractsPage() {
         )}
       </Card>
 
-      <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
+      <Dialog open={showSendDialog} onOpenChange={(open) => { setShowSendDialog(open); if (!open) { setAgentId(""); setTemplateId("auto"); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("contracts.sendSigningRequest")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -225,17 +239,19 @@ export default function ContractsPage() {
               <p className="text-xs text-muted-foreground mt-1">{t("contracts.templateAutoHint")}</p>
             </div>
             <div>
-              <Label>{t("contracts.languageOptional")}</Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger><SelectValue placeholder={t("contracts.languageAuto")} /></SelectTrigger>
+              <Label>{t("contracts.contractTemplate")}</Label>
+              <Select value={templateId} onValueChange={setTemplateId}>
+                <SelectTrigger><SelectValue placeholder={t("contracts.selectTemplatePlaceholder")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="tr">Türkçe</SelectItem>
-                  <SelectItem value="ar">العربية</SelectItem>
-                  <SelectItem value="fr">Français</SelectItem>
-                  <SelectItem value="ru">Русский</SelectItem>
+                  <SelectItem value="auto">{t("contracts.selectTemplatePlaceholder")}</SelectItem>
+                  {templates.map(tpl => (
+                    <SelectItem key={tpl.id} value={String(tpl.id)}>
+                      {tpl.name} — {LANG_LABELS[tpl.language] || tpl.language} · {tpl.entityType === "individual" ? t("contractTemplates.entityIndividual") : t("contractTemplates.entityCompany")}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">{t("contracts.templatePickHint")}</p>
             </div>
           </div>
           <DialogFooter>
