@@ -601,13 +601,16 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       </Card>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? t("universityContracts.editContract") : t("universityContracts.newContract")}</DialogTitle>
+        <DialogContent className="max-w-lg p-0 gap-0 max-h-[88vh] flex flex-col overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+            <DialogTitle className="text-base flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              {editing ? t("universityContracts.editContract") : t("universityContracts.newContract")}
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-2">
-            <div className="col-span-2">
-              <Label>{t("universityContracts.university")} *</Label>
+          <div className="px-5 py-4 space-y-4 overflow-y-auto">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">{t("universityContracts.university")} *</Label>
               <SearchableSelect
                 value={form.universityId}
                 onChange={onUniversityChange}
@@ -619,8 +622,8 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                 }))}
               />
             </div>
-            <div className="col-span-2">
-              <Label>{t("universityContracts.destinationAuto")}</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">{t("universityContracts.destinationAuto")}</Label>
               {(() => {
                 const selectedUni = universities.find(u => String(u.id) === form.universityId);
                 const uniCountry = selectedUni?.country || "";
@@ -647,7 +650,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                       }))}
                     />
                     {selectedUni && !matchExists && (
-                      <p className="text-xs text-amber-600 mt-1">
+                      <p className="text-xs text-amber-600">
                         {t("universityContracts.noMatchingDestination", { country: uniCountry })}
                       </p>
                     )}
@@ -655,28 +658,31 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                 );
               })()}
             </div>
-            <div>
-              <Label>{t("universityContracts.year")}</Label>
-              <Input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} placeholder="2025" />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">{t("universityContracts.year")}</Label>
+                <Input className="h-9" type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} placeholder="2025" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">{t("universityContracts.effectiveDate")}</Label>
+                <Input className="h-9" type="date" value={form.effectiveDate} onChange={e => setForm(f => ({ ...f, effectiveDate: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">{t("universityContracts.expiryDate")}</Label>
+                <Input className="h-9" type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />
+              </div>
             </div>
-            <div></div>
-            <div>
-              <Label>{t("universityContracts.effectiveDate")}</Label>
-              <Input type="date" value={form.effectiveDate} onChange={e => setForm(f => ({ ...f, effectiveDate: e.target.value }))} />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">{t("universityContracts.notes")}</Label>
+              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
-            <div>
-              <Label>{t("universityContracts.expiryDate")}</Label>
-              <Input type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />
-            </div>
-            <div className="col-span-2">
-              <Label>{t("universityContracts.notes")}</Label>
-              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} />
-            </div>
-            <div className="col-span-2">
-              <Label>{t("universityContracts.uniStaffLabel")}</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                {t("universityContracts.uniStaffHelp")}
-              </p>
+            <div className="space-y-1.5">
+              <div>
+                <Label className="text-xs font-medium">{t("universityContracts.uniStaffLabel")}</Label>
+                <p className="text-[11px] leading-snug text-muted-foreground mt-0.5">
+                  {t("universityContracts.uniStaffHelp")}
+                </p>
+              </div>
               {!form.universityId ? (
                 <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/20">{t("universityContracts.selectUniFirst")}</div>
               ) : staffUsers.length === 0 ? (
@@ -693,11 +699,13 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                 />
               )}
             </div>
-            <div className="col-span-2">
-              <Label>{t("universityContracts.contractStaffLabel")}</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                {t("universityContracts.contractStaffHelp")}
-              </p>
+            <div className="space-y-1.5">
+              <div>
+                <Label className="text-xs font-medium">{t("universityContracts.contractStaffLabel")}</Label>
+                <p className="text-[11px] leading-snug text-muted-foreground mt-0.5">
+                  {t("universityContracts.contractStaffHelp")}
+                </p>
+              </div>
               {staffUsers.length === 0 ? (
                 <div className="text-xs text-muted-foreground border rounded-md p-2 bg-muted/20">{t("universityContracts.noStaffFound")}</div>
               ) : (
@@ -712,8 +720,8 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                 />
               )}
             </div>
-            <div className="col-span-2">
-              <Label>{t("universityContracts.fileLabel")}</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">{t("universityContracts.fileLabel")}</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -721,19 +729,19 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                 accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                 onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
               />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                   {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
                   {form.fileObjectKey ? t("universityContracts.fileReplace") : t("universityContracts.fileUpload")}
                 </Button>
-                {form.fileName && <span className="text-sm text-muted-foreground">{form.fileName}</span>}
+                {form.fileName && <span className="text-xs text-muted-foreground truncate max-w-[200px]">{form.fileName}</span>}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">{t("universityContracts.fileAcceptedTypes")}</p>
+              <p className="text-[11px] text-muted-foreground">{t("universityContracts.fileAcceptedTypes")}</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>{t("universityContracts.cancel")}</Button>
-            <Button onClick={save} disabled={saving}>
+          <DialogFooter className="px-5 py-3 border-t shrink-0 bg-muted/20">
+            <Button variant="outline" size="sm" onClick={() => setShowDialog(false)}>{t("universityContracts.cancel")}</Button>
+            <Button size="sm" onClick={save} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               {t("universityContracts.save")}
             </Button>
