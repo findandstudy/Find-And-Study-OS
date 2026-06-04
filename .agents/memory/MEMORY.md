@@ -2,4 +2,5 @@
 - [Schema/OpenAPI changes need lib dist rebuild + safe DB migration](monorepo-schema-codegen-build.md) — rebuild lib dist (tsc -b) after schema/codegen; use ALTER TABLE not drizzle push (push drops unrelated tables).
 - [List endpoints need ORDER BY with LIMIT](list-pagination-stability.md) — row vanishing from a paginated list after edit = LIMIT without stable ORDER BY; edit-dialog preload fields must be in the list select.
 - [edcons record assignment & reassign gating](edcons-record-assignment.md) — assign_button=assign/self-claim unassigned; change_assigned=reassign assigned; gate UI with `assignedToId ? canReassign : canAssign`.
+- [Prod→Dev data copy](prod-to-dev-data-copy.md) — prod read-only via executeSql, no prod creds in dev; base64-JSON + json_populate_recordset + replica role; always verify per-table count(*), bulk copy silently skips tables.
 - [Notification template dispatch](notification-template-dispatch.md) — multilingual templates: field-level fallback (lang→top-level→en→tr), escape vars in HTML email bodies, per-channel try/catch, await the error-safe dispatch.
