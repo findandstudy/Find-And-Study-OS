@@ -65,6 +65,15 @@ function isEmailLikeField(f: { key?: string; label?: string; type?: string }): b
   return EMAIL_FIELD_PATTERNS.some(rx => rx.test(haystack));
 }
 
+// The contract year is auto-filled with the current year and locked so the
+// signer cannot change it. Detect it by the year keyword or a number field.
+function isYearLikeField(f: { key?: string; label?: string; type?: string }): boolean {
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return /year|yıl|yil|سنة|год|année|año/i.test(haystack) || f.type === "number";
+}
+
+const CURRENT_YEAR = String(new Date().getFullYear());
+
 export default function SignFlow({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -137,6 +146,9 @@ export default function SignFlow({ token }: { token: string }) {
         setSignerName(data.signerName || "");
         const schema = Array.isArray(data.template.intakeSchema) ? data.template.intakeSchema : [];
         if (schema.length && data.intakeData) setIntake(data.intakeData);
+        // Lock the contract year to the current year regardless of any saved value.
+        const yearField = schema.find(isYearLikeField);
+        if (yearField) setIntake(s => ({ ...s, [yearField.key]: CURRENT_YEAR }));
         const ef = schema.find(isEmailLikeField);
         const prefEmail = data.verifiedEmail || (ef ? data.intakeData?.[ef.key] : "") || data.signerEmail || "";
         setEmail(prefEmail || "");
@@ -367,6 +379,15 @@ export default function SignFlow({ token }: { token: string }) {
                       placeholder={f.placeholder || t("selectPlaceholder")}
                     />
                   </div>
+                ) : isYearLikeField(f) ? (
+                  <Input
+                    className="mt-1.5 bg-muted text-muted-foreground cursor-not-allowed"
+                    type="text"
+                    value={intake[f.key] || CURRENT_YEAR}
+                    readOnly
+                    disabled
+                    aria-readonly="true"
+                  />
                 ) : (
                   <Input
                     className="mt-1.5"
