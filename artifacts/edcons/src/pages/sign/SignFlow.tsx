@@ -164,7 +164,7 @@ export default function SignFlow({ token }: { token: string }) {
     setPreviewHtml(r.data?.html || "");
   }
 
-  const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean }[];
+  const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean; placeholder?: string }[];
   const intakeNameField = fields.find(isNameLikeField);
   const intakeEmailField = fields.find(isEmailLikeField);
 
@@ -307,11 +307,11 @@ export default function SignFlow({ token }: { token: string }) {
           </Button>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
           {!intakeNameField && (
             <div>
-              <Label className="text-[#143591] dark:text-foreground">{t("fullName")} *</Label>
-              <Input value={signerName} onChange={e => setSignerName(e.target.value)} required />
+              <FieldLabel required>{t("fullName")}</FieldLabel>
+              <Input className="mt-1.5" value={signerName} onChange={e => setSignerName(e.target.value)} required />
             </div>
           )}
           {!intakeEmailField && (
@@ -351,11 +351,11 @@ export default function SignFlow({ token }: { token: string }) {
               />
             ) : (
               <div key={f.key}>
-                <Label className="text-[#143591] dark:text-foreground">{f.label}{f.required ? " *" : ""}</Label>
+                <FieldLabel required={f.required}>{f.label}</FieldLabel>
                 {f.type === "textarea" ? (
-                  <Textarea value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
+                  <Textarea className="mt-1.5" placeholder={f.placeholder} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
                 ) : (
-                  <Input type={f.type === "date" ? "date" : "text"} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} />
+                  <Input className="mt-1.5" placeholder={f.placeholder} type={f.type === "date" ? "date" : "text"} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} />
                 )}
               </div>
             )
@@ -452,6 +452,14 @@ export default function SignFlow({ token }: { token: string }) {
   }
 
   return null;
+}
+
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <Label className="text-[#143591] dark:text-foreground font-medium">
+      {children}{required ? <span className="text-red-500"> *</span> : null}
+    </Label>
+  );
 }
 
 function BrandHeader({ brand }: { brand: Brand }) {
@@ -571,14 +579,14 @@ function EmailVerify({
 }) {
   return (
     <div>
-      <Label className="text-[#143591] dark:text-foreground">{label} *</Label>
+      <FieldLabel required>{label}</FieldLabel>
       <Input
         type="email"
         value={email}
         disabled={verified}
         onChange={e => onChangeEmail(e.target.value)}
         placeholder="name@example.com"
-        className="mt-1"
+        className="mt-1.5"
       />
       <div className="mt-2 rounded-lg border bg-muted/40 px-3 py-2.5">
         {verified ? (
