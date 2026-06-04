@@ -308,30 +308,48 @@ export default function SignFlow({ token }: { token: string }) {
         }
       >
         <div className="space-y-4">
-          <EmailVerify
-            t={t}
-            label={intakeEmailField ? intakeEmailField.label : t("emailLabel")}
-            email={email}
-            onChangeEmail={setEmailValue}
-            codeSent={codeSent}
-            code={code}
-            onChangeCode={setCode}
-            verified={verified}
-            sendingCode={sendingCode}
-            verifyingCode={verifyingCode}
-            codeError={codeError}
-            onSend={sendCode}
-            onVerify={verifyCode}
-          />
           {!intakeNameField && (
             <div>
               <Label className="text-[#143591] dark:text-foreground">{t("fullName")} *</Label>
               <Input value={signerName} onChange={e => setSignerName(e.target.value)} required />
             </div>
           )}
-          {fields
-            .filter(f => !(intakeEmailField && f.key === intakeEmailField.key))
-            .map(f => (
+          {!intakeEmailField && (
+            <EmailVerify
+              t={t}
+              label={t("emailLabel")}
+              email={email}
+              onChangeEmail={setEmailValue}
+              codeSent={codeSent}
+              code={code}
+              onChangeCode={setCode}
+              verified={verified}
+              sendingCode={sendingCode}
+              verifyingCode={verifyingCode}
+              codeError={codeError}
+              onSend={sendCode}
+              onVerify={verifyCode}
+            />
+          )}
+          {fields.map(f =>
+            intakeEmailField && f.key === intakeEmailField.key ? (
+              <EmailVerify
+                key={f.key}
+                t={t}
+                label={f.label}
+                email={email}
+                onChangeEmail={setEmailValue}
+                codeSent={codeSent}
+                code={code}
+                onChangeCode={setCode}
+                verified={verified}
+                sendingCode={sendingCode}
+                verifyingCode={verifyingCode}
+                codeError={codeError}
+                onSend={sendCode}
+                onVerify={verifyCode}
+              />
+            ) : (
               <div key={f.key}>
                 <Label className="text-[#143591] dark:text-foreground">{f.label}{f.required ? " *" : ""}</Label>
                 {f.type === "textarea" ? (
@@ -340,7 +358,8 @@ export default function SignFlow({ token }: { token: string }) {
                   <Input type={f.type === "date" ? "date" : "text"} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} />
                 )}
               </div>
-            ))}
+            )
+          )}
         </div>
         {!verified && (
           <p className="text-xs text-muted-foreground mt-4">{t("verifyFirst")}</p>
@@ -436,12 +455,18 @@ export default function SignFlow({ token }: { token: string }) {
 }
 
 function BrandHeader({ brand }: { brand: Brand }) {
-  const logoSrc = brand.hasLogo ? `${BASE_URL}/api/settings/branding/logo` : null;
+  const [imgError, setImgError] = useState(false);
+  const logoSrc = brand.hasLogo && !imgError ? `${BASE_URL}/api/settings/branding/logo?variant=dark` : null;
   return (
     <div className="bg-[#143591] text-white">
       <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-center gap-3">
         {logoSrc ? (
-          <img src={logoSrc} alt={brand.companyName || "Logo"} className="h-10 max-w-[220px] object-contain" />
+          <img
+            src={logoSrc}
+            onError={() => setImgError(true)}
+            alt={brand.companyName || "Logo"}
+            className="h-10 max-w-[220px] object-contain"
+          />
         ) : (
           <>
             <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center">
@@ -545,54 +570,68 @@ function EmailVerify({
   onVerify: () => void;
 }) {
   return (
-    <div className="rounded-xl border bg-muted/30 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Mail className="w-4 h-4 text-primary" />
-        <span className="text-sm font-medium">{t("emailVerifyRequired")}</span>
-      </div>
+    <div>
       <Label className="text-[#143591] dark:text-foreground">{label} *</Label>
-      <div className="flex flex-col sm:flex-row gap-2 mt-1">
-        <Input
-          type="email"
-          value={email}
-          disabled={verified}
-          onChange={e => onChangeEmail(e.target.value)}
-          placeholder="name@example.com"
-          className="flex-1"
-        />
+      <Input
+        type="email"
+        value={email}
+        disabled={verified}
+        onChange={e => onChangeEmail(e.target.value)}
+        placeholder="name@example.com"
+        className="mt-1"
+      />
+      <div className="mt-2 rounded-lg border bg-muted/40 px-3 py-2.5">
         {verified ? (
-          <div className="flex items-center gap-1.5 text-emerald-600 text-sm font-medium px-2">
+          <div className="flex items-center gap-1.5 text-emerald-600 text-sm font-medium">
             <ShieldCheck className="w-4 h-4" /> {t("verified")}
           </div>
         ) : (
-          <Button type="button" variant="outline" onClick={onSend} disabled={sendingCode}>
-            {sendingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {codeSent ? t("resendCode") : t("sendCode")}
-          </Button>
+          <>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Mail className="w-4 h-4" />
+              <span>{t("emailVerifyRequired")}</span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onSend}
+              disabled={sendingCode || !email.trim()}
+              className="mt-1 h-auto p-0 font-medium text-[#143591] hover:bg-transparent hover:text-[#0f2870] dark:text-blue-300"
+            >
+              {sendingCode ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Mail className="w-4 h-4 mr-1.5" />}
+              {codeSent ? t("resendCode") : t("sendCode")}
+            </Button>
+
+            {codeSent && (
+              <div className="mt-3">
+                <p className="text-xs text-muted-foreground mb-2">{t("codeSentTo", { email })}</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={code}
+                    onChange={e => onChangeCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder={t("enterCode")}
+                    className="flex-1 tracking-[0.4em] text-center font-semibold"
+                  />
+                  <Button
+                    type="button"
+                    onClick={onVerify}
+                    disabled={verifyingCode || code.trim().length !== 6}
+                    className="bg-[#143591] hover:bg-[#0f2870] text-white"
+                  >
+                    {verifyingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    {t("verify")}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {codeError && <p className="text-xs text-red-500 mt-2">{codeError}</p>}
+          </>
         )}
       </div>
-
-      {codeSent && !verified && (
-        <div className="mt-3">
-          <p className="text-xs text-muted-foreground mb-2">{t("codeSentTo", { email })}</p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              inputMode="numeric"
-              maxLength={6}
-              value={code}
-              onChange={e => onChangeCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder={t("enterCode")}
-              className="flex-1 tracking-[0.4em] text-center font-semibold"
-            />
-            <Button type="button" onClick={onVerify} disabled={verifyingCode || code.trim().length !== 6}>
-              {verifyingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              {t("verify")}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {codeError && <p className="text-xs text-red-500 mt-2">{codeError}</p>}
     </div>
   );
 }
