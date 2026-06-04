@@ -2,6 +2,7 @@
 - [Schema/OpenAPI changes need lib dist rebuild + safe DB migration](monorepo-schema-codegen-build.md) — rebuild lib dist (tsc -b) after schema/codegen; use ALTER TABLE not drizzle push (push drops unrelated tables).
 - [List endpoints need ORDER BY with LIMIT](list-pagination-stability.md) — row vanishing from a paginated list after edit = LIMIT without stable ORDER BY; edit-dialog preload fields must be in the list select.
 - [edcons record assignment & reassign gating](edcons-record-assignment.md) — assign_button=assign/self-claim unassigned; change_assigned=reassign assigned; gate UI with `assignedToId ? canReassign : canAssign`.
+- [Custom dropdown closes on scrollbar drag](dropdown-scrollbar-dismiss.md) — outside-close must listen to "click" not "mousedown"; preserve selected value as fallback option when filtering option lists.
 - [Contract PDF rendering](contract-pdf-rendering.md) — templates are designed for browser-to-PDF; signed/preview PDF must render real HTML via headless Chromium (playwright-core+Nix), inject signer sig into {{signature}}, SSRF-filter subresources. Never pdf-lib text.
 - [universities endpoint limit cap](edcons-universities-limit-cap.md) — GET /api/universities silently caps limit at 100; selectors needing the full list must paginate, not request one big limit.
 - [Prod→Dev data copy](prod-to-dev-data-copy.md) — prod read-only via executeSql, no prod creds in dev; base64-JSON + json_populate_recordset + replica role; always verify per-table count(*), bulk copy silently skips tables.

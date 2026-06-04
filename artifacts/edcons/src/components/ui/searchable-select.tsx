@@ -38,14 +38,19 @@ export function SearchableSelect({
   const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Use "click" (not "mousedown") so that grabbing/dragging a scrollbar
+    // — inside the popover or in an ancestor scroll container such as a
+    // dialog body — does not dismiss the dropdown. Native scrollbar
+    // interactions fire mousedown but never a click event, while real
+    // outside clicks still close the menu as expected.
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
       if (ref.current && ref.current.contains(target)) return;
       if (popRef.current && popRef.current.contains(target)) return;
       setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
   }, []);
 
   useLayoutEffect(() => {

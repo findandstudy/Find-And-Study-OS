@@ -165,15 +165,20 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     return m;
   }, [destinations]);
 
-  // Destination options driven by the system's actual data: every curated
-  // destination (with a real id, flag, name) PLUS every country that has
-  // universities but no curated destination row (synthetic "c:<country>"
-  // value). This guarantees the destination auto-fills for ANY university,
-  // not only the handful of curated destinations.
+  // Destination options driven strictly by the system's actual data:
+  // every country is one that has universities (from
+  // /api/universities/countries). A curated destination row (with a real
+  // id, flag, name) is used only when its country actually has
+  // universities; remaining university countries fall back to a synthetic
+  // "c:<country>" value. Curated destinations for countries with no
+  // universities (e.g. CMS-only website destinations) are excluded so the
+  // dropdown never lists countries that aren't in the system.
   const destinationOptions = useMemo(() => {
+    const countrySet = new Set(countries.map(c => normCountry(c)).filter(Boolean));
     const opts: { value: string; country: string; label: string }[] = [];
     const seen = new Set<string>();
     for (const d of destinations) {
+      if (!countrySet.has(normCountry(d.country))) continue;
       opts.push({ value: String(d.id), country: d.country, label: `${d.name} — ${d.country}` });
       seen.add(normCountry(d.country));
     }
@@ -685,6 +690,27 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   }
                   return a.country.localeCompare(b.country);
                 });
+                const selectOptions = sortedOptions.map(o => ({
+                  value: o.value,
+                  label: o.label,
+                  group: uniKey && normCountry(o.country) === uniKey ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
+                }));
+                // Keep an already-saved destination visible in edit mode even
+                // when its country no longer has universities (so the filtered
+                // option list omits it) — otherwise the control would render
+                // blank and the user could silently overwrite the value.
+                if (form.destinationId && !selectOptions.some(o => o.value === form.destinationId)) {
+                  const fallbackLabel = editing?.destinationName
+                    ? `${editing.destinationName}${editing.destinationCountry ? ` — ${editing.destinationCountry}` : ""}`
+                    : form.destinationId.startsWith("c:")
+                      ? form.destinationId.slice(2)
+                      : (editing?.destinationCountry || editing?.country || form.destinationId);
+                  selectOptions.unshift({
+                    value: form.destinationId,
+                    label: fallbackLabel,
+                    group: t("universityContracts.matchingDestination"),
+                  });
+                }
                 return (
                   <SearchableSelect
                     value={form.destinationId}
@@ -692,11 +718,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                     placeholder={t("universityContracts.destinationAutoPlaceholder")}
                     searchPlaceholder={t("universityContracts.searchDestination")}
                     clearable
-                    options={sortedOptions.map(o => ({
-                      value: o.value,
-                      label: o.label,
-                      group: uniKey && normCountry(o.country) === uniKey ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
-                    }))}
+                    options={selectOptions}
                   />
                 );
               })()}
