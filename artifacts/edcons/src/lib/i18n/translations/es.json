@@ -619,7 +619,8 @@
     "leadNoDocsYet": "Aún no hay documentos",
     "leadNoDocsDesc": "Cuando el prospecto envíe documentos a través del formulario de solicitud, aparecerán aquí.",
     "open": "Abrir",
-    "signOut": "Cerrar sesión"
+    "signOut": "Cerrar sesión",
+    "later": "Más tarde"
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",
@@ -1011,7 +1012,18 @@
     "latestUpdates": "Últimas novedades",
     "noUpdates": "No hay novedades recientes.",
     "notifications": "Notificaciones",
-    "noNotifications": "No hay notificaciones."
+    "noNotifications": "No hay notificaciones.",
+    "pendingContract": {
+      "title": "Contrato pendiente de tu firma",
+      "body": "Tu administrador te envió un contrato para firmar.",
+      "deadlineLabel": "Fecha límite de firma",
+      "signNow": "Firmar ahora",
+      "warning": "Si no se firma antes de la fecha límite, tu cuenta será suspendida.",
+      "expired": "Plazo vencido",
+      "unitDay": "d",
+      "unitHour": "h",
+      "unitMinute": "min"
+    }
   },
   "studentDash": {
     "welcomeBack": "¡Bienvenido de nuevo, {name}!",

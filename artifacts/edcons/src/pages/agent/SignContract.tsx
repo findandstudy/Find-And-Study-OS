@@ -22,14 +22,27 @@ interface Props {
   /** When true, renders the signing flow inside a non-dismissible modal dialog
    *  overlaid on top of the dashboard instead of as a full-screen lock. */
   asModal?: boolean;
+  /** When set, signs this specific (admin-sent, non-onboarding) session via the
+   *  agent-scoped /api/contracts/me/session/:id endpoints. When omitted, falls
+   *  back to the primary onboarding session (/api/contracts/me). */
+  sessionId?: number;
+  /** When provided, the flow becomes dismissible (admin-sent contracts are
+   *  non-blocking): a close handler is wired and a "Later" action is shown
+   *  instead of the onboarding "Sign out" action. */
+  onClose?: () => void;
 }
 
 /**
- * Authenticated agent signing flow for the primary onboarding contract.
- * No token; uses the session resolved from /api/contracts/me.
+ * Authenticated agent signing flow. By default it signs the primary onboarding
+ * contract (session resolved from /api/contracts/me). When `sessionId` is given
+ * it signs that specific admin-sent contract via the agent-scoped session
+ * endpoints, and `onClose` makes the modal dismissible (non-blocking).
  */
-export default function SignContract({ onSigned, asModal = false }: Props) {
+export default function SignContract({ onSigned, asModal = false, sessionId, onClose }: Props) {
   const { t } = useI18n();
+  const dismissible = !!onClose;
+  const loadUrl = sessionId ? `/api/contracts/me/session/${sessionId}` : "/api/contracts/me";
+  const signUrl = sessionId ? `/api/contracts/me/session/${sessionId}/sign` : "/api/contracts/me/sign";
   const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<"review" | "sign">("review");
@@ -41,7 +54,7 @@ export default function SignContract({ onSigned, asModal = false }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const r: any = await customFetch("/api/contracts/me");
+        const r: any = await customFetch(loadUrl);
         if (!r.data) { setError(t("agentOnboarding.sign.notFound") || "No onboarding contract found. Contact your administrator."); return; }
         setData(r.data);
         setSignerName(r.data.signerName || "");
@@ -51,13 +64,13 @@ export default function SignContract({ onSigned, asModal = false }: Props) {
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadUrl]);
 
   async function submitSignature(b64: string) {
     if (!data) return;
     setSubmitting(true); setError("");
     try {
-      await customFetch("/api/contracts/me/sign", {
+      await customFetch(signUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ signatureImagePngBase64: b64, signerName }),
@@ -78,7 +91,11 @@ export default function SignContract({ onSigned, asModal = false }: Props) {
         <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
         <h1 className="text-xl font-semibold">{t("agentOnboarding.sign.unavailable") || "Contract unavailable"}</h1>
         <p className="text-sm text-muted-foreground">{error}</p>
-        <Button variant="outline" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+        {dismissible ? (
+          <Button variant="outline" onClick={onClose}>{t("common.close") || "Close"}</Button>
+        ) : (
+          <Button variant="outline" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+        )}
       </div>
     </div>
   );
@@ -98,7 +115,11 @@ export default function SignContract({ onSigned, asModal = false }: Props) {
             <div className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
               dangerouslySetInnerHTML={{ __html: data.previewHtml || "" }} />
             <div className="flex justify-between mt-6">
-              <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+              {dismissible ? (
+                <Button variant="ghost" onClick={onClose}>{t("common.later") || "Later"}</Button>
+              ) : (
+                <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+              )}
               <Button onClick={() => setStep("sign")}>
                 <FileSignature className="w-4 h-4 mr-2" /> {t("agentOnboarding.sign.proceed") || "Proceed to sign"}
               </Button>
@@ -122,12 +143,12 @@ export default function SignContract({ onSigned, asModal = false }: Props) {
 
   if (asModal) {
     return (
-      <Dialog open={true} onOpenChange={() => { /* non-dismissible */ }}>
+      <Dialog open={true} onOpenChange={(open) => { if (!open && dismissible) onClose?.(); }}>
         <DialogContent
-          className="max-w-3xl max-h-[90vh] overflow-y-auto p-6 [&>button]:hidden"
-          onPointerDownOutside={e => e.preventDefault()}
-          onEscapeKeyDown={e => e.preventDefault()}
-          onInteractOutside={e => e.preventDefault()}
+          className={`max-w-3xl max-h-[90vh] overflow-y-auto p-6 ${dismissible ? "" : "[&>button]:hidden"}`}
+          onPointerDownOutside={e => { if (!dismissible) e.preventDefault(); }}
+          onEscapeKeyDown={e => { if (!dismissible) e.preventDefault(); }}
+          onInteractOutside={e => { if (!dismissible) e.preventDefault(); }}
         >
           <DialogHeader className="sr-only">
             <DialogTitle>{t("agentOnboarding.sign.title") || "Sign your agency contract"}</DialogTitle>

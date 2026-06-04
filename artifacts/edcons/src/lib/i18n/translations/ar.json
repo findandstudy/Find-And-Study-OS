@@ -619,7 +619,8 @@
     "leadNoDocsYet": "لا توجد مستندات بعد",
     "leadNoDocsDesc": "عندما يقدّم العميل المحتمل مستندات عبر نموذج الطلب، ستظهر هنا.",
     "open": "فتح",
-    "signOut": "تسجيل الخروج"
+    "signOut": "تسجيل الخروج",
+    "later": "لاحقًا"
   },
   "seo": {
     "homeTitle": "استشارات التعليم العالمي",
@@ -1011,7 +1012,18 @@
     "latestUpdates": "أحدث التحديثات",
     "noUpdates": "لا توجد تحديثات حديثة.",
     "notifications": "الإشعارات",
-    "noNotifications": "لا توجد إشعارات."
+    "noNotifications": "لا توجد إشعارات.",
+    "pendingContract": {
+      "title": "عقد بانتظار توقيعك",
+      "body": "أرسل لك المسؤول عقدًا للتوقيع.",
+      "deadlineLabel": "الموعد النهائي للتوقيع",
+      "signNow": "وقّع الآن",
+      "warning": "إذا لم يتم التوقيع قبل الموعد النهائي، فسيتم تعليق حسابك.",
+      "expired": "انتهى الموعد",
+      "unitDay": "يوم",
+      "unitHour": "ساعة",
+      "unitMinute": "د"
+    }
   },
   "studentDash": {
     "welcomeBack": "مرحبًا بعودتك، {name}!",

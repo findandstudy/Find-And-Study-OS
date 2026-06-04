@@ -5,7 +5,8 @@ import { useGetOverviewStats } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatTimeAgo } from "@/lib/i18n";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useLocation } from "wouter";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
@@ -14,9 +15,11 @@ import {
   UserPlus, FileText, FileCheck, DollarSign, CreditCard, CalendarClock,
   MessageCircle, Megaphone, AlertCircle, Shield, Mail, Phone,
   ExternalLink, UserPlus as AddStudent, Plus, ArrowUpRight,
+  FileSignature, AlertTriangle,
 } from "lucide-react";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { useSeason } from "@/contexts/SeasonContext";
+import SignContract from "@/pages/agent/SignContract";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -120,6 +123,8 @@ export default function AgentDashboard() {
             <p className="text-muted-foreground mt-1">{t("agentDash.subtitle")}</p>
           </div>
         </div>
+
+        <PendingContractsCard />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
@@ -416,5 +421,99 @@ export default function AgentDashboard() {
         </div>
 
       </div>
+  );
+}
+
+interface PendingContract {
+  sessionId: number;
+  status: string;
+  expiresAt: string;
+  templateName: string | null;
+}
+
+/**
+ * Non-blocking warning card for admin-sent contracts the agent still needs to
+ * sign. Shows a live countdown to the 14-day signing deadline and a "Sign now"
+ * action that opens the in-panel signing flow. After the deadline the backend
+ * suspends the account, so this card reminds on every dashboard visit.
+ */
+function PendingContractsCard() {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const [signing, setSigning] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const { data } = useQuery<{ data: PendingContract[] }>({
+    queryKey: ["/api/contracts/me/pending"],
+    queryFn: () => fetch(`${BASE}/api/contracts/me/pending`, { credentials: "include" }).then(r => r.json()),
+  });
+  const pending = data?.data || [];
+
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [pending.length]);
+
+  if (pending.length === 0) return null;
+
+  function countdown(expiresAt: string) {
+    const diff = new Date(expiresAt).getTime() - now;
+    if (diff <= 0) return t("agentDash.pendingContract.expired") || "Expired";
+    const days = Math.floor(diff / 86_400_000);
+    const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+    const minutes = Math.floor((diff % 3_600_000) / 60_000);
+    const parts: string[] = [];
+    if (days > 0) parts.push(`${days} ${t("agentDash.pendingContract.unitDay") || "d"}`);
+    parts.push(`${hours} ${t("agentDash.pendingContract.unitHour") || "h"}`);
+    parts.push(`${minutes} ${t("agentDash.pendingContract.unitMinute") || "m"}`);
+    return parts.join(" ");
+  }
+
+  return (
+    <>
+      {pending.map((c) => {
+        const dateLabel = new Date(c.expiresAt).toLocaleString();
+        return (
+          <Card key={c.sessionId} className="p-5 border border-amber-500/30 bg-amber-500/5 shadow-md shadow-black/5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-bold text-foreground">{t("agentDash.pendingContract.title")}</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {t("agentDash.pendingContract.body")}
+                  {c.templateName ? ` — ${c.templateName}` : ""}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                  <span className="text-muted-foreground">
+                    {t("agentDash.pendingContract.deadlineLabel")}: <strong className="text-foreground">{dateLabel}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+                    <Clock className="w-3.5 h-3.5" /> {countdown(c.expiresAt)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-700/80 mt-1">{t("agentDash.pendingContract.warning")}</p>
+              </div>
+              <Button className="shrink-0 gap-2" onClick={() => setSigning(c.sessionId)}>
+                <FileSignature className="w-4 h-4" /> {t("agentDash.pendingContract.signNow")}
+              </Button>
+            </div>
+          </Card>
+        );
+      })}
+      {signing !== null && (
+        <SignContract
+          asModal
+          sessionId={signing}
+          onClose={() => setSigning(null)}
+          onSigned={() => {
+            setSigning(null);
+            void qc.invalidateQueries({ queryKey: ["/api/contracts/me/pending"] });
+          }}
+        />
+      )}
+    </>
   );
 }

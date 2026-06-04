@@ -105,6 +105,9 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
   }
   let session = await loadOnboardingSession(agent.id);
   if (session) session = await lazyExpire(session);
+  // Enforce admin-sent contract deadlines on every panel navigation: expires
+  // past-due sessions and suspends the account when a deadline is missed.
+  try { await syncAdminContracts(agent); } catch (err) { console.error("[onboarding-status] admin contract sync:", err); }
   let contractStatus: "none" | "pending" | "signed" | "expired" | "revoked" = "none";
   if (session) {
     if (session.status === "signed") contractStatus = "signed";
@@ -515,6 +518,146 @@ router.post("/contracts/me/sign", requireAuth, async (req: Request, res: Respons
   const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
   const ua = (req.headers["user-agent"] as string) || null;
 
+  const result = await finalizeSign({
+    sessionId: session.id,
+    signatureImagePngBase64,
+    signerName: signerName ? String(signerName) : (session.signerName || null),
+    signerIp,
+    signerUserAgent: ua,
+    triggerUserId: req.user!.id,
+  });
+  if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  res.json({ data: { signedContractId: result.signedContractId } });
+});
+
+const ADMIN_PENDING_STATUSES = ["review_pending", "intake_pending"];
+
+/**
+ * Enforce admin-sent (non-onboarding) contract deadlines for an agent. Expires
+ * any past-due unsigned session and, when a deadline was missed, suspends the
+ * agent's user account (isActive=false) — requireAuth then blocks them until an
+ * administrator reactivates the account. Returns the sessions still pending
+ * (unsigned and not yet expired). Error-safe so it never breaks its callers.
+ */
+async function syncAdminContracts(agent: typeof agentsTable.$inferSelect) {
+  const rows = await db.select().from(signingSessionsTable).where(and(
+    eq(signingSessionsTable.agentId, agent.id),
+    eq(signingSessionsTable.isPrimaryOnboarding, false),
+    eq(signingSessionsTable.mode, "admin_driven"),
+  ));
+  const now = Date.now();
+  let missedDeadline = false;
+  const pending: typeof rows = [];
+  for (const s of rows) {
+    if (!ADMIN_PENDING_STATUSES.includes(s.status)) continue;
+    if (new Date(s.expiresAt).getTime() < now) {
+      // Conditionally expire only if still in the same pending status; if the
+      // session was signed concurrently the predicate won't match and no row is
+      // returned, so we must NOT count it as a missed deadline (avoids
+      // suspending an account whose contract was actually signed in time).
+      try {
+        const expired = await db.update(signingSessionsTable)
+          .set({ status: "expired" })
+          .where(and(
+            eq(signingSessionsTable.id, s.id),
+            eq(signingSessionsTable.status, s.status),
+          ))
+          .returning({ id: signingSessionsTable.id });
+        if (expired.length > 0) missedDeadline = true;
+      } catch {}
+    } else {
+      pending.push(s);
+    }
+  }
+  if (missedDeadline && agent.userId) {
+    try {
+      await db.update(usersTable).set({ isActive: false }).where(eq(usersTable.id, agent.userId));
+    } catch {}
+  }
+  return pending;
+}
+
+/**
+ * GET /api/contracts/me/pending — admin-sent (non-onboarding) contracts the
+ * authenticated agent still needs to sign, each with its signing deadline.
+ * Enforces the deadline (suspends the account on miss) as a side effect.
+ */
+router.get("/contracts/me/pending", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+  if (!agent) { res.json({ data: [] }); return; }
+  const pending = await syncAdminContracts(agent);
+  const data: Array<{ sessionId: number; status: string; expiresAt: Date; templateName: string | null }> = [];
+  for (const s of pending) {
+    const [tpl] = await db.select({ name: contractTemplatesTable.name })
+      .from(contractTemplatesTable).where(eq(contractTemplatesTable.id, s.templateId));
+    data.push({ sessionId: s.id, status: s.status, expiresAt: s.expiresAt, templateName: tpl?.name ?? null });
+  }
+  res.json({ data });
+});
+
+/**
+ * GET /api/contracts/me/session/:id — agent-scoped detail (with rendered
+ * preview HTML) for one of the agent's own non-onboarding signing sessions.
+ */
+router.get("/contracts/me/session/:id", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  const sid = parseInt(req.params.id, 10);
+  if (!sid) { res.status(400).json({ error: "Invalid session id" }); return; }
+  let [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, sid));
+  if (!session || session.agentId !== agent.id || session.isPrimaryOnboarding) {
+    res.status(404).json({ error: "Contract not found" }); return;
+  }
+  session = await lazyExpire(session);
+  const [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
+  let previewHtml: string | null = null;
+  if (template && (session.status === "review_pending" || session.status === "intake_pending")) {
+    try {
+      const { renderTemplate, buildAgentContext, cleanupSignatureImages } = await import("../lib/contractRenderer");
+      const ctx = buildAgentContext(agent, (session.intakeData as any) || null, {
+        signerEmail: session.signerEmail, signerName: session.signerName || undefined,
+      });
+      previewHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), "");
+    } catch (err) {
+      console.error("[contracts/me/session] preview render failed:", err);
+    }
+  }
+  res.json({
+    data: {
+      sessionId: session.id,
+      status: session.status,
+      expiresAt: session.expiresAt,
+      isPrimaryOnboarding: session.isPrimaryOnboarding,
+      signerEmail: session.signerEmail,
+      signerName: session.signerName,
+      template: template ? { id: template.id, name: template.name, language: template.language, entityType: template.entityType } : null,
+      previewHtml,
+    },
+  });
+});
+
+/**
+ * POST /api/contracts/me/session/:id/sign — agent draws their signature in the
+ * dashboard and finalizes one of their own non-onboarding signing sessions.
+ */
+router.post("/contracts/me/session/:id/sign", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  const sid = parseInt(req.params.id, 10);
+  if (!sid) { res.status(400).json({ error: "Invalid session id" }); return; }
+  const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, sid));
+  if (!session || session.agentId !== agent.id || session.isPrimaryOnboarding) {
+    res.status(404).json({ error: "Contract not found" }); return;
+  }
+  const { signatureImagePngBase64, signerName } = req.body || {};
+  if (!signatureImagePngBase64 || typeof signatureImagePngBase64 !== "string") {
+    res.status(400).json({ error: "signatureImagePngBase64 is required" }); return;
+  }
+  if (signatureImagePngBase64.length > 2_000_000) {
+    res.status(413).json({ error: "Signature image too large" }); return;
+  }
+  const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
+  const ua = (req.headers["user-agent"] as string) || null;
   const result = await finalizeSign({
     sessionId: session.id,
     signatureImagePngBase64,

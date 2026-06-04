@@ -619,7 +619,8 @@
     "leadNoDocsYet": "Aucun document pour le moment",
     "leadNoDocsDesc": "Lorsque le prospect soumettra des documents via le formulaire de candidature, ils apparaîtront ici.",
     "open": "Ouvrir",
-    "signOut": "Se déconnecter"
+    "signOut": "Se déconnecter",
+    "later": "Plus tard"
   },
   "seo": {
     "homeTitle": "Conseil en éducation mondiale",
@@ -1011,7 +1012,18 @@
     "latestUpdates": "Dernières mises à jour",
     "noUpdates": "Aucune mise à jour récente.",
     "notifications": "Notifications",
-    "noNotifications": "Aucune notification."
+    "noNotifications": "Aucune notification.",
+    "pendingContract": {
+      "title": "Contrat en attente de votre signature",
+      "body": "Votre administrateur vous a envoyé un contrat à signer.",
+      "deadlineLabel": "Date limite de signature",
+      "signNow": "Signer maintenant",
+      "warning": "S'il n'est pas signé avant la date limite, votre compte sera suspendu.",
+      "expired": "Délai dépassé",
+      "unitDay": "j",
+      "unitHour": "h",
+      "unitMinute": "min"
+    }
   },
   "studentDash": {
     "welcomeBack": "Bon retour, {name} !",

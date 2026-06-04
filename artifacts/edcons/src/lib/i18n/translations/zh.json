@@ -619,7 +619,8 @@
     "leadNoDocsYet": "暂无文件",
     "leadNoDocsDesc": "当潜在客户通过申请表提交文件后，将在此处显示。",
     "open": "打开",
-    "signOut": "退出登录"
+    "signOut": "退出登录",
+    "later": "稍后"
   },
   "seo": {
     "homeTitle": "全球教育咨询",
@@ -1011,7 +1012,18 @@
     "latestUpdates": "最新动态",
     "noUpdates": "暂无最新动态。",
     "notifications": "通知",
-    "noNotifications": "暂无通知。"
+    "noNotifications": "暂无通知。",
+    "pendingContract": {
+      "title": "等待您签署的合同",
+      "body": "管理员向您发送了一份需要签署的合同。",
+      "deadlineLabel": "签署截止时间",
+      "signNow": "立即签署",
+      "warning": "如果在截止时间前未签署，您的账户将被暂停。",
+      "expired": "已过期",
+      "unitDay": "天",
+      "unitHour": "小时",
+      "unitMinute": "分"
+    }
   },
   "studentDash": {
     "welcomeBack": "欢迎回来，{name}！",

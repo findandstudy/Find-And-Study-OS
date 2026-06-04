@@ -619,7 +619,8 @@
     "stage": "Stage",
     "signOut": "Sign out",
     "uploading": "Uploading...",
-    "current": "Current"
+    "current": "Current",
+    "later": "Later"
   },
   "seo": {
     "homeTitle": "Global Education Consultancy",
@@ -1011,7 +1012,18 @@
     "latestUpdates": "Latest Updates",
     "noUpdates": "No recent updates.",
     "notifications": "Notifications",
-    "noNotifications": "No notifications."
+    "noNotifications": "No notifications.",
+    "pendingContract": {
+      "title": "Contract awaiting your signature",
+      "body": "Your administrator sent you a contract to sign.",
+      "deadlineLabel": "Signing deadline",
+      "signNow": "Sign now",
+      "warning": "If it is not signed before the deadline, your account will be suspended.",
+      "expired": "Deadline passed",
+      "unitDay": "d",
+      "unitHour": "h",
+      "unitMinute": "m"
+    }
   },
   "studentDash": {
     "welcomeBack": "Welcome back, {name}!",

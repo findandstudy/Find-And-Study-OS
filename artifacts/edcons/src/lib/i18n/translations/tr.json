@@ -619,7 +619,8 @@
     "stage": "Aşama",
     "signOut": "Çıkış yap",
     "uploading": "Yükleniyor...",
-    "current": "Geçerli"
+    "current": "Geçerli",
+    "later": "Daha sonra"
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",
@@ -952,7 +953,18 @@
     "latestUpdates": "Son Güncellemeler",
     "noUpdates": "Son güncelleme yok.",
     "notifications": "Bildirimler",
-    "noNotifications": "Bildirim yok."
+    "noNotifications": "Bildirim yok.",
+    "pendingContract": {
+      "title": "İmzanızı bekleyen sözleşme",
+      "body": "Yöneticiniz imzalamanız için size bir sözleşme gönderdi.",
+      "deadlineLabel": "Son imza tarihi",
+      "signNow": "Şimdi imzala",
+      "warning": "Süre dolmadan imzalanmazsa hesabınız askıya alınacaktır.",
+      "expired": "Süre doldu",
+      "unitDay": "gün",
+      "unitHour": "saat",
+      "unitMinute": "dk"
+    }
   },
   "studentDash": {
     "welcomeBack": "Tekrar hoş geldin, {name}!",

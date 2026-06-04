@@ -619,7 +619,8 @@
     "leadNoDocsYet": "Belum ada dokumen",
     "leadNoDocsDesc": "Ketika prospek mengirimkan dokumen melalui formulir aplikasi, dokumen akan muncul di sini.",
     "open": "Buka",
-    "signOut": "Keluar"
+    "signOut": "Keluar",
+    "later": "Nanti"
   },
   "seo": {
     "homeTitle": "Konsultasi Pendidikan Global",
@@ -1011,7 +1012,18 @@
     "latestUpdates": "Pembaruan Terbaru",
     "noUpdates": "Tidak ada pembaruan terbaru.",
     "notifications": "Notifikasi",
-    "noNotifications": "Tidak ada notifikasi."
+    "noNotifications": "Tidak ada notifikasi.",
+    "pendingContract": {
+      "title": "Kontrak menunggu tanda tangan Anda",
+      "body": "Administrator Anda mengirimkan kontrak untuk ditandatangani.",
+      "deadlineLabel": "Batas waktu penandatanganan",
+      "signNow": "Tanda tangani sekarang",
+      "warning": "Jika tidak ditandatangani sebelum batas waktu, akun Anda akan ditangguhkan.",
+      "expired": "Batas waktu terlewat",
+      "unitDay": "hr",
+      "unitHour": "jam",
+      "unitMinute": "mnt"
+    }
   },
   "studentDash": {
     "welcomeBack": "Selamat datang kembali, {name}!",
