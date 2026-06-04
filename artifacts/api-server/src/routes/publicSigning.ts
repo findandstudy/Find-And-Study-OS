@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, settingsTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, settingsTable, usersTable, emailVerificationCodesTable } from "@workspace/db";
+import { and, eq, gt, inArray } from "drizzle-orm";
+import crypto from "crypto";
 import { hashToken } from "../lib/signingTokens";
 import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl } from "../lib/contractRenderer";
 
@@ -43,7 +44,7 @@ async function buildContractFilename(params: { agent: any | null; signedAt: Date
 import { buildSignedPdf } from "../lib/contractPdf";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { writeAudit } from "../lib/auditLog";
-import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "../lib/email";
+import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 const router: IRouter = Router();
@@ -57,6 +58,46 @@ const signLimiter = rateLimit({
   legacyHeaders: false,
   store: new PgRateLimitStore(SIGN_WINDOW_MS),
 });
+
+// Tighter limiter for sending verification codes: the signer types an
+// arbitrary email and we send a code there, so cap it harder than the general
+// signing limiter to avoid using the endpoint as a spam relay.
+const codeLimiter = rateLimit({
+  windowMs: SIGN_WINDOW_MS,
+  max: 8,
+  message: { error: "Too many requests. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new PgRateLimitStore(SIGN_WINDOW_MS),
+});
+
+function generateVerificationCode(): string {
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Roles that should receive a copy of every signed contract. "admin" accounts
+// as shown in the system: super_admin + admin.
+const SIGNED_CONTRACT_ADMIN_ROLES = ["super_admin", "admin"];
+
+async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<string[]> {
+  const rows = await db.select({ email: usersTable.email })
+    .from(usersTable)
+    .where(and(inArray(usersTable.role, SIGNED_CONTRACT_ADMIN_ROLES), eq(usersTable.isActive, true)));
+  const exclude = (excludeEmail || "").trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of rows) {
+    const email = (row.email || "").trim();
+    if (!email || !EMAIL_RE.test(email)) continue;
+    const key = email.toLowerCase();
+    if (key === exclude || seen.has(key)) continue;
+    seen.add(key);
+    out.push(email);
+  }
+  return out;
+}
 
 const objectStorage = new ObjectStorageService();
 
@@ -134,6 +175,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
         mode: r.session.mode,
         status: r.session.status,
         signerEmail: r.session.signerEmail,
+        verifiedEmail: r.session.verifiedEmail,
         signerName: r.session.signerName,
         expiresAt: r.session.expiresAt,
         expired: r.expired,
@@ -218,6 +260,93 @@ router.get("/public/sign/:token/preview-pdf", signLimiter, async (req, res): Pro
   }
 });
 
+// Send a 6-digit verification code to the email the signer entered. The signer
+// must verify ownership of this email before they are allowed to sign.
+router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Promise<void> => {
+  try {
+    const r = await resolveByToken(req.params.token);
+    if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
+    if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
+    if (r.session.status === "signed" || r.session.status === "revoked") {
+      res.status(409).json({ error: "Session already finalized" }); return;
+    }
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
+      res.status(400).json({ error: "A valid email is required" }); return;
+    }
+    // Bind the code to this specific signing link by storing the same token
+    // hash used for the session, so a code issued for one link cannot be
+    // replayed against another link/flow for the same email.
+    const tokenHash = hashToken(req.params.token);
+    // Invalidate previous unused codes for this email+link so only the newest works.
+    await db.update(emailVerificationCodesTable)
+      .set({ used: true })
+      .where(and(
+        eq(emailVerificationCodesTable.email, email),
+        eq(emailVerificationCodesTable.token, tokenHash),
+        eq(emailVerificationCodesTable.used, false),
+      ));
+    const code = generateVerificationCode();
+    await db.insert(emailVerificationCodesTable).values({
+      email, code, token: tokenHash, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    });
+    try {
+      const mail = await buildSignVerificationCodeEmail({
+        code,
+        templateName: r.template.name,
+        language: r.template.language,
+      });
+      await sendEmail(email, mail);
+    } catch (mailErr) {
+      console.error("[public-sign] failed to send verification code:", mailErr);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[public-sign] send-code:", err);
+    res.status(500).json({ error: "Failed to send verification code" });
+  }
+});
+
+// Verify the 6-digit code. On success, persist the verified email on the
+// session and adopt it as the signer's email (the signer supplies their own).
+router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Promise<void> => {
+  try {
+    const r = await resolveByToken(req.params.token);
+    if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
+    if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
+    if (r.session.status === "signed" || r.session.status === "revoked") {
+      res.status(409).json({ error: "Session already finalized" }); return;
+    }
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    if (!email || !EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) {
+      res.status(400).json({ error: "Email and 6-digit code are required" }); return;
+    }
+    // The code must have been issued for THIS signing link (token hash bound).
+    const tokenHash = hashToken(req.params.token);
+    const [record] = await db.select().from(emailVerificationCodesTable).where(and(
+      eq(emailVerificationCodesTable.email, email),
+      eq(emailVerificationCodesTable.code, code),
+      eq(emailVerificationCodesTable.token, tokenHash),
+      eq(emailVerificationCodesTable.used, false),
+      gt(emailVerificationCodesTable.expiresAt, new Date()),
+    ));
+    if (!record) {
+      res.status(400).json({ error: "Invalid or expired code", code: "invalid_code" }); return;
+    }
+    await db.update(emailVerificationCodesTable).set({ used: true })
+      .where(eq(emailVerificationCodesTable.id, record.id));
+    await db.update(signingSessionsTable).set({
+      verifiedEmail: email,
+      signerEmail: email,
+    }).where(eq(signingSessionsTable.id, r.session.id));
+    res.json({ success: true, verifiedEmail: email });
+  } catch (err) {
+    console.error("[public-sign] verify-code:", err);
+    res.status(500).json({ error: "Failed to verify code" });
+  }
+});
+
 router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise<void> => {
   try {
     const r = await resolveByToken(req.params.token);
@@ -263,6 +392,9 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     if (r.session.status === "revoked") { res.status(410).json({ error: "Link revoked" }); return; }
     if (r.session.mode === "self_fill" && !r.session.intakeData) {
       res.status(400).json({ error: "Intake must be completed first" }); return;
+    }
+    if (!r.session.verifiedEmail) {
+      res.status(403).json({ error: "Email verification required before signing", code: "email_not_verified" }); return;
     }
     const { signatureImagePngBase64, signerName } = req.body || {};
     if (!signatureImagePngBase64 || typeof signatureImagePngBase64 !== "string") {
@@ -375,13 +507,22 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     }
     signed = outcome.row;
 
-    // Send the signed PDF download link to the signer (best-effort).
-    // The signer is unauthenticated — link uses the same opaque token to gate
-    // access via /api/public/sign/:token/pdf, which only serves once status=signed.
-    if (r.session.signerEmail) {
-      try {
-        const downloadUrl = `${getAppBaseUrl()}/api/public/sign/${rawTokenForLink}/pdf`;
-        const portalUrl = `${getAppBaseUrl()}/login`;
+    // Deliver the signed PDF as a direct attachment (best-effort) to:
+    //  1. the signer's verified email, and
+    //  2. all active admin accounts (super_admin / admin).
+    // The download link is also kept in the body via the opaque token, which
+    // gates /api/public/sign/:token/pdf and only serves once status=signed —
+    // this is a fallback when the queued retry path (no attachment) runs.
+    try {
+      const downloadUrl = `${getAppBaseUrl()}/api/public/sign/${rawTokenForLink}/pdf`;
+      const portalUrl = `${getAppBaseUrl()}/login`;
+      const pdfAttachment = {
+        filename: `contract-${r.session.id}.pdf`,
+        content: Buffer.from(pdfBytes),
+        contentType: "application/pdf",
+      };
+      const signerEmail = r.session.verifiedEmail || r.session.signerEmail;
+      if (signerEmail) {
         const email = await buildSignedContractEmail({
           signerName: finalSignerName,
           templateName: r.template.name,
@@ -389,11 +530,28 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
           portalUrl,
           language: r.template.language,
         });
-        await sendEmail(r.session.signerEmail, email);
+        await sendEmail(signerEmail, email, { attachments: [pdfAttachment] });
         await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
-      } catch (emailErr) {
-        console.error("[public-sign] failed to email signed PDF:", emailErr);
       }
+
+      const adminEmails = await getAdminRecipientEmails(signerEmail);
+      if (adminEmails.length > 0) {
+        const adminEmail = await buildSignedContractAdminEmail({
+          signerName: finalSignerName,
+          signerEmail: signerEmail || "",
+          templateName: r.template.name,
+          pdfDownloadUrl: downloadUrl,
+        });
+        for (const to of adminEmails) {
+          try {
+            await sendEmail(to, adminEmail, { attachments: [pdfAttachment] });
+          } catch (adminErr) {
+            console.error(`[public-sign] failed to email admin ${to}:`, adminErr);
+          }
+        }
+      }
+    } catch (emailErr) {
+      console.error("[public-sign] failed to email signed PDF:", emailErr);
     }
 
     await writeAudit({

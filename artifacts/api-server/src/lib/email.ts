@@ -101,7 +101,19 @@ export function invalidateSmtpCache(): void {
   transporterConfigHash = "";
 }
 
-async function sendViaSmtp(to: string, subject: string, html: string, text: string): Promise<boolean> {
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
+async function sendViaSmtp(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  attachments?: EmailAttachment[],
+): Promise<boolean> {
   try {
     const smtp = await getTransporter();
     if (!smtp) {
@@ -118,6 +130,7 @@ async function sendViaSmtp(to: string, subject: string, html: string, text: stri
       html,
       text,
       ...(smtp.replyTo ? { replyTo: smtp.replyTo } : {}),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     });
 
     console.log(`[EMAIL] Sent via SMTP to ${to}: ${subject}`);
@@ -660,7 +673,108 @@ export async function buildSignedContractEmail(params: {
   return { subject, html: emailShell(brand, s.shellSubtitle, bodyHtml), text };
 }
 
-export async function sendEmail(to: string, email: { subject: string; html: string; text: string }): Promise<void> {
+const SIGN_CODE_STRINGS: Record<SignedEmailLang, {
+  subject: string;
+  title: string;
+  body: (n: string) => string;
+  expiry: string;
+  ignore: string;
+  shellSubtitle: string;
+}> = {
+  en: {
+    subject: "Your verification code",
+    title: "Verify your email",
+    body: n => `To continue signing <strong>${n}</strong>, enter the code below.`,
+    expiry: "This code expires in 15 minutes.",
+    ignore: "If you did not request this, you can ignore this email.",
+    shellSubtitle: "Email verification",
+  },
+  tr: {
+    subject: "Doğrulama kodunuz",
+    title: "E-postanızı doğrulayın",
+    body: n => `<strong>${n}</strong> sözleşmesini imzalamaya devam etmek için aşağıdaki kodu girin.`,
+    expiry: "Bu kod 15 dakika içinde geçersiz olur.",
+    ignore: "Bu isteği siz yapmadıysanız, bu e-postayı yok sayabilirsiniz.",
+    shellSubtitle: "E-posta doğrulama",
+  },
+  ar: {
+    subject: "رمز التحقق الخاص بك",
+    title: "تحقق من بريدك الإلكتروني",
+    body: n => `لمتابعة توقيع <strong>${n}</strong>، أدخل الرمز أدناه.`,
+    expiry: "تنتهي صلاحية هذا الرمز خلال 15 دقيقة.",
+    ignore: "إذا لم تطلب هذا، يمكنك تجاهل هذا البريد الإلكتروني.",
+    shellSubtitle: "التحقق من البريد الإلكتروني",
+  },
+  fr: {
+    subject: "Votre code de vérification",
+    title: "Vérifiez votre e-mail",
+    body: n => `Pour continuer la signature de <strong>${n}</strong>, saisissez le code ci-dessous.`,
+    expiry: "Ce code expire dans 15 minutes.",
+    ignore: "Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.",
+    shellSubtitle: "Vérification de l'e-mail",
+  },
+  ru: {
+    subject: "Ваш код подтверждения",
+    title: "Подтвердите e-mail",
+    body: n => `Чтобы продолжить подписание <strong>${n}</strong>, введите код ниже.`,
+    expiry: "Срок действия кода — 15 минут.",
+    ignore: "Если вы не запрашивали это, проигнорируйте письмо.",
+    shellSubtitle: "Подтверждение e-mail",
+  },
+};
+
+export async function buildSignVerificationCodeEmail(params: {
+  code: string;
+  templateName: string;
+  language?: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const lang: SignedEmailLang = (params.language && (["en","tr","ar","fr","ru"] as const).includes(params.language as any))
+    ? (params.language as SignedEmailLang)
+    : "en";
+  const s = SIGN_CODE_STRINGS[lang];
+  const codeHtml = `<div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;background:#f3f4f6;border-radius:10px;padding:16px 28px;font-size:32px;font-weight:700;letter-spacing:8px;color:#111827;">${escapeNotifText(params.code)}</div>
+    </div>`;
+  const bodyHtml = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${s.title}</h2>
+    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${s.body(escapeNotifText(params.templateName))}</p>
+    ${codeHtml}
+    <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">${s.expiry}</p>
+    <p style="margin:16px 0 0;color:#9ca3af;font-size:12px;">${s.ignore}</p>`;
+  const text = `${s.title}\n\n${params.code}\n\n${s.expiry}`;
+  return { subject: s.subject, html: emailShell(brand, s.shellSubtitle, bodyHtml), text };
+}
+
+export async function buildSignedContractAdminEmail(params: {
+  signerName?: string | null;
+  signerEmail: string;
+  templateName: string;
+  pdfDownloadUrl: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const subject = `Signed contract — ${params.templateName}`;
+  const who = params.signerName
+    ? `${escapeNotifText(params.signerName)} (${escapeNotifText(params.signerEmail)})`
+    : escapeNotifText(params.signerEmail);
+  const bodyHtml = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
+    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">A contract has been signed.</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14px;color:#374151;">
+      <tr><td style="padding:6px 0;color:#6b7280;width:120px;">Contract</td><td style="padding:6px 0;font-weight:600;">${escapeNotifText(params.templateName)}</td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280;">Signed by</td><td style="padding:6px 0;font-weight:600;">${who}</td></tr>
+    </table>
+    <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6;">The signed PDF is attached to this email.</p>
+    ${emailButton("Download signed PDF", params.pdfDownloadUrl, brand.primaryColor)}`;
+  const text = `${subject}\n\nSigned by: ${params.signerName ? `${params.signerName} (${params.signerEmail})` : params.signerEmail}\nDownload: ${params.pdfDownloadUrl}`;
+  return { subject, html: emailShell(brand, "Signed contract", bodyHtml), text };
+}
+
+export async function sendEmail(
+  to: string,
+  email: { subject: string; html: string; text: string },
+  opts?: { attachments?: EmailAttachment[] },
+): Promise<void> {
   console.log(`[EMAIL] Queuing email to ${to}: ${email.subject}`);
 
   let queueId: number | undefined;
@@ -677,7 +791,7 @@ export async function sendEmail(to: string, email: { subject: string; html: stri
     console.error("[EMAIL] Failed to persist email to queue:", err);
   }
 
-  const sent = await sendViaSmtp(to, email.subject, email.html, email.text);
+  const sent = await sendViaSmtp(to, email.subject, email.html, email.text, opts?.attachments);
   if (sent && queueId) {
     try {
       await db.update(emailQueueTable)

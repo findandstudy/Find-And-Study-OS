@@ -4,14 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle2, AlertCircle, FileSignature, Eraser } from "lucide-react";
+import {
+  Loader2, CheckCircle2, AlertCircle, FileSignature, Eraser,
+  Mail, ShieldCheck, Pencil, Upload, FileText, PenLine, X,
+} from "lucide-react";
 import { getTranslation, isValidLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_SIG_BASE64 = 1_900_000;
 
 type SessionView = {
   sessionId: number;
   mode: "admin_driven" | "self_fill";
   status: "intake_pending" | "review_pending" | "signed" | "revoked";
   signerEmail: string;
+  verifiedEmail: string | null;
   signerName: string | null;
   expiresAt: string;
   expired: boolean;
@@ -21,6 +29,8 @@ type SessionView = {
 };
 
 type Step = "loading" | "expired" | "revoked" | "intake" | "review" | "sign" | "success" | "error";
+type Brand = { companyName: string; hasLogo: boolean };
+type Tfn = (key: string, params?: Record<string, string | number>) => string;
 
 // Heuristic: detect intake fields that already capture the signer's full name
 // so we don't render two identical "name" inputs (template author may have
@@ -39,6 +49,21 @@ function isNameLikeField(f: { key?: string; label?: string }): boolean {
   return NAME_FIELD_PATTERNS.some(rx => rx.test(haystack));
 }
 
+// Detect an email field already declared by the template so we attach the
+// verification widget to it instead of rendering a duplicate email input.
+const EMAIL_FIELD_PATTERNS = [
+  /e-?mail/i,
+  /eposta|e-posta/i,
+  /البريد/i,
+  /почт|эл\.?\s*адрес/i,
+  /courriel|correo/i,
+];
+function isEmailLikeField(f: { key?: string; label?: string; type?: string }): boolean {
+  if (f.type === "email") return true;
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return EMAIL_FIELD_PATTERNS.some(rx => rx.test(haystack));
+}
+
 export default function SignFlow({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -47,6 +72,17 @@ export default function SignFlow({ token }: { token: string }) {
   const [intake, setIntake] = useState<Record<string, string>>({});
   const [signerName, setSignerName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [brand, setBrand] = useState<Brand>({ companyName: "", hasLogo: false });
+
+  // Email-verification state. The signer enters their own email and proves
+  // ownership via a 6-digit code before they are allowed to sign.
+  const [email, setEmail] = useState<string>("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [verified, setVerified] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [codeError, setCodeError] = useState("");
 
   // Sign flow language is driven by the contract template's language so the
   // signing experience matches the language the issuer picked when sending
@@ -55,8 +91,7 @@ export default function SignFlow({ token }: { token: string }) {
     const raw = session?.template?.language;
     return raw && isValidLanguage(raw) ? raw : "en";
   }, [session?.template?.language]);
-  const t = (key: string, params?: Record<string, string | number>) =>
-    getTranslation(lang, `sign.${key}`, params);
+  const t: Tfn = (key, params) => getTranslation(lang, `sign.${key}`, params);
   const isRTL = RTL_LANGUAGES.includes(lang);
 
   useEffect(() => {
@@ -68,13 +103,28 @@ export default function SignFlow({ token }: { token: string }) {
   useEffect(() => {
     (async () => {
       try {
+        const b: any = await customFetch(`/api/settings/branding`);
+        setBrand({
+          companyName: b?.companyName || b?.publicBrandName || "",
+          hasLogo: Boolean(b?.logoUrl),
+        });
+      } catch { /* branding is best-effort */ }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
         const res: any = await customFetch(`/api/public/sign/${encodeURIComponent(token)}`);
         const data: SessionView = res.data;
         setSession(data);
         setSignerName(data.signerName || "");
-        if (Array.isArray(data.template.intakeSchema) && data.intakeData) {
-          setIntake(data.intakeData);
-        }
+        const schema = Array.isArray(data.template.intakeSchema) ? data.template.intakeSchema : [];
+        if (schema.length && data.intakeData) setIntake(data.intakeData);
+        const ef = schema.find(isEmailLikeField);
+        const prefEmail = data.verifiedEmail || (ef ? data.intakeData?.[ef.key] : "") || data.signerEmail || "";
+        setEmail(prefEmail || "");
+        if (data.verifiedEmail) setVerified(true);
         if (data.expired) { setStep("expired"); return; }
         if (data.status === "signed") { setStep("success"); return; }
         if (data.status === "revoked") { setStep("revoked"); return; }
@@ -99,20 +149,57 @@ export default function SignFlow({ token }: { token: string }) {
     setPreviewHtml(r.data?.html || "");
   }
 
-  // If the intake schema already contains a name field, mirror its value into
-  // signerName so the signature record stays correct without showing a second
-  // input.
   const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean }[];
   const intakeNameField = fields.find(isNameLikeField);
+  const intakeEmailField = fields.find(isEmailLikeField);
+
+  function setEmailValue(v: string) {
+    setEmail(v);
+    if (verified) { setVerified(false); setCodeSent(false); setCode(""); }
+    setCodeError("");
+  }
+
+  async function sendCode() {
+    const value = email.trim();
+    if (!EMAIL_RE.test(value)) { setCodeError(t("emailRequired")); return; }
+    setSendingCode(true); setCodeError("");
+    try {
+      await customFetch(`/api/public/sign/${encodeURIComponent(token)}/send-code`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: value }),
+      });
+      setCodeSent(true);
+    } catch (err: any) {
+      setCodeError(err?.body?.error || err?.message || t("sendCodeError"));
+    }
+    setSendingCode(false);
+  }
+
+  async function verifyCode() {
+    if (!/^\d{6}$/.test(code.trim())) { setCodeError(t("codeError")); return; }
+    setVerifyingCode(true); setCodeError("");
+    try {
+      await customFetch(`/api/public/sign/${encodeURIComponent(token)}/verify-code`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), code: code.trim() }),
+      });
+      setVerified(true);
+    } catch (err: any) {
+      setCodeError(err?.body?.error || t("codeError"));
+    }
+    setVerifyingCode(false);
+  }
 
   async function submitIntake() {
     setSubmitting(true);
     try {
       const effectiveName = intakeNameField ? (intake[intakeNameField.key] || "").trim() : signerName;
       if (intakeNameField && effectiveName !== signerName) setSignerName(effectiveName);
+      const intakePayload: Record<string, string> = { ...intake, signerName: effectiveName };
+      if (intakeEmailField) intakePayload[intakeEmailField.key] = email.trim();
       await customFetch(`/api/public/sign/${encodeURIComponent(token)}/intake`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ intake: { ...intake, signerName: effectiveName } }),
+        body: JSON.stringify({ intake: intakePayload }),
       });
       await loadPreview();
       setStep("review");
@@ -131,38 +218,38 @@ export default function SignFlow({ token }: { token: string }) {
       });
       setStep("success");
     } catch (err: any) {
-      alert(err?.message || t("signError"));
+      alert(err?.body?.error || err?.message || t("signError"));
     }
     setSubmitting(false);
   }
 
   if (step === "loading") {
-    return <CenterShell><Loader2 className="w-8 h-8 animate-spin text-primary" /></CenterShell>;
+    return <CenterShell brand={brand}><Loader2 className="w-8 h-8 animate-spin text-primary" /></CenterShell>;
   }
   if (step === "expired") {
-    return <CenterShell>
+    return <CenterShell brand={brand}>
       <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
       <h1 className="text-xl font-semibold mb-2">{t("expired")}</h1>
       <p className="text-muted-foreground text-sm">{t("expiredBody")}</p>
     </CenterShell>;
   }
   if (step === "revoked") {
-    return <CenterShell>
+    return <CenterShell brand={brand}>
       <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
       <h1 className="text-xl font-semibold mb-2">{t("revoked")}</h1>
       <p className="text-muted-foreground text-sm">{t("revokedBody")}</p>
     </CenterShell>;
   }
   if (step === "error") {
-    return <CenterShell>
+    return <CenterShell brand={brand}>
       <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
       <h1 className="text-xl font-semibold mb-2">{t("error")}</h1>
       <p className="text-muted-foreground text-sm">{errorMsg}</p>
     </CenterShell>;
   }
   if (step === "success") {
-    const pdfUrl = `/api/public/sign/${encodeURIComponent(token)}/pdf`;
-    return <CenterShell>
+    const pdfUrl = `${BASE_URL}/api/public/sign/${encodeURIComponent(token)}/pdf`;
+    return <CenterShell brand={brand}>
       <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
       <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
       <p className="text-muted-foreground text-sm text-center max-w-md mb-6">{t("signedBody")}</p>
@@ -174,7 +261,7 @@ export default function SignFlow({ token }: { token: string }) {
           </a>
         </Button>
         <Button asChild variant="outline" className="flex-1">
-          <a href="/login">{t("openPortal")}</a>
+          <a href={`${BASE_URL}/login`}>{t("openPortal")}</a>
         </Button>
       </div>
     </CenterShell>;
@@ -182,33 +269,59 @@ export default function SignFlow({ token }: { token: string }) {
 
   if (!session) return null;
 
+  const stepLabels = session.mode === "self_fill"
+    ? [t("stepIntake"), t("stepReview"), t("stepSign")]
+    : [t("stepReview"), t("stepSign")];
+
   if (step === "intake") {
-    const canContinue = (intakeNameField
+    const nameOk = intakeNameField
       ? (intake[intakeNameField.key] || "").trim().length > 0
-      : signerName.trim().length > 0);
+      : signerName.trim().length > 0;
+    const canContinue = nameOk && verified;
     return (
-      <Shell title={t("title")} subtitle={session.template.name}>
-        <Stepper step={1} labels={[t("stepIntake"), t("stepReview"), t("stepSign")]} />
+      <Shell brand={brand} subtitle={session.template.name}>
+        <Stepper step={1} labels={stepLabels} />
+        <h2 className="text-lg font-semibold mb-4">{t("title")}</h2>
         <div className="space-y-4">
+          <EmailVerify
+            t={t}
+            label={intakeEmailField ? intakeEmailField.label : t("emailLabel")}
+            email={email}
+            onChangeEmail={setEmailValue}
+            codeSent={codeSent}
+            code={code}
+            onChangeCode={setCode}
+            verified={verified}
+            sendingCode={sendingCode}
+            verifyingCode={verifyingCode}
+            codeError={codeError}
+            onSend={sendCode}
+            onVerify={verifyCode}
+          />
           {!intakeNameField && (
             <div>
               <Label>{t("fullName")} *</Label>
               <Input value={signerName} onChange={e => setSignerName(e.target.value)} required />
             </div>
           )}
-          {fields.map(f => (
-            <div key={f.key}>
-              <Label>{f.label}{f.required ? " *" : ""}</Label>
-              {f.type === "textarea" ? (
-                <Textarea value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
-              ) : (
-                <Input type={f.type === "email" ? "email" : f.type === "date" ? "date" : "text"} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} />
-              )}
-            </div>
-          ))}
+          {fields
+            .filter(f => !(intakeEmailField && f.key === intakeEmailField.key))
+            .map(f => (
+              <div key={f.key}>
+                <Label>{f.label}{f.required ? " *" : ""}</Label>
+                {f.type === "textarea" ? (
+                  <Textarea value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
+                ) : (
+                  <Input type={f.type === "date" ? "date" : "text"} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} />
+                )}
+              </div>
+            ))}
         </div>
-        <div className="flex justify-end mt-6">
-          <Button onClick={submitIntake} disabled={submitting || !canContinue}>
+        {!verified && (
+          <p className="text-xs text-muted-foreground mt-4">{t("verifyFirst")}</p>
+        )}
+        <div className="mt-6">
+          <Button className="w-full" size="lg" onClick={submitIntake} disabled={submitting || !canContinue}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("continue")}
           </Button>
         </div>
@@ -218,21 +331,20 @@ export default function SignFlow({ token }: { token: string }) {
 
   if (step === "review") {
     return (
-      <Shell title={t("titleReview")} subtitle={session.template.name}>
-        <Stepper step={session.mode === "self_fill" ? 2 : 1} labels={
-          session.mode === "self_fill"
-            ? [t("stepIntake"), t("stepReview"), t("stepSign")]
-            : [t("stepReview"), t("stepSign")]
-        } />
+      <Shell brand={brand} subtitle={session.template.name}>
+        <Stepper step={session.mode === "self_fill" ? 2 : 1} labels={stepLabels} />
+        <h2 className="text-lg font-semibold mb-4">{t("titleReview")}</h2>
         <div
           className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
-        <div className="flex justify-between mt-6">
-          {session.mode === "self_fill" ? (
-            <Button variant="outline" onClick={() => setStep("intake")}>{t("back")}</Button>
-          ) : <span />}
-          <Button onClick={() => setStep("sign")}><FileSignature className="w-4 h-4 mr-2" /> {t("sign")}</Button>
+        <div className="mt-6 flex flex-col sm:flex-row-reverse gap-2">
+          <Button className="w-full sm:flex-1" size="lg" onClick={() => setStep("sign")}>
+            <FileSignature className="w-4 h-4 mr-2" /> {t("sign")}
+          </Button>
+          {session.mode === "self_fill" && (
+            <Button variant="outline" className="w-full sm:w-auto" size="lg" onClick={() => setStep("intake")}>{t("back")}</Button>
+          )}
         </div>
       </Shell>
     );
@@ -240,12 +352,30 @@ export default function SignFlow({ token }: { token: string }) {
 
   if (step === "sign") {
     return (
-      <Shell title={t("titleSign")} subtitle={session.template.name}>
-        <Stepper step={session.mode === "self_fill" ? 3 : 2} labels={
-          session.mode === "self_fill"
-            ? [t("stepIntake"), t("stepReview"), t("stepSign")]
-            : [t("stepReview"), t("stepSign")]
-        } />
+      <Shell brand={brand} subtitle={session.template.name}>
+        <Stepper step={session.mode === "self_fill" ? 3 : 2} labels={stepLabels} />
+        <h2 className="text-lg font-semibold mb-4">{t("titleSign")}</h2>
+        {/* admin_driven sessions skip the intake step, so verification happens
+            here. self_fill sessions are already verified by this point. */}
+        {!verified && (
+          <div className="mb-4">
+            <EmailVerify
+              t={t}
+              label={intakeEmailField ? intakeEmailField.label : t("emailLabel")}
+              email={email}
+              onChangeEmail={setEmailValue}
+              codeSent={codeSent}
+              code={code}
+              onChangeCode={setCode}
+              verified={verified}
+              sendingCode={sendingCode}
+              verifyingCode={verifyingCode}
+              codeError={codeError}
+              onSend={sendCode}
+              onVerify={verifyCode}
+            />
+          </div>
+        )}
         <SignaturePad
           onSubmit={submitSignature}
           submitting={submitting}
@@ -254,6 +384,7 @@ export default function SignFlow({ token }: { token: string }) {
           onChangeName={setSignerName}
           t={t}
           showNameInput={!intakeNameField}
+          verified={verified}
         />
       </Shell>
     );
@@ -262,42 +393,73 @@ export default function SignFlow({ token }: { token: string }) {
   return null;
 }
 
-function CenterShell({ children }: { children: React.ReactNode }) {
+function BrandHeader({ brand }: { brand: Brand }) {
+  const logoSrc = brand.hasLogo ? `${BASE_URL}/api/settings/branding/logo` : null;
   return (
-    <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
-      <div className="bg-card border rounded-2xl shadow-sm p-10 max-w-md w-full flex flex-col items-center text-center">{children}</div>
+    <div className="bg-gradient-to-r from-[#0a2540] to-[#123a63] text-white">
+      <div className="max-w-3xl mx-auto px-6 py-5 flex items-center gap-3">
+        {logoSrc ? (
+          <img src={logoSrc} alt={brand.companyName || "Logo"} className="h-9 max-w-[200px] object-contain" />
+        ) : (
+          <>
+            <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center">
+              <FileText className="w-5 h-5" />
+            </div>
+            <span className="text-lg font-semibold tracking-tight">{brand.companyName || "Contract Signing"}</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-function Shell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+function CenterShell({ children, brand }: { children: React.ReactNode; brand: Brand }) {
   return (
-    <div className="min-h-screen bg-secondary/30 py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+    <div className="min-h-screen bg-secondary/30 flex flex-col">
+      <BrandHeader brand={brand} />
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="bg-card border rounded-2xl shadow-sm p-10 max-w-md w-full flex flex-col items-center text-center">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Shell({ subtitle, brand, children }: { subtitle: string; brand: Brand; children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-secondary/30 flex flex-col">
+      <BrandHeader brand={brand} />
+      <div className="flex-1 py-8 px-4">
+        <div className="max-w-3xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-3">{subtitle}</p>
+          <div className="bg-card border rounded-2xl shadow-sm p-6">{children}</div>
         </div>
-        <div className="bg-card border rounded-2xl shadow-sm p-6">{children}</div>
       </div>
     </div>
   );
 }
 
 function Stepper({ step, labels }: { step: number; labels: string[] }) {
+  const icons = [Pencil, FileText, PenLine];
   return (
-    <div className="flex items-center justify-center gap-2 mb-6">
+    <div className="flex flex-wrap items-center gap-2 mb-6">
       {labels.map((label, i) => {
         const num = i + 1;
         const active = num === step;
         const done = num < step;
+        const Icon = icons[i] || Pencil;
         return (
-          <div key={label} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${active ? "bg-primary text-primary-foreground" : done ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"}`}>
-              {done ? "✓" : num}
-            </div>
-            <span className={`ml-2 text-sm ${active ? "font-semibold" : "text-muted-foreground"}`}>{label}</span>
-            {i < labels.length - 1 && <div className="w-8 h-px bg-border mx-3" />}
+          <div
+            key={label}
+            className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              active
+                ? "bg-primary text-primary-foreground"
+                : done
+                ? "bg-emerald-500 text-white"
+                : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {done ? <CheckCircle2 className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+            <span>{label}</span>
           </div>
         );
       })}
@@ -305,21 +467,98 @@ function Stepper({ step, labels }: { step: number; labels: string[] }) {
   );
 }
 
-function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName, t, showNameInput }: {
+function EmailVerify({
+  t, label, email, onChangeEmail, codeSent, code, onChangeCode, verified,
+  sendingCode, verifyingCode, codeError, onSend, onVerify,
+}: {
+  t: Tfn;
+  label: string;
+  email: string;
+  onChangeEmail: (v: string) => void;
+  codeSent: boolean;
+  code: string;
+  onChangeCode: (v: string) => void;
+  verified: boolean;
+  sendingCode: boolean;
+  verifyingCode: boolean;
+  codeError: string;
+  onSend: () => void;
+  onVerify: () => void;
+}) {
+  return (
+    <div className="rounded-xl border bg-muted/30 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Mail className="w-4 h-4 text-primary" />
+        <span className="text-sm font-medium">{t("emailVerifyRequired")}</span>
+      </div>
+      <Label>{label} *</Label>
+      <div className="flex flex-col sm:flex-row gap-2 mt-1">
+        <Input
+          type="email"
+          value={email}
+          disabled={verified}
+          onChange={e => onChangeEmail(e.target.value)}
+          placeholder="name@example.com"
+          className="flex-1"
+        />
+        {verified ? (
+          <div className="flex items-center gap-1.5 text-emerald-600 text-sm font-medium px-2">
+            <ShieldCheck className="w-4 h-4" /> {t("verified")}
+          </div>
+        ) : (
+          <Button type="button" variant="outline" onClick={onSend} disabled={sendingCode}>
+            {sendingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {codeSent ? t("resendCode") : t("sendCode")}
+          </Button>
+        )}
+      </div>
+
+      {codeSent && !verified && (
+        <div className="mt-3">
+          <p className="text-xs text-muted-foreground mb-2">{t("codeSentTo", { email })}</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              inputMode="numeric"
+              maxLength={6}
+              value={code}
+              onChange={e => onChangeCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder={t("enterCode")}
+              className="flex-1 tracking-[0.4em] text-center font-semibold"
+            />
+            <Button type="button" onClick={onVerify} disabled={verifyingCode || code.trim().length !== 6}>
+              {verifyingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {t("verify")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {codeError && <p className="text-xs text-red-500 mt-2">{codeError}</p>}
+    </div>
+  );
+}
+
+function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName, t, showNameInput, verified }: {
   onSubmit: (b64: string) => void;
   submitting: boolean;
   onCancel: () => void;
   signerName: string;
   onChangeName: (v: string) => void;
-  t: (k: string) => string;
+  t: Tfn;
   showNameInput: boolean;
+  verified: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<"draw" | "upload">("draw");
   const [drawing, setDrawing] = useState(false);
   const [hasInk, setHasInk] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [uploaded, setUploaded] = useState<string>("");
+  const [uploadError, setUploadError] = useState("");
 
   useEffect(() => {
+    if (mode !== "draw") return;
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext("2d"); if (!ctx) return;
     const ratio = window.devicePixelRatio || 1;
@@ -330,7 +569,8 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.strokeStyle = "#0f172a";
-  }, []);
+    setHasInk(false);
+  }, [mode]);
 
   function pointerPos(e: PointerEvent | React.PointerEvent) {
     const c = canvasRef.current!;
@@ -357,12 +597,53 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
     ctx.clearRect(0, 0, c.width, c.height);
     setHasInk(false);
   }
-  function submit() {
-    if (!hasInk) return;
-    const c = canvasRef.current!;
-    const dataUrl = c.toDataURL("image/png");
-    onSubmit(dataUrl);
+
+  function handleFile(file: File | undefined) {
+    setUploadError("");
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/.test(file.type)) { setUploadError(t("sigUploadHint")); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 600;
+        const scale = Math.min(1, maxW / img.width);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        const cx = cv.getContext("2d");
+        if (!cx) { setUploadError(t("sigTooLarge")); return; }
+        cx.drawImage(img, 0, 0, w, h);
+        let dataUrl = cv.toDataURL("image/png");
+        if (dataUrl.length > MAX_SIG_BASE64) dataUrl = cv.toDataURL("image/jpeg", 0.85);
+        if (dataUrl.length > MAX_SIG_BASE64) { setUploadError(t("sigTooLarge")); return; }
+        setUploaded(dataUrl);
+      };
+      img.onerror = () => setUploadError(t("sigUploadHint"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => setUploadError(t("sigUploadHint"));
+    reader.readAsDataURL(file);
   }
+
+  function removeUpload() {
+    setUploaded("");
+    setUploadError("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function submit() {
+    if (mode === "draw") {
+      if (!hasInk) return;
+      onSubmit(canvasRef.current!.toDataURL("image/png"));
+    } else {
+      if (!uploaded) return;
+      onSubmit(uploaded);
+    }
+  }
+
+  const hasSignature = mode === "draw" ? hasInk : Boolean(uploaded);
 
   return (
     <div className="space-y-4">
@@ -372,32 +653,86 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
           <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
         </div>
       )}
+
       <div>
         <Label>{t("signature")}</Label>
-        <div className="border rounded-lg bg-white relative" style={{ height: 200 }}>
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full touch-none rounded-lg"
-            onPointerDown={start}
-            onPointerMove={move}
-            onPointerUp={end}
-            onPointerCancel={end}
-          />
-          <button type="button" onClick={clear} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
-            <Eraser className="w-3 h-3" /> {t("clear")}
+        <div className="inline-flex rounded-lg border p-1 bg-muted/40 mt-1 mb-2">
+          <button
+            type="button"
+            onClick={() => setMode("draw")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${mode === "draw" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+          >
+            <Pencil className="w-3.5 h-3.5" /> {t("sigDraw")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("upload")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${mode === "upload" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+          >
+            <Upload className="w-3.5 h-3.5" /> {t("sigUpload")}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">{t("signatureHint")}</p>
+
+        {mode === "draw" ? (
+          <>
+            <div className="border rounded-lg bg-white relative" style={{ height: 200 }}>
+              <canvas
+                ref={canvasRef}
+                className="w-full h-full touch-none rounded-lg"
+                onPointerDown={start}
+                onPointerMove={move}
+                onPointerUp={end}
+                onPointerCancel={end}
+              />
+              <button type="button" onClick={clear} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
+                <Eraser className="w-3 h-3" /> {t("clear")}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{t("signatureHint")}</p>
+          </>
+        ) : (
+          <>
+            {uploaded ? (
+              <div className="border rounded-lg bg-white relative flex items-center justify-center p-3" style={{ minHeight: 200 }}>
+                <img src={uploaded} alt="signature" className="max-h-[180px] max-w-full object-contain" />
+                <button type="button" onClick={removeUpload} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
+                  <X className="w-3 h-3" /> {t("sigRemove")}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="w-full border-2 border-dashed rounded-lg bg-muted/20 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-muted/30 transition-colors"
+                style={{ height: 200 }}
+              >
+                <Upload className="w-6 h-6" />
+                <span className="text-sm font-medium">{t("sigChooseFile")}</span>
+                <span className="text-xs">{t("sigUploadHint")}</span>
+              </button>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={e => handleFile(e.target.files?.[0])}
+            />
+            {uploadError && <p className="text-xs text-red-500 mt-1">{uploadError}</p>}
+          </>
+        )}
       </div>
+
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" />
         <span>{t("consent")}</span>
       </label>
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onCancel}>{t("back")}</Button>
-        <Button onClick={submit} disabled={!hasInk || !confirmed || !signerName.trim() || submitting}>
+
+      <div className="flex flex-col sm:flex-row-reverse gap-2">
+        <Button className="w-full sm:flex-1" size="lg" onClick={submit} disabled={!verified || !hasSignature || !confirmed || !signerName.trim() || submitting}>
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />} {t("signAndSend")}
         </Button>
+        <Button variant="outline" className="w-full sm:w-auto" size="lg" onClick={onCancel}>{t("back")}</Button>
       </div>
     </div>
   );

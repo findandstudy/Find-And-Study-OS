@@ -30,6 +30,7 @@ export const signingSessionsTable = pgTable("signing_sessions", {
   status: text("status").notNull().default("review_pending"),
   intakeData: jsonb("intake_data"),
   signerEmail: text("signer_email").notNull(),
+  verifiedEmail: text("verified_email"),
   signerName: text("signer_name"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdByUserId: integer("created_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
