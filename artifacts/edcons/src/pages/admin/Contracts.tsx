@@ -86,7 +86,7 @@ export default function ContractsPage() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId: aid, templateId: templateId !== "auto" ? parseInt(templateId, 10) : undefined }),
       });
-      toast({ title: t("contracts.sentTitle"), description: t("contracts.sentDesc", { url: res.data?.signUrl }) });
+      toast({ title: t("contracts.sentTitle") });
       setShowSendDialog(false);
       setAgentId(""); setTemplateId("auto");
       await load();
