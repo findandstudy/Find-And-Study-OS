@@ -1709,9 +1709,11 @@
     "fields": {
       "email": "Email *",
       "name": "Name (optional)",
+      "template": "Contract template",
       "language": "Language",
       "type": "Type"
     },
+    "selectTemplate": "Select a contract template",
     "types": {
       "company": "Company",
       "individual": "Individual"

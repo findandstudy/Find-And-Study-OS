@@ -1650,9 +1650,11 @@
     "fields": {
       "email": "E-posta *",
       "name": "İsim (opsiyonel)",
+      "template": "Sözleşme şablonu",
       "language": "Dil",
       "type": "Tip"
     },
+    "selectTemplate": "Bir sözleşme şablonu seçin",
     "types": {
       "company": "Şirket",
       "individual": "Bireysel"

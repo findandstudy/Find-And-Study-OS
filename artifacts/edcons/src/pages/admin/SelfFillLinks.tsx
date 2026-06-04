@@ -9,13 +9,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { formatDateTime, LANGUAGE_META, SUPPORTED_LANGUAGES } from "@/lib/i18n";
+import { formatDateTime } from "@/lib/i18n";
 import { Link2, Loader2, Plus, RotateCw, Ban, Copy } from "lucide-react";
 
 type Session = {
   id: number; templateId: number; agentId: number | null; mode: string; status: string;
   signerEmail: string; signerName: string | null; expiresAt: string;
   openedAt: string | null; signedAt: string | null; revokedAt: string | null; createdAt: string;
+};
+
+type Template = { id: number; name: string; language: string; entityType: string; version: number; isActive: boolean };
+
+const LANG_LABELS: Record<string, string> = {
+  en: "English", tr: "Türkçe", ar: "العربية", fr: "Français", ru: "Русский",
+  es: "Español", fa: "فارسی", hi: "हिन्दी", id: "Bahasa", zh: "中文",
 };
 
 const STATUS_TONE: Record<string, any> = {
@@ -29,10 +36,11 @@ export default function SelfFillLinksPage() {
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const [rows, setRows] = useState<Session[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ signerEmail: "", signerName: "", language: lang, entityType: "company" as "company" | "individual" });
+  const [form, setForm] = useState({ signerEmail: "", signerName: "", templateId: "" });
   const [lastUrl, setLastUrl] = useState("");
 
   async function load() {
@@ -43,19 +51,26 @@ export default function SelfFillLinksPage() {
     } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
     setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  async function loadTemplates() {
+    try {
+      const res: any = await customFetch(`/api/contract-templates?isActive=true`);
+      setTemplates(res.data || []);
+    } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
+  }
+  useEffect(() => { load(); loadTemplates(); }, []);
 
   async function create() {
     if (!form.signerEmail.trim()) { toast({ title: t("selfFill.toast.emailRequired"), variant: "destructive" }); return; }
+    if (!form.templateId) { toast({ title: t("selfFill.selectTemplate"), variant: "destructive" }); return; }
     setCreating(true);
     try {
       const res: any = await customFetch(`/api/contracts/self-fill-link`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ signerEmail: form.signerEmail, signerName: form.signerName, templateId: parseInt(form.templateId, 10) }),
       });
       setLastUrl(res.data?.signUrl || "");
       toast({ title: t("selfFill.toast.linkCreated") });
-      setForm({ signerEmail: "", signerName: "", language: lang, entityType: "company" });
+      setForm({ signerEmail: "", signerName: "", templateId: "" });
       await load();
     } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
     setCreating(false);
@@ -132,33 +147,18 @@ export default function SelfFillLinksPage() {
               <Label>{t("selfFill.fields.name")}</Label>
               <Input value={form.signerName} onChange={e => setForm(f => ({ ...f, signerName: e.target.value }))} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>{t("selfFill.fields.language")}</Label>
-                <Select value={form.language} onValueChange={v => setForm(f => ({ ...f, language: v as any }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {SUPPORTED_LANGUAGES.map(code => (
-                      <SelectItem key={code} value={code}>
-                        {t(`languages.${code}`)}
-                        {LANGUAGE_META[code].nativeName !== t(`languages.${code}`) && (
-                          <span className="text-muted-foreground"> ({LANGUAGE_META[code].nativeName})</span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t("selfFill.fields.type")}</Label>
-                <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v as any }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="company">{t("selfFill.types.company")}</SelectItem>
-                    <SelectItem value="individual">{t("selfFill.types.individual")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>{t("selfFill.fields.template")}</Label>
+              <Select value={form.templateId} onValueChange={v => setForm(f => ({ ...f, templateId: v }))}>
+                <SelectTrigger><SelectValue placeholder={t("selfFill.selectTemplate")} /></SelectTrigger>
+                <SelectContent>
+                  {templates.map(tpl => (
+                    <SelectItem key={tpl.id} value={String(tpl.id)}>
+                      {tpl.name} — {LANG_LABELS[tpl.language] || tpl.language} · {tpl.entityType === "individual" ? t("contractTemplates.entityIndividual") : t("contractTemplates.entityCompany")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {lastUrl && (
               <div className="bg-muted/40 rounded-lg p-3 text-xs flex items-center gap-2 min-w-0 overflow-hidden">
