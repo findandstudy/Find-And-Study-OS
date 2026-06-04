@@ -8,5 +8,6 @@
 - [Prod→Dev data copy](prod-to-dev-data-copy.md) — prod read-only via executeSql, no prod creds in dev; base64-JSON + json_populate_recordset + replica role; always verify per-table count(*), bulk copy silently skips tables.
 - [Notification template dispatch](notification-template-dispatch.md) — multilingual templates: field-level fallback (lang→top-level→en→tr), escape vars in HTML email bodies, per-channel try/catch, await the error-safe dispatch.
 - [i18n key parity](i18n-key-parity.md) — locale JSONs must contain EVERY en string key (getTranslation falls back to en silently); don't letter-filter the parity/fill step, only the translate step.
+- [Fast Refresh mixed exports crash](fast-refresh-mixed-exports.md) — a .tsx exporting a component + a hook/util/type breaks Fast Refresh → full reload can crash mounted shells (empty {} ErrorBoundary). Dev-only; not the prod stale-chunk case.
 - [Lifted child submit/readiness](lifted-child-submit-ref.md) — moving a child's action button to a parent footer via ref+state stale-enables across mounts; clean up on unmount + reset on view change.
 - [Public sign email verification](public-sign-email-verification.md) — signer-email 6-digit gate: bind codes to the link via hashToken in the `token` column; render verify widget in BOTH intake (self_fill) and sign (admin_driven) steps.

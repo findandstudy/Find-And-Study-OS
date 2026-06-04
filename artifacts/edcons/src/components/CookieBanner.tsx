@@ -6,9 +6,9 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const CONSENT_KEY = "cookie_consent";
 
-export type CookieConsent = "all" | "essential" | null;
+type CookieConsent = "all" | "essential" | null;
 
-export function getConsent(): CookieConsent {
+function getConsent(): CookieConsent {
   try {
     const v = localStorage.getItem(CONSENT_KEY);
     if (v === "all" || v === "essential") return v;
