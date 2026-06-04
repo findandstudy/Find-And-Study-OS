@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   Loader2, CheckCircle2, AlertCircle, FileSignature, Eraser,
   Mail, ShieldCheck, Pencil, Upload, FileText, PenLine, X,
@@ -388,6 +389,13 @@ export default function SignFlow({ token }: { token: string }) {
                     disabled
                     aria-readonly="true"
                   />
+                ) : f.type === "tel" ? (
+                  <div className="mt-1.5">
+                    <PhoneInput
+                      value={intake[f.key] || ""}
+                      onChange={v => setIntake(s => ({ ...s, [f.key]: v }))}
+                    />
+                  </div>
                 ) : (
                   <Input
                     className="mt-1.5"
