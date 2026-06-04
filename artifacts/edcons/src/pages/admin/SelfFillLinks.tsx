@@ -60,7 +60,6 @@ export default function SelfFillLinksPage() {
   useEffect(() => { load(); loadTemplates(); }, []);
 
   async function create() {
-    if (!form.signerEmail.trim()) { toast({ title: t("selfFill.toast.emailRequired"), variant: "destructive" }); return; }
     if (!form.templateId) { toast({ title: t("selfFill.selectTemplate"), variant: "destructive" }); return; }
     setCreating(true);
     try {

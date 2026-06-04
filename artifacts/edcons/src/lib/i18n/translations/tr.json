@@ -1648,7 +1648,7 @@
     },
     "modalTitle": "Yeni self-fill bağlantı",
     "fields": {
-      "email": "E-posta *",
+      "email": "E-posta (opsiyonel)",
       "name": "İsim (opsiyonel)",
       "template": "Sözleşme şablonu",
       "language": "Dil",

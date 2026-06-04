@@ -212,7 +212,7 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
 router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fill_links.manage"), async (req, res): Promise<void> => {
   try {
     const { signerEmail, signerName, language, entityType, expiryDays, templateId } = req.body || {};
-    if (!signerEmail || typeof signerEmail !== "string") { res.status(400).json({ error: "signerEmail is required" }); return; }
+    const hasEmail = typeof signerEmail === "string" && signerEmail.trim().length > 0;
     let tpl: Awaited<ReturnType<typeof pickTemplate>> | Awaited<ReturnType<typeof loadTemplateById>> = null;
     if (templateId !== undefined && templateId !== null && templateId !== "") {
       const tid = typeof templateId === "number" ? templateId : parseInt(String(templateId), 10);
@@ -237,25 +237,27 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
       mode: "self_fill",
       status: "intake_pending",
       intakeData: null,
-      signerEmail: String(signerEmail).toLowerCase().trim(),
+      signerEmail: hasEmail ? String(signerEmail).toLowerCase().trim() : "",
       signerName: signerName ? String(signerName).slice(0, 200) : null,
       expiresAt,
       createdByUserId: (req as any).user?.id ?? null,
     }).returning();
 
     const signUrl = `${getAppBaseUrl()}/sign/${rawToken}`;
-    try {
-      const email = await buildContractSignRequestEmail({
-        signerName: signerName || null,
-        agentName: null,
-        templateName: tpl.name,
-        signUrl,
-        expiresAt,
-        selfFill: true,
-      });
-      await sendEmail(session.signerEmail, email);
-    } catch (err) {
-      console.error("[contracts] failed to send self-fill email:", err);
+    if (hasEmail) {
+      try {
+        const email = await buildContractSignRequestEmail({
+          signerName: signerName || null,
+          agentName: null,
+          templateName: tpl.name,
+          signUrl,
+          expiresAt,
+          selfFill: true,
+        });
+        await sendEmail(session.signerEmail, email);
+      } catch (err) {
+        console.error("[contracts] failed to send self-fill email:", err);
+      }
     }
 
     await writeAudit({
@@ -353,7 +355,7 @@ router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, as
       .where(eq(signingSessionsTable.id, id));
     const [tpl] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
     const signUrl = `${getAppBaseUrl()}/sign/${rawToken}`;
-    if (tpl) {
+    if (tpl && session.signerEmail) {
       try {
         const email = await buildContractSignRequestEmail({
           signerName: session.signerName,

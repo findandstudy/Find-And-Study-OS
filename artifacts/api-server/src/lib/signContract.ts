@@ -130,18 +130,21 @@ export async function finalizeSign(opts: {
   if (!outcome.ok) return outcome;
   const signed = outcome.row;
 
-  // Email the signed PDF copy. Best-effort.
-  try {
-    const downloadUrl = opts.pdfDownloadUrl || `${getAppBaseUrl()}/api/contracts/signed/${signed.id}/pdf`;
-    const email = await buildSignedContractEmail({
-      signerName: finalSignerName,
-      templateName: template.name,
-      pdfDownloadUrl: downloadUrl,
-    });
-    await sendEmail(session.signerEmail, email);
-    await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
-  } catch (emailErr) {
-    console.error("[signContract] failed to email signed PDF:", emailErr);
+  // Email the signed PDF copy. Best-effort. Skipped when no signer email
+  // exists (e.g. a self-fill link created without an email address).
+  if (session.signerEmail) {
+    try {
+      const downloadUrl = opts.pdfDownloadUrl || `${getAppBaseUrl()}/api/contracts/signed/${signed.id}/pdf`;
+      const email = await buildSignedContractEmail({
+        signerName: finalSignerName,
+        templateName: template.name,
+        pdfDownloadUrl: downloadUrl,
+      });
+      await sendEmail(session.signerEmail, email);
+      await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
+    } catch (emailErr) {
+      console.error("[signContract] failed to email signed PDF:", emailErr);
+    }
   }
 
   await writeAudit({

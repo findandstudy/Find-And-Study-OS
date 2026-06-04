@@ -1707,7 +1707,7 @@
     },
     "modalTitle": "New self-fill link",
     "fields": {
-      "email": "Email *",
+      "email": "Email (optional)",
       "name": "Name (optional)",
       "template": "Contract template",
       "language": "Language",

@@ -378,20 +378,22 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     // Send the signed PDF download link to the signer (best-effort).
     // The signer is unauthenticated — link uses the same opaque token to gate
     // access via /api/public/sign/:token/pdf, which only serves once status=signed.
-    try {
-      const downloadUrl = `${getAppBaseUrl()}/api/public/sign/${rawTokenForLink}/pdf`;
-      const portalUrl = `${getAppBaseUrl()}/login`;
-      const email = await buildSignedContractEmail({
-        signerName: finalSignerName,
-        templateName: r.template.name,
-        pdfDownloadUrl: downloadUrl,
-        portalUrl,
-        language: r.template.language,
-      });
-      await sendEmail(r.session.signerEmail, email);
-      await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
-    } catch (emailErr) {
-      console.error("[public-sign] failed to email signed PDF:", emailErr);
+    if (r.session.signerEmail) {
+      try {
+        const downloadUrl = `${getAppBaseUrl()}/api/public/sign/${rawTokenForLink}/pdf`;
+        const portalUrl = `${getAppBaseUrl()}/login`;
+        const email = await buildSignedContractEmail({
+          signerName: finalSignerName,
+          templateName: r.template.name,
+          pdfDownloadUrl: downloadUrl,
+          portalUrl,
+          language: r.template.language,
+        });
+        await sendEmail(r.session.signerEmail, email);
+        await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
+      } catch (emailErr) {
+        console.error("[public-sign] failed to email signed PDF:", emailErr);
+      }
     }
 
     await writeAudit({
