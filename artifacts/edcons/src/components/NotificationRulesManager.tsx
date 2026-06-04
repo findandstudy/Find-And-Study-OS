@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import {
   Bell, Mail, MessageCircle, Send, Smartphone, Check, X,
   Loader2, ChevronDown, ChevronRight, Settings2, Pencil, Eye, Save,
@@ -30,13 +31,16 @@ interface NotificationRule {
 interface LangTemplate { subject?: string; body?: string; }
 interface NotifTemplate extends LangTemplate { translations?: Record<string, LangTemplate>; }
 
+// Email/notification template languages are derived from the canonical
+// system language list (Settings → Language & Region) so the editor always
+// exposes every supported locale instead of a hardcoded subset. "tr" and
+// "en" are surfaced first to match the org's primary content languages; the
+// backend dispatcher resolves any language key with fallback (lang → en → tr).
+const TEMPLATE_LANG_ORDER = ["tr", "en"] as const;
 const TEMPLATE_LANGS: { code: string; label: string }[] = [
-  { code: "tr", label: "TR" },
-  { code: "en", label: "EN" },
-  { code: "ar", label: "AR" },
-  { code: "fr", label: "FR" },
-  { code: "ru", label: "RU" },
-];
+  ...TEMPLATE_LANG_ORDER,
+  ...SUPPORTED_LANGUAGES.filter(c => !TEMPLATE_LANG_ORDER.includes(c as any)),
+].map(code => ({ code, label: code.toUpperCase() }));
 
 const PASSIVE_CHANNELS = new Set(["telegram", "sms"]);
 
