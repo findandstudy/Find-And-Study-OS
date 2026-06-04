@@ -1555,7 +1555,9 @@
     "sigUploadHint": "PNG أو JPG، حتى بضعة ميغابايت.",
     "sigChooseFile": "اختر صورة",
     "sigRemove": "إزالة",
-    "sigTooLarge": "الصورة كبيرة جدًا. استخدم ملفًا أصغر."
+    "sigTooLarge": "الصورة كبيرة جدًا. استخدم ملفًا أصغر.",
+    "fillDetailsFor": "يرجى إدخال بياناتك من أجل:",
+    "footerNote": "ستُستخدم معلوماتك لإنشاء العقد."
   },
   "messagesPage": {
     "messages": "الرسائل",

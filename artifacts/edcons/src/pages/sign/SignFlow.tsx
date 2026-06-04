@@ -74,6 +74,11 @@ export default function SignFlow({ token }: { token: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [brand, setBrand] = useState<Brand>({ companyName: "", hasLogo: false });
 
+  // Sign-step footer wiring: the signature action button lives in the sticky
+  // footer (outside SignaturePad), so we lift readiness + a submit handle up.
+  const sigSubmitRef = useRef<(() => void) | null>(null);
+  const [sigReady, setSigReady] = useState(false);
+
   // Email-verification state. The signer enters their own email and proves
   // ownership via a 6-digit code before they are allowed to sign.
   const [email, setEmail] = useState<string>("");
@@ -111,6 +116,16 @@ export default function SignFlow({ token }: { token: string }) {
       } catch { /* branding is best-effort */ }
     })();
   }, []);
+
+  // When we leave the sign step, clear the lifted signature wiring so a later
+  // return to the sign step can't briefly act on a stale handle/readiness from
+  // the previous SignaturePad mount.
+  useEffect(() => {
+    if (step !== "sign") {
+      sigSubmitRef.current = null;
+      setSigReady(false);
+    }
+  }, [step]);
 
   useEffect(() => {
     (async () => {
@@ -254,7 +269,7 @@ export default function SignFlow({ token }: { token: string }) {
       <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
       <p className="text-muted-foreground text-sm text-center max-w-md mb-6">{t("signedBody")}</p>
       <div className="flex flex-col sm:flex-row gap-2 w-full">
-        <Button asChild className="flex-1 bg-[#0a2540] hover:bg-[#123a63] text-white">
+        <Button asChild className="flex-1 bg-[#143591] hover:bg-[#0f2870] text-white">
           <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
             <FileSignature className="w-4 h-4 mr-2" />
             {t("downloadPdf")}
@@ -279,7 +294,19 @@ export default function SignFlow({ token }: { token: string }) {
       : signerName.trim().length > 0;
     const canContinue = nameOk && verified;
     return (
-      <Shell brand={brand} step={1} labels={stepLabels} title={t("title")} subtitle={session.template.name}>
+      <Shell
+        brand={brand}
+        step={1}
+        labels={stepLabels}
+        title={t("title")}
+        subtitle={<>{t("fillDetailsFor")} <span className="font-semibold text-foreground">{session.template.name}</span></>}
+        footerNote={t("footerNote")}
+        footer={
+          <Button className="w-full bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={submitIntake} disabled={submitting || !canContinue}>
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("continue")}
+          </Button>
+        }
+      >
         <div className="space-y-4">
           <EmailVerify
             t={t}
@@ -298,7 +325,7 @@ export default function SignFlow({ token }: { token: string }) {
           />
           {!intakeNameField && (
             <div>
-              <Label className="text-[#0a2540] dark:text-foreground">{t("fullName")} *</Label>
+              <Label className="text-[#143591] dark:text-foreground">{t("fullName")} *</Label>
               <Input value={signerName} onChange={e => setSignerName(e.target.value)} required />
             </div>
           )}
@@ -306,7 +333,7 @@ export default function SignFlow({ token }: { token: string }) {
             .filter(f => !(intakeEmailField && f.key === intakeEmailField.key))
             .map(f => (
               <div key={f.key}>
-                <Label className="text-[#0a2540] dark:text-foreground">{f.label}{f.required ? " *" : ""}</Label>
+                <Label className="text-[#143591] dark:text-foreground">{f.label}{f.required ? " *" : ""}</Label>
                 {f.type === "textarea" ? (
                   <Textarea value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
                 ) : (
@@ -318,37 +345,59 @@ export default function SignFlow({ token }: { token: string }) {
         {!verified && (
           <p className="text-xs text-muted-foreground mt-4">{t("verifyFirst")}</p>
         )}
-        <div className="mt-6">
-          <Button className="w-full bg-[#0a2540] hover:bg-[#123a63] text-white" size="lg" onClick={submitIntake} disabled={submitting || !canContinue}>
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("continue")}
-          </Button>
-        </div>
       </Shell>
     );
   }
 
   if (step === "review") {
     return (
-      <Shell brand={brand} step={session.mode === "self_fill" ? 2 : 1} labels={stepLabels} title={t("titleReview")} subtitle={session.template.name}>
+      <Shell
+        brand={brand}
+        step={session.mode === "self_fill" ? 2 : 1}
+        labels={stepLabels}
+        title={t("titleReview")}
+        subtitle={<span className="font-semibold text-foreground">{session.template.name}</span>}
+        footer={
+          <div className="flex flex-col sm:flex-row-reverse gap-2">
+            <Button className="w-full sm:flex-1 bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={() => setStep("sign")}>
+              <FileSignature className="w-4 h-4 mr-2" /> {t("sign")}
+            </Button>
+            {session.mode === "self_fill" && (
+              <Button variant="outline" className="w-full sm:w-auto" size="lg" onClick={() => setStep("intake")}>{t("back")}</Button>
+            )}
+          </div>
+        }
+      >
         <div
           className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
-        <div className="mt-6 flex flex-col sm:flex-row-reverse gap-2">
-          <Button className="w-full sm:flex-1 bg-[#0a2540] hover:bg-[#123a63] text-white" size="lg" onClick={() => setStep("sign")}>
-            <FileSignature className="w-4 h-4 mr-2" /> {t("sign")}
-          </Button>
-          {session.mode === "self_fill" && (
-            <Button variant="outline" className="w-full sm:w-auto" size="lg" onClick={() => setStep("intake")}>{t("back")}</Button>
-          )}
-        </div>
       </Shell>
     );
   }
 
   if (step === "sign") {
     return (
-      <Shell brand={brand} step={session.mode === "self_fill" ? 3 : 2} labels={stepLabels} title={t("titleSign")} subtitle={session.template.name}>
+      <Shell
+        brand={brand}
+        step={session.mode === "self_fill" ? 3 : 2}
+        labels={stepLabels}
+        title={t("titleSign")}
+        subtitle={<span className="font-semibold text-foreground">{session.template.name}</span>}
+        footer={
+          <div className="flex flex-col sm:flex-row-reverse gap-2">
+            <Button
+              className="w-full sm:flex-1 bg-[#143591] hover:bg-[#0f2870] text-white"
+              size="lg"
+              onClick={() => sigSubmitRef.current?.()}
+              disabled={!verified || !sigReady || !signerName.trim() || submitting}
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />} {t("signAndSend")}
+            </Button>
+            <Button variant="outline" className="w-full sm:w-auto" size="lg" onClick={() => setStep("review")}>{t("back")}</Button>
+          </div>
+        }
+      >
         {/* admin_driven sessions skip the intake step, so verification happens
             here. self_fill sessions are already verified by this point. */}
         {!verified && (
@@ -372,13 +421,12 @@ export default function SignFlow({ token }: { token: string }) {
         )}
         <SignaturePad
           onSubmit={submitSignature}
-          submitting={submitting}
-          onCancel={() => setStep("review")}
+          submitRef={sigSubmitRef}
+          onReady={setSigReady}
           signerName={signerName}
           onChangeName={setSignerName}
           t={t}
           showNameInput={!intakeNameField}
-          verified={verified}
         />
       </Shell>
     );
@@ -390,7 +438,7 @@ export default function SignFlow({ token }: { token: string }) {
 function BrandHeader({ brand }: { brand: Brand }) {
   const logoSrc = brand.hasLogo ? `${BASE_URL}/api/settings/branding/logo` : null;
   return (
-    <div className="bg-gradient-to-r from-[#0a2540] to-[#123a63] text-white">
+    <div className="bg-[#143591] text-white">
       <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-center gap-3">
         {logoSrc ? (
           <img src={logoSrc} alt={brand.companyName || "Logo"} className="h-10 max-w-[220px] object-contain" />
@@ -418,8 +466,9 @@ function CenterShell({ children, brand }: { children: React.ReactNode; brand: Br
   );
 }
 
-function Shell({ subtitle, title, step, labels, brand, children }: {
-  subtitle: string; title: string; step: number; labels: string[]; brand: Brand; children: React.ReactNode;
+function Shell({ subtitle, title, step, labels, brand, children, footer, footerNote }: {
+  subtitle: React.ReactNode; title: string; step: number; labels: string[]; brand: Brand;
+  children: React.ReactNode; footer?: React.ReactNode; footerNote?: string;
 }) {
   return (
     <div className="min-h-screen bg-secondary/30 flex flex-col">
@@ -428,12 +477,20 @@ function Shell({ subtitle, title, step, labels, brand, children }: {
         <div className="max-w-3xl mx-auto">
           <Stepper step={step} labels={labels} />
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-[#0a2540] dark:text-white">{title}</h1>
+            <h1 className="text-2xl font-bold text-[#143591] dark:text-white">{title}</h1>
             <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
           </div>
           <div className="bg-card border rounded-2xl shadow-sm p-6">{children}</div>
         </div>
       </div>
+      {footer && (
+        <div className="sticky bottom-0 z-10 border-t bg-background/95 backdrop-blur-sm">
+          <div className="max-w-3xl mx-auto px-4 py-4">
+            {footer}
+            {footerNote && <p className="text-center text-xs text-muted-foreground mt-2">{footerNote}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -453,7 +510,7 @@ function Stepper({ step, labels }: { step: number; labels: string[] }) {
             <div
               className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-[#0a2540] text-white"
+                  ? "bg-[#143591] text-white"
                   : done
                   ? "bg-emerald-500 text-white"
                   : "bg-muted text-muted-foreground"
@@ -493,7 +550,7 @@ function EmailVerify({
         <Mail className="w-4 h-4 text-primary" />
         <span className="text-sm font-medium">{t("emailVerifyRequired")}</span>
       </div>
-      <Label className="text-[#0a2540] dark:text-foreground">{label} *</Label>
+      <Label className="text-[#143591] dark:text-foreground">{label} *</Label>
       <div className="flex flex-col sm:flex-row gap-2 mt-1">
         <Input
           type="email"
@@ -540,15 +597,14 @@ function EmailVerify({
   );
 }
 
-function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName, t, showNameInput, verified }: {
+function SignaturePad({ onSubmit, submitRef, onReady, signerName, onChangeName, t, showNameInput }: {
   onSubmit: (b64: string) => void;
-  submitting: boolean;
-  onCancel: () => void;
+  submitRef: React.MutableRefObject<(() => void) | null>;
+  onReady: (ready: boolean) => void;
   signerName: string;
   onChangeName: (v: string) => void;
   t: Tfn;
   showNameInput: boolean;
-  verified: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -647,17 +703,28 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
 
   const hasSignature = mode === "draw" ? hasInk : Boolean(uploaded);
 
+  // Keep the lifted submit handle pointing at the latest closure, and report
+  // readiness to the parent so the sticky footer button can enable/submit.
+  useEffect(() => {
+    submitRef.current = submit;
+    return () => { submitRef.current = null; };
+  });
+  useEffect(() => {
+    onReady(hasSignature && confirmed);
+    return () => { onReady(false); };
+  }, [hasSignature, confirmed, onReady]);
+
   return (
     <div className="space-y-4">
       {showNameInput && (
         <div>
-          <Label className="text-[#0a2540] dark:text-foreground">{t("fullName")} *</Label>
+          <Label className="text-[#143591] dark:text-foreground">{t("fullName")} *</Label>
           <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
         </div>
       )}
 
       <div>
-        <Label className="text-[#0a2540] dark:text-foreground">{t("signature")}</Label>
+        <Label className="text-[#143591] dark:text-foreground">{t("signature")}</Label>
         <div className="inline-flex rounded-lg border p-1 bg-muted/40 mt-1 mb-2">
           <button
             type="button"
@@ -729,13 +796,6 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" />
         <span>{t("consent")}</span>
       </label>
-
-      <div className="flex flex-col sm:flex-row-reverse gap-2">
-        <Button className="w-full sm:flex-1 bg-[#0a2540] hover:bg-[#123a63] text-white" size="lg" onClick={submit} disabled={!verified || !hasSignature || !confirmed || !signerName.trim() || submitting}>
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />} {t("signAndSend")}
-        </Button>
-        <Button variant="outline" className="w-full sm:w-auto" size="lg" onClick={onCancel}>{t("back")}</Button>
-      </div>
     </div>
   );
 }

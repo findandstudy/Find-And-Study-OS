@@ -1668,7 +1668,9 @@
     "sigUploadHint": "PNG veya JPG, birkaç MB'a kadar.",
     "sigChooseFile": "Bir görsel seçin",
     "sigRemove": "Kaldır",
-    "sigTooLarge": "Görsel çok büyük. Lütfen daha küçük bir dosya kullanın."
+    "sigTooLarge": "Görsel çok büyük. Lütfen daha küçük bir dosya kullanın.",
+    "fillDetailsFor": "Lütfen şunun için bilgilerinizi girin:",
+    "footerNote": "Bilgileriniz sözleşmeyi oluşturmak için kullanılacaktır."
   },
   "languages": {
     "tr": "Türkçe",

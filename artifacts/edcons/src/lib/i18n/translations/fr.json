@@ -1555,7 +1555,9 @@
     "sigUploadHint": "PNG ou JPG, jusqu'à quelques Mo.",
     "sigChooseFile": "Choisir une image",
     "sigRemove": "Supprimer",
-    "sigTooLarge": "L'image est trop volumineuse. Utilisez un fichier plus petit."
+    "sigTooLarge": "L'image est trop volumineuse. Utilisez un fichier plus petit.",
+    "fillDetailsFor": "Veuillez renseigner vos informations pour :",
+    "footerNote": "Vos informations serviront à générer le contrat."
   },
   "messagesPage": {
     "messages": "Messages",

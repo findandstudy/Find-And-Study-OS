@@ -3212,7 +3212,9 @@
     "sigUploadHint": "PNG or JPG, up to a few MB.",
     "sigChooseFile": "Choose an image",
     "sigRemove": "Remove",
-    "sigTooLarge": "Image is too large. Please use a smaller file."
+    "sigTooLarge": "Image is too large. Please use a smaller file.",
+    "fillDetailsFor": "Please fill in your details for:",
+    "footerNote": "Your information will be used to generate the contract."
   },
   "languages": {
     "tr": "Turki",
