@@ -165,35 +165,25 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     return m;
   }, [destinations]);
 
-  // Destination options driven strictly by the system's actual data:
-  // every country is one that has universities (from
-  // /api/universities/countries). A curated destination row (with a real
-  // id, flag, name) is used only when its country actually has
-  // universities; remaining university countries fall back to a synthetic
-  // "c:<country>" value. Curated destinations for countries with no
-  // universities (e.g. CMS-only website destinations) are excluded so the
-  // dropdown never lists countries that aren't in the system.
+  // Destination options come straight from the system's destinations
+  // table — the same rows that `university_contracts.destinationId`
+  // references. Every option is therefore a real destination, so a saved
+  // contract always links to an actual destination row (rather than a
+  // synthetic "country" value that would silently persist as NULL).
   const destinationOptions = useMemo(() => {
-    const countrySet = new Set(countries.map(c => normCountry(c)).filter(Boolean));
-    const opts: { value: string; country: string; label: string }[] = [];
-    const seen = new Set<string>();
-    for (const d of destinations) {
-      if (!countrySet.has(normCountry(d.country))) continue;
-      opts.push({ value: String(d.id), country: d.country, label: `${d.name} — ${d.country}` });
-      seen.add(normCountry(d.country));
-    }
-    for (const c of countries) {
-      if (!c || seen.has(normCountry(c))) continue;
-      opts.push({ value: `c:${c}`, country: c, label: c });
-      seen.add(normCountry(c));
-    }
-    return opts;
-  }, [destinations, countries]);
+    return destinations.map(d => ({
+      value: String(d.id),
+      country: d.country,
+      label: `${d.name} — ${d.country}`,
+    }));
+  }, [destinations]);
 
+  // Auto-fill resolves to the destination whose country matches the
+  // selected university. If the system has no destination for that
+  // country, leave it blank rather than inventing a value.
   const destValueForCountry = (country: string | null | undefined) => {
     const curated = destByCountry[normCountry(country)];
-    if (curated) return String(curated.id);
-    return country ? `c:${country}` : "";
+    return curated ? String(curated.id) : "";
   };
 
   async function load() {
@@ -696,15 +686,13 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   group: uniKey && normCountry(o.country) === uniKey ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
                 }));
                 // Keep an already-saved destination visible in edit mode even
-                // when its country no longer has universities (so the filtered
-                // option list omits it) — otherwise the control would render
+                // when it is no longer in the active destinations list (e.g.
+                // it was deactivated) — otherwise the control would render
                 // blank and the user could silently overwrite the value.
                 if (form.destinationId && !selectOptions.some(o => o.value === form.destinationId)) {
                   const fallbackLabel = editing?.destinationName
                     ? `${editing.destinationName}${editing.destinationCountry ? ` — ${editing.destinationCountry}` : ""}`
-                    : form.destinationId.startsWith("c:")
-                      ? form.destinationId.slice(2)
-                      : (editing?.destinationCountry || editing?.country || form.destinationId);
+                    : (editing?.destinationCountry || editing?.country || form.destinationId);
                   selectOptions.unshift({
                     value: form.destinationId,
                     label: fallbackLabel,

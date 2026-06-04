@@ -131,6 +131,13 @@ export function SearchableSelect({
             left: pos.left,
             width: Math.max(pos.width, 240),
             transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
+            // Re-enable pointer events explicitly. When this dropdown is used
+            // inside a Radix modal Dialog, the dialog sets
+            // `pointer-events: none` on <body> and only re-enables it within
+            // the dialog content. Because this popover is portaled to
+            // document.body (a sibling of the dialog), it would otherwise
+            // inherit `none` and its options would be unclickable.
+            pointerEvents: "auto",
           }}
           className="z-[1000] bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
         >
