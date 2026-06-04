@@ -39,6 +39,39 @@ hides per-table gaps.
    `SELECT setval(pg_get_serial_sequence('public."T"','id'), GREATEST(max(id),1))`.
 5. `ANALYZE` the copied tables (replica-role bulk load does not update planner stats).
 
+## executeSql arg-size limit — the real bottleneck (writes AND reads)
+`executeSql` passes the whole SQL string as a process **argv**, so big payloads
+fail hard: a multi-row INSERT literal or even a single wide row trips
+`SPAWN_ERROR spawn E2BIG`, and a `json_agg` read whose output is multi-MB gets the
+helper **killed by signal** (`EXECUTE_SQL_COMMAND_ERROR ... exitReason=signal`).
+Halving the page size only helps until one *single row* exceeds the limit.
+- **Write path fix:** don't write to dev through `executeSql`. Connect to dev
+  directly with node-postgres `Client({connectionString: DATABASE_URL})` and
+  `INSERT ... json_populate_recordset(NULL::"T", $1::json)` with the JSON as a
+  **bound param** (sent over the wire protocol, no argv limit; large batches fine).
+  Still `SET session_replication_role=replica` on that connection to skip FK/triggers.
+- **Gotchas:** `process.env` is **undefined inside the code_execution sandbox**, so
+  the pg write must run from a Node script via **bash** (bash has the env). `pg` is
+  often NOT a direct dep of the api artifact — require it by full pnpm-store path
+  (`node_modules/.pnpm/pg@<v>/node_modules/pg`). Prod stays read-only via
+  `executeSql({environment:"production"})`; only the dev write switches to pg.
+- **Read path:** prod→sandbox still goes through `executeSql` base64 (the value
+  returned to JS is NOT truncated at 30k — only the displayed observation is), but
+  it cannot return a multi-MB single row.
+
+## Huge inline blob columns — exclude them
+`documents.file_data` and `application_stage_documents.file_data` are nullable TEXT
+holding base64 file bytes (rows up to ~11.7MB, `documents` ~300MB total). They are
+impossible to ferry through `executeSql` and impractical to mirror. Copy those
+tables with an explicit column list **omitting file_data** (json_populate_recordset
+leaves the missing key NULL); records/metadata/`file_key`/`file_url` come over,
+blobs don't. Tell the user dev downloads of those files won't work.
+
+## Live-drift residual
+Prod is live: after a copy, append/activity tables (`audit_logs`, `notes`, etc.)
+can be off by ±1–few vs prod simply because prod kept changing during the copy.
+Don't chase these — they are not copy defects.
+
 ## Faithful-mirror caveat
 The dev copy mirrors prod warts and all: prod itself had dangling FKs (conversations
 194/831 → channel_accounts 1170/1770 that don't exist in prod) and lots of e2e
