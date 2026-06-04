@@ -157,11 +157,39 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handledOpenIdRef = useRef<number | null>(null);
 
+  const normCountry = (c: string | null | undefined) => (c ?? "").trim().toLowerCase();
+
   const destByCountry = useMemo(() => {
     const m: Record<string, Destination> = {};
-    for (const d of destinations) m[d.country] = d;
+    for (const d of destinations) m[normCountry(d.country)] = d;
     return m;
   }, [destinations]);
+
+  // Destination options driven by the system's actual data: every curated
+  // destination (with a real id, flag, name) PLUS every country that has
+  // universities but no curated destination row (synthetic "c:<country>"
+  // value). This guarantees the destination auto-fills for ANY university,
+  // not only the handful of curated destinations.
+  const destinationOptions = useMemo(() => {
+    const opts: { value: string; country: string; label: string }[] = [];
+    const seen = new Set<string>();
+    for (const d of destinations) {
+      opts.push({ value: String(d.id), country: d.country, label: `${d.name} — ${d.country}` });
+      seen.add(normCountry(d.country));
+    }
+    for (const c of countries) {
+      if (!c || seen.has(normCountry(c))) continue;
+      opts.push({ value: `c:${c}`, country: c, label: c });
+      seen.add(normCountry(c));
+    }
+    return opts;
+  }, [destinations, countries]);
+
+  const destValueForCountry = (country: string | null | undefined) => {
+    const curated = destByCountry[normCountry(country)];
+    if (curated) return String(curated.id);
+    return country ? `c:${country}` : "";
+  };
 
   async function load() {
     setLoading(true);
@@ -181,15 +209,33 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     setLoading(false);
   }
 
+  // The /api/universities endpoint caps limit at 100 server-side, so a
+  // single request silently drops universities once the catalog exceeds
+  // 100 rows. Page through until the full list is loaded so every
+  // university is selectable in the contract dialog.
+  async function fetchAllUniversities(): Promise<University[]> {
+    const byId = new Map<number, University>();
+    let page = 1;
+    while (page <= 100) {
+      const res: any = await customFetch(`/api/universities?limit=100&page=${page}`);
+      const batch: University[] = res?.data || [];
+      for (const u of batch) byId.set(u.id, u);
+      const total = Number(res?.meta?.total ?? byId.size);
+      if (batch.length === 0 || byId.size >= total) break;
+      page++;
+    }
+    return Array.from(byId.values());
+  }
+
   async function loadMeta() {
     try {
       const [unis, cs, dests, users]: any = await Promise.all([
-        customFetch(`/api/universities?limit=500`),
+        fetchAllUniversities(),
         customFetch(`/api/universities/countries`),
         customFetch(`/api/public/destinations`),
         customFetch(`/api/users?limit=500`).catch(() => ({ data: [] })),
       ]);
-      setUniversities(unis.data || []);
+      setUniversities(Array.isArray(unis) ? unis : (unis?.data || []));
       setCountries(cs || []);
       setDestinations(Array.isArray(dests) ? dests : (dests?.data || []));
       const list: any[] = users?.data || [];
@@ -272,8 +318,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
       const next = { ...f, universityId: uniId, universityAssignedStaffIds: [] };
       const uni = universities.find(u => String(u.id) === uniId);
       if (uni && !next.destinationId) {
-        const dest = destByCountry[uni.country];
-        if (dest) next.destinationId = String(dest.id);
+        next.destinationId = destValueForCountry(uni.country);
       }
       return next;
     });
@@ -322,7 +367,10 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     try {
       const body: any = {
         universityId: parseInt(form.universityId, 10),
-        destinationId: form.destinationId ? parseInt(form.destinationId, 10) : null,
+        // Only curated destinations have a real FK id; synthetic
+        // "c:<country>" values carry no id (the contract's country is
+        // derived from the university server-side regardless).
+        destinationId: /^\d+$/.test(form.destinationId) ? parseInt(form.destinationId, 10) : null,
         year: form.year ? parseInt(form.year, 10) : null,
         effectiveDate: form.effectiveDate || null,
         expiryDate: form.expiryDate || null,
@@ -522,7 +570,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                   // not set on the contract.
                   const dest = c.destinationName
                     ? { name: c.destinationName, flagEmoji: c.destinationFlagEmoji || null }
-                    : destByCountry[c.country];
+                    : destByCountry[normCountry(c.country)];
                   const tooltipText = dl === null ? t("universityContracts.tooltipNoExpiry") :
                     dl < 0 ? t(Math.abs(dl) === 1 ? "universityContracts.tooltipExpiredAgo" : "universityContracts.tooltipExpiredAgoPlural", { n: Math.abs(dl) }) :
                     t("universityContracts.tooltipExpiresOn", { date: formatDate(c.expiryDate, locale) });
@@ -627,34 +675,29 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
               {(() => {
                 const selectedUni = universities.find(u => String(u.id) === form.universityId);
                 const uniCountry = selectedUni?.country || "";
-                const sortedDestinations = [...destinations].sort((a, b) => {
-                  if (uniCountry) {
-                    if (a.country === uniCountry && b.country !== uniCountry) return -1;
-                    if (b.country === uniCountry && a.country !== uniCountry) return 1;
+                const uniKey = normCountry(uniCountry);
+                const sortedOptions = [...destinationOptions].sort((a, b) => {
+                  if (uniKey) {
+                    const am = normCountry(a.country) === uniKey;
+                    const bm = normCountry(b.country) === uniKey;
+                    if (am && !bm) return -1;
+                    if (bm && !am) return 1;
                   }
                   return a.country.localeCompare(b.country);
                 });
-                const matchExists = uniCountry ? destinations.some(d => d.country === uniCountry) : true;
                 return (
-                  <>
-                    <SearchableSelect
-                      value={form.destinationId}
-                      onChange={v => setForm(f => ({ ...f, destinationId: v }))}
-                      placeholder={t("universityContracts.destinationAutoPlaceholder")}
-                      searchPlaceholder={t("universityContracts.searchDestination")}
-                      clearable
-                      options={sortedDestinations.map(d => ({
-                        value: String(d.id),
-                        label: `${d.name} — ${d.country}`,
-                        group: uniCountry && d.country === uniCountry ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
-                      }))}
-                    />
-                    {selectedUni && !matchExists && (
-                      <p className="text-xs text-amber-600">
-                        {t("universityContracts.noMatchingDestination", { country: uniCountry })}
-                      </p>
-                    )}
-                  </>
+                  <SearchableSelect
+                    value={form.destinationId}
+                    onChange={v => setForm(f => ({ ...f, destinationId: v }))}
+                    placeholder={t("universityContracts.destinationAutoPlaceholder")}
+                    searchPlaceholder={t("universityContracts.searchDestination")}
+                    clearable
+                    options={sortedOptions.map(o => ({
+                      value: o.value,
+                      label: o.label,
+                      group: uniKey && normCountry(o.country) === uniKey ? t("universityContracts.matchingDestination") : t("universityContracts.otherDestinations"),
+                    }))}
+                  />
                 );
               })()}
             </div>
