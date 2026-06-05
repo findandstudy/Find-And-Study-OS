@@ -11,6 +11,21 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
+// Hard upper bound for a single GCS object upload (file.save). Without a timeout,
+// a stalled upload leaves the HTTP request hanging indefinitely; on autoscale the
+// edge proxy eventually kills the hung connection and returns its own opaque
+// "403 Forbidden" HTML page instead of a JSON error. Bounding the upload lets us
+// surface a clear, actionable error to the caller instead.
+const UPLOAD_TIMEOUT_MS = 30_000;
+
+export class ObjectUploadTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Object upload timed out after ${timeoutMs}ms`);
+    this.name = "ObjectUploadTimeoutError";
+    Object.setPrototypeOf(this, ObjectUploadTimeoutError.prototype);
+  }
+}
+
 export const objectStorageClient = new Storage({
   credentials: {
     audience: "replit",
@@ -120,10 +135,31 @@ export class ObjectStorageService {
     const { bucketName, objectName } = parseObjectPath(fullPath);
     const bucket = objectStorageClient.bucket(bucketName);
     const file = bucket.file(objectName);
-    await file.save(opts.buffer, {
-      metadata: { contentType: opts.contentType },
-      resumable: false,
+
+    // Bound the upload. We pass the GCS client's own `timeout` option AND guard
+    // with Promise.race: the client timeout aborts the underlying HTTP request,
+    // while the race guarantees we reject promptly even if the client's timer
+    // does not fire. Either way the caller gets a clear error instead of a hung
+    // request that the autoscale edge proxy turns into an opaque 403.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new ObjectUploadTimeoutError(UPLOAD_TIMEOUT_MS)),
+        UPLOAD_TIMEOUT_MS
+      );
     });
+    try {
+      await Promise.race([
+        file.save(opts.buffer, {
+          metadata: { contentType: opts.contentType },
+          resumable: false,
+          timeout: UPLOAD_TIMEOUT_MS,
+        }),
+        timeout,
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     // Return canonical /objects/<entityId> path consumable by getObjectEntityFile.
     let entityDir = privateObjectDir;
     if (entityDir.endsWith("/")) entityDir = entityDir.slice(0, -1);
