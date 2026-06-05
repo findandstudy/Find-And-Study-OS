@@ -623,7 +623,9 @@
     "later": "Más tarde",
     "applicationSpecificDocuments": "Documentos específicos de la solicitud",
     "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, mantenidos separados de los documentos del perfil del estudiante.",
-    "preview": "Vista previa"
+    "preview": "Vista previa",
+    "continue": "Continuar",
+    "select": "Seleccionar..."
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",
@@ -3187,7 +3189,11 @@
     "saving": "Guardando…",
     "setPassword": "Establecer contraseña",
     "ready": "¡Listo!",
-    "redirectingToSigning": "Redirigiéndote al paso de firma del contrato…"
+    "redirectingToSigning": "Redirigiéndote al paso de firma del contrato…",
+    "intake": {
+      "title": "Información de la agencia",
+      "subtitle": "Complete los datos de su agencia antes de revisar el contrato."
+    }
   },
   "sign": {
     "title": "Introduce tus datos",

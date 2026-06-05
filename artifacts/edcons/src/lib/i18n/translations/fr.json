@@ -623,7 +623,9 @@
     "later": "Plus tard",
     "applicationSpecificDocuments": "Documents spécifiques à la candidature",
     "applicationSpecificDocumentsHint": "Téléchargés pour une candidature spécifique, conservés séparément des documents de profil de l'étudiant.",
-    "preview": "Aperçu"
+    "preview": "Aperçu",
+    "continue": "Continuer",
+    "select": "Sélectionner..."
   },
   "seo": {
     "homeTitle": "Conseil en éducation mondiale",
@@ -3238,7 +3240,11 @@
     "saving": "Enregistrement…",
     "setPassword": "Définir le mot de passe",
     "ready": "Prêt !",
-    "redirectingToSigning": "Redirection vers l'étape de signature du contrat…"
+    "redirectingToSigning": "Redirection vers l'étape de signature du contrat…",
+    "intake": {
+      "title": "Informations sur l'agence",
+      "subtitle": "Remplissez les informations de votre agence avant de consulter le contrat."
+    }
   },
   "languages": {
     "tr": "Turc",

@@ -16,6 +16,7 @@ type Status = {
   passwordSet?: boolean;
   email: string | null;
   contractStatus: "none" | "pending" | "signed" | "expired" | "revoked" | "n/a";
+  contractMandatory?: boolean;
   sessionId: number | null;
   expiresAt: string | null;
   isPrimaryOnboarding: boolean;
@@ -32,6 +33,10 @@ export function AgentOnboardingGuard({ children }: Props) {
   const { user } = useAuth(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
+  // Per-mount dismissal: when the contract is not yet mandatory the agent can
+  // postpone signing ("Later") and use the portal. The reminder re-appears on
+  // the next login because this state resets on a fresh mount.
+  const [dismissed, setDismissed] = useState(false);
   const fetched = useRef(false);
 
   async function reload() {
@@ -69,12 +74,21 @@ export function AgentOnboardingGuard({ children }: Props) {
     return <SetPasswordStep onComplete={() => { fetched.current = false; void reload(); }} />;
   }
   if (status.contractStatus === "pending") {
-    // Render the dashboard underneath but overlay a non-dismissible signing
-    // dialog so the agent must sign before doing anything else.
+    // Before the deadline day the contract is non-mandatory: render the portal
+    // underneath and overlay a dismissible reminder the agent can postpone with
+    // "Later". On/after the deadline day it becomes mandatory and the dialog is
+    // non-dismissible, so the agent must sign before doing anything else.
+    const mandatory = !!status.contractMandatory;
     return (
       <>
         {children}
-        <SignContract asModal onSigned={() => { fetched.current = false; void reload(); }} />
+        {(mandatory || !dismissed) && (
+          <SignContract
+            asModal
+            onSigned={() => { setDismissed(false); fetched.current = false; void reload(); }}
+            onClose={mandatory ? undefined : () => setDismissed(true)}
+          />
+        )}
       </>
     );
   }

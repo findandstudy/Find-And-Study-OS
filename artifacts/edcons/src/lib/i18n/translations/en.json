@@ -623,7 +623,9 @@
     "later": "Later",
     "applicationSpecificDocuments": "Application-Specific Documents",
     "applicationSpecificDocumentsHint": "Uploaded for a specific application, kept separate from the student's profile documents.",
-    "preview": "Preview"
+    "preview": "Preview",
+    "continue": "Continue",
+    "select": "Select..."
   },
   "seo": {
     "homeTitle": "Global Education Consultancy",
@@ -1694,7 +1696,11 @@
     "saving": "Saving…",
     "setPassword": "Set Password",
     "ready": "Ready!",
-    "redirectingToSigning": "Redirecting you to the contract signing step…"
+    "redirectingToSigning": "Redirecting you to the contract signing step…",
+    "intake": {
+      "title": "Agency Information",
+      "subtitle": "Fill in your agency details before reviewing the contract."
+    }
   },
   "sign": {
     "title": "Enter your details",

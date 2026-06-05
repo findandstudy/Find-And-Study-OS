@@ -67,6 +67,22 @@ async function loadOnboardingSession(agentId: number) {
   return s || null;
 }
 
+/**
+ * The primary onboarding contract becomes *mandatory* (non-dismissible, portal
+ * blocked) once the calendar day of its deadline arrives. Before that day the
+ * agent may postpone signing ("Later") and keep using the portal, while a
+ * reminder popup is shown on every login.
+ */
+function isOnboardingContractMandatory(session: typeof signingSessionsTable.$inferSelect | null): boolean {
+  if (!session) return false;
+  if (session.status === "signed" || session.status === "expired" || session.status === "revoked") return false;
+  const deadline = new Date(session.expiresAt);
+  if (isNaN(deadline.getTime())) return true; // unparseable deadline: force signing to be safe
+  const startOfDeadlineDay = new Date(deadline);
+  startOfDeadlineDay.setHours(0, 0, 0, 0);
+  return Date.now() >= startOfDeadlineDay.getTime();
+}
+
 async function lazyExpire(session: typeof signingSessionsTable.$inferSelect) {
   if (!session) return session;
   const isPastDue = new Date(session.expiresAt).getTime() < Date.now();
@@ -122,6 +138,7 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     passwordSet,
     email: user?.email || null,
     contractStatus,
+    contractMandatory: contractStatus === "pending" ? isOnboardingContractMandatory(session) : false,
     sessionId: session?.id ?? null,
     expiresAt: session?.expiresAt ?? null,
     templateId: session?.templateId ?? null,
@@ -837,4 +854,5 @@ export const ONBOARDING_HELPERS = {
   loadAgentForUser,
   loadOnboardingSession,
   lazyExpire,
+  isOnboardingContractMandatory,
 };

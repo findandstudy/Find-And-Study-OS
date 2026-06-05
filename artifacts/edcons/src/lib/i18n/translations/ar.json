@@ -623,7 +623,9 @@
     "later": "لاحقًا",
     "applicationSpecificDocuments": "مستندات خاصة بالطلب",
     "applicationSpecificDocumentsHint": "تم رفعها لطلب معيّن، ويتم الاحتفاظ بها منفصلة عن مستندات ملف الطالب.",
-    "preview": "معاينة"
+    "preview": "معاينة",
+    "continue": "متابعة",
+    "select": "اختر..."
   },
   "seo": {
     "homeTitle": "استشارات التعليم العالمي",
@@ -3238,7 +3240,11 @@
     "saving": "جارٍ الحفظ…",
     "setPassword": "تعيين كلمة المرور",
     "ready": "جاهز!",
-    "redirectingToSigning": "جارٍ تحويلك إلى خطوة توقيع العقد…"
+    "redirectingToSigning": "جارٍ تحويلك إلى خطوة توقيع العقد…",
+    "intake": {
+      "title": "معلومات الوكالة",
+      "subtitle": "املأ تفاصيل وكالتك قبل مراجعة العقد."
+    }
   },
   "languages": {
     "tr": "التركية",

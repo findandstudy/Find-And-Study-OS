@@ -623,7 +623,9 @@
     "later": "Daha sonra",
     "applicationSpecificDocuments": "Başvuruya Özel Belgeler",
     "applicationSpecificDocumentsHint": "Belirli bir başvuru için yüklenmiş, öğrencinin profil belgelerinden ayrı tutulan belgeler.",
-    "preview": "Önizleme"
+    "preview": "Önizleme",
+    "continue": "Devam et",
+    "select": "Seçin..."
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",
@@ -1635,7 +1637,11 @@
     "saving": "Kaydediliyor...",
     "setPassword": "Şifreyi Belirle",
     "ready": "Hazır!",
-    "redirectingToSigning": "Sözleşme imzalama adımına yönlendiriliyorsunuz..."
+    "redirectingToSigning": "Sözleşme imzalama adımına yönlendiriliyorsunuz...",
+    "intake": {
+      "title": "Acente Bilgileri",
+      "subtitle": "Sözleşmeyi incelemeden önce acente bilgilerinizi doldurun."
+    }
   },
   "sign": {
     "title": "Bilgilerinizi girin",

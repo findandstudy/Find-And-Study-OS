@@ -73,6 +73,7 @@ const ALLOWLIST_EXACT = new Set([
   "/agents/onboarding/verify-with-link",
   "/agents/onboarding/resend-public",
   "/contracts/me",
+  "/contracts/me/intake",
   "/contracts/me/sign",
   "/settings/branding",
   "/settings/branding/logo",
@@ -108,7 +109,14 @@ router.use(async (req, res, next) => {
       res.status(403).json({ error: "Onboarding contract revoked", code: "CONTRACT_EXPIRED" });
       return;
     }
-    res.status(403).json({ error: "Contract signature required", code: "CONTRACT_SIGNATURE_REQUIRED" });
+    // Before the deadline day the agent may postpone signing and keep using the
+    // portal (the frontend shows a dismissible reminder). On/after the deadline
+    // day the contract becomes mandatory and the portal is blocked until signed.
+    if (ONBOARDING_HELPERS.isOnboardingContractMandatory(session)) {
+      res.status(403).json({ error: "Contract signature required", code: "CONTRACT_SIGNATURE_REQUIRED" });
+      return;
+    }
+    next();
   } catch (err) {
     console.error("[agent-onboarding-gate]", err);
     next();

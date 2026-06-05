@@ -623,7 +623,9 @@
     "later": "Nanti",
     "applicationSpecificDocuments": "Dokumen Khusus Aplikasi",
     "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa.",
-    "preview": "Pratinjau"
+    "preview": "Pratinjau",
+    "continue": "Lanjutkan",
+    "select": "Pilih..."
   },
   "seo": {
     "homeTitle": "Konsultasi Pendidikan Global",
@@ -3187,7 +3189,11 @@
     "saving": "Menyimpan…",
     "setPassword": "Tetapkan Kata Sandi",
     "ready": "Siap!",
-    "redirectingToSigning": "Mengalihkan Anda ke langkah penandatanganan kontrak…"
+    "redirectingToSigning": "Mengalihkan Anda ke langkah penandatanganan kontrak…",
+    "intake": {
+      "title": "Informasi Agen",
+      "subtitle": "Isi detail agen Anda sebelum meninjau kontrak."
+    }
   },
   "sign": {
     "title": "Masukkan detail Anda",

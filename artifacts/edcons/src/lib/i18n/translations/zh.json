@@ -623,7 +623,9 @@
     "later": "稍后",
     "applicationSpecificDocuments": "申请专属文件",
     "applicationSpecificDocumentsHint": "为特定申请上传，与学生档案文件分开保存。",
-    "preview": "预览"
+    "preview": "预览",
+    "continue": "继续",
+    "select": "选择..."
   },
   "seo": {
     "homeTitle": "全球教育咨询",
@@ -3187,7 +3189,11 @@
     "saving": "保存中…",
     "setPassword": "设置密码",
     "ready": "准备就绪！",
-    "redirectingToSigning": "正在将您跳转至合同签署步骤…"
+    "redirectingToSigning": "正在将您跳转至合同签署步骤…",
+    "intake": {
+      "title": "代理机构信息",
+      "subtitle": "在查看合同之前，请填写您的代理机构信息。"
+    }
   },
   "sign": {
     "title": "填写您的信息",
