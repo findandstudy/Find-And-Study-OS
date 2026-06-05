@@ -1,3 +1,4 @@
+import "./lib/client-state-version";
 import { activateInMemoryRouting, getSavedNavPath } from "./lib/navigation";
 import { getAuthCache } from "./lib/auth-cache";
 import "./lib/csrfSetup";
