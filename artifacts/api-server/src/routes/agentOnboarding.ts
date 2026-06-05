@@ -8,7 +8,7 @@ import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
 import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
-import { finalizeSign } from "../lib/signContract";
+import { finalizeSign, ensureSignedContractPdf } from "../lib/signContract";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -570,9 +570,14 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
       .where(eq(signedContractsTable.signingSessionId, session.id));
     if (!signed) { res.status(404).json({ error: "Signed contract record not found" }); return; }
     if (signed.agentId !== agent.id) { res.status(403).json({ error: "Forbidden" }); return; }
+    let pdfKey = signed.pdfObjectKey;
+    if (!pdfKey) {
+      try { pdfKey = (await ensureSignedContractPdf(signed.id)).pdfObjectKey; }
+      catch (e) { console.error("[contracts/me/pdf] lazy pdf gen:", e); res.status(503).json({ error: "PDF hazırlanıyor, lütfen birazdan tekrar deneyin." }); return; }
+    }
     const { ObjectStorageService } = await import("../lib/objectStorage");
     const svc = new ObjectStorageService();
-    let normalizedPath = signed.pdfObjectKey;
+    let normalizedPath = pdfKey;
     if (normalizedPath.startsWith("/objects/")) normalizedPath = normalizedPath.slice("/objects/".length);
     if (normalizedPath.startsWith("objects/")) normalizedPath = normalizedPath.slice("objects/".length);
     const file = await svc.getObjectEntityFile(`/objects/${normalizedPath}`);

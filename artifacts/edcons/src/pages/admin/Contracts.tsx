@@ -18,7 +18,7 @@ type Session = {
 };
 type Signed = {
   id: number; signingSessionId: number; agentId: number | null; templateId: number;
-  pdfObjectKey: string; evidenceHash: string; signerEmail: string; signerName: string | null; signedAt: string;
+  pdfObjectKey: string | null; evidenceHash: string | null; signerEmail: string; signerName: string | null; signedAt: string;
 };
 type Agent = { id: number; firstName: string | null; lastName: string | null; businessName: string | null; email: string | null; entityType?: string | null; preferredContractLanguage?: string | null };
 type Template = { id: number; name: string; language: string; entityType: string; version: number; isActive: boolean };
@@ -207,7 +207,7 @@ export default function ContractsPage() {
                     <div className="text-xs text-muted-foreground">{c.signerEmail}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(c.signedAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash.slice(0, 16)}…</td>
+                  <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash ? c.evidenceHash.slice(0, 16) + "…" : "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <a href={`/api/contracts/signed/${c.id}/pdf`} target="_blank" rel="noreferrer">
                       <Button size="sm" variant="ghost"><Download className="w-4 h-4" /></Button>

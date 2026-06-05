@@ -43,6 +43,7 @@ async function buildContractFilename(params: { agent: any | null; signedAt: Date
 
 import { buildSignedPdf } from "../lib/contractPdf";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { ensureSignedContractPdf } from "../lib/signContract";
 import { writeAudit } from "../lib/auditLog";
 import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
@@ -592,7 +593,12 @@ router.get("/public/sign/:token/pdf", signLimiter, async (req, res): Promise<voi
     const [signed] = await db.select().from(signedContractsTable)
       .where(eq(signedContractsTable.signingSessionId, r.session.id));
     if (!signed) { res.status(404).json({ error: "Signed PDF not found" }); return; }
-    let normalizedPath = signed.pdfObjectKey;
+    let pdfKey = signed.pdfObjectKey;
+    if (!pdfKey) {
+      try { pdfKey = (await ensureSignedContractPdf(signed.id)).pdfObjectKey; }
+      catch (e) { console.error("[public-sign] lazy pdf gen:", e); res.status(503).json({ error: "PDF hazırlanıyor, lütfen birazdan tekrar deneyin." }); return; }
+    }
+    let normalizedPath = pdfKey;
     if (normalizedPath.startsWith("/objects/")) normalizedPath = normalizedPath.slice("/objects/".length);
     if (normalizedPath.startsWith("objects/")) normalizedPath = normalizedPath.slice("objects/".length);
     const file = await objectStorage.getObjectEntityFile(`/objects/${normalizedPath}`);

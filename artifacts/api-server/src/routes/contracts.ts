@@ -5,6 +5,7 @@ import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
 import { buildContractSignRequestEmail, sendEmail, getAppBaseUrl } from "../lib/email";
+import { ensureSignedContractPdf } from "../lib/signContract";
 
 const router: IRouter = Router();
 
@@ -124,9 +125,14 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    let pdfKey = row.pdfObjectKey;
+    if (!pdfKey) {
+      try { pdfKey = (await ensureSignedContractPdf(row.id)).pdfObjectKey; }
+      catch (e) { console.error("[contracts] lazy pdf gen:", e); res.status(503).json({ error: "PDF hazırlanıyor, lütfen birazdan tekrar deneyin." }); return; }
+    }
     const { ObjectStorageService } = await import("../lib/objectStorage");
     const svc = new ObjectStorageService();
-    const file = await svc.getObjectEntityFile(row.pdfObjectKey);
+    const file = await svc.getObjectEntityFile(pdfKey);
     const [meta] = await file.getMetadata();
     res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="contract-${id}.pdf"`);

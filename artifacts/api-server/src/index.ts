@@ -468,6 +468,12 @@ async function seedClaudeIntegration() {
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS signed_contracts_session_id_unique ON signed_contracts(signing_session_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS signed_contracts_agent_id_idx ON signed_contracts(agent_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS signed_contracts_template_id_idx ON signed_contracts(template_id)`);
+    // The signed-contract PDF is now generated lazily on first download instead of
+    // synchronously during signing (heavy headless-Chromium render was crashing the
+    // autoscale instance mid-request). The sign step therefore inserts NULL for
+    // these columns and they are backfilled on first PDF access. Idempotent.
+    await pool.query(`ALTER TABLE signed_contracts ALTER COLUMN pdf_object_key DROP NOT NULL`);
+    await pool.query(`ALTER TABLE signed_contracts ALTER COLUMN evidence_hash DROP NOT NULL`);
 
     // Backfill the new contract permissions for the default admin role.
     const newPerms = [
