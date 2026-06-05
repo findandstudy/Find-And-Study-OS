@@ -854,7 +854,10 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
           )),
         db.select({ type: documentsTable.type })
           .from(documentsTable)
-          .where(eq(documentsTable.studentId, currentApp.studentId)),
+          .where(and(
+            eq(documentsTable.studentId, currentApp.studentId),
+            isNull(documentsTable.deletedAt),
+          )),
       ]);
 
       const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
@@ -894,7 +897,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   //       retried PATCH passes this check and the move completes.
   if (updates.stage) {
     const targetStage = updates.stage as string;
-    const [curRow] = await db.select({ stage: applicationsTable.stage })
+    const [curRow] = await db.select({ stage: applicationsTable.stage, studentId: applicationsTable.studentId })
       .from(applicationsTable)
       .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
     const currentStage = curRow?.stage;
@@ -973,14 +976,44 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
           ))
           .limit(1);
         if (!existingReq) {
-          res.status(422).json({
-            error: "Bu aşamaya geçmeden önce talep edilecek belgeleri seçin",
-            code: "DOC_SELECTION_REQUIRED",
-            requiredStage: targetStage,
-            suggestedDocTypes: Array.isArray(mdAction.requiredDocTypes) ? mdAction.requiredDocTypes : [],
-            actionLabel: typeof mdAction.label === "string" ? mdAction.label : null,
-          });
-          return;
+          const configuredTypes = Array.isArray(mdAction.requiredDocTypes)
+            ? (mdAction.requiredDocTypes as unknown[]).filter((t): t is string => typeof t === "string")
+            : [];
+          // Task #286 — reconcile the configured request list against the
+          // documents the student already has on file (matched via the
+          // doc-type equivalence map). A re-application for a new program /
+          // level must NOT re-request documents the student already provided
+          // for another application, so we pre-select only the genuinely
+          // missing extras. Staff can still add more in the dialog.
+          let suggestedDocTypes: string[] = configuredTypes;
+          let allConfiguredAlreadyOnFile = false;
+          if (configuredTypes.length > 0 && curRow?.studentId) {
+            const studentDocs = await db.select({ type: documentsTable.type })
+              .from(documentsTable)
+              .where(and(
+                eq(documentsTable.studentId, curRow.studentId),
+                isNull(documentsTable.deletedAt),
+              ));
+            const uploadedTypes = new Set<string>(
+              studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()),
+            );
+            suggestedDocTypes = findMissingMandatoryTypes(configuredTypes, uploadedTypes);
+            allConfiguredAlreadyOnFile = suggestedDocTypes.length === 0;
+          }
+          // Only block to prompt a document request when there is actually
+          // something to request. If the stage configured specific documents
+          // and the student already satisfies every one of them (directly or
+          // via an equivalent doc), skip the prompt and let the move proceed.
+          if (!allConfiguredAlreadyOnFile) {
+            res.status(422).json({
+              error: "Bu aşamaya geçmeden önce talep edilecek belgeleri seçin",
+              code: "DOC_SELECTION_REQUIRED",
+              requiredStage: targetStage,
+              suggestedDocTypes,
+              actionLabel: typeof mdAction.label === "string" ? mdAction.label : null,
+            });
+            return;
+          }
         }
       }
     }

@@ -220,6 +220,105 @@ function testEquivalenceUnits(): Section {
 }
 
 // ---------------------------------------------------------------------------
+// (a2) Cross-level / cross-university reconciliation (Task #286)
+//
+// When an admin adds a NEW application for a student who already has documents
+// (uploaded for a different program, university, or level), the backend
+// reduces the configured document-request list to only the docs the student
+// is genuinely missing — matched via equivalence, regardless of which program
+// or level the existing docs were uploaded for. These pure-unit checks mirror
+// the server-side `findMissingMandatoryTypes` reduction used by the
+// DOC_SELECTION_REQUIRED / STUDENT_DOCS_REQUIRED paths in applications.ts.
+// ---------------------------------------------------------------------------
+
+function testCrossLevelReconciliation(): Section {
+  const details: string[] = [];
+  let ok = true;
+
+  // A student's on-file library — docs were uploaded once (any program/uni).
+  // Mixed apply-key + canonical forms, as can happen across upload paths.
+  const studentLibrary = new Set([
+    "passport",
+    "photo",
+    "bachelor_diploma",          // apply key ≡ bachelors_certificate
+    "bachelors_transcript",      // canonical
+    "class_12th_hsc_certificate", // canonical hs cert
+  ]);
+
+  // Cross-university: two DIFFERENT programs/universities require the same
+  // canonical type. One existing equivalent upload satisfies BOTH — the
+  // reconciliation is program/university-agnostic (groups by canonical type).
+  const programA_required = ["passport", "bachelors_certificate"];
+  const programB_required = ["passport", "bachelors_certificate"]; // different uni, same req
+  ok = assert(
+    findMissingMandatoryTypes(programA_required, studentLibrary).length === 0,
+    "Cross-university: program A's passport+bachelors_certificate already satisfied",
+    details,
+  ) && ok;
+  ok = assert(
+    findMissingMandatoryTypes(programB_required, studentLibrary).length === 0,
+    "Cross-university: program B (different uni) same reqs also satisfied by one upload",
+    details,
+  ) && ok;
+
+  // Cross-level: a new MASTERS program requires bachelor-level docs the student
+  // uploaded for an earlier BACHELORS application — satisfied via equivalence,
+  // even though the stored type strings differ (apply key vs canonical).
+  const mastersRequired = [
+    "passport",
+    "bachelors_certificate",
+    "bachelors_transcript",
+  ];
+  ok = assert(
+    findMissingMandatoryTypes(mastersRequired, studentLibrary).length === 0,
+    "Cross-level: masters bachelor-doc requirements satisfied by prior bachelors uploads",
+    details,
+  ) && ok;
+
+  // Only-the-extra: the new program requires something the student does NOT
+  // have (masters_certificate) plus docs they do have. Reconciliation must
+  // return ONLY the genuinely-missing extra, preserving the configured string.
+  const phdRequired = [
+    "passport",
+    "bachelors_certificate",
+    "masters_certificate", // student has no masters docs
+  ];
+  const phdMissing = findMissingMandatoryTypes(phdRequired, studentLibrary);
+  ok = assert(
+    phdMissing.length === 1 && phdMissing[0] === "masters_certificate",
+    `Only the genuinely-missing extra is requested (got [${phdMissing.join(",")}])`,
+    details,
+  ) && ok;
+
+  // All-satisfied: when every configured doc is already on file (directly or
+  // via equivalence), reconciliation yields an empty list — the server then
+  // skips the request prompt entirely and lets the move proceed.
+  const allSatisfied = findMissingMandatoryTypes(
+    ["passport", "photo", "bachelor_diploma", "class_12th_hsc_certificate"],
+    studentLibrary,
+  );
+  ok = assert(
+    allSatisfied.length === 0,
+    `All configured docs already on file -> empty (got [${allSatisfied.join(",")}])`,
+    details,
+  ) && ok;
+
+  // Unknown / custom catalog types (not in any equivalence group) fall back to
+  // exact case-insensitive matching and are reported missing when absent.
+  const withCustom = findMissingMandatoryTypes(
+    ["passport", "some_custom_doc"],
+    studentLibrary,
+  );
+  ok = assert(
+    withCustom.length === 1 && withCustom[0] === "some_custom_doc",
+    `Unknown/custom type with no equivalent reported missing (got [${withCustom.join(",")}])`,
+    details,
+  ) && ok;
+
+  return { name: "(a2) Cross-level/cross-university reconciliation (Task #286)", ok, details };
+}
+
+// ---------------------------------------------------------------------------
 // Shared ephemeral Express server hosting the public-apply router
 // ---------------------------------------------------------------------------
 
@@ -705,6 +804,7 @@ async function main(): Promise<void> {
 
   const sections: Section[] = [];
   sections.push(testEquivalenceUnits());
+  sections.push(testCrossLevelReconciliation());
 
   const server = await startApplyServer();
   try {
