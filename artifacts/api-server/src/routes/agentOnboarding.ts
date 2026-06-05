@@ -604,6 +604,8 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
  * and finalizes the primary onboarding session (no token).
  */
 router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const signStart = Date.now();
+  console.log(`[contracts/sign] start user=${req.user!.id} rss=${Math.round(process.memoryUsage().rss / (1024 * 1024))}MB`);
   const agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   const session = await loadOnboardingSession(agent.id);
@@ -645,6 +647,7 @@ router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Reque
     return;
   }
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  console.log(`[contracts/sign] done user=${req.user!.id} signedContractId=${result.signedContractId} ms=${Date.now() - signStart}`);
   res.json({ data: { signedContractId: result.signedContractId } });
 });
 

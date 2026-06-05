@@ -209,6 +209,22 @@ function renderWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {
   const { chromium } = await import("playwright-core");
   const executablePath = resolveChromiumPath();
+  // Memory-minimizing launch args. The autoscale instance is small, and a single
+  // contract render must not blow its RSS budget — an OOM kill there does not
+  // surface as a JSON error, it kills the whole instance mid-request and the
+  // edge proxy returns an opaque HTML "403 Forbidden" to whatever other request
+  // was in flight (e.g. an agent's sign POST). In addition to the existing
+  // shared-memory and sandbox flags we:
+  //  - `--single-process`: collapse Chromium's multi-process model into one
+  //    process. This is the single biggest RSS reduction for short-lived
+  //    HTML→PDF renders and is the standard choice in memory-constrained
+  //    serverless environments. Safe here because each browser renders one
+  //    document then closes.
+  //  - `--no-zygote`: no forked zygote process (pairs with --single-process).
+  //  - `--disable-gpu` / `--disable-software-rasterizer`: no GPU stack; PDF
+  //    print does not need it and it costs memory.
+  //  - `--disable-extensions` / `--disable-background-networking` /
+  //    `--mute-audio`: trim background subsystems we never use.
   const browser = await chromium.launch({
     executablePath,
     args: [
@@ -216,9 +232,19 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--font-render-hinting=none",
+      "--single-process",
+      "--no-zygote",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--mute-audio",
     ],
   });
 
+  const renderStart = Date.now();
+  const rssMb = () => Math.round(process.memoryUsage().rss / (1024 * 1024));
+  console.log(`[contract-pdf] render start signer=${params.signerEmail} rss=${rssMb()}MB`);
   const deadline = Date.now() + RENDER_TIMEOUT_MS;
   const remainingMs = () => Math.max(1, deadline - Date.now());
   try {
@@ -255,7 +281,11 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     evidencePages.forEach((p) => merged.addPage(p));
     const pdfBytes = await merged.save();
 
+    console.log(`[contract-pdf] render done signer=${params.signerEmail} ms=${Date.now() - renderStart} rss=${rssMb()}MB`);
     return { pdfBytes, evidenceHash };
+  } catch (err) {
+    console.error(`[contract-pdf] render failed signer=${params.signerEmail} ms=${Date.now() - renderStart} rss=${rssMb()}MB:`, err);
+    throw err;
   } finally {
     await browser.close();
   }
