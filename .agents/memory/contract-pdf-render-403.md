@@ -36,8 +36,15 @@ The edcons deployment is **Autoscale** (`deploymentTarget = "autoscale"` in
   ONE Chromium runs at a time per instance — kills the concurrent-render OOM
   multiplier. `ensureSignedContractPdf` re-checks the stored `pdfObjectKey`
   inside the lock so concurrent downloads of the same contract skip redundant work.
-- Chromium launch args already include `--no-sandbox`,
-  `--disable-dev-shm-usage` — missing flags are NOT the cause; memory is.
+- Chromium launch args matter for RSS: beyond `--no-sandbox` /
+  `--disable-dev-shm-usage`, add `--single-process` + `--no-zygote` (collapse
+  Chromium's multi-process model — the single biggest RSS cut for short-lived
+  HTML→PDF) plus `--disable-gpu` / `--disable-software-rasterizer` /
+  `--disable-extensions` / `--disable-background-networking` / `--mute-audio`.
+  These do NOT guarantee no OOM, but meaningfully lower the per-render peak so a
+  render is far less likely to collateral-kill a concurrent sign POST. Safe here
+  because each browser renders one doc then closes, and renders are bounded by a
+  30s timeout + `browser.close()` in finally + `withRenderLock` serialization.
 
 ## Diagnosing
 - Dev has generous memory and hides the OOM — sign + download both return 200 in

@@ -646,7 +646,10 @@ router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Reque
     res.status(500).json({ error: "Sözleşme imzalanamadı. Lütfen tekrar deneyin." });
     return;
   }
-  if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  if (!result.ok) {
+    console.log(`[contracts/sign] rejected user=${req.user!.id} status=${result.status} ms=${Date.now() - signStart}`);
+    res.status(result.status).json({ error: result.error }); return;
+  }
   console.log(`[contracts/sign] done user=${req.user!.id} signedContractId=${result.signedContractId} ms=${Date.now() - signStart}`);
   res.json({ data: { signedContractId: result.signedContractId } });
 });
