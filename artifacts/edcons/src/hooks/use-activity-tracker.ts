@@ -183,7 +183,18 @@ export function useActivityTracker(isAuthenticated: boolean) {
     const handleBeforeUnload = () => {
       if (sessionIdRef.current) {
         const data = JSON.stringify({ sessionId: sessionIdRef.current, reason: "browser_closed_assumed" });
-        navigator.sendBeacon?.(`/api/activity/session/end`, new Blob([data], { type: "application/json" }));
+        // Use keepalive fetch instead of navigator.sendBeacon: sendBeacon cannot
+        // set the x-csrf-token header, so the request fails the server's CSRF
+        // check (403) and the session never ends. A keepalive fetch survives
+        // page unload AND passes through the csrf fetch wrapper, which attaches
+        // the header (and credentials carry the auth + csrf cookies).
+        void fetch(`/api/activity/session/end`, {
+          method: "POST",
+          keepalive: true,
+          headers: { "content-type": "application/json" },
+          body: data,
+          credentials: "include",
+        }).catch(() => {});
       }
     };
 
